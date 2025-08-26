@@ -1,31 +1,30 @@
-# CalibrateImage → AstrometryTask tuning
+# CalibrateImage → AstrometryTask tuning for difficult seeds
 a = config.astrometry
 
-# Use bright *enough* stars, but not too strict (avoid starvation in B/V)
+# --- use brighter stars for the initial match ---
 a.sourceSelector.name = "science"
 ss = a.sourceSelector["science"]
 ss.doSignalToNoise = True
-ss.signalToNoise.minimum = 10.0          # was 20.0 — lower to keep candidates
+ss.signalToNoise.minimum = 20.0          # try 15–25; raise later once stable
 ss.signalToNoise.maximum = None
 ss.signalToNoise.fluxField = "slot_CalibFlux_instFlux"
 ss.signalToNoise.errField  = "slot_CalibFlux_instFluxErr"
-# keep defaults from setDefaults: doFlags True; flags.good=["calib_psf_candidate"]; unresolved/isolation off
+# keep the defaults from setDefaults (good flag 'calib_psf_candidate'); no unresolved/isolation
 
-# Widen initial search (handles bad header pointing/rotation)
+# --- widen the initial search; guard for version differences ---
 m = a.matcher
-if hasattr(m, "maxOffsetPix"):       m.maxOffsetPix = 3900     # ~13' at 0.2"/px; ~26' at 0.4"/px
-if hasattr(m, "maxRotationDeg"):     m.maxRotationDeg = 5.0
-if hasattr(m, "matcherIterations"):  m.matcherIterations = 10
-if hasattr(m, "maxRefObjects"):      m.maxRefObjects = 30000
-if hasattr(m, "maxStars"):           m.maxStars = 8000
+if hasattr(m, "maxOffsetPix"):       m.maxOffsetPix = 1500     # allow big pointing error
+if hasattr(m, "maxRotationDeg"):     m.maxRotationDeg = 5.0    # tolerate rotation
+if hasattr(m, "matcherIterations"):  m.matcherIterations = 20
+if hasattr(m, "maxRefObjects"):      m.maxRefObjects = 20000
+if hasattr(m, "maxStars"):           m.maxStars = 6000
 if hasattr(m, "minMatchPairs"):      m.minMatchPairs = 8
+if hasattr(m, "numPointsForShape"):  m.numPointsForShape = 6
 
-# Relax convergence a bit for the first lock; we'll tighten later
-a.maxMeanDistanceArcsec = 180.0       # was 120/60
-a.matchDistanceSigma    = 10.0
-a.maxIter               = 25
+# --- relax convergence criteria for the first pass ---
+a.maxMeanDistanceArcsec = 120.0       # was 60
+a.matchDistanceSigma    = 10.0        # was 8
+a.maxIter               = 20
 
-# Make sure the ref loader fetches a wide-enough sky area when WCS is off
-rl = config.astrometry_ref_loader
-if hasattr(rl, "pixelMargin"):
-    rl.pixelMargin = 5000             # pull a much larger area of ref stars
+# If some visits have *good* header WCS, forcing it can help. Leave False by default.
+# a.forceKnownWcs = True

@@ -152,9 +152,14 @@ pipetask run \
   -i "$RUN","$CALIB_CHAIN","refcats" \
   -o "$PROCESS_CCD_RUN" \
   -p "$PIPE#processCcd" \
+  -C calibrateImage:configs/apcorr_overrides.py \
+  -C calibrateImage:configs/psf_detection_relaxed.py \
+  -C calibrateImage:configs/psf_starselector_relaxed.py \
+  -C calibrateImage:configs/astrometry_relaxed.py \
   -d "instrument='Nickel' AND exposure.observation_type='science' AND NOT (exposure IN (${BAD}))" \
-  --register-dataset-types \
-  2>&1 | tee logs/processCcd_$TS.log
+  -j 1 --register-dataset-types \
+  2>&1 | tee "logs/processCcd_${TS}.log"
+  # --debug \
   # -d "instrument='Nickel' AND exposure.observation_type='science'" \
 
 echo "=== Done ==="
