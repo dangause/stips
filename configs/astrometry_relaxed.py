@@ -18,11 +18,6 @@ m.numBrightStars = 300
 m.maxRefObjects = 10000
 m.numPatternConsensus = 2
 
-# # WCS fitter: you're using FitAffineWcsTask (no 'order' here)
-# f = config.astrometry.wcsFitter    # FitAffineWcsConfig
-# f.numRejIter = 3
-# f.sigmaClip = 4.0
-
 # Mild source S/N cut for the astrometry stage
 ss = config.astrometry.sourceSelector["science"]
 ss.doSignalToNoise = True
