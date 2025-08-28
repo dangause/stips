@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 
 # bad exposures - exclude:
-BAD="1032,1033,1034,1043,1046,1047,1048,1049,1050,1051,1052,1056,1059,1060"
+# BAD="1032,1033,1034,1043,1046,1047,1048,1049,1050,1051,1052,1056,1058,1059,1060"
+BAD="1032,1051,1052"
 
 ########## ABSOLUTE PATHS (edit if needed) ##########
 REPO="/Users/dangause/Desktop/lick/lsst/data/nickel/062424"
@@ -66,7 +67,7 @@ if butler query-datasets "$REPO" flat --collections "$CP_RUN_FLAT" | grep -q '^f
     --repo "$REPO" \
     --collection "$CP_RUN_FLAT" \
     --manual-box 255 0 2 1025 \
-    --manual-box 782 0 3 977 \
+    --manual-box 783 0 2 977 \
     --manual-box 1000 0 25 1024 \
     --register \
     --ingest \
@@ -151,9 +152,14 @@ pipetask run \
   -i "$RUN","$CALIB_CHAIN","refcats" \
   -o "$PROCESS_CCD_RUN" \
   -p "$PIPE#processCcd" \
+  -C calibrateImage:configs/apcorr_overrides.py \
+  -C calibrateImage:configs/psf_detection_relaxed.py \
+  -C calibrateImage:configs/psf_starselector_relaxed.py \
+  -C calibrateImage:configs/astrometry_relaxed.py \
   -d "instrument='Nickel' AND exposure.observation_type='science' AND NOT (exposure IN (${BAD}))" \
-  --register-dataset-types \
-  2>&1 | tee logs/processCcd_$TS.log
+  -j 1 --register-dataset-types \
+  2>&1 | tee "logs/processCcd_${TS}.log"
+  # --debug \
   # -d "instrument='Nickel' AND exposure.observation_type='science'" \
 
 echo "=== Done ==="
