@@ -67,4 +67,4 @@ CCDs:
         readNoise: 10.7
         hdu: 0
         ixy: [0, 0]
-        flipXY: [false, false]
+        flipXY: [false, true]
