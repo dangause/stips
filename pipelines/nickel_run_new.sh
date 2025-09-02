@@ -55,25 +55,27 @@ pipetask run \
   -d "instrument='Nickel' AND exposure.observation_type='flat'" \
   --register-dataset-types
 
-########## DEFECTS (from flats; only this block changed) ##########
-# Proceed only if cpFlat produced 'flat' datasets.
+
+########## DEFECTS (from flats; updated for Y inversion + unified out dir) ##########
 if butler query-datasets "$REPO" flat --collections "$CP_RUN_FLAT" | grep -q '^flat'; then
   DEF_TS="$(date -u +%Y%m%dT%H%M%SZ)"
   DEFECTS_RUN="Nickel/calib/defects/$DEF_TS"
-  QA_DIR="$OBS_NICKEL/scripts/defects/qa_$DEF_TS"
+  DEF_DIR="$OBS_NICKEL/scripts/defects/defects_$DEF_TS"
 
   echo "[defects] Building from flats in $CP_RUN_FLAT -> $DEFECTS_RUN"
   python "$OBS_NICKEL"/scripts/defects/make_defects_from_flats.py \
     --repo "$REPO" \
     --collection "$CP_RUN_FLAT" \
-    --manual-box 255 0 2 1025 \
+    --invert-manual-y \
+    --manual-box 255 0 2 1024 \
     --manual-box 783 0 2 977 \
     --manual-box 1000 0 25 1024 \
+    --manual-box 45 120 6 9 \
+    --manual-box 980 200 12 8 \
     --register \
     --ingest \
     --defects-run "$DEFECTS_RUN" \
-    --plot \
-    --qa-dir "$QA_DIR"
+    --plot
 
   # Only relink 'current' if the run exists.
   if butler query-collections "$REPO" | awk '{print $1}' | grep -qx "$DEFECTS_RUN"; then
@@ -153,14 +155,26 @@ pipetask run \
   -o "$PROCESS_CCD_RUN" \
   -p "$PIPE#processCcd" \
   -C calibrateImage:configs/apcorr_overrides.py \
-  -C calibrateImage:configs/psf_detection_relaxed.py \
-  -C calibrateImage:configs/psf_starselector_relaxed.py \
-  -C calibrateImage:configs/astrometry_relaxed.py \
-  -d "instrument='Nickel' AND exposure.observation_type='science' AND NOT (exposure IN (${BAD}))" \
+  -d "instrument='Nickel' AND exposure.observation_type='science'" \
   -j 1 --register-dataset-types \
   2>&1 | tee "logs/processCcd_${TS}.log"
+  # -C calibrateImage:configs/psf_detection_relaxed.py \
+  # -C calibrateImage:configs/psf_starselector_relaxed.py \
+  # -C calibrateImage:configs/astrometry_relaxed.py \
+  # -d "instrument='Nickel' AND exposure.observation_type='science' AND NOT (exposure IN (${BAD}))" \
   # --debug \
-  # -d "instrument='Nickel' AND exposure.observation_type='science'" \
+
+# BAD="1032,1051,1052"
+pipetask run \
+  -b "$REPO" \
+  -i "$PROCESS_CCD_RUN","$CALIB_CHAIN","refcats" \
+  -o Nickel/run/postproc/visits/$TS \
+  -p ./pipelines/PostProcessing.yaml \
+  --register-dataset-types \
+  -d "instrument='Nickel' AND exposure.observation_type='science' AND NOT (exposure IN (${BAD}))" \
+  -j 1 \
+  2>&1 | tee "logs/postproc_visits_${TS}.log"
+
 
 echo "=== Done ==="
 echo "Curated:     $CURATED"

@@ -4,31 +4,12 @@ Build rectangular defect masks from cpFlat outputs, optionally merge with
 manual rectangles, ingest as a Butler `defects` calib, and (optionally)
 certify validity and save QA plots.
 
-- Supports *manual* rectangles in LSST format (lower-left x0,y0 + width,height)
-  via --manual-box and/or --manual-csv.
-- Can disable auto detection with --no-auto.
-
-Tested with lsst-scipipe-9.x/10.x and obs_nickel (single detector).
-
-Examples:
-
-  # Auto + a couple manual boxes
-  python make_defects_from_flats.py \
-    --repo <REPO> \
-    --collection Nickel/run/cp_flat/<TS> \
-    --manual-box 45 120 6 9 \
-    --manual-box 980 200 12 8 \
-    --register --ingest --defects-run Nickel/calib/defects/<TS> \
-    --plot --qa-dir qa_defects
-
-  # Manual only from CSV
-  python make_defects_from_flats.py \
-    --repo <REPO> \
-    --collection Nickel/run/cp_flat/<TS> \
-    --manual-csv manual_boxes.csv \
-    --no-auto \
-    --register --ingest --defects-run Nickel/calib/defects/<TS>
+Changes:
+- NEW: --invert-manual-y flips *manual* rectangles in Y to match a
+       post-geometry-inversion detector frame.
+- NEW defaults: all outputs (CSV + QA) go to ./scripts/defects/defects_<TS>/
 """
+
 from __future__ import annotations
 import argparse
 import os
@@ -240,15 +221,17 @@ def main():
                     help="Add a manual rectangle (LL x0,y0,width,height). Repeatable.")
     ap.add_argument("--manual-csv", type=str, default=None,
                     help="CSV with columns x0,y0,width,height[,label] for manual rectangles.")
+    ap.add_argument("--invert-manual-y", action="store_true",
+                    help="Mirror *manual* rectangles in Y (y -> ny - (y+height)). Use if you flipped the detector.")
 
     # Outputs/ingest
-    ap.add_argument("--csv-out", default=None, help="Path to write rectangles CSV (default: nickel_defects_rects_<TS>.csv)")
+    ap.add_argument("--csv-out", default=None,
+                    help="Path to write rectangles CSV (default: ./scripts/defects/defects_<TS>/nickel_defects_rects_<TS>.csv)")
     ap.add_argument("--ingest", action="store_true", help="Ingest defects to Butler after creating CSV")
     ap.add_argument("--register", action="store_true", help="Register dataset type 'defects' if missing")
     ap.add_argument("--defects-run", default=None, help="Run name for ingest (default: Nickel/calib/defects/<TS>)")
-    ap.add_argument("--plot", action="store_true", help="Write PNG overlays/masks to --qa-dir")
-    ap.add_argument("--qa-dir", default="qa_defects", help="Directory for QA PNGs (default: qa_defects)")
-
+    ap.add_argument("--plot", action="store_true", help="Write PNG overlays/masks to QA dir")
+    ap.add_argument("--qa-dir", default=None, help="Directory for QA PNGs (default: same ./scripts/defects/defects_<TS>/)")
     # Optional certify
     ap.add_argument("--certify", action="store_true", help="Certify validity in the calib chain (requires --begin/--end)")
     ap.add_argument("--begin", type=str, default=None, help="Begin date (YYYY-MM-DD) for certify")
@@ -266,6 +249,7 @@ def main():
     print(f"Building median flat from {args.collection} ...")
     med, refs = median_flat(b_flat, args.instrument)
     print(f"Using {len(refs)} flat(s)")
+    ny, nx = med.shape  # NOTE: shape = (rows, cols) = (y, x)
 
     # ----------------- auto + manual rectangle assembly -----------------
     auto_rects: List[Tuple[int,int,int,int]] = []
@@ -279,6 +263,7 @@ def main():
             open_kernel=args.open_kernel,
         )
 
+    # Collect manual rectangles (optionally invert Y)
     manual_rects_labeled: List[Tuple[int,int,int,int,str]] = []
     if args.manual_csv:
         manual_rects_labeled.extend(_read_manual_csv(os.path.expanduser(args.manual_csv)))
@@ -286,8 +271,15 @@ def main():
         for (x0, y0, w, h) in args.manual_box:
             manual_rects_labeled.append((int(x0), int(y0), int(w), int(h), "manual"))
 
+    if args.invert_manual_y and manual_rects_labeled:
+        flipped: List[Tuple[int,int,int,int,str]] = []
+        for x0, y0, w, h, label in manual_rects_labeled:
+            y0_new = int(ny - (y0 + h))
+            flipped.append((x0, y0_new, w, h, label))
+        manual_rects_labeled = flipped
+        print("Applied Y inversion to manual rectangles.")
+
     # Validate/clip manual rects to image bounds
-    ny, nx = med.shape
     valid_manual_rects: List[Tuple[int,int,int,int]] = []
     for x0, y0, w, h, label in manual_rects_labeled:
         if w <= 0 or h <= 0:
@@ -310,10 +302,14 @@ def main():
           f"({len(valid_manual_rects)} manual, {len(auto_rects)} auto); "
           f"masked fraction ≈ {frac:.3%}")
 
-    # ------------------------------- CSV --------------------------------
+    # ----------------------- default output dir --------------------------
     ts = ts_utc()
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    default_csv = os.path.join(script_dir, f"nickel_defects_rects_{ts}.csv")
+    script_dir = os.path.dirname(os.path.abspath(__file__))  # typically .../scripts
+    default_dir = os.path.join(script_dir, "defects", f"defects_{ts}")
+    os.makedirs(default_dir, exist_ok=True)
+
+    # ------------------------------- CSV --------------------------------
+    default_csv = os.path.join(default_dir, f"nickel_defects_rects_{ts}.csv")
     csv_out = os.path.expanduser(args.csv_out) if args.csv_out else default_csv
 
     # Keep labels in CSV: manual vs auto
@@ -327,10 +323,11 @@ def main():
     print(f"Wrote rectangles -> {csv_out}")
 
     # ------------------------------- QA ---------------------------------
+    qa_dir = os.path.expanduser(args.qa_dir) if args.qa_dir else default_dir
     if args.plot:
-        os.makedirs(args.qa_dir, exist_ok=True)
-        overlay_png = os.path.join(args.qa_dir, "overlay.png")
-        mask_png    = os.path.join(args.qa_dir, "mask.png")
+        os.makedirs(qa_dir, exist_ok=True)
+        overlay_png = os.path.join(qa_dir, "overlay.png")
+        mask_png    = os.path.join(qa_dir, "mask.png")
         save_overlay_png(med, rects, "Median flat + defects", overlay_png)
         save_mask_png(med, rects, mask_png)
         print(f"QA images: {overlay_png}, {mask_png}")
@@ -341,6 +338,7 @@ def main():
         print(f"Ingesting defects to run: {defects_run}")
         b_write = Butler(repo, run=defects_run)
 
+        # Register dataset type if requested
         if args.register:
             ensure_defects_dataset_type(b_write)
 
@@ -350,8 +348,7 @@ def main():
             try:
                 det_id = int(refs[0].dataId["detector"])
             except Exception:
-                # Nickel is single-detector; fall back to 0
-                det_id = 0
+                det_id = 0  # Nickel is single-detector
         print(f"Using detector id: {det_id}")
 
         boxes = rectangles_to_boxes(rects)
