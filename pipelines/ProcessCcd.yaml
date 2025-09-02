@@ -22,9 +22,7 @@ tasks:
   calibrateImage:
     class: lsst.pipe.tasks.calibrateImage.CalibrateImageTask
     config:
-      connections.astrometry_ref_cat: gaia_dr3_20250728
-      connections.photometry_ref_cat: panstarrs1_dr2_20250730
-
+      
       # --- initial PSF used by first-pass detection ---
       install_simple_psf.fwhm: 7.0
       install_simple_psf.width: 35
@@ -43,19 +41,11 @@ tasks:
       psf_detection.nSigmaToGrow: 2.0
       psf_detection.combinedGrow: true
           
-
-
-
-
-
-
-
-
-      # psf_measure_psf.psfDeterminer.
-
+      # ---- Astrometry Config Parameters ----
+      connections.astrometry_ref_cat: gaia_dr3_20250728
       astrometry.forceKnownWcs: False
 
-      # match search‐radius: 60″ ≃ 300 pix @ 0.2″/pix
+      # match search‐radius: 60″ ≃ 300 pix @ 0.      # match search‐radius: 60″ ≃ 300 pix @ 0.2″/pix
       astrometry.matcher.maxOffsetPix: 300
       astrometry.matcher.maxRotationDeg: 5.0
       astrometry.matcher.matcherIterations: 12
@@ -65,11 +55,13 @@ tasks:
       astrometry.matchDistanceSigma: 8.0
       astrometry.maxIter: 12
       
-      # astrometry_ref_loader.anyFilterMapsToThis: None
-      # astrometry_ref_loader.filterMap: {"b": "gMeanPSFMag", "v": "gMeanPSFMag", "r": "rMeanPSFMag", "i": "iMeanPSFMag", "u": "gMeanPSFMag"}
+      # --- Photometry Config Parameters ---
+      connections.photometry_ref_cat: panstarrs1_dr2_20250730
+
       photometry_ref_loader.filterMap: {"b": "gMeanPSFMag", "v": "gMeanPSFMag", "r": "rMeanPSFMag", "i": "iMeanPSFMag", "u": "gMeanPSFMag"}
-      # photometry_ref_loader.filterMap: {"b": "g", "v": "g", "r": "r", "i": "i", "u": "g"}
-      photometry.match.matchRadius: 60.0
+      photometry.match.matchRadius: 1.5
+
+      photometry.applyColorTerms: false
 
 subsets:
   processCcd:
