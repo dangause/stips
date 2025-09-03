@@ -149,31 +149,36 @@ PROCESS_CCD_RUN="Nickel/run/processCcd/$(date +%Y%m%dT%H%M%S)"
 # quick sanity
 butler query-collections "$REPO" | grep -E 'Nickel/calib/(current|defects/current)' || true
 
+
 pipetask run \
   -b "$REPO" \
   -i "$RUN","$CALIB_CHAIN","refcats" \
-  -o "$PROCESS_CCD_RUN" \
+  -o Nickel/run/processCcd \
   -p "$PIPE#processCcd" \
-  -C calibrateImage:configs/calibrateImage/apcorr/apcorr_overrides.py \
-  -C calibrateImage:configs/calibrateImage/psf_detection/psf_detection_relaxed.py \
-  -C calibrateImage:configs/calibrateImage/psf_measure_psf/psf_starselector_relaxed.py \
-  -C calibrateImage:configs/calibrateImage/astrometry/astrometry_relaxed.py \
-  # -C calibrateImage:configs/calibrateImage/colorterms/apply_colorterms.py \
-  # -d "instrument='Nickel' AND exposure.observation_type='science' AND NOT (exposure IN (${BAD}))" \
-  -d "instrument='Nickel' AND exposure.observation_type='science'" \
+  -d "instrument='Nickel' AND exposure.observation_type='science' AND NOT (exposure IN (${BAD}))" \
+  -C calibrateImage:configs/calibrateImage/astrometry/astrometry.py \
   -j 1 --register-dataset-types \
   2>&1 | tee "logs/processCcd_${TS}.log"
+  # -C calibrateImage:configs/calibrateImage/astrometry/astrometry_relaxed.py \
+  # -C calibrateImage:configs/calibrateImage/apcorr/apcorr_overrides.py \
+  # -C calibrateImage:configs/calibrateImage/psf_detection/psf_detection_relaxed.py \
+  # -C calibrateImage:configs/calibrateImage/psf_measure_psf/psf_starselector_relaxed.py \
+  # -C calibrateImage:configs/apply_colorterms.py \
   # --debug \
+  # -d "instrument='Nickel' AND exposure.observation_type='science' AND exposure IN (1042)" \
+  # -d "instrument='Nickel' AND exposure.observation_type='science'" \
 
+
+# Option B: same, but exclude your BAD list
 # BAD="1032,1051,1052"
 pipetask run \
   -b "$REPO" \
-  -i "$PROCESS_CCD_RUN","$CALIB_CHAIN","refcats" \
+  -i "Nickel/run/processCcd","$CALIB_CHAIN","refcats" \
   -o Nickel/run/postproc/visits/$TS \
   -p ./pipelines/PostProcessing.yaml \
   --register-dataset-types \
   -d "instrument='Nickel' AND exposure.observation_type='science' AND NOT (exposure IN (${BAD}))" \
-  -j 1 \
+  -j 4 \
   2>&1 | tee "logs/postproc_visits_${TS}.log"
 
 
