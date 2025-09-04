@@ -14,14 +14,23 @@ tasks:
 
 
 
-# description: Minimal Nickel (Gen3) single-band coadd from initial_pvi
+  # writeSourceTable:
+  #   class: lsst.pipe.tasks.postprocess.WriteSourceTableTask
+  #   config:
+  #     connections.catalog: "initial_stars_detector"
 
-# tasks:
+  # transformSourceTable:
+  #   class: lsst.pipe.tasks.postprocess.TransformSourceTableTask
+  #   config:
+  #     connections.inputCatalog: "initial_stars_detector"
+
+# # description: Minimal Nickel (Gen3) single-band coadd from initial_pvi
+
+# # tasks:
 
 #   makeDiscreteSkyMap:
 #     class: lsst.pipe.tasks.makeDiscreteSkyMap.MakeDiscreteSkyMapTask
-#     config:
-#       skyMap.name: "discrete"
+
 
 #   # Optional but handy later (e.g., FGCM): write consolidated per-visit source tables
 #   writeSourceTable:

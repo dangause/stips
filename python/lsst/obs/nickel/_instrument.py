@@ -46,8 +46,8 @@ class Nickel(Instrument):
                     "instrument": self.getName(),
                     "id": det.getId(),
                     "full_name": det.getName(),
-                    "name_in_raft": det.getName(),  # adjust as needed
-                    "raft": det.getName(),          # adjust as needed
+                    "name_in_raft": det.getName(),
+                    "raft": det.getName(),        
                     "purpose": str(det.getType()).split(".")[-1],
                 }, update=update)
 

@@ -1,0 +1,34 @@
+description: "Nickel postprocess: consolidate visit summaries + visit/source tables"
+
+tasks:
+  consolidateVisitSummary:
+    class: lsst.pipe.tasks.postprocess.ConsolidateVisitSummaryTask
+    config:
+      # Point at your Gen3 calibrated exposure dataset name:
+      connections.calexp: "initial_pvi"
+
+  makeVisitTable:
+    class: lsst.pipe.tasks.postprocess.MakeVisitTableTask
+    config:
+      connections.visitSummaries: "visitSummary"
+
+  updateVisitSummary:
+    class: lsst.drp.tasks.update_visit_summary.UpdateVisitSummaryTask
+    config: {}
+  
+
+    # config:
+    #   do_use_sky_corr: false
+    #   remove_initial_photo_calib: true
+
+  # # Optional but useful tables for later QA/FGCM/etc.
+  # writeSourceTable:
+  #   class: lsst.pipe.tasks.postprocess.WriteSourceTableTask
+  #   config:
+  #     connections.catalog: "initial_stars_detector"
+
+  # transformSourceTable:
+  #   class: lsst.pipe.tasks.postprocess.TransformSourceTableTask
+
+  # consolidateSourceTable:
+  #   class: lsst.pipe.tasks.postprocess.ConsolidateSourceTableTask
