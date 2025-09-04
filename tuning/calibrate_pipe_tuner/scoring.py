@@ -1,44 +1,89 @@
+# calibrate_pipe_tuner/scoring.py
 from __future__ import annotations
-from typing import Dict, Optional, List
+from typing import Dict, List, Optional, Tuple
+import math
 
-# Targets / weights (lower score is better; ~1.0 means “on target”)
-TARGETS = {
-    "psfSigma_med":        2.0,    # pixels
-    "astromOffsetStd_med": 0.035,  # arcsec
-    "skyNoise_med":        9.0,    # ADU
-    "magLim_med":          20.0,   # mag (higher is better)
-}
-WEIGHTS = {
-    "psfSigma_med":        0.35,
-    "astromOffsetStd_med": 0.35,
-    "skyNoise_med":        0.15,
-    "magLim_med":          0.15,
-}
+def aggregate(values: List[float], how: str) -> Optional[float]:
+    if not values:
+        return None
+    v = sorted(values)
+    if how == "median":
+        n = len(v)
+        return v[n // 2] if n % 2 else 0.5 * (v[n // 2 - 1] + v[n // 2])
+    if how == "mean":
+        return sum(v) / len(v)
+    raise ValueError(f"Unknown aggregate: {how}")
 
-def compute_base_score(meds: Dict[str, Optional[float]]) -> float:
-    """Combine per-visit medians into a single score (lower is better)."""
-    terms: List[float] = []
-    for k in ("psfSigma_med", "astromOffsetStd_med", "skyNoise_med"):
-        v = meds.get(k)
-        if v is None or v <= 0:
-            return float("inf")
-        terms.append(WEIGHTS[k] * (v / TARGETS[k]))
-    v = meds.get("magLim_med")
-    if v is None or v <= 0:
-        return float("inf")
-    terms.append(WEIGHTS["magLim_med"] * (TARGETS["magLim_med"] / v))
-    return sum(terms)
+def compute_metrics_and_score(
+    meds: Dict[str, Optional[float]],
+    metrics_cfg: List[dict],
+) -> Tuple[float, float]:
+    """
+    Compute a base score from metrics using config-driven targets/weights/directions.
 
-def penalize_score(base: float, n_success: int, n_total: int, policy: str, weight: float) -> float:
-    """Apply failure-aware penalty: 'hard' | 'frac' | 'linear'."""
+    Parameters
+    ----------
+    meds : Dict[str, Optional[float]]
+        Metric medians keyed by metric name.
+    metrics_cfg : List[dict]
+        Each item must include: name, target, weight, direction ('min'|'max').
+
+    Returns
+    -------
+    (score_base, score_base)
+        Legacy pair; first is the base score (no failure penalty),
+        second is the same value (penalty is applied outside this function).
+    """
+    total = 0.0
+    for m in metrics_cfg:
+        name = m["name"]
+        target = float(m["target"])
+        weight = float(m["weight"])
+        direction = m["direction"]  # 'min' or 'max'
+        val = meds.get(name)
+        if val is None or val <= 0 or target <= 0:
+            return math.inf, math.inf
+        if direction == "min":
+            term = weight * (val / target)
+        elif direction == "max":
+            term = weight * (target / val)
+        else:
+            raise ValueError(f"direction must be 'min' or 'max' for {name}")
+        total += term
+    return total, total
+
+def penalize_score(
+    base_score: float,
+    n_success: int,
+    n_total: int,
+    policy: str = "frac",
+    weight: float = 1.0,
+) -> float:
+    """
+    Apply failure-penalization to a base score.
+
+    Policies
+    --------
+    hard   : any failure => +inf
+    frac   : base * (success_rate ** -weight)
+    linear : base * (1 + weight * n_fail)
+    """
     if n_total <= 0:
-        return float("inf")
+        return math.inf
+
     n_fail = n_total - n_success
+
     if policy == "hard":
-        return float("inf") if n_fail > 0 else base
+        return math.inf if n_fail > 0 else base_score
+
     if policy == "frac":
         sr = n_success / n_total
-        return float("inf") if sr <= 0 else base * (sr ** (-weight))
+        if sr <= 0:
+            return math.inf
+        return base_score * (sr ** (-weight))
+
     if policy == "linear":
-        return base * (1.0 + weight * n_fail)
-    return base
+        return base_score * (1.0 + weight * n_fail)
+
+    # Unknown policy -> no extra penalty
+    return base_score

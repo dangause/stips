@@ -1,0 +1,198 @@
+# Static code injected at the top of the overrides file (once per trial).
+overrides_prelude: |
+  # Ensure S/N limits and reserve behavior are enabled consistently
+  cfg = config.psf_measure_psf.starSelector["objectSize"]
+  cfg.doSignalToNoiseLimit = True
+  cfg.doFluxLimit = False
+  cfg.widthMin = 0.8
+  cfg.widthMax = 8.0
+  cfg.nSigmaClip = 3.0
+  config.psf_measure_psf.reserve.fraction = 0.0
+
+
+  # Aperture correction source selector tweaks
+  c = config.measure_aperture_correction
+  c.sourceSelector.name = "science"
+  css = c.sourceSelector["science"]
+  css.doSignalToNoise = True
+  css.signalToNoise.maximum = None
+
+  # PSF-normalized calibration flux source selector tweaks
+  ncf = config.psf_normalized_calibration_flux.measure_ap_corr
+  ncf.sourceSelector.name = "science"
+  nss = ncf.sourceSelector["science"]
+  nss.doSignalToNoise = True
+  nss.doUnresolved = False
+  nss.doIsolated = False
+
+  # Astrometry source selector tweaks
+  ss = config.astrometry.sourceSelector["science"]
+  ss.doSignalToNoise = True
+
+  # Enable astrometry reference selector mag limits globally; values set per trial
+  refSel = config.astrometry.referenceSelector
+  refSel.doMagLimit = False
+
+# Parameters to tune. Each item:
+#   type: float|int|categorical
+#   low/high (for float/int) or choices (for categorical)
+#   apply: a one-line Python assignment executed with {value} substituted
+parameters:
+  psf_det.threshold:
+    type: float
+    low: 3.0
+    high: 8.0
+    apply: "config.psf_detection.thresholdValue = {value}"
+
+  psf_det.incMult:
+    type: float
+    low: 1.0
+    high: 6.5
+    apply: "config.psf_detection.includeThresholdMultiplier = {value}"
+
+  psfsel.snmin:
+    type: float
+    low: 8.0
+    high: 30.0
+    apply: "config.psf_measure_psf.starSelector['objectSize'].signalToNoiseMin = {value}"
+
+  psfsel.widthStdMax:
+    type: float
+    low: 0.30
+    high: 0.45
+    apply: "config.psf_measure_psf.starSelector['objectSize'].widthStdAllowed = {value}"
+
+  match.maxOffsetPix:
+    type: int
+    low: 80
+    high: 300
+    apply: "config.astrometry.matcher.maxOffsetPix = int({value})"
+
+  match.maxRotationDeg:
+    type: float
+    low: 0.5
+    high: 3.0
+    apply: "config.astrometry.matcher.maxRotationDeg = {value}"
+
+  match.matcherIterations:
+    type: int
+    low: 6
+    high: 12
+    apply: "config.astrometry.matcher.matcherIterations = int({value})"
+
+  match.minMatchDistPixels:
+    type: float
+    low: 1.0
+    high: 3.0
+    apply: "config.astrometry.matcher.minMatchDistPixels = {value}"
+
+  match.minMatchedPairs:
+    type: int
+    low: 8
+    high: 25
+    apply: "config.astrometry.matcher.minMatchedPairs = int({value})"
+
+  match.minFracMatchedPairs:
+    type: float
+    low: 0.02
+    high: 0.08
+    apply: "config.astrometry.matcher.minFracMatchedPairs = {value}"
+
+  match.numBrightStars:
+    type: int
+    low: 150
+    high: 300
+    apply: "config.astrometry.matcher.numBrightStars = int({value})"
+
+  match.maxRefObjects:
+    type: int
+    low: 4000
+    high: 6500
+    apply: "config.astrometry.matcher.maxRefObjects = int({value})"
+
+  match.numPatternConsensus:
+    type: int
+    low: 2
+    high: 3
+    apply: "config.astrometry.matcher.numPatternConsensus = int({value})"
+
+  astro_src.snmin:
+    type: float
+    low: 8.0
+    high: 25.0
+    apply: "config.astrometry.sourceSelector['science'].signalToNoise.minimum = {value}"
+
+  apcorr.snmin:
+    type: float
+    low: 25.0
+    high: 45.0
+    apply: "config.measure_aperture_correction.sourceSelector['science'].signalToNoise.minimum = {value}"
+
+  apcorr.sigclip:
+    type: float
+    low: 3.0
+    high: 5.0
+    apply: "config.measure_aperture_correction.numSigmaClip = {value}"
+
+  apcorr.niter:
+    type: int
+    low: 3
+    high: 6
+    apply: "config.measure_aperture_correction.numIter = int({value})"
+
+  ncf.snmin:
+    type: float
+    low: 15.0
+    high: 30.0
+    apply: "config.psf_normalized_calibration_flux.measure_ap_corr.sourceSelector['science'].signalToNoise.minimum = {value}"
+
+  # ref.magMin:
+  #   type: float
+  #   low: 10.0    # pick your sensible lower bound
+  #   high: 14.0   # keep this < ref.magMax.low to avoid inversions
+  #   apply: "config.astrometry.referenceSelector.magLimit.minimum = {value}"
+
+  # ref.magMax:
+  #   type: float
+  #   low: 18.0    # ensure this stays > ref.magMin.high
+  #   high: 22.5
+  #   apply: "config.astrometry.referenceSelector.magLimit.maximum = {value}"
+
+# Metrics computed from visitSummary and combined into a single score.
+# For min-direction metrics, score term = weight * (value / target).
+# For max-direction metrics, score term = weight * (target / value).
+metrics:
+  - name: psfSigma_med
+    field: psfSigma
+    aggregate: median
+    direction: min
+    target: 2.0
+    weight: 0.35
+
+  - name: astromOffsetMean_med
+    field: astromOffsetMean
+    aggregate: median
+    direction: min
+    target: 0.035
+    weight: 0.35
+
+  - name: astromOffsetStd_med
+    field: astromOffsetStd
+    aggregate: median
+    direction: min
+    target: 0.035
+    weight: 0.35
+
+  - name: skyNoise_med
+    field: skyNoise
+    aggregate: median
+    direction: min
+    target: 9.0
+    weight: 0.10
+
+  - name: magLim_med
+    field: magLim
+    aggregate: median
+    direction: max
+    target: 20.0
+    weight: 0.10

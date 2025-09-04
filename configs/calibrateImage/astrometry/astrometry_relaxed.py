@@ -17,8 +17,8 @@ m.minMatchedPairs = 8
 m.minFracMatchedPairs = 0.02
 
 # Keep more candidates available
-m.numBrightStars = 200
-m.maxRefObjects = 6000
+m.numBrightStars = 200         
+m.maxRefObjects = 6000          
 m.numPatternConsensus = 2
 
 # Mild source S/N cut for the astrometry stage

@@ -43,7 +43,6 @@ def discover_all_science_visits(repo: Path) -> List[int]:
         )
 
 def read_visit_summaries(coll: str, repo: Path, visits: List[int]) -> List[Any]:
-    """Fetch visitSummary tables (as Astropy rows) for given visits from a collection."""
     from lsst.daf.butler import Butler
     butler = Butler(str(repo), collections=coll, instrument="Nickel")
     rows: List[Any] = []
@@ -56,6 +55,15 @@ def read_visit_summaries(coll: str, repo: Path, visits: List[int]) -> List[Any]:
         except Exception:
             pass
     return rows
+
+def extract_metric_values(rows: List[Any], field: str) -> List[float]:
+    vals: List[float] = []
+    for r in rows:
+        try:
+            vals.append(float(r[field]))
+        except Exception:
+            pass
+    return vals
 
 def median_from_rows(rows: List[Any], field: str) -> Optional[float]:
     """Median of a numeric column from a list of Astropy row objects (or None)."""

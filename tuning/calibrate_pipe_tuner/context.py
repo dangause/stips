@@ -51,3 +51,17 @@ class Context:
     echo_logs: bool
     tail: int
     run_postproc: bool
+    cfg: dict                     # loaded tune config (parameters + metrics)
+
+
+def make_runs_headers(ctx: Context) -> list[str]:
+    """Build CSV headers including dynamic metric names and parameter keys."""
+    metric_names = [m["name"] for m in ctx.cfg.get("metrics", [])]
+    param_keys = list(ctx.cfg.get("parameters", {}).keys())
+    return [
+        "time", "trial_index", "trial_tag", "status", "out_coll",
+        "read_from_collection", "postproc_out",
+        "n_total", "n_success", "n_fail", "success_rate",
+        *metric_names, "score_base", "score",
+        *param_keys, "overrides_path", "trial_dir",
+    ]

@@ -6,14 +6,15 @@ import sys
 from pathlib import Path
 import optuna
 
+from .config import load_config
+from .context import Context
 from .context import Context
 from .butler_utils import discover_postisr, discover_all_science_visits
 from .objective import make_objective
 
 def parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(
-        description="Tune Nickel calibrateImage with failure-penalized scoring"
-    )
+    p = argparse.ArgumentParser(description="Tune Nickel calibrateImage (config-driven)")
+
     p.add_argument("--repo", required=True, help="Butler repo path")
     p.add_argument("--obs-nickel", required=True, help="obs_nickel package root")
     p.add_argument("--visits", nargs="+", type=int, help="visit IDs to process (omit to use all)")
@@ -31,6 +32,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--echo-logs", action="store_true", help="Echo tail of stdout/stderr for each pipetask")
     p.add_argument("--tail", type=int, default=20, help="Number of lines to tail when echoing logs")
     p.add_argument("--no-postproc", action="store_true", help="Skip PostProcessing.yaml (default: run it)")
+    p.add_argument("--config", required=True, help="Path to tune.yaml (or .json) defining parameters & metrics")
     return p.parse_args()
 
 def main() -> None:
@@ -62,6 +64,8 @@ def main() -> None:
     print(f"[inputs] post   : {post_pipe}")
     print(f"[inputs] visits : {visits}{discovered_note} (excluded {args.bad})")
 
+    cfg = load_config(Path(args.config))
+
     ctx = Context(
         repo=repo,
         obs_nickel=obs,
@@ -79,6 +83,7 @@ def main() -> None:
         echo_logs=args.echo_logs,
         tail=args.tail,
         run_postproc=(not args.no_postproc),
+        cfg=cfg,
     )
 
     study = optuna.create_study(direction="minimize")
