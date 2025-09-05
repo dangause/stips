@@ -9,6 +9,8 @@ REPO="/Users/dangause/Desktop/lick/lsst/data/nickel/062424"
 RAWDIR="/Users/dangause/Desktop/lick/data/062424/raw"
 OBS_NICKEL="/Users/dangause/Desktop/lick/lsst/lsst_stack/stack/obs_nickel"
 REFCAT_REPO="/Users/dangause/Desktop/lick/lsst/lsst_stack/stack/refcats"
+OVR="/Users/dangause/Desktop/lick/lsst/data/nickel/062424/tuning_runs/trials/t022/calib_overrides_t022.py"
+STACK_DIR="/Users/dangause/Desktop/lick/lsst/lsst_stack"
 
 ########## BASIC CONFIG ##########
 INSTRUMENT="lsst.obs.nickel.Nickel"
@@ -16,6 +18,12 @@ RUN="Nickel/raw/all"
 TS="$(date -u +%Y%m%dT%H%M%SZ)"
 
 echo "=== Nickel pipeline starting @ $TS ==="
+
+cd "$STACK_DIR"
+source loadLSST.zsh
+setup lsst_distrib; setup obs_nickel; setup testdata_nickel
+
+cd "$OBS_NICKEL"
 
 ########## CREATE & REGISTER ##########
 if [ ! -f "$REPO/butler.yaml" ]; then
@@ -153,12 +161,13 @@ butler query-collections "$REPO" | grep -E 'Nickel/calib/(current|defects/curren
 pipetask run \
   -b "$REPO" \
   -i "$RUN","$CALIB_CHAIN","refcats" \
-  -o Nickel/run/processCcd \
+  -o "$PROCESS_CCD_RUN" \
   -p "$PIPE#processCcd" \
+  -C calibrateImage:configs/calibrateImage/tuned_configs/best_calib_t071.py \
   -d "instrument='Nickel' AND exposure.observation_type='science' AND NOT (exposure IN (${BAD}))" \
-  -C calibrateImage:configs/calibrateImage/astrometry/astrometry.py \
-  -j 1 --register-dataset-types \
+  -j 8 --register-dataset-types \
   2>&1 | tee "logs/processCcd_${TS}.log"
+#   -C calibrateImage:configs/calibrateImage/astrometry/astrometry.py \
   # -C calibrateImage:configs/calibrateImage/astrometry/astrometry_relaxed.py \
   # -C calibrateImage:configs/calibrateImage/apcorr/apcorr_overrides.py \
   # -C calibrateImage:configs/calibrateImage/psf_detection/psf_detection_relaxed.py \
@@ -173,13 +182,31 @@ pipetask run \
 # BAD="1032,1051,1052"
 pipetask run \
   -b "$REPO" \
-  -i "Nickel/run/processCcd","$CALIB_CHAIN","refcats" \
+  -i "$PROCESS_CCD_RUN","$CALIB_CHAIN","refcats" \
   -o Nickel/run/postproc/visits/$TS \
   -p ./pipelines/PostProcessing.yaml \
   --register-dataset-types \
   -d "instrument='Nickel' AND exposure.observation_type='science' AND NOT (exposure IN (${BAD}))" \
-  -j 4 \
+  -j 8 \
   2>&1 | tee "logs/postproc_visits_${TS}.log"
+
+
+
+# Build discrete skymap config from initial_pvi footprints
+SKY_CFG="configs/makeSkyMap_discrete_auto.py"
+python scripts/build_discrete_skymap_config.py \
+  --repo "$REPO" \
+  --collections "$PROCESS_CCD_RUN" \
+  --dataset-type initial_pvi \
+  --skymap-id nickel_discrete \
+  --border-deg 0.05 \
+  --out "$SKY_CFG"
+
+# Register it
+butler register-skymap "$REPO" -C "$SKY_CFG"
+
+# (Optional) sanity
+butler query-datasets "$REPO" skyMap --where "skymap='nickel_discrete'"
 
 
 echo "=== Done ==="

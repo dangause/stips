@@ -1,0 +1,15 @@
+# pipelines/CoaddOnly.yaml
+description: "Warp+Assemble coadd (deep)"
+tasks:
+  makeWarp:
+    class: lsst.pipe.tasks.makeWarp.MakeWarpTask
+    config:
+      coaddName: deep
+      doApplyPhotoCalib: true
+      doApplySkyCorr: false
+      warper.warpingKernelName: "lanczos3"
+  assembleCoadd:
+    class: lsst.pipe.tasks.assembleCoadd.AssembleCoaddTask
+    config:
+      coaddName: deep
+      doMatchBackgrounds: true
