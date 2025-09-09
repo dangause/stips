@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Nickel reduction pipeline v2
 
 # bad exposures - exclude:
 # BAD="1032,1033,1034,1043,1046,1047,1048,1049,1050,1051,1052,1056,1058,1059,1060"
@@ -167,19 +168,12 @@ pipetask run \
   -d "instrument='Nickel' AND exposure.observation_type='science' AND NOT (exposure IN (${BAD}))" \
   -j 8 --register-dataset-types \
   2>&1 | tee "logs/processCcd_${TS}.log"
-#   -C calibrateImage:configs/calibrateImage/astrometry/astrometry.py \
-  # -C calibrateImage:configs/calibrateImage/astrometry/astrometry_relaxed.py \
-  # -C calibrateImage:configs/calibrateImage/apcorr/apcorr_overrides.py \
-  # -C calibrateImage:configs/calibrateImage/psf_detection/psf_detection_relaxed.py \
-  # -C calibrateImage:configs/calibrateImage/psf_measure_psf/psf_starselector_relaxed.py \
   # -C calibrateImage:configs/apply_colorterms.py \
   # --debug \
   # -d "instrument='Nickel' AND exposure.observation_type='science' AND exposure IN (1042)" \
   # -d "instrument='Nickel' AND exposure.observation_type='science'" \
 
 
-# Option B: same, but exclude your BAD list
-# BAD="1032,1051,1052"
 pipetask run \
   -b "$REPO" \
   -i "$PROCESS_CCD_RUN","$CALIB_CHAIN","refcats" \
