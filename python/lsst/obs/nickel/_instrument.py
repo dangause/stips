@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import os
 from lsst.obs.base._instrument import Instrument
-from lsst.obs.base.yamlCamera import makeCamera
+# imports
+from lsst.obs.base import yamlCamera
 from lsst.obs.base import DefineVisitsTask, VisitSystem
 from lsst.utils.introspection import get_full_type_name
 from lsst.utils import getPackageDir
@@ -29,10 +30,9 @@ class Nickel(Instrument):
         super().__init__(collection_prefix=collection_prefix)
 
     def getCamera(self):
-        if self._camera is None:
-            path = os.path.join(getPackageDir("obs_nickel"), "camera", "nickel.yaml")
-            self._camera = makeCamera(path)
-        return self._camera
+        path = os.path.join(getPackageDir("obs_nickel"), "camera", "nickel.yaml")
+        return yamlCamera.makeCamera(path)
+
 
     @classmethod
     def getName(cls) -> str:
