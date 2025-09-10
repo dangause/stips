@@ -46,7 +46,7 @@ class Nickel(Instrument):
                 {
                     "name": self.getName(),
                     "class_name": get_full_type_name(type(self)),
-                    "detector_max": 1,  # single-CCD camera
+                    "detector_max": len(camera),  # single-CCD camera
                     "visit_max": obsMax,
                     "visit_system": VisitSystem.ONE_TO_ONE.value,
                     "exposure_max": obsMax,
