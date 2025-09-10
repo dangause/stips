@@ -5,13 +5,14 @@
 # BAD="1032,1033,1034,1043,1046,1047,1048,1049,1050,1051,1052,1056,1058,1059,1060"
 BAD="1032,1051,1052"
 
-########## ABSOLUTE PATHS (edit if needed) ##########
-REPO="/Users/dangause/Desktop/lick/lsst/data/nickel/062424"
-RAWDIR="/Users/dangause/Desktop/lick/data/062424/raw"
-OBS_NICKEL="/Users/dangause/Desktop/lick/lsst/lsst_stack/stack/obs_nickel"
-REFCAT_REPO="/Users/dangause/Desktop/lick/lsst/lsst_stack/stack/refcats"
-OVR="/Users/dangause/Desktop/lick/lsst/data/nickel/062424/tuning_runs/trials/t022/calib_overrides_t022.py"
-STACK_DIR="/Users/dangause/Desktop/lick/lsst/lsst_stack"
+########## ABSOLUTE PATHS (change these to your) ##########
+RAWDIR="/Users/dangause/Desktop/lick/data/062424/raw" # raw data directory
+REPO="/Users/dangause/Desktop/lick/lsst/data/nickel/062424"  # butler repo directory
+OBS_NICKEL="/Users/dangause/Desktop/lick/lsst/lsst_stack/stack/obs_nickel"  # obs_nickel directory
+REFCAT_REPO="/Users/dangause/Desktop/lick/lsst/lsst_stack/stack/refcats"  # refcat repo directory
+OVR="/Users/dangause/Desktop/lick/lsst/data/nickel/062424/tuning_runs/trials/t022/calib_overrides_t022.py"  # tuned calib override file
+STACK_DIR="/Users/dangause/Desktop/lick/lsst/lsst_stack"  # lsst_stack directory (with loadLSST.zsh)
+
 
 ########## BASIC CONFIG ##########
 INSTRUMENT="lsst.obs.nickel.Nickel"

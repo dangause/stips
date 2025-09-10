@@ -176,6 +176,5 @@ notebooks
 .virtual_documents
 .vscode
 logs
-pipelines/Example run script.md
 .DS_Store
 */defects/defects/*

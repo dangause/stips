@@ -148,9 +148,6 @@ def main():
     lines.append(f"d.radiusList = [{radius_deg:.6f}] # deg (includes border {args.border_deg} deg)")
     lines.append(f"d.pixelScale   = {pixscale_as:.6f}  # arcsec/pixel")
     lines.append("d.tractOverlap = 0.0                 # deg")
-    # (optional) you can expose these as args if you need to tweak:
-    # lines.append("d.patchInnerDimensions = [4000, 4000]")
-    # lines.append("d.patchBorder = [100, 100]")
 
     out.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
