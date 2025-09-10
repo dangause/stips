@@ -9,7 +9,8 @@ description = "LSST obs package for the Nickel telescope"
 authors = [{ name = "Dan Gause" }]
 dependencies = [
     "astro_metadata_translator>=0.11.0",
-    "astropy"
+    "astropy",
+    "pre-commit>=4.3.0",
 ]
 
 [tool.setuptools]

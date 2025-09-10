@@ -1,7 +1,9 @@
 # calibrate_pipe_tuner/scoring.py
 from __future__ import annotations
-from typing import Dict, List, Optional, Tuple
+
 import math
+from typing import Dict, List, Optional, Tuple
+
 
 def aggregate(values: List[float], how: str) -> Optional[float]:
     if not values:
@@ -13,6 +15,7 @@ def aggregate(values: List[float], how: str) -> Optional[float]:
     if how == "mean":
         return sum(v) / len(v)
     raise ValueError(f"Unknown aggregate: {how}")
+
 
 def compute_metrics_and_score(
     meds: Dict[str, Optional[float]],
@@ -51,6 +54,7 @@ def compute_metrics_and_score(
             raise ValueError(f"direction must be 'min' or 'max' for {name}")
         total += term
     return total, total
+
 
 def penalize_score(
     base_score: float,

@@ -7,14 +7,13 @@ import logging
 from typing import Any
 
 import astropy.time
+import astropy.units as u
+from astro_metadata_translator.translator import cache_translation
+from astro_metadata_translator.translators.fits import FitsTranslator
 from astro_metadata_translator.translators.helpers import (
     tracking_from_degree_headers,
-    altaz_from_degree_headers,
 )
-import astropy.units as u
-from astropy.coordinates import Angle, SkyCoord, EarthLocation
-from astro_metadata_translator.translators.fits import FitsTranslator
-from astro_metadata_translator.translator import cache_translation
+from astropy.coordinates import Angle, EarthLocation
 
 log = logging.getLogger(__name__)
 
@@ -71,7 +70,6 @@ class NickelTranslator(FitsTranslator):
             return t
         return self._from_fits_date("DATE-OBS", scale="utc")
 
-
     @cache_translation
     def to_datetime_end(self):
         """Prefer DATE-END; if missing or earlier than begin, use begin + EXPTIME.
@@ -87,11 +85,12 @@ class NickelTranslator(FitsTranslator):
                 if exptime > 0.0:
                     # Use TAI for a pure elapsed-time delta; choice doesn’t matter
                     # as long as begin and end are compared consistently.
-                    end = begin + astropy.time.TimeDelta(exptime, format="sec", scale="tai")
+                    end = begin + astropy.time.TimeDelta(
+                        exptime, format="sec", scale="tai"
+                    )
                 else:
                     end = begin
         return end
-
 
     @cache_translation
     def to_observation_type(self) -> str:

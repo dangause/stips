@@ -1,0 +1,18 @@
+# .ruff.toml
+target-version = "py312"
+line-length = 100
+
+[lint]
+# Keep basic sanity checks + import sorting; Black handles formatting.
+select = ["E", "F", "I"]
+ignore = ["E501"]
+
+# Allow auto-fixes from the pre-commit hook (`--fix`).
+fixable = ["ALL"]
+
+[lint.per-file-ignores]
+# LSST pipeline configs: `config` is injected at runtime, so allow F821 here.
+"configs/**/*.py" = ["F821"]
+
+# This helper intentionally sets the backend after some logic; ignore import-at-top.
+"debug.py" = ["E402"]

@@ -19,13 +19,14 @@
 # - Pixel scale is taken as the median across inputs, with optional override.
 
 from __future__ import annotations
+
 import argparse
 from pathlib import Path
 from statistics import median
 
-from lsst.daf.butler import Butler
 import lsst.geom as geom
 import lsst.sphgeom as sphgeom
+from lsst.daf.butler import Butler
 
 
 def _get_wcs_and_bbox(butler: Butler, dsref, dtype: str, collections):
@@ -76,7 +77,9 @@ def _hull_center_radius_deg(wcs_bbox_pairs: list[tuple], border_deg: float):
     return ra_deg, dec_deg, rad_deg
 
 
-def _median_pixscale_arcsec(wcs_bbox_pairs: list[tuple], fallback: float | None = None) -> float:
+def _median_pixscale_arcsec(
+    wcs_bbox_pairs: list[tuple], fallback: float | None = None
+) -> float:
     vals = []
     for wcs, _ in wcs_bbox_pairs:
         try:
@@ -91,27 +94,49 @@ def _median_pixscale_arcsec(wcs_bbox_pairs: list[tuple], fallback: float | None 
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Build a discrete SkyMap config from initial_pvi footprints.")
+    ap = argparse.ArgumentParser(
+        description="Build a discrete SkyMap config from initial_pvi footprints."
+    )
     ap.add_argument("--repo", required=True, help="Butler repo path")
-    ap.add_argument("--collections", required=True, nargs="+",
-                    help="One or more input collections to search (order matters)")
-    ap.add_argument("--dataset-type", default="initial_pvi",
-                    help="Dataset type to use for footprints (default: initial_pvi)")
-    ap.add_argument("--skymap-id", default="nickel_discrete",
-                    help="Skymap identifier (coadd name) to write into config")
-    ap.add_argument("--border-deg", type=float, default=0.05,
-                    help="Extra border (deg) added to the bounding circle")
-    ap.add_argument("--pixel-scale-arcsec", type=float, default=None,
-                    help="Override pixel scale (arcsec/pix). If omitted, median of inputs is used.")
-    ap.add_argument("--out", required=True, help="Output config file path (pex_config python)")
+    ap.add_argument(
+        "--collections",
+        required=True,
+        nargs="+",
+        help="One or more input collections to search (order matters)",
+    )
+    ap.add_argument(
+        "--dataset-type",
+        default="initial_pvi",
+        help="Dataset type to use for footprints (default: initial_pvi)",
+    )
+    ap.add_argument(
+        "--skymap-id",
+        default="nickel_discrete",
+        help="Skymap identifier (coadd name) to write into config",
+    )
+    ap.add_argument(
+        "--border-deg",
+        type=float,
+        default=0.05,
+        help="Extra border (deg) added to the bounding circle",
+    )
+    ap.add_argument(
+        "--pixel-scale-arcsec",
+        type=float,
+        default=None,
+        help="Override pixel scale (arcsec/pix). If omitted, median of inputs is used.",
+    )
+    ap.add_argument(
+        "--out", required=True, help="Output config file path (pex_config python)"
+    )
     args = ap.parse_args()
 
     butler = Butler(args.repo, writeable=False)
 
     # Find inputs
-    dsrefs = list(butler.registry.queryDatasets(
-        args.dataset_type, collections=args.collections
-    ))
+    dsrefs = list(
+        butler.registry.queryDatasets(args.dataset_type, collections=args.collections)
+    )
     if not dsrefs:
         raise SystemExit(f"No '{args.dataset_type}' found in {args.collections}")
 
@@ -119,7 +144,9 @@ def main():
     pairs = []
     for ds in dsrefs:
         try:
-            wcs, bbox = _get_wcs_and_bbox(butler, ds, args.dataset_type, args.collections)
+            wcs, bbox = _get_wcs_and_bbox(
+                butler, ds, args.dataset_type, args.collections
+            )
             pairs.append((wcs, bbox))
         except Exception as e:
             print(f"[warn] skipping {ds.id}: {e}")
@@ -131,8 +158,11 @@ def main():
     ra_deg, dec_deg, radius_deg = _hull_center_radius_deg(pairs, args.border_deg)
 
     # Pixel scale (median or override)
-    pixscale_as = (_median_pixscale_arcsec(pairs, fallback=None)
-                   if args.pixel_scale_arcsec is None else float(args.pixel_scale_arcsec))
+    pixscale_as = (
+        _median_pixscale_arcsec(pairs, fallback=None)
+        if args.pixel_scale_arcsec is None
+        else float(args.pixel_scale_arcsec)
+    )
 
     # Write config (registry-style; works with `butler register-skymap`)
     out = Path(args.out)
@@ -145,15 +175,20 @@ def main():
     lines.append('d = config.skyMap["discrete"]')
     lines.append(f"d.raList     = [{ra_deg:.6f}]     # deg")
     lines.append(f"d.decList    = [{dec_deg:.6f}]    # deg")
-    lines.append(f"d.radiusList = [{radius_deg:.6f}] # deg (includes border {args.border_deg} deg)")
+    lines.append(
+        f"d.radiusList = [{radius_deg:.6f}] # deg (includes border {args.border_deg} deg)"
+    )
     lines.append(f"d.pixelScale   = {pixscale_as:.6f}  # arcsec/pixel")
     lines.append("d.tractOverlap = 0.0                 # deg")
 
     out.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
     print(f"[ok] wrote config: {out}")
-    print(f"[info] name={args.skymap_id}  center=({ra_deg:.6f},{dec_deg:.6f}) deg  radius={radius_deg:.6f} deg")
+    print(
+        f"[info] name={args.skymap_id}  center=({ra_deg:.6f},{dec_deg:.6f}) deg  radius={radius_deg:.6f} deg"
+    )
     print(f"[hint] register with:\n  butler register-skymap {args.repo} -C {out}")
+
 
 if __name__ == "__main__":
     main()

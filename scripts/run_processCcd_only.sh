@@ -23,5 +23,3 @@ pipetask run \
   # --debug \
   # -d "instrument='Nickel' AND exposure.observation_type='science' AND exposure IN (1042)" \
   # -d "instrument='Nickel' AND exposure.observation_type='science'" \
-
-

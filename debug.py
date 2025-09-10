@@ -1,23 +1,29 @@
 # debug.py
 import lsst.afw.display as afwDisplay
-import lsst.display.ds9
+
 afwDisplay.setDefaultBackend("ds9")
 
 # Also enable Matplotlib for scatter/diagnostic plots (star selector)
 import matplotlib
+
 try:
-    matplotlib.use("MacOSX", force=True)   # macOS
+    matplotlib.use("MacOSX", force=True)  # macOS
 except Exception:
     matplotlib.use("TkAgg", force=True)
 from matplotlib import pyplot as plt
+
 plt.ion()
 
 import lsstDebug
+
 print("Importing lsstDebug settings...")
+
 
 def _autocontinue(prompt):
     print(prompt, "(auto-continue)")
     return "c"
+
+
 lsstDebug.input = _autocontinue
 
 
@@ -53,5 +59,6 @@ def DebugInfo(name):
     #     di.plotMagSize = True
 
     return di
+
 
 lsstDebug.Info = DebugInfo

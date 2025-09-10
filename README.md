@@ -1,5 +1,3 @@
-README.md
-
 # obs_nickel
 
 Gen3 **obs** package for the **Nickel 1-m telescope (Lick Observatory)**.
@@ -74,7 +72,7 @@ This writes the **camera** dataset (and any other built-ins) to a timestamped co
 
 ## Camera overview
 
-- **Detector**: single CCD (`CCD0`), **imaging area 1024×1024**, right-side serial overscan **32 columns**  
+- **Detector**: single CCD (`CCD0`), **imaging area 1024×1024**, right-side serial overscan **32 columns**
   (raw amp frame = 1056×1024).
 - **Amplifiers**: 1 (`A00`).
 - **Pixel size**: 15 μm.
@@ -89,9 +87,9 @@ See `camera/nickel.yaml` for the authoritative configuration.
 
 Defined in `python/lsst/obs/nickel/nickelFilters.py`:
 
-- `B` (band `b`) — Johnson/Bessell B  
-- `V` (band `v`) — Johnson/Bessell V  
-- `R` (band `r`) — Cousins R  
+- `B` (band `b`) — Johnson/Bessell B
+- `V` (band `v`) — Johnson/Bessell V
+- `R` (band `r`) — Cousins R
 - `I` (band `i`) — Cousins I
 
 The **translator** reads `FILTNAM` and maps directly to the **physical filter** string.
@@ -102,7 +100,7 @@ The **translator** reads `FILTNAM` and maps directly to the **physical filter** 
 
 Key behavior (matches tests):
 
-- **Instrument**: "Nickel"  
+- **Instrument**: "Nickel"
 - **Times**:
   - `to_datetime_begin`: `DATE-BEG` if present, else `DATE-OBS`
   - `to_datetime_end`: `DATE-END`, else `begin + EXPTIME`
@@ -111,7 +109,7 @@ Key behavior (matches tests):
 - **Location**: `EarthLocation.of_site("Lick Observatory")`
 - **Tracking RA/Dec**: uses **primary WCS center** (`CRVAL1/CRVAL2`) and frame from `RADECSYS`/`RADESYS`
 - **AltAz/pressure**: not provided in v1 (`None`)
-- **Observation typing**: simple rules on `OBSTYPE` and `OBJECT`  
+- **Observation typing**: simple rules on `OBSTYPE` and `OBJECT`
   (`science`, `flat`, `dark`, `bias`, `focus`)
 
 ---
@@ -139,7 +137,7 @@ A portable runner is provided in `scripts/run_nickel.sh` that:
 - (optionally) writes curated calibs, builds CP bias/flats, defects, a calib chain,
 - runs ProcessCcd and post-processing.
 
-Run `scripts/run_nickel.sh -h` for usage.  
+Run `scripts/run_nickel.sh -h` for usage.
 If you have your own script, ensure it **doesn’t** hard-code personal paths; prefer flags/env.
 
 ---
@@ -157,4 +155,4 @@ If you have your own script, ensure it **doesn’t** hard-code personal paths; p
 
 ## License
 
-This package is intended to be distributed under **GPL-3.0** (or the license your org prefers).  
+This package is intended to be distributed under **GPL-3.0**.

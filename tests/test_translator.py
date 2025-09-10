@@ -4,7 +4,6 @@ import unittest
 import astropy.units as u
 from astropy.coordinates import SkyCoord
 from astropy.time import Time
-
 from lsst.obs.nickel.translator import NickelTranslator
 
 
@@ -16,12 +15,10 @@ class TestNickelTranslator(unittest.TestCase):
             # IDs / instrument
             "INSTRUME": "Nickel Direct Camera",
             "OBSNUM": 1032,
-
             # Times
             "EXPTIME": 120.0,
             "DATE-BEG": "2024-06-25T05:15:49.25",
             "DATE-END": "2024-06-25T05:17:49.25",
-
             # WCS center (primary; degrees)
             "CRVAL1": 179.1170349121,
             "CRVAL2": 55.1252822876,
@@ -33,7 +30,6 @@ class TestNickelTranslator(unittest.TestCase):
             "CTYPE2": "DEC--TAN",
             "RADECSYS": "FK5",
             "EQUINOX": 2000.0,
-
             # Misc used by trivial map and sanity checks
             "OBJECT": "NGC_3982",
             "AIRMASS": 1.281367778778,
@@ -69,7 +65,9 @@ class TestNickelTranslator(unittest.TestCase):
         hdr.pop("DATE-END")
         tr2 = NickelTranslator(hdr)
         t1b = tr2.to_datetime_end()
-        expected = Time(hdr["DATE-BEG"], format="isot", scale="utc") + hdr["EXPTIME"] * u.s
+        expected = (
+            Time(hdr["DATE-BEG"], format="isot", scale="utc") + hdr["EXPTIME"] * u.s
+        )
         self.assertAlmostEqual(t1b.mjd, expected.mjd, places=9)
 
     def test_temperature(self):
@@ -83,7 +81,9 @@ class TestNickelTranslator(unittest.TestCase):
     def test_tracking_radec_from_primary_wcs(self):
         coord = self.tr.to_tracking_radec()
         self.assertIsInstance(coord, SkyCoord)
-        expected = SkyCoord(self.header["CRVAL1"], self.header["CRVAL2"], unit=u.deg, frame="fk5")
+        expected = SkyCoord(
+            self.header["CRVAL1"], self.header["CRVAL2"], unit=u.deg, frame="fk5"
+        )
         # Compare by separation (< 0.1 arcsec)
         sep = coord.separation(expected).to(u.arcsec).value
         self.assertLess(sep, 0.1)

@@ -1,11 +1,11 @@
 # Use the object-size selector with looser cuts
 cfg = config.psf_measure_psf.starSelector["objectSize"]
 cfg.doSignalToNoiseLimit = True
-cfg.signalToNoiseMin = 10.0            
-cfg.doFluxLimit = False                # drop the 12.5k flux floor
+cfg.signalToNoiseMin = 10.0
+cfg.doFluxLimit = False  # drop the 12.5k flux floor
 cfg.widthMin = 0.8
 cfg.widthMax = 8.0
-cfg.widthStdAllowed = 0.40             # widen cluster tolerance
+cfg.widthStdAllowed = 0.40  # widen cluster tolerance
 cfg.nSigmaClip = 3.0
 
 # Be a bit less strict on mask flags for sparse frames

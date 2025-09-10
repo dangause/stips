@@ -3,7 +3,7 @@ REPO="/Users/dangause/Desktop/lick/lsst/data/nickel/062424"
 OBS="${HOME}/Desktop/lick/lsst/lsst_stack/stack/obs_nickel"
 CALIB="Nickel/calib/current"
 REFCATS="refcats"
-RAW_IN="Nickel/raw/all"               
+RAW_IN="Nickel/raw/all"
 BAD="1032,1048,1051,1052"
 
 TS=$(date -u +%Y%m%dT%H%M%SZ)

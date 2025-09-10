@@ -15,11 +15,11 @@ AMP: &AMP
   saturation: 65535                         # DN (~118k e- full well / 1.8 e-/DN ≈ 65.6k DN)
   linearityType: PROPORTIONAL
   linearityThreshold: 0
-  linearityMax: 60000                       
+  linearityMax: 60000
   linearityCoeffs: [0.0, 1.0]
-  hdu: 0                                    
+  hdu: 0
   ixy: [0, 0]
-  flipXY: [false, true]                     
+  flipXY: [false, true]
 
 CCD: &CCD
   detectorType: 0

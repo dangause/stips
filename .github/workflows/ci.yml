@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/lsst/scipipe:al9-w_2025_32
+      env:
+        # Ensure EUPS is happy in containerized/root context
+        SHELL: /bin/bash
+        HOME: /__w/${{ github.event.repository.name }}/${{ github.event.repository.name }}
+        USER: runner
+    env:
+      STACK_DIR: /opt/lsst/software/stack
+      TESTDATA_NICKEL_DIR: ${{ github.workspace }}/extern/testdata_nickel
+
+    steps:
+      - name: Checkout obs_nickel
+        uses: actions/checkout@v4
+
+      - name: Checkout testdata_nickel
+        uses: actions/checkout@v4
+        with:
+          repository: dangause/testdata_nickel
+          path: extern/testdata_nickel
+          # If private, uncomment and set GH_PAT in repo secrets:
+          # token: ${{ secrets.GH_PAT }}
+
+      - name: Mark repo as safe (avoids root + git warnings)
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Install pre-commit and tox (via pip inside scipipe)
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install pre-commit tox
+
+      - name: Run pre-commit
+        run: pre-commit run -a
+
+      - name: Run tests via tox (honors TESTDATA_NICKEL_DIR)
+        run: tox -q
