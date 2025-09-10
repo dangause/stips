@@ -6,18 +6,17 @@ __all__ = ("NickelTranslator",)
 import logging
 from typing import Any
 
-import astropy.units as u
 import astropy.time
-from astropy.coordinates import Angle, EarthLocation, SkyCoord
+from astro_metadata_translator.translators.helpers import (
+    tracking_from_degree_headers,
+    altaz_from_degree_headers,
+)
+import astropy.units as u
+from astropy.coordinates import Angle, SkyCoord, EarthLocation
 from astro_metadata_translator.translators.fits import FitsTranslator
 from astro_metadata_translator.translator import cache_translation
 
 log = logging.getLogger(__name__)
-
-# Lick Nickel approx. location
-_NICKEL_LOCATION = EarthLocation.from_geodetic(
-    lat=37.3414, lon=-121.6429, height=1293 * u.m
-)
 
 
 class NickelTranslator(FitsTranslator):
@@ -26,11 +25,13 @@ class NickelTranslator(FitsTranslator):
     name = "Nickel"
     supported_instrument = {"Nickel"}
 
+    # _const_map includes properties that you may not know, nor can calculate.
     _const_map = {
         "boresight_rotation_angle": Angle(0.0 * u.deg),
         "boresight_rotation_coord": "sky",
     }
 
+    # _trivial_map includes properties that can be taken directly from header
     _trivial_map: dict[str, str | tuple[str, dict[str, Any]]] = {
         "exposure_time": ("EXPTIME", {"unit": u.s, "default": 0.0 * u.s}),
         "dark_time": ("EXPTIME", {"unit": u.s, "default": 0.0 * u.s}),
@@ -134,16 +135,19 @@ class NickelTranslator(FitsTranslator):
 
     @cache_translation
     def to_location(self) -> EarthLocation:
-        return _NICKEL_LOCATION
+
+        value = EarthLocation.of_site("Lick Observatory")
+        return value
 
     @cache_translation
-    def to_tracking_radec(self) -> SkyCoord:
-        ra = self._header.get("RA")
-        dec = self._header.get("DEC")
-        frame = self._header.get("RADESYSS", "FK5").strip()
-        if ra and dec:
-            return SkyCoord(ra, dec, unit=(u.hourangle, u.deg), frame=frame.lower())
-        raise RuntimeError("Missing RA/DEC in header")
+    def to_tracking_radec(self):
+        # Use primary WCS center; RA/Dec in degrees; frame from RADECSYS/RADESYS.
+        return tracking_from_degree_headers(
+            self,
+            ("RADECSYS", "RADESYS"),
+            (("CRVAL1", "CRVAL2"),),
+            unit=u.deg,
+        )
 
     @cache_translation
     def to_temperature(self) -> u.Quantity:
