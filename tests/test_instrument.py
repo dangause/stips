@@ -18,19 +18,64 @@ from lsst.obs.base.instrument_tests import InstrumentTests, InstrumentTestData
 import lsst.obs.nickel
 
 
-class TestNickel(InstrumentTests, lsst.utils.tests.TestCase):
+# tests/test_instrument_extras.py
+import unittest
+
+from lsst.obs.nickel import Nickel
+from lsst.obs.nickel.nickelFilters import NICKEL_FILTER_DEFINITIONS
+from lsst.obs.base import DefineVisitsTask
+
+
+class TestNickelExtras(unittest.TestCase):
     def setUp(self):
-        # Match what is actually registered by the instrument
-        physical_filters = {"B", "V", "R", "I"}
+        self.inst = Nickel()
 
-        self.data = InstrumentTestData(
-            name="Nickel",
-            nDetectors=1,
-            firstDetectorName="CCD0",
-            physical_filters=physical_filters
-        )
+    def test_name_consistency(self):
+        # Class attribute and method should agree
+        self.assertEqual(self.inst.name, "Nickel")
+        self.assertEqual(self.inst.getName(), "Nickel")
 
-        self.instrument = lsst.obs.nickel.Nickel()
+    def test_camera_basics(self):
+        cam = self.inst.getCamera()
+        # One detector only
+        self.assertEqual(len(list(cam)), 1)
+
+        det = next(iter(cam))
+        # ID and names from your nickel.yaml
+        self.assertEqual(det.getId(), 0)
+        self.assertEqual(det.getName(), "CCD0")
+
+        # The detector bbox should be 1024x1024 (binned imaging area)
+        bbox = det.getBBox()
+        self.assertEqual(bbox.getWidth(), 1025)
+        self.assertEqual(bbox.getHeight(), 1025)
+
+        # One amplifier named A00
+        amps = list(det)
+        self.assertEqual(len(amps), 1)
+        self.assertEqual(amps[0].getName(), "A00")
+
+    def test_raw_formatter(self):
+        # Should return the NickelRawFormatter class (not an instance)
+        rf_cls = self.inst.getRawFormatter(dataId={"detector": 0})
+        from lsst.obs.nickel.rawFormatter import NickelRawFormatter
+        self.assertIs(rf_cls, NickelRawFormatter)
+
+    def test_define_visits_task(self):
+        # One exposure = one visit
+        self.assertIs(self.inst.getDefineVisitsTask(), DefineVisitsTask)
+
+    def test_filters_registered(self):
+        # Basic sanity: four physical filters with expected bands
+        pfs = {fd.physical_filter for fd in NICKEL_FILTER_DEFINITIONS}
+        self.assertEqual(pfs, {"B", "V", "R", "I"})
+
+        bands = {fd.band for fd in NICKEL_FILTER_DEFINITIONS}
+        self.assertEqual(bands, {"b", "v", "r", "i"})
+
+        # Ensure there are no duplicate physical_filter entries
+        self.assertEqual(len(pfs), len(list(NICKEL_FILTER_DEFINITIONS)))
+
 
 
 

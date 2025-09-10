@@ -36,7 +36,7 @@ nss.doIsolated = False
 # refSel.doUnresolved = True
 # refSel.doIsolated   = True
 
-# ------------- Tuned values (from your JSON) -------------
+# ------------- Tuned values -------------
 # PSF detection
 config.psf_detection.thresholdValue = 3.1852891079592682
 config.psf_detection.includeThresholdMultiplier = 3.8347177138731223

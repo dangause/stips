@@ -5,7 +5,7 @@ ss = c.sourceSelector["science"]
 ss.doFlags = True
 ss.flags.good = ["calib_psf_used"]
 ss.flags.bad = []
-ss.doUnresolved = False          # <-- keep False here
+ss.doUnresolved = False          
 ss.doIsolated = False
 ss.doSignalToNoise = True
 ss.signalToNoise.minimum = 30.0
@@ -19,11 +19,11 @@ c.numSigmaClip = 5.0
 c.numIter = 4
 c.allowFailure = ["base_GaussianFlux"]
 
-# PSF normalized calibration flux selector (this is where it crashed)
+# PSF normalized calibration flux selector
 ncf = config.psf_normalized_calibration_flux.measure_ap_corr
 ncf.sourceSelector.name = "science"
 nss = ncf.sourceSelector["science"]
 nss.doSignalToNoise = True
 nss.signalToNoise.minimum = 25.0
-nss.doUnresolved = False         # <-- set False here too
+nss.doUnresolved = False       
 nss.doIsolated = False
