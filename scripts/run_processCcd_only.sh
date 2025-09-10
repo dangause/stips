@@ -16,8 +16,12 @@ pipetask run \
   -C calibrateImage:configs/psf_detection_relaxed.py \
   -C calibrateImage:configs/psf_starselector_relaxed.py \
   -C calibrateImage:configs/astrometry_relaxed.py \
+  # -C calibrateImage:configs/apply_colorterms.py \
   -d "instrument='Nickel' AND exposure.observation_type='science' AND NOT (exposure IN (${BAD}))" \
   -j 1 --register-dataset-types \
   2>&1 | tee "logs/processCcd_only_${TS}.log"
   # --debug \
+  # -d "instrument='Nickel' AND exposure.observation_type='science' AND exposure IN (1042)" \
   # -d "instrument='Nickel' AND exposure.observation_type='science'" \
+
+

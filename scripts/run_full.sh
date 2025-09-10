@@ -1,14 +1,18 @@
 #!/usr/bin/env bash
+# Nickel reduction pipeline v2
 
 # bad exposures - exclude:
 # BAD="1032,1033,1034,1043,1046,1047,1048,1049,1050,1051,1052,1056,1058,1059,1060"
 BAD="1032,1051,1052"
 
-########## ABSOLUTE PATHS (edit if needed) ##########
-REPO="/Users/dangause/Desktop/lick/lsst/data/nickel/062424"
-RAWDIR="/Users/dangause/Desktop/lick/data/062424/raw"
-OBS_NICKEL="/Users/dangause/Desktop/lick/lsst/lsst_stack/stack/obs_nickel"
-REFCAT_REPO="/Users/dangause/Desktop/lick/lsst/lsst_stack/stack/refcats"
+########## ABSOLUTE PATHS (change these to your) ##########
+RAWDIR="/Users/dangause/Desktop/lick/data/062424/raw" # raw data directory
+REPO="/Users/dangause/Desktop/lick/lsst/data/nickel/062424"  # butler repo directory
+OBS_NICKEL="/Users/dangause/Desktop/lick/lsst/lsst_stack/stack/obs_nickel"  # obs_nickel directory
+REFCAT_REPO="/Users/dangause/Desktop/lick/lsst/lsst_stack/stack/refcats"  # refcat repo directory
+OVR="/Users/dangause/Desktop/lick/lsst/data/nickel/062424/tuning_runs/trials/t022/calib_overrides_t022.py"  # tuned calib override file
+STACK_DIR="/Users/dangause/Desktop/lick/lsst/lsst_stack"  # lsst_stack directory (with loadLSST.zsh)
+
 
 ########## BASIC CONFIG ##########
 INSTRUMENT="lsst.obs.nickel.Nickel"
@@ -16,6 +20,12 @@ RUN="Nickel/raw/all"
 TS="$(date -u +%Y%m%dT%H%M%SZ)"
 
 echo "=== Nickel pipeline starting @ $TS ==="
+
+cd "$STACK_DIR"
+source loadLSST.zsh
+setup lsst_distrib; setup obs_nickel; setup testdata_nickel
+
+cd "$OBS_NICKEL"
 
 ########## CREATE & REGISTER ##########
 if [ ! -f "$REPO/butler.yaml" ]; then
@@ -149,22 +159,22 @@ PROCESS_CCD_RUN="Nickel/run/processCcd/$(date +%Y%m%dT%H%M%S)"
 # quick sanity
 butler query-collections "$REPO" | grep -E 'Nickel/calib/(current|defects/current)' || true
 
+
 pipetask run \
   -b "$REPO" \
   -i "$RUN","$CALIB_CHAIN","refcats" \
   -o "$PROCESS_CCD_RUN" \
   -p "$PIPE#processCcd" \
-  -C calibrateImage:configs/apcorr_overrides.py \
-  -d "instrument='Nickel' AND exposure.observation_type='science'" \
-  -j 1 --register-dataset-types \
+  -C calibrateImage:configs/calibrateImage/tuned_configs/best_calib_t071.py \
+  -d "instrument='Nickel' AND exposure.observation_type='science' AND NOT (exposure IN (${BAD}))" \
+  -j 8 --register-dataset-types \
   2>&1 | tee "logs/processCcd_${TS}.log"
-  # -C calibrateImage:configs/psf_detection_relaxed.py \
-  # -C calibrateImage:configs/psf_starselector_relaxed.py \
-  # -C calibrateImage:configs/astrometry_relaxed.py \
-  # -d "instrument='Nickel' AND exposure.observation_type='science' AND NOT (exposure IN (${BAD}))" \
+  # -C calibrateImage:configs/apply_colorterms.py \
   # --debug \
+  # -d "instrument='Nickel' AND exposure.observation_type='science' AND exposure IN (1042)" \
+  # -d "instrument='Nickel' AND exposure.observation_type='science'" \
 
-# BAD="1032,1051,1052"
+
 pipetask run \
   -b "$REPO" \
   -i "$PROCESS_CCD_RUN","$CALIB_CHAIN","refcats" \
@@ -172,8 +182,26 @@ pipetask run \
   -p ./pipelines/PostProcessing.yaml \
   --register-dataset-types \
   -d "instrument='Nickel' AND exposure.observation_type='science' AND NOT (exposure IN (${BAD}))" \
-  -j 1 \
+  -j 8 \
   2>&1 | tee "logs/postproc_visits_${TS}.log"
+
+
+
+# Build discrete skymap config from initial_pvi footprints
+SKY_CFG="configs/makeSkyMap_discrete_auto.py"
+python scripts/build_discrete_skymap_config.py \
+  --repo "$REPO" \
+  --collections "$PROCESS_CCD_RUN" \
+  --dataset-type initial_pvi \
+  --skymap-id nickel_discrete \
+  --border-deg 0.05 \
+  --out "$SKY_CFG"
+
+# Register it
+butler register-skymap "$REPO" -C "$SKY_CFG"
+
+# (Optional) sanity
+butler query-datasets "$REPO" skyMap --where "skymap='nickel_discrete'"
 
 
 echo "=== Done ==="

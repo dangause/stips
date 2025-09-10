@@ -1,0 +1,71 @@
+# pipelines/Postprocessing.yaml
+
+description: "Nickel postprocess: consolidate visit summaries + make visit table"
+
+tasks:
+  consolidateVisitSummary:
+    class: lsst.pipe.tasks.postprocess.ConsolidateVisitSummaryTask
+    config:
+      # Point the task at your Gen3 calibrated exposure dataset
+      connections.calexp: "initial_pvi"
+      
+  makeVisitTable:
+    class: lsst.pipe.tasks.postprocess.MakeVisitTableTask
+    config:
+      connections.visitSummaries: "visitSummary"
+
+
+
+  # writeSourceTable:
+  #   class: lsst.pipe.tasks.postprocess.WriteSourceTableTask
+  #   config:
+  #     connections.catalog: "initial_stars_detector"
+
+  # transformSourceTable:
+  #   class: lsst.pipe.tasks.postprocess.TransformSourceTableTask
+  #   config:
+  #     connections.inputCatalog: "initial_stars_detector"
+
+# # description: Minimal Nickel (Gen3) single-band coadd from initial_pvi
+
+# # tasks:
+
+#   makeDiscreteSkyMap:
+#     class: lsst.pipe.tasks.makeDiscreteSkyMap.MakeDiscreteSkyMapTask
+
+
+#   # Optional but handy later (e.g., FGCM): write consolidated per-visit source tables
+#   writeSourceTable:
+#     class: lsst.pipe.tasks.postprocess.WriteSourceTableTask
+#     config:
+#       # Point it at your Gen3 catalog from calibrateImage:
+#       # One of these connection names will match your stack version:
+#       connections.sourceCatalog: "initial_stars_detector"
+#       # connections.src: "initial_stars_detector"   # (older/newer name, if needed)
+
+#   consolidateSourceTable:
+#     class: lsst.pipe.tasks.postprocess.ConsolidateSourceTableTask
+
+#   makeWarp:
+#     class: lsst.pipe.tasks.makeCoaddTempExp.MakeWarpTask
+#     config:
+#       doApplySkyCorr: false  # Nickel is single-detector
+#       # Read your Gen3 visit image:
+#       connections.calExp: "initial_pvi"   # (common in many versions)
+#       # connections.inputExposure: "initial_pvi"   # (alt name in some versions)
+#       # Choose warp flavor (default is PSF-matched to tempExp):
+#       # warpType: "direct"  # uncomment for direct reproject (no PSF matching)
+
+#   assembleCoadd:
+#     class: lsst.pipe.tasks.assembleCoadd.AssembleCoaddTask
+#     config:
+#       doMatchBackgrounds: true
+
+#   detectCoaddSources:
+#     class: lsst.pipe.tasks.detectCoaddSources.DetectCoaddSourcesTask
+
+#   deblendCoaddSources:
+#     class: lsst.meas.deblender.SourceDeblendTask
+
+#   measureCoaddSources:
+#     class: lsst.meas.base.MeasureCoaddSourcesTask
