@@ -9,7 +9,6 @@ from lsst.utils.introspection import get_full_type_name
 from lsst.utils import getPackageDir
 
 from .nickelFilters import NICKEL_FILTER_DEFINITIONS
-from .rawFormatter import NickelRawFormatter
 from .translator import NickelTranslator
 
 
@@ -35,21 +34,22 @@ class Nickel(Instrument):
 
 
     @classmethod
-    def getName(cls) -> str:
-        return cls.name
+    def getName(cls):
+        return "Nickel"
 
     def register(self, registry, update: bool = False):
         camera = self.getCamera()
+        obsMax = 2**31
         with registry.transaction():
             registry.syncDimensionData(
                 "instrument",
                 {
                     "name": self.getName(),
                     "class_name": get_full_type_name(type(self)),
-                    "detector_max": len(camera),
-                    "visit_max": 2**25,
+                    "detector_max": 1,  # single-CCD camera
+                    "visit_max": obsMax,
                     "visit_system": VisitSystem.ONE_TO_ONE.value,
-                    "exposure_max": 2**25,
+                    "exposure_max": obsMax,
                 },
                 update=update,
             )
@@ -72,6 +72,9 @@ class Nickel(Instrument):
             self._registerFilters(registry, update=update)
 
     def getRawFormatter(self, dataId):
+        # local import to prevent circular dependency
+
+        from .rawFormatter import NickelRawFormatter
         return NickelRawFormatter
 
     def getDefineVisitsTask(self):
