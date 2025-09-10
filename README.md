@@ -1,5 +1,3 @@
-README.md
-
 # obs_nickel
 
 Gen3 **obs** package for the **Nickel 1-m telescope (Lick Observatory)**.
@@ -157,4 +155,4 @@ If you have your own script, ensure it **doesn’t** hard-code personal paths; p
 
 ## License
 
-This package is intended to be distributed under **GPL-3.0** (or the license your org prefers).
+This package is intended to be distributed under **GPL-3.0**.
