@@ -1,5 +1,4 @@
 # Auto-generated from saved best tuning (trial t071)
-# IMPORTANT: this file is executed by pipetask with `config` in scope.
 # Use top-level assignments only (no functions).
 
 # --- Prelude: keep selector behavior consistent ---
@@ -28,7 +27,6 @@ nss.doUnresolved = False
 nss.doIsolated = False
 
 # (Optional but recommended) reference mag limits and star-like refs
-# Uncomment if you want the stricter reference selection you tried earlier.
 # refSel = config.astrometry.referenceSelector
 # refSel.doMagLimit = True
 # refSel.magLimit.minimum = 12.0
