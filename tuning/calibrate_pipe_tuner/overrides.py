@@ -1,15 +1,28 @@
 from __future__ import annotations
+
 from pathlib import Path
 from typing import Dict
+
 from .io_utils import ensure_parent
 
-def write_overrides_from_config(workdir: Path, tag: str, params: Dict[str, float], param_cfg: Dict[str, dict], prelude: str = "") -> Path:
+
+def write_overrides_from_config(
+    workdir: Path,
+    tag: str,
+    params: Dict[str, float],
+    param_cfg: Dict[str, dict],
+    prelude: str = "",
+) -> Path:
     """Emit per-trial overrides from config (one 'apply' snippet per parameter)."""
     trial_dir = workdir / "trials" / tag
     trial_dir.mkdir(parents=True, exist_ok=True)
     ov_path = trial_dir / f"calib_overrides_{tag}.py"
 
-    lines = ["# Auto-generated overrides for " + tag, "# Executed with `config` in scope.", ""]
+    lines = [
+        "# Auto-generated overrides for " + tag,
+        "# Executed with `config` in scope.",
+        "",
+    ]
     if prelude.strip():
         lines.append("# ---- Prelude ----")
         lines.append(prelude.rstrip("\n"))

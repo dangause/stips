@@ -1,14 +1,21 @@
 from __future__ import annotations
+
 from pathlib import Path
 from typing import Any, List, Optional
+
 
 def discover_postisr(repo: Path) -> str:
     """Return latest Nickel postISR run collection, or '' if none."""
     from lsst.daf.butler import Butler
+
     b = Butler(str(repo))
-    cands = [str(rec) for rec in b.registry.queryCollections()
-             if str(rec).startswith("Nickel/run/processCcd/")]
+    cands = [
+        str(rec)
+        for rec in b.registry.queryCollections()
+        if str(rec).startswith("Nickel/run/processCcd/")
+    ]
     return sorted(cands)[-1] if cands else ""
+
 
 def discover_all_science_visits(repo: Path) -> List[int]:
     """Return all visit IDs for Nickel science exposures in this repo.
@@ -17,6 +24,7 @@ def discover_all_science_visits(repo: Path) -> List[int]:
     scanning data IDs over RAW datasets.
     """
     from lsst.daf.butler import Butler
+
     b = Butler(str(repo))
 
     try:
@@ -42,8 +50,10 @@ def discover_all_science_visits(repo: Path) -> List[int]:
             "Try specifying --visits explicitly."
         )
 
+
 def read_visit_summaries(coll: str, repo: Path, visits: List[int]) -> List[Any]:
     from lsst.daf.butler import Butler
+
     butler = Butler(str(repo), collections=coll, instrument="Nickel")
     rows: List[Any] = []
     for v in visits:
@@ -56,6 +66,7 @@ def read_visit_summaries(coll: str, repo: Path, visits: List[int]) -> List[Any]:
             pass
     return rows
 
+
 def extract_metric_values(rows: List[Any], field: str) -> List[float]:
     vals: List[float] = []
     for r in rows:
@@ -64,6 +75,7 @@ def extract_metric_values(rows: List[Any], field: str) -> List[float]:
         except Exception:
             pass
     return vals
+
 
 def median_from_rows(rows: List[Any], field: str) -> Optional[float]:
     """Median of a numeric column from a list of Astropy row objects (or None)."""

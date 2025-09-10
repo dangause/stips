@@ -13,17 +13,13 @@
 
 import unittest
 
-import lsst.utils.tests
-from lsst.obs.base.instrument_tests import InstrumentTests, InstrumentTestData
 import lsst.obs.nickel
-
+import lsst.utils.tests
+from lsst.obs.base import DefineVisitsTask
 
 # tests/test_instrument_extras.py
-import unittest
-
 from lsst.obs.nickel import Nickel
 from lsst.obs.nickel.nickelFilters import NICKEL_FILTER_DEFINITIONS
-from lsst.obs.base import DefineVisitsTask
 
 
 class TestNickelExtras(unittest.TestCase):
@@ -59,6 +55,7 @@ class TestNickelExtras(unittest.TestCase):
         # Should return the NickelRawFormatter class (not an instance)
         rf_cls = self.inst.getRawFormatter(dataId={"detector": 0})
         from lsst.obs.nickel.rawFormatter import NickelRawFormatter
+
         self.assertIs(rf_cls, NickelRawFormatter)
 
     def test_define_visits_task(self):
@@ -77,8 +74,6 @@ class TestNickelExtras(unittest.TestCase):
         self.assertEqual(len(pfs), len(list(NICKEL_FILTER_DEFINITIONS)))
 
 
-
-
 class MemoryTester(lsst.utils.tests.MemoryTestCase):
     pass
 
@@ -87,6 +82,6 @@ def setup_module(module):
     lsst.utils.tests.init()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     lsst.utils.tests.init()
     unittest.main()

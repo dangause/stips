@@ -1,22 +1,32 @@
 from __future__ import annotations
+
 import json
-from pathlib import Path
 from typing import Dict, List, Tuple
 
+from .butler_utils import extract_metric_values, read_visit_summaries
 from .context import Context, make_runs_headers
 from .io_utils import now_utc_iso, run, tail_lines, write_csv_row
 from .overrides import write_overrides_from_config
-from .pipetask_cmds import build_calibrate_cmd, maybe_run_postproc, log_failure_row
-from .butler_utils import read_visit_summaries, extract_metric_values
-from .scoring import aggregate, compute_metrics_and_score
-from .scoring import penalize_score  # reuse your existing penalty function if in scoring.py
+from .pipetask_cmds import build_calibrate_cmd, log_failure_row, maybe_run_postproc
+from .scoring import (
+    aggregate,
+    compute_metrics_and_score,
+    penalize_score,
+)  # reuse your existing penalty function if in scoring.py
 
-def run_trial(ctx: Context, params: Dict[str, float], tag: str, trial_index: int) -> Tuple[str, float, Dict[str, float]]:
+
+def run_trial(
+    ctx: Context, params: Dict[str, float], tag: str, trial_index: int
+) -> Tuple[str, float, Dict[str, float]]:
     trial_dir = ctx.workdir / "trials" / tag
     trial_dir.mkdir(parents=True, exist_ok=True)
 
     ov_path = write_overrides_from_config(
-        ctx.workdir, tag, params, ctx.cfg["parameters"], ctx.cfg.get("overrides_prelude", "")
+        ctx.workdir,
+        tag,
+        params,
+        ctx.cfg["parameters"],
+        ctx.cfg.get("overrides_prelude", ""),
     )
 
     out_coll = f"Nickel/run/calib_tune/{tag}"
@@ -32,7 +42,9 @@ def run_trial(ctx: Context, params: Dict[str, float], tag: str, trial_index: int
         try:
             cp = run(cmd, check=True, stdout_log=stdout_log, stderr_log=stderr_log)
             if ctx.echo_logs:
-                print(f"\n--- pipetask calibrateImage v{v} (rc={cp.returncode}) tail ---")
+                print(
+                    f"\n--- pipetask calibrateImage v{v} (rc={cp.returncode}) tail ---"
+                )
                 if cp.stdout:
                     print(tail_lines(cp.stdout, ctx.tail))
                 if cp.stderr:
@@ -62,7 +74,9 @@ def run_trial(ctx: Context, params: Dict[str, float], tag: str, trial_index: int
         meds[m["name"]] = aggregate(vals, m.get("aggregate", "median"))
 
     score_base, _ = compute_metrics_and_score(meds, ctx.cfg["metrics"])
-    score = penalize_score(score_base, n_success, n_total, ctx.fail_policy, ctx.fail_weight)
+    score = penalize_score(
+        score_base, n_success, n_total, ctx.fail_policy, ctx.fail_weight
+    )
 
     metrics = {
         "n_total": n_total,
@@ -75,19 +89,24 @@ def run_trial(ctx: Context, params: Dict[str, float], tag: str, trial_index: int
     }
 
     # Write per-trial JSON
-    (trial_dir / "metrics.json").write_text(json.dumps({
-        "time": now_utc_iso(),
-        "trial_index": trial_index,
-        "trial_tag": tag,
-        "out_coll": out_coll,
-        "read_from_collection": read_coll,
-        "postproc_out": post_coll,
-        "params": params,
-        "metrics": metrics,
-        "success_visits": success_visits,
-        "failed_visits": failed_visits,
-        "overrides_path": str(ov_path),
-    }, indent=2))
+    (trial_dir / "metrics.json").write_text(
+        json.dumps(
+            {
+                "time": now_utc_iso(),
+                "trial_index": trial_index,
+                "trial_tag": tag,
+                "out_coll": out_coll,
+                "read_from_collection": read_coll,
+                "postproc_out": post_coll,
+                "params": params,
+                "metrics": metrics,
+                "success_visits": success_visits,
+                "failed_visits": failed_visits,
+                "overrides_path": str(ov_path),
+            },
+            indent=2,
+        )
+    )
 
     # Runs CSV (dynamic headers)
     headers = make_runs_headers(ctx)
@@ -95,7 +114,9 @@ def run_trial(ctx: Context, params: Dict[str, float], tag: str, trial_index: int
         "time": now_utc_iso(),
         "trial_index": trial_index,
         "trial_tag": tag,
-        "status": "ok" if n_success == n_total else ("partial" if n_success > 0 else "fail"),
+        "status": (
+            "ok" if n_success == n_total else ("partial" if n_success > 0 else "fail")
+        ),
         "out_coll": out_coll,
         "read_from_collection": read_coll,
         "postproc_out": post_coll or "",

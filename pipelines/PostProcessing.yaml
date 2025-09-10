@@ -8,7 +8,7 @@ tasks:
     config:
       # Point the task at your Gen3 calibrated exposure dataset
       connections.calexp: "initial_pvi"
-      
+
   makeVisitTable:
     class: lsst.pipe.tasks.postprocess.MakeVisitTableTask
     config:

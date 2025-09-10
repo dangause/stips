@@ -1,4 +1,5 @@
 """Unit tests for Gen3 Nickel raw data ingest."""
+
 import os
 import unittest
 
@@ -17,6 +18,7 @@ except Exception:
 @unittest.skipIf(testDataDirectory is None, "testdata_nickel must be set up")
 class TestNickelIngest(IngestTestBase, lsst.utils.tests.TestCase):
     """Test ingestion of Nickel raw data."""
+
     ingestDir = os.path.dirname(__file__)
     instrumentClassName = "lsst.obs.nickel.Nickel"
     filterLabel = FilterLabel(physical="B", band="b")

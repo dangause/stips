@@ -41,27 +41,31 @@ config.psf_detection.includeThresholdMultiplier = 3.8347177138731223
 
 # PSF star selector: objectSize
 config.psf_measure_psf.starSelector["objectSize"].signalToNoiseMin = 11.331620382942939
-config.psf_measure_psf.starSelector["objectSize"].widthStdAllowed  = 0.35714305927818163
+config.psf_measure_psf.starSelector["objectSize"].widthStdAllowed = 0.35714305927818163
 
 # Astrometry matcher (pessimisticB)
 m = config.astrometry.matcher
-m.maxOffsetPix         = int(184)
-m.maxRotationDeg       = 2.3481849888137583
-m.matcherIterations    = int(8)
-m.minMatchDistPixels   = 2.19105964461907
-m.minMatchedPairs      = int(9)
-m.minFracMatchedPairs  = 0.06453778850229026
-m.numBrightStars       = int(200)
-m.maxRefObjects        = int(6498)
-m.numPatternConsensus  = int(2)
+m.maxOffsetPix = int(184)
+m.maxRotationDeg = 2.3481849888137583
+m.matcherIterations = int(8)
+m.minMatchDistPixels = 2.19105964461907
+m.minMatchedPairs = int(9)
+m.minFracMatchedPairs = 0.06453778850229026
+m.numBrightStars = int(200)
+m.maxRefObjects = int(6498)
+m.numPatternConsensus = int(2)
 
 # Astrometry science source S/N
 config.astrometry.sourceSelector["science"].signalToNoise.minimum = 16.27252713241595
 
 # ApCorr (science selector + clipping)
-config.measure_aperture_correction.sourceSelector["science"].signalToNoise.minimum = 36.97527026411837
+config.measure_aperture_correction.sourceSelector["science"].signalToNoise.minimum = (
+    36.97527026411837
+)
 config.measure_aperture_correction.numSigmaClip = 3.7130223492394188
-config.measure_aperture_correction.numIter      = int(5)
+config.measure_aperture_correction.numIter = int(5)
 
 # PSF Normalized Calibration Flux (N.C.F.) selector S/N
-config.psf_normalized_calibration_flux.measure_ap_corr.sourceSelector["science"].signalToNoise.minimum = 22.322792002973504
+config.psf_normalized_calibration_flux.measure_ap_corr.sourceSelector[
+    "science"
+].signalToNoise.minimum = 22.322792002973504

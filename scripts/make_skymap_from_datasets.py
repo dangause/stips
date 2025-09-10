@@ -19,12 +19,11 @@ from __future__ import annotations
 import argparse
 from typing import Iterable, List, Tuple
 
-from lsst.daf.butler import Butler, DatasetType
-from lsst.geom import Box2D
 import lsst.geom as geom
 import lsst.sphgeom as sphgeom
+from lsst.daf.butler import Butler, DatasetType
+from lsst.geom import Box2D
 from lsst.skymap import DiscreteSkyMap
-import lsst.pipe.tasks.makeDiscreteSkyMap as mkd  # for parity with Task logic (not required)
 
 
 def ensure_skyMap_dataset_type(butler: Butler) -> None:
@@ -58,11 +57,11 @@ def collect_wcs_bbox(
     collections: List[str],
 ) -> List[Tuple[geom.SkyWcs, geom.Box2I]]:
     """Gather (Wcs, BBox) pairs for all datasets of the given type in collections."""
-    dsrefs = list(
-        butler.registry.queryDatasets(dataset_type, collections=collections)
-    )
+    dsrefs = list(butler.registry.queryDatasets(dataset_type, collections=collections))
     if not dsrefs:
-        raise RuntimeError(f"No datasets of type '{dataset_type}' found in {collections}")
+        raise RuntimeError(
+            f"No datasets of type '{dataset_type}' found in {collections}"
+        )
 
     print(f"[info] Found {len(dsrefs)} {dataset_type} in {collections}")
     out: List[Tuple[geom.SkyWcs, geom.Box2I]] = []
@@ -72,7 +71,9 @@ def collect_wcs_bbox(
     return out
 
 
-def convex_hull_from_wcs_bboxes(pairs: Iterable[Tuple[geom.SkyWcs, geom.Box2I]]) -> sphgeom.ConvexPolygon:
+def convex_hull_from_wcs_bboxes(
+    pairs: Iterable[Tuple[geom.SkyWcs, geom.Box2I]]
+) -> sphgeom.ConvexPolygon:
     """Mirror of MakeDiscreteSkyMapTask: convex hull of all exposure corner sky positions."""
     points = []
     for wcs, boxI in pairs:
@@ -84,7 +85,9 @@ def convex_hull_from_wcs_bboxes(pairs: Iterable[Tuple[geom.SkyWcs, geom.Box2I]])
         raise RuntimeError("No data found from which to compute convex hull")
     polygon = sphgeom.ConvexPolygon.convexHull(points)
     if polygon is None:
-        raise RuntimeError("Failed to compute convex hull; corners may be hemispherical.")
+        raise RuntimeError(
+            "Failed to compute convex hull; corners may be hemispherical."
+        )
     return polygon
 
 
@@ -125,7 +128,9 @@ def build_discrete_skymap_from_polygon(
     return skyMap
 
 
-def upsert_dimensions_for_skymap(butler: Butler, skymap_id: str, skyMap: DiscreteSkyMap) -> None:
+def upsert_dimensions_for_skymap(
+    butler: Butler, skymap_id: str, skyMap: DiscreteSkyMap
+) -> None:
     """Insert dimension rows for 'skymap' and 'tract' with required fields."""
     # skymap row (name only)
     try:
@@ -161,13 +166,34 @@ def upsert_dimensions_for_skymap(butler: Butler, skymap_id: str, skyMap: Discret
 
 
 def parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Create and persist a DiscreteSkyMap from exposure footprints.")
+    p = argparse.ArgumentParser(
+        description="Create and persist a DiscreteSkyMap from exposure footprints."
+    )
     p.add_argument("--repo", required=True, help="Butler repo path/URI")
-    p.add_argument("--collections", required=True, help="Comma-separated collection(s) to read from")
-    p.add_argument("--dataset-type", default="initial_pvi", help="Dataset type to sample (default: initial_pvi)")
-    p.add_argument("--skymap-id", required=True, help="Identifier for the skyMap dimension row (e.g. nickel_discrete)")
-    p.add_argument("--run", required=True, help="RUN collection to write the skyMap dataset into")
-    p.add_argument("--border-deg", type=float, default=0.0, help="Extra border (deg) added to convex-hull radius")
+    p.add_argument(
+        "--collections",
+        required=True,
+        help="Comma-separated collection(s) to read from",
+    )
+    p.add_argument(
+        "--dataset-type",
+        default="initial_pvi",
+        help="Dataset type to sample (default: initial_pvi)",
+    )
+    p.add_argument(
+        "--skymap-id",
+        required=True,
+        help="Identifier for the skyMap dimension row (e.g. nickel_discrete)",
+    )
+    p.add_argument(
+        "--run", required=True, help="RUN collection to write the skyMap dataset into"
+    )
+    p.add_argument(
+        "--border-deg",
+        type=float,
+        default=0.0,
+        help="Extra border (deg) added to convex-hull radius",
+    )
     return p.parse_args()
 
 

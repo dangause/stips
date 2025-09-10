@@ -20,8 +20,6 @@ from __future__ import annotations
 import argparse
 import csv
 import json
-import math
-import os
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -35,6 +33,7 @@ import optuna
 # Utility dataclasses & helpers
 # ----------------------------
 
+
 @dataclass
 class Context:
     repo: Path
@@ -46,47 +45,80 @@ class Context:
     bad: List[int]
     jobs: int
     inputs_postisr: str  # e.g., "Nickel/run/processCcd/2025..."
-    calib_chain: str     # e.g., "Nickel/calib/current"
-    refcats: str         # usually "refcats"
+    calib_chain: str  # e.g., "Nickel/calib/current"
+    refcats: str  # usually "refcats"
     fail_policy: str
     fail_weight: float
     echo_logs: bool
     tail: int
     run_postproc: bool
 
+
 # CSV schemas
 FAIL_LOG_HEADERS = [
-    "time", "trial_tag", "exception", "message", "returncode",
-    "cmd", "stdout_log", "stderr_log"
+    "time",
+    "trial_tag",
+    "exception",
+    "message",
+    "returncode",
+    "cmd",
+    "stdout_log",
+    "stderr_log",
 ]
 RUNS_CSV_HEADERS = [
     # trial identity
-    "time", "trial_index", "trial_tag", "status", "out_coll",
+    "time",
+    "trial_index",
+    "trial_tag",
+    "status",
+    "out_coll",
     # where we read metrics from
-    "read_from_collection", "postproc_out",
+    "read_from_collection",
+    "postproc_out",
     # visits accounting
-    "n_total", "n_success", "n_fail", "success_rate",
+    "n_total",
+    "n_success",
+    "n_fail",
+    "success_rate",
     # metrics
-    "psfSigma_med", "astromOffsetStd_med", "skyNoise_med", "magLim_med",
-    "score_base", "score",
+    "psfSigma_med",
+    "astromOffsetStd_med",
+    "skyNoise_med",
+    "magLim_med",
+    "score_base",
+    "score",
     # parameters (flattened)
-    "psf_det.threshold", "psf_det.incMult",
-    "psfsel.snmin", "psfsel.widthStdMax",
-    "match.maxOffsetPix", "match.maxRotationDeg", "match.matcherIterations",
-    "match.minMatchDistPixels", "match.minMatchedPairs", "match.minFracMatchedPairs",
-    "match.numBrightStars", "match.maxRefObjects", "match.numPatternConsensus",
+    "psf_det.threshold",
+    "psf_det.incMult",
+    "psfsel.snmin",
+    "psfsel.widthStdMax",
+    "match.maxOffsetPix",
+    "match.maxRotationDeg",
+    "match.matcherIterations",
+    "match.minMatchDistPixels",
+    "match.minMatchedPairs",
+    "match.minFracMatchedPairs",
+    "match.numBrightStars",
+    "match.maxRefObjects",
+    "match.numPatternConsensus",
     "astro_src.snmin",
-    "apcorr.snmin", "apcorr.sigclip", "apcorr.niter",
+    "apcorr.snmin",
+    "apcorr.sigclip",
+    "apcorr.niter",
     "ncf.snmin",
     # artifact paths
-    "overrides_path", "trial_dir"
+    "overrides_path",
+    "trial_dir",
 ]
+
 
 def now_utc_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
+
 def ensure_parent(p: Path) -> None:
     p.parent.mkdir(parents=True, exist_ok=True)
+
 
 def tail_lines(s: str, n: int) -> str:
     if not s:
@@ -94,10 +126,17 @@ def tail_lines(s: str, n: int) -> str:
     lines = s.rstrip("\n").splitlines()
     return "\n".join(lines[-n:]) if n > 0 else s
 
-def run(cmd: List[str], check: bool,
-        stdout_log: Optional[Path] = None, stderr_log: Optional[Path] = None) -> subprocess.CompletedProcess:
+
+def run(
+    cmd: List[str],
+    check: bool,
+    stdout_log: Optional[Path] = None,
+    stderr_log: Optional[Path] = None,
+) -> subprocess.CompletedProcess:
     """Run a subprocess, tee stdout/stderr into files (if provided), and return CompletedProcess."""
-    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    proc = subprocess.Popen(
+        cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+    )
     out, err = proc.communicate()
     if stdout_log:
         ensure_parent(stdout_log)
@@ -110,6 +149,7 @@ def run(cmd: List[str], check: bool,
         raise ex
     return subprocess.CompletedProcess(cmd, proc.returncode, out, err)
 
+
 def write_csv_row(csv_path: Path, headers: List[str], row: Dict[str, Any]) -> None:
     ensure_parent(csv_path)
     new_file = not csv_path.exists()
@@ -120,8 +160,15 @@ def write_csv_row(csv_path: Path, headers: List[str], row: Dict[str, Any]) -> No
         safe = {h: row.get(h, "") for h in headers}
         w.writerow(safe)
 
-def log_failure(ctx: Context, tag: str, exc: BaseException, cmd: List[str],
-                stdout_log: Optional[Path], stderr_log: Optional[Path]) -> None:
+
+def log_failure(
+    ctx: Context,
+    tag: str,
+    exc: BaseException,
+    cmd: List[str],
+    stdout_log: Optional[Path],
+    stderr_log: Optional[Path],
+) -> None:
     row = {
         "time": now_utc_iso(),
         "trial_tag": tag,
@@ -134,6 +181,7 @@ def log_failure(ctx: Context, tag: str, exc: BaseException, cmd: List[str],
     }
     write_csv_row(ctx.workdir / "trial_failures.csv", FAIL_LOG_HEADERS, row)
 
+
 # ---------------------------------------
 # Trial parameter handling & overrides I/O
 # ---------------------------------------
@@ -141,56 +189,85 @@ def log_failure(ctx: Context, tag: str, exc: BaseException, cmd: List[str],
 PARAM_BOUNDS = {
     # PSF detection
     "psf_det.threshold": (3.0, 8.0),
-    "psf_det.incMult":   (1.0, 6.5),
-
+    "psf_det.incMult": (1.0, 6.5),
     # PSF star selector (objectSize)
-    "psfsel.snmin":       (8.0, 30.0),
+    "psfsel.snmin": (8.0, 30.0),
     "psfsel.widthStdMax": (0.30, 0.45),
-
     # Astrometry matcher (pessimisticB)
-    "match.maxOffsetPix":        (80, 300),
-    "match.maxRotationDeg":      (0.5, 3.0),
-    "match.matcherIterations":   (6, 12),
-    "match.minMatchDistPixels":  (1.0, 3.0),
-    "match.minMatchedPairs":     (8, 25),
+    "match.maxOffsetPix": (80, 300),
+    "match.maxRotationDeg": (0.5, 3.0),
+    "match.matcherIterations": (6, 12),
+    "match.minMatchDistPixels": (1.0, 3.0),
+    "match.minMatchedPairs": (8, 25),
     "match.minFracMatchedPairs": (0.02, 0.08),
-    "match.numBrightStars":      (150, 300),
-    "match.maxRefObjects":       (4000, 6500),
+    "match.numBrightStars": (150, 300),
+    "match.maxRefObjects": (4000, 6500),
     "match.numPatternConsensus": (2, 3),
-
     # Astrometry source S/N
     "astro_src.snmin": (8.0, 25.0),
-
     # ApCorr (science selector + clipping)
-    "apcorr.snmin":   (25.0, 45.0),
+    "apcorr.snmin": (25.0, 45.0),
     "apcorr.sigclip": (3.0, 5.0),
-    "apcorr.niter":   (3, 6),
-
+    "apcorr.niter": (3, 6),
     # PSF Normalized Calibration Flux (N.C.F.) selector S/N
     "ncf.snmin": (15.0, 30.0),
 }
 
+
 def suggest_params(trial: optuna.Trial) -> Dict[str, Any]:
     p = {}
-    p["psf_det.threshold"]      = trial.suggest_float("psf_det.threshold", *PARAM_BOUNDS["psf_det.threshold"])
-    p["psf_det.incMult"]        = trial.suggest_float("psf_det.incMult",   *PARAM_BOUNDS["psf_det.incMult"])
-    p["psfsel.snmin"]           = trial.suggest_float("psfsel.snmin",      *PARAM_BOUNDS["psfsel.snmin"])
-    p["psfsel.widthStdMax"]     = trial.suggest_float("psfsel.widthStdMax",*PARAM_BOUNDS["psfsel.widthStdMax"])
-    p["match.maxOffsetPix"]     = trial.suggest_int  ("match.maxOffsetPix",*PARAM_BOUNDS["match.maxOffsetPix"])
-    p["match.maxRotationDeg"]   = trial.suggest_float("match.maxRotationDeg", *PARAM_BOUNDS["match.maxRotationDeg"])
-    p["match.matcherIterations"]= trial.suggest_int  ("match.matcherIterations", *PARAM_BOUNDS["match.matcherIterations"])
-    p["match.minMatchDistPixels"]=trial.suggest_float("match.minMatchDistPixels", *PARAM_BOUNDS["match.minMatchDistPixels"])
-    p["match.minMatchedPairs"]  = trial.suggest_int  ("match.minMatchedPairs", *PARAM_BOUNDS["match.minMatchedPairs"])
-    p["match.minFracMatchedPairs"]=trial.suggest_float("match.minFracMatchedPairs", *PARAM_BOUNDS["match.minFracMatchedPairs"])
-    p["match.numBrightStars"]   = trial.suggest_int  ("match.numBrightStars", *PARAM_BOUNDS["match.numBrightStars"])
-    p["match.maxRefObjects"]    = trial.suggest_int  ("match.maxRefObjects", *PARAM_BOUNDS["match.maxRefObjects"])
-    p["match.numPatternConsensus"]=trial.suggest_int ("match.numPatternConsensus", *PARAM_BOUNDS["match.numPatternConsensus"])
-    p["astro_src.snmin"]        = trial.suggest_float("astro_src.snmin", *PARAM_BOUNDS["astro_src.snmin"])
-    p["apcorr.snmin"]           = trial.suggest_float("apcorr.snmin",    *PARAM_BOUNDS["apcorr.snmin"])
-    p["apcorr.sigclip"]         = trial.suggest_float("apcorr.sigclip",  *PARAM_BOUNDS["apcorr.sigclip"])
-    p["apcorr.niter"]           = trial.suggest_int  ("apcorr.niter",    *PARAM_BOUNDS["apcorr.niter"])
-    p["ncf.snmin"]              = trial.suggest_float("ncf.snmin",       *PARAM_BOUNDS["ncf.snmin"])
+    p["psf_det.threshold"] = trial.suggest_float(
+        "psf_det.threshold", *PARAM_BOUNDS["psf_det.threshold"]
+    )
+    p["psf_det.incMult"] = trial.suggest_float(
+        "psf_det.incMult", *PARAM_BOUNDS["psf_det.incMult"]
+    )
+    p["psfsel.snmin"] = trial.suggest_float(
+        "psfsel.snmin", *PARAM_BOUNDS["psfsel.snmin"]
+    )
+    p["psfsel.widthStdMax"] = trial.suggest_float(
+        "psfsel.widthStdMax", *PARAM_BOUNDS["psfsel.widthStdMax"]
+    )
+    p["match.maxOffsetPix"] = trial.suggest_int(
+        "match.maxOffsetPix", *PARAM_BOUNDS["match.maxOffsetPix"]
+    )
+    p["match.maxRotationDeg"] = trial.suggest_float(
+        "match.maxRotationDeg", *PARAM_BOUNDS["match.maxRotationDeg"]
+    )
+    p["match.matcherIterations"] = trial.suggest_int(
+        "match.matcherIterations", *PARAM_BOUNDS["match.matcherIterations"]
+    )
+    p["match.minMatchDistPixels"] = trial.suggest_float(
+        "match.minMatchDistPixels", *PARAM_BOUNDS["match.minMatchDistPixels"]
+    )
+    p["match.minMatchedPairs"] = trial.suggest_int(
+        "match.minMatchedPairs", *PARAM_BOUNDS["match.minMatchedPairs"]
+    )
+    p["match.minFracMatchedPairs"] = trial.suggest_float(
+        "match.minFracMatchedPairs", *PARAM_BOUNDS["match.minFracMatchedPairs"]
+    )
+    p["match.numBrightStars"] = trial.suggest_int(
+        "match.numBrightStars", *PARAM_BOUNDS["match.numBrightStars"]
+    )
+    p["match.maxRefObjects"] = trial.suggest_int(
+        "match.maxRefObjects", *PARAM_BOUNDS["match.maxRefObjects"]
+    )
+    p["match.numPatternConsensus"] = trial.suggest_int(
+        "match.numPatternConsensus", *PARAM_BOUNDS["match.numPatternConsensus"]
+    )
+    p["astro_src.snmin"] = trial.suggest_float(
+        "astro_src.snmin", *PARAM_BOUNDS["astro_src.snmin"]
+    )
+    p["apcorr.snmin"] = trial.suggest_float(
+        "apcorr.snmin", *PARAM_BOUNDS["apcorr.snmin"]
+    )
+    p["apcorr.sigclip"] = trial.suggest_float(
+        "apcorr.sigclip", *PARAM_BOUNDS["apcorr.sigclip"]
+    )
+    p["apcorr.niter"] = trial.suggest_int("apcorr.niter", *PARAM_BOUNDS["apcorr.niter"])
+    p["ncf.snmin"] = trial.suggest_float("ncf.snmin", *PARAM_BOUNDS["ncf.snmin"])
     return p
+
 
 def write_overrides(ctx: Context, params: Dict[str, Any], tag: str) -> Path:
     """Emit a calibrateImage overrides .py with top-level assignments (required for -C)."""
@@ -256,23 +333,25 @@ nss.doIsolated = False
     ov_path.write_text(txt)
     return ov_path
 
+
 # -----------------
 # Score & penalties
 # -----------------
 
 # Targets / weights
 TARGETS = {
-    "psfSigma_med":        2.0,    # pixels, lower better
+    "psfSigma_med": 2.0,  # pixels, lower better
     "astromOffsetStd_med": 0.035,  # arcsec, lower better
-    "skyNoise_med":        9.0,    # ADU,   lower better
-    "magLim_med":          20.0,   # mag,   higher better
+    "skyNoise_med": 9.0,  # ADU,   lower better
+    "magLim_med": 20.0,  # mag,   higher better
 }
 WEIGHTS = {
-    "psfSigma_med":        0.35,
+    "psfSigma_med": 0.35,
     "astromOffsetStd_med": 0.35,
-    "skyNoise_med":        0.15,
-    "magLim_med":          0.15,
+    "skyNoise_med": 0.15,
+    "magLim_med": 0.15,
 }
+
 
 def compute_base_score(meds: Dict[str, Optional[float]]) -> float:
     """
@@ -294,7 +373,10 @@ def compute_base_score(meds: Dict[str, Optional[float]]) -> float:
     terms.append(WEIGHTS[k] * r)
     return sum(terms)
 
-def penalize_score(base_score: float, n_success: int, n_total: int, policy: str, weight: float) -> float:
+
+def penalize_score(
+    base_score: float, n_success: int, n_total: int, policy: str, weight: float
+) -> float:
     if n_total <= 0:
         return float("inf")
     n_fail = n_total - n_success
@@ -309,12 +391,15 @@ def penalize_score(base_score: float, n_success: int, n_total: int, policy: str,
         return base_score * (1.0 + weight * n_fail)
     return base_score
 
+
 # --------------------------
 # Butler interaction (Gen3)
 # --------------------------
 
+
 def read_visit_summaries(coll: str, repo: Path, visits: List[int]) -> List[Any]:
     from lsst.daf.butler import Butler
+
     butler = Butler(str(repo), collections=coll, instrument="Nickel")
     rows: List[Any] = []
     for v in visits:
@@ -327,6 +412,7 @@ def read_visit_summaries(coll: str, repo: Path, visits: List[int]) -> List[Any]:
             # skip missing visitSummary (failed/absent)
             pass
     return rows
+
 
 def med_from_rows(rows: List[Any], field: str) -> Optional[float]:
     vals: List[float] = []
@@ -341,41 +427,66 @@ def med_from_rows(rows: List[Any], field: str) -> Optional[float]:
     n = len(vals)
     return vals[n // 2] if n % 2 == 1 else 0.5 * (vals[n // 2 - 1] + vals[n // 2])
 
+
 # --------------------------
 # Command builders per visit
 # --------------------------
 
-def build_calibrate_cmd(ctx: Context, overrides: Path, visit: int, out_coll: str) -> List[str]:
+
+def build_calibrate_cmd(
+    ctx: Context, overrides: Path, visit: int, out_coll: str
+) -> List[str]:
     # Note: Do not pass unsupported flags like --log-level (ctrl_mpexec here doesn’t accept it).
     return [
-        "pipetask", "run",
-        "-b", str(ctx.repo),
-        "-i", ",".join([ctx.inputs_postisr, ctx.calib_chain, ctx.refcats]),
-        "-o", out_coll,
-        "-p", str(ctx.proc_pipe) + "#calibrateImage",
-        "-C", f"calibrateImage:{overrides}",
-        "-j", str(ctx.jobs),
+        "pipetask",
+        "run",
+        "-b",
+        str(ctx.repo),
+        "-i",
+        ",".join([ctx.inputs_postisr, ctx.calib_chain, ctx.refcats]),
+        "-o",
+        out_coll,
+        "-p",
+        str(ctx.proc_pipe) + "#calibrateImage",
+        "-C",
+        f"calibrateImage:{overrides}",
+        "-j",
+        str(ctx.jobs),
         "--register-dataset-types",
-        "-d", f"instrument='Nickel' AND exposure.observation_type='science' AND visit IN ({int(visit)})",
+        "-d",
+        f"instrument='Nickel' AND exposure.observation_type='science' AND visit IN ({int(visit)})",
     ]
 
-def build_postproc_cmd(ctx: Context, out_coll: str, post_out: str, visits: List[int]) -> List[str]:
+
+def build_postproc_cmd(
+    ctx: Context, out_coll: str, post_out: str, visits: List[int]
+) -> List[str]:
     vlist = ",".join(str(int(v)) for v in visits)
     return [
-        "pipetask", "run",
-        "-b", str(ctx.repo),
-        "-i", ",".join([out_coll, ctx.calib_chain, ctx.refcats]),
-        "-o", post_out,
-        "-p", str(ctx.post_pipe),
+        "pipetask",
+        "run",
+        "-b",
+        str(ctx.repo),
+        "-i",
+        ",".join([out_coll, ctx.calib_chain, ctx.refcats]),
+        "-o",
+        post_out,
+        "-p",
+        str(ctx.post_pipe),
         "--register-dataset-types",
-        "-j", str(ctx.jobs),
-        "-d", (
+        "-j",
+        str(ctx.jobs),
+        "-d",
+        (
             "instrument='Nickel' AND detector=0 AND exposure.observation_type='science' "
             f"AND visit IN ({vlist})"
         ),
     ]
 
-def maybe_run_postproc(ctx: Context, out_coll: str, trial_dir: Path, visits: List[int]) -> Optional[str]:
+
+def maybe_run_postproc(
+    ctx: Context, out_coll: str, trial_dir: Path, visits: List[int]
+) -> Optional[str]:
     """Run PostProcessing.yaml into a timestamped child collection. Return its name or None on failure."""
     ts = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
     post_out = f"{out_coll}/{ts}"
@@ -400,11 +511,15 @@ def maybe_run_postproc(ctx: Context, out_coll: str, trial_dir: Path, visits: Lis
             print(tail_lines(e.stderr, ctx.tail))
         return None
 
+
 # ---------------
 # Trial execution
 # ---------------
 
-def run_trial(ctx: Context, params: Dict[str, Any], tag: str, trial_index: int) -> Tuple[str, float, Dict[str, Any]]:
+
+def run_trial(
+    ctx: Context, params: Dict[str, Any], tag: str, trial_index: int
+) -> Tuple[str, float, Dict[str, Any]]:
     trial_dir = ctx.workdir / "trials" / tag
     trial_dir.mkdir(parents=True, exist_ok=True)
     overrides = write_overrides(ctx, params, tag)
@@ -422,7 +537,9 @@ def run_trial(ctx: Context, params: Dict[str, Any], tag: str, trial_index: int) 
         try:
             cp = run(cmd, check=True, stdout_log=stdout_log, stderr_log=stderr_log)
             if ctx.echo_logs:
-                print(f"\n--- pipetask calibrateImage v{v} (rc={cp.returncode}) tail ---")
+                print(
+                    f"\n--- pipetask calibrateImage v{v} (rc={cp.returncode}) tail ---"
+                )
                 if cp.stdout:
                     print(tail_lines(cp.stdout, ctx.tail))
                 if cp.stderr:
@@ -431,7 +548,9 @@ def run_trial(ctx: Context, params: Dict[str, Any], tag: str, trial_index: int) 
             success_visits.append(v)
         except subprocess.CalledProcessError as e:
             log_failure(ctx, f"{tag}-v{v}", e, cmd, stdout_log, stderr_log)
-            print(f"\n--- pipetask calibrateImage v{v} FAILED (rc={e.returncode}) tail ---")
+            print(
+                f"\n--- pipetask calibrateImage v{v} FAILED (rc={e.returncode}) tail ---"
+            )
             print(tail_lines(e.output or "", ctx.tail))
             if e.stderr:
                 print("\n--- STDERR tail ---")
@@ -454,13 +573,15 @@ def run_trial(ctx: Context, params: Dict[str, Any], tag: str, trial_index: int) 
     # Metrics from visitSummary on successful visits only
     rows = read_visit_summaries(read_coll, ctx.repo, success_visits)
     meds = {
-        "psfSigma_med":        med_from_rows(rows, "psfSigma"),
+        "psfSigma_med": med_from_rows(rows, "psfSigma"),
         "astromOffsetStd_med": med_from_rows(rows, "astromOffsetStd"),
-        "skyNoise_med":        med_from_rows(rows, "skyNoise"),
-        "magLim_med":          med_from_rows(rows, "magLim"),
+        "skyNoise_med": med_from_rows(rows, "skyNoise"),
+        "magLim_med": med_from_rows(rows, "magLim"),
     }
     score_base = compute_base_score(meds)
-    score = penalize_score(score_base, n_success, n_total, ctx.fail_policy, ctx.fail_weight)
+    score = penalize_score(
+        score_base, n_success, n_total, ctx.fail_policy, ctx.fail_weight
+    )
 
     metrics = {
         "n_total": n_total,
@@ -473,19 +594,24 @@ def run_trial(ctx: Context, params: Dict[str, Any], tag: str, trial_index: int) 
     }
 
     # Persist per-trial summary JSON
-    (trial_dir / "metrics.json").write_text(json.dumps({
-        "time": now_utc_iso(),
-        "trial_index": trial_index,
-        "trial_tag": tag,
-        "out_coll": out_coll,
-        "read_from_collection": read_coll,
-        "postproc_out": post_coll,
-        "params": params,
-        "metrics": metrics,
-        "success_visits": success_visits,
-        "failed_visits": failed_visits,
-        "overrides_path": str(overrides),
-    }, indent=2))
+    (trial_dir / "metrics.json").write_text(
+        json.dumps(
+            {
+                "time": now_utc_iso(),
+                "trial_index": trial_index,
+                "trial_tag": tag,
+                "out_coll": out_coll,
+                "read_from_collection": read_coll,
+                "postproc_out": post_coll,
+                "params": params,
+                "metrics": metrics,
+                "success_visits": success_visits,
+                "failed_visits": failed_visits,
+                "overrides_path": str(overrides),
+            },
+            indent=2,
+        )
+    )
 
     # Append a row to the global runs table
     runs_csv = ctx.workdir / "tuning_runs.csv"
@@ -493,7 +619,9 @@ def run_trial(ctx: Context, params: Dict[str, Any], tag: str, trial_index: int) 
         "time": now_utc_iso(),
         "trial_index": trial_index,
         "trial_tag": tag,
-        "status": "ok" if n_success == n_total else ("partial" if n_success > 0 else "fail"),
+        "status": (
+            "ok" if n_success == n_total else ("partial" if n_success > 0 else "fail")
+        ),
         "out_coll": out_coll,
         "read_from_collection": read_coll,
         "postproc_out": post_coll or "",
@@ -501,23 +629,46 @@ def run_trial(ctx: Context, params: Dict[str, Any], tag: str, trial_index: int) 
         "n_success": n_success,
         "n_fail": n_total - n_success,
         "success_rate": metrics["success_rate"],
-        "psfSigma_med": metrics["psfSigma_med"] if metrics["psfSigma_med"] is not None else "",
-        "astromOffsetStd_med": metrics["astromOffsetStd_med"] if metrics["astromOffsetStd_med"] is not None else "",
-        "skyNoise_med": metrics["skyNoise_med"] if metrics["skyNoise_med"] is not None else "",
-        "magLim_med": metrics["magLim_med"] if metrics["magLim_med"] is not None else "",
+        "psfSigma_med": (
+            metrics["psfSigma_med"] if metrics["psfSigma_med"] is not None else ""
+        ),
+        "astromOffsetStd_med": (
+            metrics["astromOffsetStd_med"]
+            if metrics["astromOffsetStd_med"] is not None
+            else ""
+        ),
+        "skyNoise_med": (
+            metrics["skyNoise_med"] if metrics["skyNoise_med"] is not None else ""
+        ),
+        "magLim_med": (
+            metrics["magLim_med"] if metrics["magLim_med"] is not None else ""
+        ),
         "score_base": metrics["score_base"],
         "score": metrics["score"],
         # params
-        **{k: params.get(k, "") for k in [
-            "psf_det.threshold","psf_det.incMult",
-            "psfsel.snmin","psfsel.widthStdMax",
-            "match.maxOffsetPix","match.maxRotationDeg","match.matcherIterations",
-            "match.minMatchDistPixels","match.minMatchedPairs","match.minFracMatchedPairs",
-            "match.numBrightStars","match.maxRefObjects","match.numPatternConsensus",
-            "astro_src.snmin",
-            "apcorr.snmin","apcorr.sigclip","apcorr.niter",
-            "ncf.snmin"
-        ]},
+        **{
+            k: params.get(k, "")
+            for k in [
+                "psf_det.threshold",
+                "psf_det.incMult",
+                "psfsel.snmin",
+                "psfsel.widthStdMax",
+                "match.maxOffsetPix",
+                "match.maxRotationDeg",
+                "match.matcherIterations",
+                "match.minMatchDistPixels",
+                "match.minMatchedPairs",
+                "match.minFracMatchedPairs",
+                "match.numBrightStars",
+                "match.maxRefObjects",
+                "match.numPatternConsensus",
+                "astro_src.snmin",
+                "apcorr.snmin",
+                "apcorr.sigclip",
+                "apcorr.niter",
+                "ncf.snmin",
+            ]
+        },
         "overrides_path": str(overrides),
         "trial_dir": str(trial_dir),
     }
@@ -525,9 +676,11 @@ def run_trial(ctx: Context, params: Dict[str, Any], tag: str, trial_index: int) 
 
     return out_coll, score, metrics
 
+
 # --------------
 # Optuna objective
 # --------------
+
 
 def make_objective(ctx: Context):
     def objective(trial: optuna.Trial) -> float:
@@ -539,77 +692,157 @@ def make_objective(ctx: Context):
             trial.set_user_attr("metrics", metrics)
             trial.set_user_attr("params", params)
             return score
-        except optuna.TrialPruned as e:
+        except optuna.TrialPruned:
             # still log a runs row with fail status (no metrics)
             runs_csv = ctx.workdir / "tuning_runs.csv"
-            write_csv_row(runs_csv, RUNS_CSV_HEADERS, {
-                "time": now_utc_iso(), "trial_index": trial.number, "trial_tag": tag,
-                "status": "fail", "out_coll": "",
-                "read_from_collection": "", "postproc_out": "",
-                "n_total": len(ctx.visits), "n_success": 0, "n_fail": len(ctx.visits), "success_rate": 0.0,
-                "psfSigma_med": "", "astromOffsetStd_med": "", "skyNoise_med": "", "magLim_med": "",
-                "score_base": "", "score": "",
-                **{k: params.get(k, "") for k in [
-                    "psf_det.threshold","psf_det.incMult","psfsel.snmin","psfsel.widthStdMax",
-                    "match.maxOffsetPix","match.maxRotationDeg","match.matcherIterations",
-                    "match.minMatchDistPixels","match.minMatchedPairs","match.minFracMatchedPairs",
-                    "match.numBrightStars","match.maxRefObjects","match.numPatternConsensus",
-                    "astro_src.snmin","apcorr.snmin","apcorr.sigclip","apcorr.niter","ncf.snmin"
-                ]},
-                "overrides_path": "", "trial_dir": str(ctx.workdir / "trials" / tag)
-            })
+            write_csv_row(
+                runs_csv,
+                RUNS_CSV_HEADERS,
+                {
+                    "time": now_utc_iso(),
+                    "trial_index": trial.number,
+                    "trial_tag": tag,
+                    "status": "fail",
+                    "out_coll": "",
+                    "read_from_collection": "",
+                    "postproc_out": "",
+                    "n_total": len(ctx.visits),
+                    "n_success": 0,
+                    "n_fail": len(ctx.visits),
+                    "success_rate": 0.0,
+                    "psfSigma_med": "",
+                    "astromOffsetStd_med": "",
+                    "skyNoise_med": "",
+                    "magLim_med": "",
+                    "score_base": "",
+                    "score": "",
+                    **{
+                        k: params.get(k, "")
+                        for k in [
+                            "psf_det.threshold",
+                            "psf_det.incMult",
+                            "psfsel.snmin",
+                            "psfsel.widthStdMax",
+                            "match.maxOffsetPix",
+                            "match.maxRotationDeg",
+                            "match.matcherIterations",
+                            "match.minMatchDistPixels",
+                            "match.minMatchedPairs",
+                            "match.minFracMatchedPairs",
+                            "match.numBrightStars",
+                            "match.maxRefObjects",
+                            "match.numPatternConsensus",
+                            "astro_src.snmin",
+                            "apcorr.snmin",
+                            "apcorr.sigclip",
+                            "apcorr.niter",
+                            "ncf.snmin",
+                        ]
+                    },
+                    "overrides_path": "",
+                    "trial_dir": str(ctx.workdir / "trials" / tag),
+                },
+            )
             raise
         except Exception as e:
             # fatal trial failure -> log & prune
             log_failure(ctx, tag, e, cmd=[], stdout_log=None, stderr_log=None)
             raise optuna.TrialPruned(f"Trial error: {e}")
+
     return objective
+
 
 # ------
 #  Main
 # ------
 
+
 def parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Tune Nickel calibrateImage with failure-penalized scoring")
+    p = argparse.ArgumentParser(
+        description="Tune Nickel calibrateImage with failure-penalized scoring"
+    )
     p.add_argument("--repo", required=True, help="Butler repo path")
     p.add_argument("--obs-nickel", required=True, help="obs_nickel package root")
-    p.add_argument("--visits", nargs="+", type=int, required=True, help="visit IDs to process")
+    p.add_argument(
+        "--visits", nargs="+", type=int, required=True, help="visit IDs to process"
+    )
     p.add_argument("--bad", nargs="*", type=int, default=[], help="visits to exclude")
     p.add_argument("--jobs", type=int, default=1)
     p.add_argument("--trials", type=int, default=20)
-    p.add_argument("--workdir", required=True, help="directory to store trial artifacts & tables")
-    p.add_argument("--proc-pipe", default=None, help="ProcessCcd.yaml path; default uses obs-nickel/pipelines/ProcessCcd.yaml")
-    p.add_argument("--post-pipe", default=None, help="PostProcessing.yaml path; default uses obs-nickel/pipelines/PostProcessing.yaml")
-    p.add_argument("--inputs-postisr", default=None, help="postISR input collection (e.g., Nickel/run/processCcd/...)")
+    p.add_argument(
+        "--workdir", required=True, help="directory to store trial artifacts & tables"
+    )
+    p.add_argument(
+        "--proc-pipe",
+        default=None,
+        help="ProcessCcd.yaml path; default uses obs-nickel/pipelines/ProcessCcd.yaml",
+    )
+    p.add_argument(
+        "--post-pipe",
+        default=None,
+        help="PostProcessing.yaml path; default uses obs-nickel/pipelines/PostProcessing.yaml",
+    )
+    p.add_argument(
+        "--inputs-postisr",
+        default=None,
+        help="postISR input collection (e.g., Nickel/run/processCcd/...)",
+    )
     p.add_argument("--calib-chain", default="Nickel/calib/current")
     p.add_argument("--refcats", default="refcats")
-    p.add_argument("--fail-policy", choices=["hard","frac","linear"], default="frac")
+    p.add_argument("--fail-policy", choices=["hard", "frac", "linear"], default="frac")
     p.add_argument("--fail-weight", type=float, default=1.0)
-    p.add_argument("--echo-logs", action="store_true", help="Echo tail of stdout/stderr for each pipetask")
-    p.add_argument("--tail", type=int, default=20, help="Number of lines to tail when echoing logs")
-    p.add_argument("--no-postproc", action="store_true", help="Skip PostProcessing.yaml (by default it runs).")
+    p.add_argument(
+        "--echo-logs",
+        action="store_true",
+        help="Echo tail of stdout/stderr for each pipetask",
+    )
+    p.add_argument(
+        "--tail", type=int, default=20, help="Number of lines to tail when echoing logs"
+    )
+    p.add_argument(
+        "--no-postproc",
+        action="store_true",
+        help="Skip PostProcessing.yaml (by default it runs).",
+    )
     return p.parse_args()
+
 
 def discover_postisr(repo: Path) -> str:
     # pick the most recent Nickel/run/processCcd/* collection
     from lsst.daf.butler import Butler
+
     b = Butler(str(repo))
-    cands = [str(rec) for rec in b.registry.queryCollections()
-             if str(rec).startswith("Nickel/run/processCcd/")]
+    cands = [
+        str(rec)
+        for rec in b.registry.queryCollections()
+        if str(rec).startswith("Nickel/run/processCcd/")
+    ]
     return sorted(cands)[-1] if cands else ""
+
 
 def main() -> None:
     args = parse_args()
     repo = Path(args.repo)
     obs = Path(args.obs_nickel)
-    proc_pipe = Path(args.proc_pipe) if args.proc_pipe else obs / "pipelines" / "ProcessCcd.yaml"
-    post_pipe = Path(args.post_pipe) if args.post_pipe else obs / "pipelines" / "PostProcessing.yaml"
+    proc_pipe = (
+        Path(args.proc_pipe)
+        if args.proc_pipe
+        else obs / "pipelines" / "ProcessCcd.yaml"
+    )
+    post_pipe = (
+        Path(args.post_pipe)
+        if args.post_pipe
+        else obs / "pipelines" / "PostProcessing.yaml"
+    )
     workdir = Path(args.workdir)
     workdir.mkdir(parents=True, exist_ok=True)
 
     inputs_postisr = args.inputs_postisr or discover_postisr(repo)
     if not inputs_postisr:
-        print("[inputs] Could not discover postISR collection automatically; specify --inputs-postisr", file=sys.stderr)
+        print(
+            "[inputs] Could not discover postISR collection automatically; specify --inputs-postisr",
+            file=sys.stderr,
+        )
         sys.exit(2)
 
     visits = [v for v in args.visits if v not in set(args.bad)]
@@ -650,6 +883,7 @@ def main() -> None:
         "out_coll": best.user_attrs.get("out_coll", ""),
     }
     print(json.dumps(out, indent=2))
+
 
 if __name__ == "__main__":
     main()

@@ -1,12 +1,14 @@
 from __future__ import annotations
+
+import json
 from pathlib import Path
 from typing import Any, Dict
-import json
 
 try:
     import yaml  # PyYAML
 except Exception:
     yaml = None
+
 
 def load_config(path: Path) -> Dict[str, Any]:
     """Load tuning config from YAML or JSON."""
@@ -17,11 +19,14 @@ def load_config(path: Path) -> Dict[str, Any]:
         return yaml.safe_load(text) or {}
     return json.loads(text)
 
+
 def get_parameters(cfg: Dict[str, Any]) -> Dict[str, Any]:
     return cfg.get("parameters", {})
 
+
 def get_metrics(cfg: Dict[str, Any]) -> Any:
     return cfg.get("metrics", [])
+
 
 def get_overrides_prelude(cfg: Dict[str, Any]) -> str:
     return cfg.get("overrides_prelude", "")

@@ -2,11 +2,11 @@
 
 __all__ = ["NickelRawFormatter"]
 
-from astro_metadata_translator import FitsTranslator
 from lsst.obs.base import FitsRawFormatterBase
-from .translator import NickelTranslator
-from .nickelFilters import NICKEL_FILTER_DEFINITIONS
+
 from ._instrument import Nickel
+from .nickelFilters import NICKEL_FILTER_DEFINITIONS
+from .translator import NickelTranslator
 
 
 class NickelRawFormatter(FitsRawFormatterBase):
@@ -17,4 +17,3 @@ class NickelRawFormatter(FitsRawFormatterBase):
 
     def getDetector(self, id):
         return Nickel().getCamera()[id]
-

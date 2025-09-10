@@ -1,16 +1,15 @@
 from __future__ import annotations
 
 import os
-from lsst.obs.base._instrument import Instrument
+
 # imports
-from lsst.obs.base import yamlCamera
-from lsst.obs.base import DefineVisitsTask, VisitSystem
-from lsst.utils.introspection import get_full_type_name
+from lsst.obs.base import DefineVisitsTask, VisitSystem, yamlCamera
+from lsst.obs.base._instrument import Instrument
 from lsst.utils import getPackageDir
+from lsst.utils.introspection import get_full_type_name
 
 from .nickelFilters import NICKEL_FILTER_DEFINITIONS
 from .translator import NickelTranslator
-
 
 __all__ = ["Nickel"]
 
@@ -31,7 +30,6 @@ class Nickel(Instrument):
     def getCamera(self):
         path = os.path.join(getPackageDir("obs_nickel"), "camera", "nickel.yaml")
         return yamlCamera.makeCamera(path)
-
 
     @classmethod
     def getName(cls):
@@ -62,8 +60,8 @@ class Nickel(Instrument):
                         "instrument": self.getName(),
                         "id": int(det.getId()),
                         "full_name": det.getName(),
-                        "name_in_raft": "S00",   # there is no raft, but need something stable
-                        "raft": "R00",           # there is no raft, but need something stable
+                        "name_in_raft": "S00",  # there is no raft, but need something stable
+                        "raft": "R00",  # there is no raft, but need something stable
                         "purpose": det.getType().name,
                     },
                     update=update,
@@ -75,6 +73,7 @@ class Nickel(Instrument):
         # local import to prevent circular dependency
 
         from .rawFormatter import NickelRawFormatter
+
         return NickelRawFormatter
 
     def getDefineVisitsTask(self):

@@ -1,14 +1,21 @@
 import os
 import unittest
 
-import lsst.afw.geom
 import lsst.afw.fits
+import lsst.afw.geom
 import lsst.afw.image
+import lsst.obs.nickel  # Your obs package
 import lsst.utils
 import lsst.utils.tests
-from lsst.daf.butler import Location, FileDescriptor, DatasetType, DatasetRef, DimensionUniverse, DataCoordinate, StorageClassFactory
-
-import lsst.obs.nickel  # Your obs package
+from lsst.daf.butler import (
+    DataCoordinate,
+    DatasetRef,
+    DatasetType,
+    DimensionUniverse,
+    FileDescriptor,
+    Location,
+    StorageClassFactory,
+)
 from lsst.obs.nickel.rawFormatter import NickelRawFormatter  # Adjust path if needed
 
 testDataPackage = "testdata_nickel"
@@ -22,8 +29,12 @@ storageClass = StorageClassFactory().getStorageClass("Exposure")
 
 def make_dataset_ref(detector="CCD0"):
     universe = DimensionUniverse()
-    dataset_type = DatasetType("raw", ("instrument", "detector"), storageClass, universe=universe)
-    data_id = DataCoordinate.standardize(instrument="Nickel", detector=detector, universe=universe)
+    dataset_type = DatasetType(
+        "raw", ("instrument", "detector"), storageClass, universe=universe
+    )
+    data_id = DataCoordinate.standardize(
+        instrument="Nickel", detector=detector, universe=universe
+    )
     return DatasetRef(dataset_type, data_id, "test")
 
 
