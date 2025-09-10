@@ -16,10 +16,11 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/lsst/scipipe:al9-w_2025_32
+      # Run as the same UID/GID as the hosted runner workspace (/__w), avoids EACCES
+      options: --user 1001:1001
       env:
-        # Ensure EUPS is happy in containerized/root context
         SHELL: /bin/bash
-        HOME: /__w/${{ github.event.repository.name }}/${{ github.event.repository.name }}
+        HOME: /github/home
         USER: runner
     env:
       STACK_DIR: /opt/lsst/software/stack
@@ -34,19 +35,21 @@ jobs:
         with:
           repository: dangause/testdata_nickel
           path: extern/testdata_nickel
-          # If private, uncomment and set GH_PAT in repo secrets:
+          # If private, uncomment and set GH_PAT secret:
           # token: ${{ secrets.GH_PAT }}
 
-      - name: Mark repo as safe (avoids root + git warnings)
+      - name: Mark repo as safe
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
-      - name: Install pre-commit and tox (via pip inside scipipe)
+      - name: Python venv
         run: |
-          python3 -m pip install --upgrade pip
-          python3 -m pip install pre-commit tox
+          python3 -m venv .venv
+          . .venv/bin/activate
+          python -m pip install --upgrade pip
+          pip install pre-commit tox
 
       - name: Run pre-commit
-        run: pre-commit run -a
+        run: . .venv/bin/activate && pre-commit run -a
 
       - name: Run tests via tox (honors TESTDATA_NICKEL_DIR)
-        run: tox -q
+        run: . .venv/bin/activate && tox -q
