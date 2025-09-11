@@ -15,8 +15,14 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/lsst/scipipe:al9-w_2025_32
-      # Run as root so checkout can write to /__w/_temp/_runner_file_commands
+      # run as root so checkout can write to /__w/_temp and pre-commit has permissions
       options: --user 0
+
+    # make sure every `run:` executes in the repo root, with bash
+    defaults:
+      run:
+        shell: bash
+        working-directory: ${{ github.workspace }}
 
     env:
       STACK_DIR: /opt/lsst/software/stack
@@ -33,28 +39,28 @@ jobs:
         with:
           repository: dangause/testdata_nickel
           path: extern/testdata_nickel
-          # token: ${{ secrets.GH_PAT }}   # uncomment if private
+          # If private, uncomment and provide a token in repo secrets:
+          # token: ${{ secrets.GH_PAT }}
 
-      # With root user we don't need to fabricate a passwd entry.
-      # Ensure git exists for pre-commit:
-      - name: Install git (inside container)
-        shell: bash
+      - name: Install git (AlmaLinux container)
         run: |
-          if command -v git >/dev/null; then
+          if command -v git >/dev/null 2>&1; then
             git --version
-          elif command -v microdnf >/dev/null; then
+          elif command -v microdnf >/dev/null 2>&1; then
             microdnf install -y git
-          elif command -v dnf >/dev/null; then
+          elif command -v dnf >/dev/null 2>&1; then
             dnf -y makecache && dnf -y install git
-          elif command -v apt-get >/dev/null; then
-            apt-get update && apt-get install -y git
           else
-            echo "No known package manager; cannot install git." >&2
+            echo "No known package manager found to install git." >&2
             exit 1
           fi
 
+      - name: Mark workspace as safe for git (running as root)
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --global --add safe.directory /__w/${{ github.event.repository.name }}/${{ github.event.repository.name }}
+
       - name: Create Python venv for pre-commit + tox
-        shell: bash
         run: |
           python3 -m venv .venv
           . .venv/bin/activate
@@ -62,13 +68,11 @@ jobs:
           pip install pre-commit tox
 
       - name: Run pre-commit
-        shell: bash
         run: |
           . .venv/bin/activate
           pre-commit run -a
 
       - name: Run tests via tox (honors TESTDATA_NICKEL_DIR)
-        shell: bash
         run: |
           . .venv/bin/activate
           tox
