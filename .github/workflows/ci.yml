@@ -1,4 +1,3 @@
-# .github/workflows/ci.yml
 name: CI
 
 on:
@@ -14,7 +13,10 @@ concurrency:
 jobs:
   lint-and-test:
     runs-on: ubuntu-latest
-    container: ghcr.io/lsst/scipipe:al9-w_2025_32
+    container:
+      image: ghcr.io/lsst/scipipe:al9-w_2025_32
+      # Run as root so checkout can write to /__w/_temp/_runner_file_commands
+      options: --user 0
 
     env:
       STACK_DIR: /opt/lsst/software/stack
@@ -24,23 +26,17 @@ jobs:
       - name: Checkout obs_nickel
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0          # optional; nice for some pre-commit hooks
+          fetch-depth: 0
 
       - name: Checkout testdata_nickel
         uses: actions/checkout@v4
         with:
           repository: dangause/testdata_nickel
           path: extern/testdata_nickel
-          # token: ${{ secrets.GH_PAT }}   # if private
+          # token: ${{ secrets.GH_PAT }}   # uncomment if private
 
-      # (Only needed if you run the job with a non-root UID and see “Unknown shell”.)
-      - name: Ensure the container user has a shell
-        shell: bash
-        run: |
-          if ! getent passwd "$(id -u)" >/dev/null; then
-            echo "runner:x:$(id -u):$(id -g)::${HOME}:/bin/bash" | tee -a /etc/passwd
-          fi
-
+      # With root user we don't need to fabricate a passwd entry.
+      # Ensure git exists for pre-commit:
       - name: Install git (inside container)
         shell: bash
         run: |
@@ -57,7 +53,7 @@ jobs:
             exit 1
           fi
 
-      - name: Create Python venv for pre-commit/tox
+      - name: Create Python venv for pre-commit + tox
         shell: bash
         run: |
           python3 -m venv .venv
@@ -67,14 +63,12 @@ jobs:
 
       - name: Run pre-commit
         shell: bash
-        working-directory: ${{ github.workspace }}
         run: |
           . .venv/bin/activate
           pre-commit run -a
 
       - name: Run tests via tox (honors TESTDATA_NICKEL_DIR)
         shell: bash
-        working-directory: ${{ github.workspace }}
         run: |
           . .venv/bin/activate
           tox
