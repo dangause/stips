@@ -208,7 +208,7 @@ def _read_manual_csv(path: str) -> List[Tuple[int, int, int, int, str]]:
 
 
 def _dedupe_exact(
-    rects: List[Tuple[int, int, int, int]]
+    rects: List[Tuple[int, int, int, int]],
 ) -> List[Tuple[int, int, int, int]]:
     """Remove exact duplicate (x0,y0,w,h) rectangles; preserve order."""
     seen = set()

@@ -8,8 +8,7 @@
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 
-"""Tests of the Nickel instrument class.
-"""
+"""Tests of the Nickel instrument class."""
 
 import unittest
 

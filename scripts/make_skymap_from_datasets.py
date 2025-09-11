@@ -72,7 +72,7 @@ def collect_wcs_bbox(
 
 
 def convex_hull_from_wcs_bboxes(
-    pairs: Iterable[Tuple[geom.SkyWcs, geom.Box2I]]
+    pairs: Iterable[Tuple[geom.SkyWcs, geom.Box2I]],
 ) -> sphgeom.ConvexPolygon:
     """Mirror of MakeDiscreteSkyMapTask: convex hull of all exposure corner sky positions."""
     points = []
