@@ -1,3 +1,4 @@
+# .github/workflows/ci.yml
 name: CI
 
 on:
@@ -5,7 +6,6 @@ on:
     branches: [ main, master ]
   pull_request:
     branches: [ main, master ]
-  workflow_dispatch: {}
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -16,12 +16,11 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/lsst/scipipe:al9-w_2025_32
-      # Run as the same UID/GID as the hosted runner workspace (/__w), avoids EACCES
-      options: --user 1001:1001
-      env:
-        SHELL: /bin/bash
-        HOME: /github/home
-        USER: runner
+      options: --user 0:0   # <— run as root to avoid uid=1001 passwd issues
+    defaults:
+      run:
+        shell: bash        # <— ensure steps use bash
+
     env:
       STACK_DIR: /opt/lsst/software/stack
       TESTDATA_NICKEL_DIR: ${{ github.workspace }}/extern/testdata_nickel
@@ -35,17 +34,13 @@ jobs:
         with:
           repository: dangause/testdata_nickel
           path: extern/testdata_nickel
-          # If private, uncomment and set GH_PAT secret:
-          # token: ${{ secrets.GH_PAT }}
+          # token: ${{ secrets.GH_PAT }}   # if private
 
-      - name: Mark repo as safe
-        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
-
-      - name: Python venv
+      - name: Create Python venv for pre-commit/tox
         run: |
           python3 -m venv .venv
           . .venv/bin/activate
-          python -m pip install --upgrade pip
+          python -m pip install -U pip
           pip install pre-commit tox
 
       - name: Run pre-commit

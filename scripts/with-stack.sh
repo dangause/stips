@@ -1,101 +1,137 @@
 #!/usr/bin/env bash
-# Run a command inside an LSST stack environment.
+# Activate the LSST stack and run a command in that environment.
 # Usage:
-#   ./scripts/with-stack.sh -S /path/to/stack [--setup-testdata] -- <cmd ...>
+#   ./scripts/with-stack.sh -S /path/to/lsst_stack [--setup-testdata] -- <command> [args...]
+#
+# Examples:
+#   ./scripts/with-stack.sh -S /opt/lsst/software/stack -- pytest -q
+#   TESTDATA_NICKEL_DIR=/mnt/testdata_nickel \
+#     ./scripts/with-stack.sh -S /opt/lsst/software/stack --setup-testdata -- pytest -q
+#
+# Notes:
+# - We source loadLSST.bash if present (preferred in LSST images). If only loadLSST.zsh
+#   exists, we import its environment via a zsh subprocess.
+# - We temporarily relax `set -u` around stack activation since some LSST env scripts
+#   reference possibly-unset variables (e.g., DYLD_LIBRARY_PATH on Linux).
+# - If --setup-testdata is given, we try `setup testdata_nickel` first; if that fails
+#   and $TESTDATA_NICKEL_DIR points at a checkout, we declare+setup from there.
 
 set -euo pipefail
 
 STACK_DIR=""
-SETUP_TESTDATA=0
+DO_SETUP_TESTDATA=0
 
-# --- helpers ---
-_suppress_nounset_begin() {
-  # Return 0/1 in global _HAD_U to indicate whether nounset was active
-  if [[ -o nounset ]]; then
-    set +u
-    _HAD_U=1
-  else
-    _HAD_U=0
-  fi
-}
-_suppress_nounset_end() {
-  if [[ "${_HAD_U:-0}" -eq 1 ]]; then
-    set -u
-  fi
+print_usage() {
+  cat <<USAGE
+Usage: $0 -S /path/to/lsst_stack [--setup-testdata] -- <command> [args...]
+
+Options:
+  -S, --stack-dir PATH    Path to LSST stack prefix (directory containing loadLSST.bash|zsh).
+      --setup-testdata    Also set up testdata_nickel (pre-installed or from \$TESTDATA_NICKEL_DIR).
+  -h, --help              Show this help and exit.
+
+Environment:
+  TESTDATA_NICKEL_DIR     If set to a local checkout, will be used to declare+setup testdata_nickel
+                          (only if --setup-testdata is provided and a pre-installed product is not found).
+USAGE
 }
 
-# --- parse args ---
+# --------- Parse args (stop at -- and pass the rest through) ----------
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    -S|--stack-dir) STACK_DIR="$2"; shift 2 ;;
-    --setup-testdata) SETUP_TESTDATA=1; shift ;;
-    --) shift; break ;;
-    *) echo "with-stack.sh: unknown arg: $1" >&2; exit 2 ;;
+    -S|--stack-dir)
+      [[ $# -lt 2 ]] && { echo "ERROR: $1 requires a path" >&2; exit 2; }
+      STACK_DIR="$2"; shift 2;;
+    --setup-testdata)
+      DO_SETUP_TESTDATA=1; shift;;
+    -h|--help)
+      print_usage; exit 0;;
+    --)
+      shift; break;;
+    *)
+      # First non-option before --: treat as command start for convenience
+      break;;
   esac
 done
 
 if [[ -z "${STACK_DIR}" ]]; then
-  echo "with-stack.sh: ERROR: pass -S / --stack-dir" >&2
+  echo "ERROR: must supply -S/--stack-dir pointing at your LSST stack." >&2
   exit 2
 fi
 
-# --- source LSST env (disable nounset while activating stack) ---
-_suppress_nounset_begin
+if [[ ! -d "${STACK_DIR}" ]]; then
+  echo "ERROR: stack dir not found: ${STACK_DIR}" >&2
+  exit 2
+fi
+
+# --------- Activate LSST stack (prefer bash variant) ----------
 if [[ -f "${STACK_DIR}/loadLSST.bash" ]]; then
-  # shellcheck disable=SC1090
+  # Temporarily relax nounset for activation scripts
+  set +u
+  # shellcheck source=/dev/null
   source "${STACK_DIR}/loadLSST.bash"
+  set -u
 elif [[ -f "${STACK_DIR}/loadLSST.zsh" ]]; then
-  # import zsh-sourced env into this bash
-  eval "$(
-    zsh -lc "source '${STACK_DIR}/loadLSST.zsh'; python3 - <<'PY'
-import os
-for k, v in os.environ.items():
-    if k in ('_', 'SHLVL'): continue
-    v = v.replace(\"'\", \"'\\\\''\")
-    print(f\"export {k}='{v}'\")
-PY"
-  )"
+  # We are in bash, but only zsh entrypoint exists; import env from a zsh subshell.
+  if ! command -v zsh >/dev/null 2>&1; then
+    echo "ERROR: only loadLSST.zsh found, but 'zsh' is not available." >&2
+    exit 2
+  fi
+  # Capture environment after sourcing loadLSST.zsh in zsh, then export into bash.
+  # Relax nounset while importing.
+  set +u
+  # Use NUL-separated output to reduce parsing issues.
+  while IFS= read -r -d '' line; do
+    # Skip read-only or funky lines; simple VAR=VALUE pairs only.
+    var="${line%%=*}"
+    val="${line#*=}"
+    # Basic guard: variable names must be alnum/_ and not empty
+    if [[ -n "$var" && "$var" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+      # Export with printf to preserve content; rely on bash to handle the value as-is.
+      printf -v "$var" '%s' "$val"
+      export "$var"
+    fi
+  done < <(zsh -c "source '${STACK_DIR}/loadLSST.zsh' >/dev/null 2>&1; env -0")
+  set -u
 else
-  _suppress_nounset_end
-  echo "with-stack.sh: ERROR: loadLSST.[bash|zsh] not found in ${STACK_DIR}" >&2
+  echo "ERROR: loadLSST.bash or loadLSST.zsh not found in: ${STACK_DIR}" >&2
   exit 2
 fi
-_suppress_nounset_end
 
-# --- setup base products (also suppress nounset during eups setup) ---
-_suppress_nounset_begin
-setup lsst_distrib || true
-_suppress_nounset_end
+# --------- Setup core products and this working copy ----------
+set +u
+# Ensure base stack is ready
+setup lsst_distrib
 
-# Declare + setup obs_nickel from current checkout so Python can import it
-_suppress_nounset_begin
+# Declare + setup obs_nickel from the current working tree
 eups declare -r "$(pwd)" obs_nickel -t current 2>/dev/null || true
 setup obs_nickel
-_suppress_nounset_end
+set -u
 
-# --- optional: testdata_nickel ---
-if [[ "${SETUP_TESTDATA}" -eq 1 ]]; then
-  _suppress_nounset_begin
+# --------- Optional: setup testdata_nickel ----------
+if (( DO_SETUP_TESTDATA == 1 )); then
+  echo "[with-stack] Ensuring testdata_nickel..." >&2
   if setup testdata_nickel >/dev/null 2>&1; then
-    echo "[with-stack] testdata_nickel set up (pre-installed)."
+    echo "[with-stack] testdata_nickel set up (pre-installed)." >&2
   elif [[ -n "${TESTDATA_NICKEL_DIR:-}" && -d "${TESTDATA_NICKEL_DIR}" ]]; then
-    echo "[with-stack] Declaring testdata_nickel from TESTDATA_NICKEL_DIR: ${TESTDATA_NICKEL_DIR}"
+    echo "[with-stack] Declaring testdata_nickel from TESTDATA_NICKEL_DIR: ${TESTDATA_NICKEL_DIR}" >&2
     eups declare -r "${TESTDATA_NICKEL_DIR}" testdata_nickel -t current || true
     if setup testdata_nickel >/dev/null 2>&1; then
-      echo "[with-stack] testdata_nickel set up from TESTDATA_NICKEL_DIR."
+      echo "[with-stack] testdata_nickel set up from TESTDATA_NICKEL_DIR." >&2
     else
-      echo "[with-stack][WARN] Could not set up testdata_nickel after declare."
+      echo "[with-stack][WARN] Could not set up testdata_nickel even after declare." >&2
     fi
   else
-    echo "[with-stack] testdata_nickel not found; continuing without it."
+    echo "[with-stack] testdata_nickel not found; continuing without it." >&2
   fi
-  _suppress_nounset_end
 fi
 
-# --- run command ---
+# --------- Execute the requested command ----------
 if [[ $# -eq 0 ]]; then
-  echo "with-stack.sh: nothing to run (missing -- <cmd ...>)" >&2
-  exit 2
+  echo "[with-stack] No command provided. Environment is active; printing a brief status." >&2
+  set +e
+  eups list lsst_distrib || true
+  exit 0
 fi
 
 exec "$@"
