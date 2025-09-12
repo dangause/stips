@@ -137,55 +137,57 @@ echo "DEFECTS_RUN = $DEFECTS_RUN"
 butler collection-chain "$REPO" Nickel/calib/defects/current "$DEFECTS_RUN" --mode redefine
 butler query-collections "$REPO" | grep -E 'Nickel/calib/defects/current|Nickel/calib/curated' || true
 
-########## REF CATS (ingest & chain) ##########
+########## REF CATS (concise & idempotent) ##########
 cd "$REFCAT_REPO"
 
-# Find the latest conversion outputs produced by scripts/convert_refcats.py
-GAIA_DIR="$(ls -d data/gaia-refcat-* 2>/dev/null | sort -V | tail -n1)"
-PS1_DIR="$(ls -d data/ps1-refcat-*  2>/dev/null | sort -V | tail -n1)"
+# Latest converted outputs from scripts/convert_refcats.py
+GAIA_DIR=$(ls -d data/gaia-refcat-* 2>/dev/null | sort -V | tail -n1)
+PS1_DIR=$(ls -d data/ps1-refcat-*  2>/dev/null | sort -V | tail -n1)
 
-if [[ -z "$GAIA_DIR" || -z "$PS1_DIR" ]]; then
-  echo "[refcats] ERROR: No converted refcat outputs found in data/."
-  echo "          Run:  python scripts/convert_refcats.py"
-  exit 2
-fi
+[[ -n "$GAIA_DIR" && -n "$PS1_DIR" ]] || {
+  echo "[refcats] No converted outputs; run: python scripts/convert_refcats.py"; exit 2; }
 
-GAIA_MAP="${GAIA_DIR}/filename_to_htm.ecsv"
-PS1_MAP="${PS1_DIR}/filename_to_htm.ecsv"
+GAIA_DT="gaia_dr3";            GAIA_MAP="${GAIA_DIR}/filename_to_htm.ecsv"
+PS1_DT="panstarrs1_dr2";       PS1_MAP="${PS1_DIR}/filename_to_htm.ecsv"
+GAIA_RUN="refcats/${GAIA_DT}_${GAIA_DIR##*-}"
+PS1_RUN="refcats/${PS1_DT}_${PS1_DIR##*-}"
 
-if [[ ! -s "$GAIA_MAP" ]]; then
-  echo "[refcats][GAIA] ERROR: map not found: $GAIA_MAP"; exit 2
-fi
-if [[ ! -s "$PS1_MAP" ]]; then
-  echo "[refcats][PS1] ERROR: map not found: $PS1_MAP"; exit 2
-fi
-
-# Extract date stamp from dir names (suffix after last '-'), e.g. 20250911
-GAIA_DATE="${GAIA_DIR##*-}"
-PS1_DATE="${PS1_DIR##*-}"
-
-# Stable dataset type names (so pipeline configs never change)
-GAIA_DT="gaia_dr3"
-PS1_DT="panstarrs1_dr2"
-
-# Date-stamped RUN collections keep history of each conversion
-GAIA_RUN="refcats/gaia_dr3_${GAIA_DATE}"
-PS1_RUN="refcats/panstarrs1_dr2_${PS1_DATE}"
+[[ -s "$GAIA_MAP" ]] || { echo "[refcats] GAIA map not found: $GAIA_MAP"; exit 2; }
+[[ -s "$PS1_MAP"  ]] || { echo "[refcats] PS1  map not found: $PS1_MAP";  exit 2; }
 
 echo "[refcats][GAIA] Registering dataset type: $GAIA_DT"
 butler register-dataset-type "$REPO" "$GAIA_DT" SimpleCatalog htm7 || true
-echo "[refcats][GAIA] Ingesting tiles → $GAIA_RUN"
-butler ingest-files -t direct "$REPO" "$GAIA_DT" "$GAIA_RUN" "$GAIA_MAP"
-
 echo "[refcats][PS1 ] Registering dataset type: $PS1_DT"
 butler register-dataset-type "$REPO" "$PS1_DT" SimpleCatalog htm7 || true
-echo "[refcats][PS1 ] Ingesting tiles → $PS1_RUN"
-butler ingest-files -t direct "$REPO" "$PS1_DT" "$PS1_RUN" "$PS1_MAP"
 
-# Build/refresh the CHAIN 'refcats' (Gaia first, then PS1)
-echo "[refcats] Building CHAIN 'refcats' = [$GAIA_RUN, $PS1_RUN]"
-butler collection-chain "$REPO" refcats "$GAIA_RUN" "$PS1_RUN" --mode redefine
-butler query-collections "$REPO" | grep -E '^refcats$|^  refcats/' || true
+# Ingest only if the RUN collection doesn't already exist
+if ! butler query-collections "$REPO" | awk '{print $1}' | grep -qx "$GAIA_RUN"; then
+  echo "[refcats][GAIA] Ingest → $GAIA_RUN"
+  butler ingest-files -t direct "$REPO" "$GAIA_DT" "$GAIA_RUN" "$GAIA_MAP"
+else
+  echo "[refcats][GAIA] Skip ingest (exists) → $GAIA_RUN"
+fi
+
+if ! butler query-collections "$REPO" | awk '{print $1}' | grep -qx "$PS1_RUN"; then
+  echo "[refcats][PS1 ] Ingest → $PS1_RUN"
+  butler ingest-files -t direct "$REPO" "$PS1_DT" "$PS1_RUN" "$PS1_MAP"
+else
+  echo "[refcats][PS1 ] Skip ingest (exists) → $PS1_RUN"
+fi
+
+# Build/refresh 'refcats' chain with whatever runs exist
+children=()
+butler query-collections "$REPO" | awk '{print $1}' | grep -qx "$GAIA_RUN" && children+=("$GAIA_RUN")
+butler query-collections "$REPO" | awk '{print $1}' | grep -qx "$PS1_RUN"  && children+=("$PS1_RUN")
+
+if (( ${#children[@]} )); then
+  echo "[refcats] Chain 'refcats' = [${children[*]}]"
+  butler collection-chain "$REPO" refcats "${children[@]}" --mode redefine
+  butler query-collections "$REPO" | grep -E '^refcats$|^  refcats/' || true
+else
+  echo "[refcats] Nothing to chain."
+fi
+
 
 # --- NIGHTLY CERTIFICATION WINDOW (robust) ---
 export NIGHT   # ensure available to subprocesses
