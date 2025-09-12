@@ -18,11 +18,14 @@ from astropy.coordinates import Angle, EarthLocation
 log = logging.getLogger(__name__)
 
 
+EPOCH0 = astropy.time.Time("2000-01-01T00:00:00", scale="utc")
+
+
 class NickelTranslator(FitsTranslator):
     """Metadata translator for the Nickel telescope at Lick Observatory."""
 
     name = "Nickel"
-    supported_instrument = {"Nickel"}
+    supported_instrument = "Nickel"
 
     # _const_map includes properties that you may not know, nor can calculate.
     _const_map = {
@@ -31,11 +34,11 @@ class NickelTranslator(FitsTranslator):
     }
 
     # _trivial_map includes properties that can be taken directly from header
-    _trivial_map: dict[str, str | tuple[str, dict[str, Any]]] = {
+    _trivial_map: dict[str, str | list[str] | tuple[Any, ...]] = {
         "exposure_time": ("EXPTIME", {"unit": u.s, "default": 0.0 * u.s}),
         "dark_time": ("EXPTIME", {"unit": u.s, "default": 0.0 * u.s}),
         "boresight_airmass": ("AIRMASS", {"default": float("nan")}),
-        "observation_id": ("OBSNUM", {"default": "0"}),
+        # "observation_id": ("OBSNUM", {"default": "0"}),
         "object": ("OBJECT", {"default": "UNKNOWN"}),
         "telescope": ("TELESCOP", {"default": "Nickel 1m"}),
         "science_program": ("PROGRAM", {"default": "unknown"}),
@@ -55,8 +58,43 @@ class NickelTranslator(FitsTranslator):
         return "Nickel"
 
     @cache_translation
+    def to_day_obs(self) -> int:
+        """Observing day as YYYYMMDD (UTC), using only DATE."""
+        return int(self.to_datetime_end().datetime.strftime("%Y%m%d"))
+
+    @cache_translation
+    def to_observation_id(self) -> str:
+        """String ID that must be globally unique for the instrument."""
+        return f"{self.to_day_obs():08d}_{int(self._header.get('OBSNUM', 0))}"
+
+    @cache_translation
     def to_exposure_id(self) -> int:
-        return int(self._header.get("OBSNUM", 0))
+        """Unique exposure/visit ID that fits in 31 bits.
+
+        ID = (days_since_2000 * 10000) + OBSNUM
+        """
+        obsnum = int(self._header["OBSNUM"])
+        t = self.to_datetime_end()
+        days = int((t - EPOCH0).to_value("day"))
+        exposure_id = days * 10000 + obsnum
+        if exposure_id >= 2**31:
+            raise ValueError(f"exposure_id {exposure_id} is out of 31-bit range")
+        return exposure_id
+
+        # """Unique exposure integer for Nickel using only DATE and OBSNUM.
+
+        # exposure_id = day_obs + OBSNUM
+        # """
+        # day_obs = self._to_day_obs()
+        # obs_num = self._header.get("OBSNUM", 0)
+        # return day_obs * 10000 + obs_num
+
+    # @cache_translation
+    # def to_exposure_id(self) -> int:
+    #     obs_num = self._header.get("OBSNUM", 0)
+    #     dt = self.to_datetime_end()
+    #     return ""
+    #     # return int(self._header.get("OBSNUM", 0))
 
     @cache_translation
     def to_visit_id(self) -> int:
@@ -134,7 +172,6 @@ class NickelTranslator(FitsTranslator):
 
     @cache_translation
     def to_location(self) -> EarthLocation:
-
         value = EarthLocation.of_site("Lick Observatory")
         return value
 

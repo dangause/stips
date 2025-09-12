@@ -1,9 +1,57 @@
 #!/usr/bin/env bash
 # Nickel reduction pipeline — persistent repo, nightly certification
 
+# set -euo pipefail
+
+############################
+# CLI parsing
+############################
+NIGHT="${NIGHT:-}"   # allow env override
+BAD_EXPOSURES=""     # exposure IDs (integers)
+BAD_EXPOSURES_FILE=""
+BAD_OBSIDS=""        # OBSNUM strings (e.g., 1052)
+BAD_OBSIDS_FILE=""
+
+usage() {
+  cat <<USAGE
+Usage: $0 --night YYYYMMDD [--bad EXPOSURE_IDS] [--bad-file FILE] [--bad-obs OBSNUMS] [--bad-obs-file FILE]
+
+Options:
+  -n, --night          Night tag in YYYYMMDD format (required unless NIGHT env var set)
+      --bad            Comma-separated exposure IDs to exclude (e.g. "88991050,88991052")
+      --bad-file       Path to file with exposure IDs to exclude (one per line; comments with '#')
+      --bad-obs        Comma-separated OBSNUMs to exclude (e.g. "1050,1052")
+      --bad-obs-file   Path to file with OBSNUMs to exclude (one per line; comments with '#')
+  -h, --help           Show this help
+
+Examples:
+  $0 --night 20240624
+  $0 -n 20240624 --bad "88991050,88991052"
+  $0 -n 20240624 --bad-obs "1050,1052"
+  $0 -n 20240624 --bad-file bad_exposures.txt --bad-obs-file bad_obs.txt
+  NIGHT=20240512 $0
+USAGE
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -n|--night)        NIGHT="${2:-}"; shift 2;;
+    --bad)             BAD_EXPOSURES="${2:-}"; shift 2;;
+    --bad-file)        BAD_EXPOSURES_FILE="${2:-}"; shift 2;;
+    --bad-obs)         BAD_OBSIDS="${2:-}"; shift 2;;
+    --bad-obs-file)    BAD_OBSIDS_FILE="${2:-}"; shift 2;;
+    -h|--help)         usage; exit 0;;
+    *) echo "Unknown argument: $1"; usage; exit 2;;
+  esac
+done
+
+if [[ -z "${NIGHT}" ]]; then
+  echo "ERROR: Night not provided. Use --night YYYYMMDD or set NIGHT env var."
+  usage
+  exit 2
+fi
+
 ########## USER PATHS ##########
-NIGHT="20240624"                               # night tag for this dataset
-# NIGHT="20240512"
 RAWDIR="/Users/dangause/Desktop/lick/data/${NIGHT}/raw"                       # raw data directory
 REPO="/Users/dangause/Desktop/lick/lsst/data/nickel/repo"                    # persistent Butler repo
 OBS_NICKEL="/Users/dangause/Desktop/lick/lsst/lsst_stack/stack/obs_nickel"   # obs_nickel directory
@@ -20,8 +68,6 @@ CURATED_RUN="Nickel/calib/curated/${TS}"
 DEFECTS_RUN="Nickel/calib/defects/${TS}"
 CALIB_OUT="Nickel/calib/${NIGHT}"              # nightly CALIBRATION collection
 CALIB_CHAIN="Nickel/calib/current"             # unified chain used by science
-BAD=""                                          # exposures to exclude (none for now)
-# BAD="1032,1047,1051,1052"                           # science exposures to exclude
 
 echo "=== Nickel pipeline starting @ $TS (night=$NIGHT) ==="
 
@@ -118,12 +164,11 @@ fi
 GAIA_DATE="${GAIA_DIR##*-}"
 PS1_DATE="${PS1_DIR##*-}"
 
-# -------- Option A (recommended): stable dataset type names ----------
-# Ingest tiles under constant dataset types so pipeline configs don't need daily edits.
+# Stable dataset type names (so pipeline configs never change)
 GAIA_DT="gaia_dr3"
 PS1_DT="panstarrs1_dr2"
 
-# Use date-stamped RUN collection names (so you can keep history)
+# Date-stamped RUN collections keep history of each conversion
 GAIA_RUN="refcats/gaia_dr3_${GAIA_DATE}"
 PS1_RUN="refcats/panstarrs1_dr2_${PS1_DATE}"
 
@@ -141,7 +186,6 @@ butler ingest-files -t direct "$REPO" "$PS1_DT" "$PS1_RUN" "$PS1_MAP"
 echo "[refcats] Building CHAIN 'refcats' = [$GAIA_RUN, $PS1_RUN]"
 butler collection-chain "$REPO" refcats "$GAIA_RUN" "$PS1_RUN" --mode redefine
 butler query-collections "$REPO" | grep -E '^refcats$|^  refcats/' || true
-
 
 # --- NIGHTLY CERTIFICATION WINDOW (robust) ---
 export NIGHT   # ensure available to subprocesses
@@ -167,7 +211,6 @@ PY
 )"
 
 echo "[window] Certify range: $BEGIN_ISO → $END_ISO (UTC)"
-
 
 ########## CERTIFY CP CALIBS INTO NIGHTLY CALIBRATION COLLECTION ##########
 # Check if nightly CALIB collection exists before querying datasets inside it.
@@ -210,16 +253,61 @@ cd "$OBS_NICKEL"
 PIPE="$OBS_NICKEL/pipelines/ProcessCcd.yaml"
 PROCESS_CCD_RUN="Nickel/runs/${NIGHT}/processCcd/${TS}"
 
-# sanity
-butler query-collections "$REPO" | grep -E 'Nickel/calib/(current|defects/current)|^refcats$' || true
+# -------------------------------------------------
+# Build the exclusion predicate from CLI/file inputs
+# -------------------------------------------------
+# Normalize comma-separated strings -> newline, strip comments/spaces, keep digits only.
+norm_csv_to_lines() {
+  # read from STDIN
+  tr -cs '0-9,\n' '\n' | sed 's/^0\+//' | sed '/^$/d'
+}
+norm_file_to_lines() {
+  local f="$1"
+  [[ -f "$f" ]] || return 0
+  sed 's/#.*//' "$f" | tr -cs '0-9,\n' '\n' | sed 's/^0\+//' | sed '/^$/d'
+}
 
-# Exclude known-bad exposures (comma-separated list of exposure IDs)
-if [[ -n "$BAD" ]]; then
-  BAD_EXPR="AND NOT (exposure IN (${BAD}))"
-else
-  BAD_EXPR=""
+BAD_EXP_CSV=""
+BAD_OBS_CSV=""
+
+# From --bad (exposure IDs)
+if [[ -n "$BAD_EXPOSURES" ]]; then
+  BAD_EXP_CSV="$(printf "%s" "$BAD_EXPOSURES" | norm_csv_to_lines | awk 'length($0)>=7' | sort -u | paste -sd, -)"
+fi
+# From --bad-file (exposure IDs)
+if [[ -n "$BAD_EXPOSURES_FILE" && -f "$BAD_EXPOSURES_FILE" ]]; then
+  ADD="$(norm_file_to_lines "$BAD_EXPOSURES_FILE" | awk 'length($0)>=7' | sort -u | paste -sd, -)"
+  [[ -n "$ADD" ]] && BAD_EXP_CSV="${BAD_EXP_CSV:+$BAD_EXP_CSV,}$ADD"
 fi
 
+# From --bad-obs (OBSNUMs)
+if [[ -n "$BAD_OBSIDS" ]]; then
+  BAD_OBS_CSV="$(printf "%s" "$BAD_OBSIDS" | norm_csv_to_lines | awk 'length($0)>=1 && length($0)<=6' | sort -u | paste -sd, -)"
+fi
+# From --bad-obs-file (OBSNUMs)
+if [[ -n "$BAD_OBSIDS_FILE" && -f "$BAD_OBSIDS_FILE" ]]; then
+  ADD="$(norm_file_to_lines "$BAD_OBSIDS_FILE" | awk 'length($0)>=1 && length($0)<=6' | sort -u | paste -sd, -)"
+  [[ -n "$ADD" ]] && BAD_OBS_CSV="${BAD_OBS_CSV:+$BAD_OBS_CSV,}$ADD"
+fi
+
+# Build the WHERE clause tail
+BAD_EXPR=""
+if [[ -n "$BAD_EXP_CSV" ]]; then
+  BAD_EXPR+=" AND NOT (exposure IN (${BAD_EXP_CSV}))"
+fi
+if [[ -n "$BAD_OBS_CSV" ]]; then
+  # quote each OBSNUM for SQL string comparison
+  local_quoted="$(printf "%s\n" "$BAD_OBS_CSV" | tr ',' '\n' | sed "s/.*/'&'/" | paste -sd, -)"
+  BAD_EXPR+=" AND NOT (exposure.obs_id IN (${local_quoted}))"
+fi
+
+if [[ -n "$BAD_EXP_CSV$BAD_OBS_CSV" ]]; then
+  echo "[science] Excluding exposures: ${BAD_EXP_CSV:-<none>}  and OBSNUMs: ${BAD_OBS_CSV:-<none>}"
+fi
+# -------------------------------------------------
+
+# sanity
+butler query-collections "$REPO" | grep -E 'Nickel/calib/(current|defects/current)|^refcats$' || true
 
 echo "[science] ProcessCcd -> $PROCESS_CCD_RUN"
 pipetask run \

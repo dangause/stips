@@ -2,8 +2,8 @@
 config.name = "nickel_discrete"
 config.skyMap.name = "discrete"
 d = config.skyMap["discrete"]
-d.raList = [251.847639]  # deg
-d.decList = [2.264044]  # deg
-d.radiusList = [18.903904]  # deg (includes border 0.05 deg)
-d.pixelScale = 0.370891  # arcsec/pixel
+d.raList = [251.977993]  # deg
+d.decList = [2.244679]  # deg
+d.radiusList = [19.035485]  # deg (includes border 0.05 deg)
+d.pixelScale = 0.370900  # arcsec/pixel
 d.tractOverlap = 0.0  # deg
