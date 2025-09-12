@@ -3,7 +3,7 @@
 
 ########## USER PATHS ##########
 NIGHT="20240624"                               # night tag for this dataset
-# NIGHT="20240524"
+# NIGHT="20240512"
 RAWDIR="/Users/dangause/Desktop/lick/data/${NIGHT}/raw"                       # raw data directory
 REPO="/Users/dangause/Desktop/lick/lsst/data/nickel/repo"                    # persistent Butler repo
 OBS_NICKEL="/Users/dangause/Desktop/lick/lsst/lsst_stack/stack/obs_nickel"   # obs_nickel directory
@@ -93,32 +93,55 @@ butler query-collections "$REPO" | grep -E 'Nickel/calib/defects/current|Nickel/
 
 ########## REF CATS (ingest & chain) ##########
 cd "$REFCAT_REPO"
-# GAIA DR3
-if [ ! -d "refcats/gaia_dr3_20250728" ] || [ -z "$(ls -A refcats/gaia_dr3_20250728 2>/dev/null || true)" ]; then
-  echo "[refcats][GAIA] Converting…"
-  convertReferenceCatalog data/gaia-refcat/ scripts/gaia_dr3_config.py ./data/gaia_dr3_all_cones/gaia_dr3_all_cones.csv &> convert-gaia.log
-fi
-echo "[refcats][GAIA] Registering dataset type gaia_dr3_20250728"
-butler register-dataset-type "$REPO" gaia_dr3_20250728 SimpleCatalog htm7 || true
-echo "[refcats][GAIA] Ingesting tiles into 'refcats/gaia_dr3_20250728'"
-butler ingest-files -t direct "$REPO" gaia_dr3_20250728 refcats/gaia_dr3_20250728 data/gaia-refcat/filename_to_htm.ecsv
 
-# PS1 DR2
-if [ ! -d "refcats/panstarrs1_dr2_20250730" ] || [ -z "$(ls -A refcats/panstarrs1_dr2_20250730 2>/dev/null || true)" ]; then
-  echo "[refcats][PS1] Converting…"
-  convertReferenceCatalog data/ps1-refcat/ scripts/ps1_config.py ./data/ps1_all_cones/merged_ps1_cones.csv &> convert-ps1.log
-fi
-echo "[refcats][PS1] Registering dataset type panstarrs1_dr2_20250730"
-butler register-dataset-type "$REPO" panstarrs1_dr2_20250730 SimpleCatalog htm7 || true
-echo "[refcats][PS1] Ingesting tiles into 'refcats/panstarrs1_dr2_20250730'"
-butler ingest-files -t direct "$REPO" panstarrs1_dr2_20250730 refcats/panstarrs1_dr2_20250730 data/ps1-refcat/filename_to_htm.ecsv
+# Find the latest conversion outputs produced by scripts/convert_refcats.py
+GAIA_DIR="$(ls -d data/gaia-refcat-* 2>/dev/null | sort -V | tail -n1)"
+PS1_DIR="$(ls -d data/ps1-refcat-*  2>/dev/null | sort -V | tail -n1)"
 
-# Build/refresh the CHAIN collection "refcats"
-echo "[refcats] Building CHAIN 'refcats' with children: refcats/gaia_dr3_20250728, refcats/panstarrs1_dr2_20250730"
-butler collection-chain "$REPO" refcats \
-  refcats/gaia_dr3_20250728 refcats/panstarrs1_dr2_20250730 \
-  --mode redefine
+if [[ -z "$GAIA_DIR" || -z "$PS1_DIR" ]]; then
+  echo "[refcats] ERROR: No converted refcat outputs found in data/."
+  echo "          Run:  python scripts/convert_refcats.py"
+  exit 2
+fi
+
+GAIA_MAP="${GAIA_DIR}/filename_to_htm.ecsv"
+PS1_MAP="${PS1_DIR}/filename_to_htm.ecsv"
+
+if [[ ! -s "$GAIA_MAP" ]]; then
+  echo "[refcats][GAIA] ERROR: map not found: $GAIA_MAP"; exit 2
+fi
+if [[ ! -s "$PS1_MAP" ]]; then
+  echo "[refcats][PS1] ERROR: map not found: $PS1_MAP"; exit 2
+fi
+
+# Extract date stamp from dir names (suffix after last '-'), e.g. 20250911
+GAIA_DATE="${GAIA_DIR##*-}"
+PS1_DATE="${PS1_DIR##*-}"
+
+# -------- Option A (recommended): stable dataset type names ----------
+# Ingest tiles under constant dataset types so pipeline configs don't need daily edits.
+GAIA_DT="gaia_dr3"
+PS1_DT="panstarrs1_dr2"
+
+# Use date-stamped RUN collection names (so you can keep history)
+GAIA_RUN="refcats/gaia_dr3_${GAIA_DATE}"
+PS1_RUN="refcats/panstarrs1_dr2_${PS1_DATE}"
+
+echo "[refcats][GAIA] Registering dataset type: $GAIA_DT"
+butler register-dataset-type "$REPO" "$GAIA_DT" SimpleCatalog htm7 || true
+echo "[refcats][GAIA] Ingesting tiles → $GAIA_RUN"
+butler ingest-files -t direct "$REPO" "$GAIA_DT" "$GAIA_RUN" "$GAIA_MAP"
+
+echo "[refcats][PS1 ] Registering dataset type: $PS1_DT"
+butler register-dataset-type "$REPO" "$PS1_DT" SimpleCatalog htm7 || true
+echo "[refcats][PS1 ] Ingesting tiles → $PS1_RUN"
+butler ingest-files -t direct "$REPO" "$PS1_DT" "$PS1_RUN" "$PS1_MAP"
+
+# Build/refresh the CHAIN 'refcats' (Gaia first, then PS1)
+echo "[refcats] Building CHAIN 'refcats' = [$GAIA_RUN, $PS1_RUN]"
+butler collection-chain "$REPO" refcats "$GAIA_RUN" "$PS1_RUN" --mode redefine
 butler query-collections "$REPO" | grep -E '^refcats$|^  refcats/' || true
+
 
 # --- NIGHTLY CERTIFICATION WINDOW (robust) ---
 export NIGHT   # ensure available to subprocesses
