@@ -105,14 +105,14 @@ class TestNickelTranslator(unittest.TestCase):
 
     def test_ids_and_detector_fields(self):
         self.assertEqual(self.tr.to_instrument(), "Nickel")
-        self.assertEqual(self.tr.to_exposure_id(), 1032)
-        self.assertEqual(self.tr.to_visit_id(), 1032)
+        self.assertEqual(self.tr.to_exposure_id(), 89421032)
+        self.assertEqual(self.tr.to_visit_id(), 89421032)
         self.assertEqual(self.tr.to_detector_num(), 0)
         self.assertEqual(self.tr.to_detector_name(), "0")
         self.assertEqual(self.tr.to_detector_unique_name(), "0")
         self.assertEqual(self.tr.to_detector_serial(), "")
         self.assertEqual(self.tr.to_detector_group(), "")
-        self.assertEqual(self.tr.to_detector_exposure_id(), 1032)
+        self.assertEqual(self.tr.to_detector_exposure_id(), 89421032)
 
     def test_location(self):
         loc = self.tr.to_location()
