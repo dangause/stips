@@ -16,7 +16,7 @@ import argparse
 import os
 import sys
 import warnings
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Iterable, List, Optional, Tuple
 
 import matplotlib
@@ -40,7 +40,7 @@ except ImportError:
 
 
 def ts_utc() -> str:
-    return datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+    return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
 
 def _query_flat_refs(b: Butler, instrument: str) -> list:

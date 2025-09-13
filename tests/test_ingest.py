@@ -24,7 +24,7 @@ class TestNickelIngest(IngestTestBase, lsst.utils.tests.TestCase):
     filterLabel = FilterLabel(physical="B", band="b")
 
     # One raw
-    dataIds = [dict(instrument="Nickel", exposure=1032, detector=0)]
+    dataIds = [dict(instrument="Nickel", exposure=89421032, detector=0)]
 
     @property
     def file(self):
@@ -36,10 +36,10 @@ class TestNickelIngest(IngestTestBase, lsst.utils.tests.TestCase):
         # Build DataCoordinate keys using the repo’s universe to match the base test.
         butler = Butler(self.root, collections=[self.outputRun])
         visit_dc = DataCoordinate.standardize(
-            instrument="Nickel", visit=1032, universe=butler.dimensions
+            instrument="Nickel", visit=89421032, universe=butler.dimensions
         )
         exposure_dc = DataCoordinate.standardize(
-            instrument="Nickel", exposure=1032, universe=butler.dimensions
+            instrument="Nickel", exposure=89421032, universe=butler.dimensions
         )
         return {visit_dc: [exposure_dc]}
 

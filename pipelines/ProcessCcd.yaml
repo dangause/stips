@@ -42,7 +42,7 @@ tasks:
       psf_detection.combinedGrow: true
 
       # ---- Astrometry Config Parameters ----
-      connections.astrometry_ref_cat: gaia_dr3_20250728
+      connections.astrometry_ref_cat: gaia_dr3
       astrometry.forceKnownWcs: False
 
       # match search‐radius: 60″ ≃ 300 pix @ 0.      # match search‐radius: 60″ ≃ 300 pix @ 0.2″/pix
@@ -56,7 +56,8 @@ tasks:
       astrometry.maxIter: 12
 
       # --- Photometry Config Parameters ---
-      connections.photometry_ref_cat: panstarrs1_dr2_20250730
+      connections.photometry_ref_cat: panstarrs1_dr2
+      # connections.photometry_ref_cat: panstarrs1_dr2_20250730
 
       photometry_ref_loader.filterMap: {"b": "gMeanPSFMag", "v": "gMeanPSFMag", "r": "rMeanPSFMag", "i": "iMeanPSFMag", "u": "gMeanPSFMag"}
       photometry.match.matchRadius: 1.5

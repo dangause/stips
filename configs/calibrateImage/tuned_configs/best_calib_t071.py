@@ -52,7 +52,7 @@ m.minMatchDistPixels = 2.19105964461907
 m.minMatchedPairs = int(9)
 m.minFracMatchedPairs = 0.06453778850229026
 m.numBrightStars = int(200)
-m.maxRefObjects = int(6498)
+m.maxRefObjects = int(6498)  # was 6498
 m.numPatternConsensus = int(2)
 
 # Astrometry science source S/N
