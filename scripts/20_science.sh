@@ -52,6 +52,16 @@ POST_RUN="${POST_PARENT}/run"
 QG_DIR="$REPO/qgraphs"; mkdir -p "$QG_DIR"
 LOGS_DIR="$OBS_NICKEL/logs"; mkdir -p "$LOGS_DIR"
 
+# Paths (next to your existing QG_* paths)
+QG_SCI_DOT="$QG_DIR/processCcd_${NIGHT}_${RUN_TS}.dot"
+QG_SCI_MMD="$QG_DIR/processCcd_${NIGHT}_${RUN_TS}.mmd"
+QG_SCI_SVG="$QG_DIR/processCcd_${NIGHT}_${RUN_TS}.svg"
+
+QG_POST_DOT="$QG_DIR/postproc_visits_${NIGHT}_${RUN_TS}.dot"
+QG_POST_MMD="$QG_DIR/postproc_visits_${NIGHT}_${RUN_TS}.mmd"
+QG_POST_SVG="$QG_DIR/postproc_visits_${NIGHT}_${RUN_TS}.svg"
+
+
 echo "=== [science] night=${NIGHT} @ ${RUN_TS} ==="
 
 ########## ENV ##########
@@ -114,6 +124,8 @@ pipetask qgraph \
   --output-run "$SCI_RUN" \
   --save-qgraph "$QG_SCI" \
   --config-file "$CFG_ARG" \
+  --qgraph-dot "$QG_SCI_DOT" \
+  --qgraph-mermaid "$QG_SCI_MMD" \
   -d "instrument='Nickel' AND exposure.observation_type='science' ${BAD_EXPR}"
 
 # (optional) peek at graph/tasks (no 'counts' — not a valid show item)
@@ -141,6 +153,8 @@ pipetask qgraph \
   -o "$POST_PARENT" \
   --output-run "$POST_RUN" \
   --save-qgraph "$QG_POST" \
+  --qgraph-dot "$QG_POST_DOT" \
+  --qgraph-mermaid "$QG_POST_MMD" \
   -d "instrument='Nickel' AND exposure.observation_type='science' ${BAD_EXPR}"
 
 echo "[run] postproc (visits) ..."
