@@ -1,14 +1,11 @@
 #!/usr/bin/env bash
 # 10_calibs.sh — Nickel nightly calibrations (bias/flat/defects) with stable run names
 # Usage: 10_calibs.sh --night YYYYMMDD
-# Notes:
-#  - Writes curated calibs after ingesting raws (scans RAW_RUN)
-#  - Builds QGraphs via `pipetask qgraph`, executes with `pipetask run -g`
-#  - Uses a single RUN_TS per invocation (no drift)
-#  - Forces deterministic child RUN names with --output-run
-#  - Quiet, robust pre-checks before certify to avoid EmptyQueryResultError
 
 # set -euo pipefail
+set -a
+source .env
+set +a
 
 ########## CLI ##########
 NIGHT="${NIGHT:-}"
@@ -21,11 +18,9 @@ while [[ $# -gt 0 ]]; do
 done
 [[ -n "$NIGHT" ]] || { echo "Provide --night YYYYMMDD"; exit 2; }
 
-########## USER PATHS ##########
-RAWDIR="/Users/dangause/Desktop/lick/data/${NIGHT}/raw"
-REPO="/Users/dangause/Desktop/lick/lsst/data/nickel/repo"
-OBS_NICKEL="/Users/dangause/Desktop/lick/lsst/lsst_stack/stack/obs_nickel"
-STACK_DIR="/Users/dangause/Desktop/lick/lsst/lsst_stack"
+########## ENVIRONMENT VARS ##########
+RAWDIR=${RAW_PARENT_DIR}/${NIGHT}/raw
+
 INSTRUMENT="lsst.obs.nickel.Nickel"
 
 # cpPipe pipeline location (same as your monolith; must exist)

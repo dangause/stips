@@ -3,6 +3,10 @@
 
 # set -euo pipefail
 
+set -a
+source .env
+set +a
+
 ########## CLI ##########
 NIGHT="${NIGHT:-}"
 BAD_EXPOSURES=""; BAD_EXPOSURES_FILE=""
@@ -25,10 +29,7 @@ done
 [[ -n "$NIGHT" ]] || { echo "Provide --night YYYYMMDD"; exit 2; }
 
 
-########## USER PATHS ##########
-REPO="/Users/dangause/Desktop/lick/lsst/data/nickel/repo"
-OBS_NICKEL="/Users/dangause/Desktop/lick/lsst/lsst_stack/stack/obs_nickel"
-STACK_DIR="/Users/dangause/Desktop/lick/lsst/lsst_stack"
+########## ENVIRONMENT VARS ##########
 INSTRUMENT="lsst.obs.nickel.Nickel"
 
 # Pipeline files (absolute)
@@ -118,7 +119,7 @@ CFG_ARG="calibrateImage:$TUNED_CFG_FILE"   # build safely to avoid empty -C
 echo "[qgraph] processCcd -> $QG_SCI"
 pipetask qgraph \
   -b "$REPO" \
-  -p "$PIPE#processCcd" \
+  -p "$PIPE#stage1-single-visit" \
   -i "$RAW_RUN","$CALIB_CHAIN","$REFCATS_CHAIN" \
   -o "$SCI_PARENT" \
   --output-run "$SCI_RUN" \
@@ -142,30 +143,30 @@ pipetask run \
 # Ensure parent chain points to child RUN
 butler collection-chain "$REPO" "$SCI_PARENT" "$SCI_RUN" --mode redefine
 
-########## OPTIONAL: Post-processing on visits ##########
-QG_POST="$QG_DIR/postproc_visits_${NIGHT}_${RUN_TS}.qgraph"
+# ########## OPTIONAL: Post-processing on visits ##########
+# QG_POST="$QG_DIR/postproc_visits_${NIGHT}_${RUN_TS}.qgraph"
 
-echo "[qgraph] postproc (visits) -> $QG_POST"
-pipetask qgraph \
-  -b "$REPO" \
-  -p "$POST_PIPE" \
-  -i "$SCI_PARENT","$CALIB_CHAIN","$REFCATS_CHAIN" \
-  -o "$POST_PARENT" \
-  --output-run "$POST_RUN" \
-  --save-qgraph "$QG_POST" \
-  --qgraph-dot "$QG_POST_DOT" \
-  --qgraph-mermaid "$QG_POST_MMD" \
-  -d "instrument='Nickel' AND exposure.observation_type='science' ${BAD_EXPR}"
+# echo "[qgraph] postproc (visits) -> $QG_POST"
+# pipetask qgraph \
+#   -b "$REPO" \
+#   -p "$POST_PIPE" \
+#   -i "$SCI_PARENT","$CALIB_CHAIN","$REFCATS_CHAIN" \
+#   -o "$POST_PARENT" \
+#   --output-run "$POST_RUN" \
+#   --save-qgraph "$QG_POST" \
+#   --qgraph-dot "$QG_POST_DOT" \
+#   --qgraph-mermaid "$QG_POST_MMD" \
+#   -d "instrument='Nickel' AND exposure.observation_type='science' ${BAD_EXPR}"
 
-echo "[run] postproc (visits) ..."
-pipetask run \
-  -b "$REPO" \
-  -g "$QG_POST" \
-  --register-dataset-types \
-  -j 8 \
-  2>&1 | tee "$LOGS_DIR/postproc_visits_${RUN_TS}.log"
+# echo "[run] postproc (visits) ..."
+# pipetask run \
+#   -b "$REPO" \
+#   -g "$QG_POST" \
+#   --register-dataset-types \
+#   -j 8 \
+#   2>&1 | tee "$LOGS_DIR/postproc_visits_${RUN_TS}.log"
 
-butler collection-chain "$REPO" "$POST_PARENT" "$POST_RUN" --mode redefine
+# butler collection-chain "$REPO" "$POST_PARENT" "$POST_RUN" --mode redefine
 
 # ########## SKYMAP (discrete) — only if we produced initial_pvi ##########
 # cd "$OBS_NICKEL"
@@ -195,5 +196,5 @@ echo "CALIB_CHAIN = $CALIB_CHAIN"
 echo "REFCATS     = $REFCATS_CHAIN"
 echo "SCI_PARENT  = $SCI_PARENT"
 echo "SCI_RUN     = $SCI_RUN"
-echo "POST_PARENT = $POST_PARENT"
-echo "POST_RUN    = $POST_RUN"
+# echo "POST_PARENT = $POST_PARENT"
+# echo "POST_RUN    = $POST_RUN"

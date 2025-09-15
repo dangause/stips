@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # set -euo pipefail
 
-########## USER PATHS ##########
-REPO="/Users/dangause/Desktop/lick/lsst/data/nickel/repo"
-OBS_NICKEL="/Users/dangause/Desktop/lick/lsst/lsst_stack/stack/obs_nickel"
-REFCAT_REPO="/Users/dangause/Desktop/lick/lsst/lsst_stack/stack/refcats"
-STACK_DIR="/Users/dangause/Desktop/lick/lsst/lsst_stack"
+set -a
+source .env
+set +a
+
+########## ENVIRONMENT VARS ##########
+
 INSTRUMENT="lsst.obs.nickel.Nickel"
 
 TS="$(date -u +%Y%m%dT%H%M%SZ)"
