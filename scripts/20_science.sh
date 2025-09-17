@@ -125,6 +125,7 @@ pipetask qgraph \
   --output-run "$SCI_RUN" \
   --save-qgraph "$QG_SCI" \
   --config-file "$CFG_ARG" \
+  --config-file "calibrateImage:$OBS_NICKEL/configs/apply_colorterms.py" \
   --qgraph-dot "$QG_SCI_DOT" \
   --qgraph-mermaid "$QG_SCI_MMD" \
   -d "instrument='Nickel' AND exposure.observation_type='science' ${BAD_EXPR}"

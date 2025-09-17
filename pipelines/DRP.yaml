@@ -88,7 +88,8 @@ tasks:
         i: iMeanPSFMag
         u: gMeanPSFMag
       photometry.match.matchRadius: 1.5
-      photometry.applyColorTerms: false
+      photometry.applyColorTerms: true
+      photometry.photoCatName: panstarrs1_dr2
 
 
   standardizeSingleVisitStar:
