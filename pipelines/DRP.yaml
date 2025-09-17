@@ -63,7 +63,8 @@ tasks:
         i: iMeanPSFMag
         u: gMeanPSFMag
       photometry.match.matchRadius: 1.5
-      photometry.applyColorTerms: false
+      photometry.applyColorTerms: true
+      photometry.photoCatName: panstarrs1_dr2
 
 # Pull your tuned Python config on top of the YAML values above.
 # (Keeps the long/structured bits maintainable)
