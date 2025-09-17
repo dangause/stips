@@ -210,7 +210,7 @@ subsets:
     # - analyzeAmpInterfaceOffsetMetadata
     - analyzeCalibrateImageMetadataNickel
     - analyzeInitialSummaryStats
-    # 1b
+    # # 1b
     # - consolidateSingleVisitStar
     # - consolidateVisitSummary
     # - analyzeSingleVisitStar
