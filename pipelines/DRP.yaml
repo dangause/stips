@@ -11,6 +11,7 @@ imports:
   - location: $DRP_PIPE_DIR/pipelines/_ingredients/analysis-association-source.yaml
   - location: $DRP_PIPE_DIR/pipelines/_ingredients/analysis-dia.yaml
   - location: $OBS_NICKEL/pipelines/nickel-visit-quality-detector.yaml
+  - location: $OBS_NICKEL/pipelines/nickel-analysis-visit-single-visit.yaml
 
 parameters:
   release_id: 0
@@ -92,6 +93,7 @@ tasks:
       photometry.photoCatName: panstarrs1_dr2
 
 
+
   standardizeSingleVisitStar:
     class: lsst.pipe.tasks.postprocess.TransformSourceTableTask
     config:
@@ -147,26 +149,26 @@ subsets:
 
       A skymap constraint is unnecessary and not recommended.
 
-  # step1b-single-visit-visits:
-  #   subset:
-  #     - consolidateSingleVisitStar
-  #     - consolidateVisitSummary
-  #     - analyzeSingleVisitStar
-  #     - makeAnalysisSingleVisitStarAstrometricRefMatch
-  #     - analyzeSingleVisitStarAstrometricRefMatch
-  #     - makeAnalysisSingleVisitStarPhotometricRefMatch
-  #     - analyzeSingleVisitStarPhotometricRefMatch
-  #   description: |
-  #     A step that consolidates per-detector initial star catalogs and metadata
-  #     to full-focal-plane visit-level versions, and runs analysis on initial
-  #     stars.
+  step1b-single-visit-visits:
+    subset:
+      - consolidateSingleVisitStar
+      - consolidateVisitSummary
+      - analyzeSingleVisitStar
+      - makeAnalysisSingleVisitStarAstrometricRefMatchNickel
+      - analyzeSingleVisitStarAstrometricRefMatchNickel
+      - makeAnalysisSingleVisitStarPhotometricRefMatchNickel
+      - analyzeSingleVisitStarPhotometricRefMatchNickel
+    description: |
+      A step that consolidates per-detector initial star catalogs and metadata
+      to full-focal-plane visit-level versions, and runs analysis on initial
+      stars.
 
-  #     A visit constraint may be used for sharding and may be useful in speeding
-  #     up QuantumGraph generation.
+      A visit constraint may be used for sharding and may be useful in speeding
+      up QuantumGraph generation.
 
-  #     An instrument constraint is generally redundant but recommended.
+      An instrument constraint is generally redundant but recommended.
 
-  #     A skymap constraint is unnecessary and not recommended.
+      A skymap constraint is unnecessary and not recommended.
 
   # step1c-single-visit-tracts:
   #   subset:
@@ -211,14 +213,14 @@ subsets:
     # - analyzeAmpInterfaceOffsetMetadata
     - analyzeCalibrateImageMetadataNickel
     - analyzeInitialSummaryStats
-    # # 1b
-    # - consolidateSingleVisitStar
-    # - consolidateVisitSummary
-    # - analyzeSingleVisitStar
-    # - makeAnalysisSingleVisitStarAstrometricRefMatch
-    # - analyzeSingleVisitStarAstrometricRefMatch
-    # - makeAnalysisSingleVisitStarPhotometricRefMatch
-    # - analyzeSingleVisitStarPhotometricRefMatch
+    # 1b
+    - consolidateSingleVisitStar
+    - consolidateVisitSummary
+    - analyzeSingleVisitStar
+    - makeAnalysisSingleVisitStarAstrometricRefMatchNickel
+    - analyzeSingleVisitStarAstrometricRefMatchNickel
+    - makeAnalysisSingleVisitStarPhotometricRefMatchNickel
+    # - analyzeSingleVisitStarPhotometricRefMatchNickel
     # # 1c
     # - associateIsolatedStar
     # - analyzeSingleVisitStarAssociation
