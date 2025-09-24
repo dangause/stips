@@ -34,32 +34,29 @@ tasks:
     config:
       connections.targetCatalog: single_visit_star
       connections.visitSummaryTable: preliminary_visit_summary
-      # Drop explicit refcat name from template to avoid needing to set it in
-      # downstream task configs.
-      connections.matchedCatalog: "gaia_dr3_ref_match_astrom"
+      connections.refCatalog: gaia_dr3
+      # keep the output name the analyzer expects
+      connections.matchedCatalog: "{targetCatalog}_ref_match_astrom"
   analyzeSingleVisitStarAstrometricRefMatchNickel:
     class: lsst.analysis.tools.tasks.refCatSourceAnalysis.RefCatSourceAnalysisTask
     config:
       file: $ANALYSIS_TOOLS_DIR/config/refCatSourceAstrometricCore.py
       connections.targetCatalog: single_visit_star
-      connections.data: "gaia_dr3_ref_match_astrom"
-      # Can't use {targetCatalog} in outputName because it is a template.
+      connections.data: "{targetCatalog}_ref_match_astrom"
       connections.outputName: "single_visit_star_ref_match_astrom"
   makeAnalysisSingleVisitStarPhotometricRefMatchNickel:
     class: lsst.analysis.tools.tasks.photometricCatalogMatch.PhotometricCatalogMatchVisitTask
     config:
+      file: $OBS_NICKEL/configs/analysisToolsPhotometricCatalogMatchVisit.py
       connections.targetCatalog: single_visit_star
       connections.visitSummaryTable: preliminary_visit_summary
-      # Drop explicit refcat name from template to avoid needing to set it in
-      # downstream task configs.
-      connections.matchedCatalog: "panstarrs1_dr2_ref_match_photom"
+      connections.matchedCatalog: "{targetCatalog}_ref_match_photom"
   analyzeSingleVisitStarPhotometricRefMatchNickel:
     class: lsst.analysis.tools.tasks.refCatSourcePhotometricAnalysis.RefCatSourcePhotometricAnalysisTask
     config:
       file: $ANALYSIS_TOOLS_DIR/config/refCatSourcePhotometricCore.py
       connections.targetCatalog: single_visit_star
-      connections.data: "panstarrs1_dr2_ref_match_photom"
-      # Can't use {targetCatalog} in outputName because it is a template.
+      connections.data: "{targetCatalog}_ref_match_photom"
       connections.outputName: "single_visit_star_ref_match_photom"
 
 # subsets:

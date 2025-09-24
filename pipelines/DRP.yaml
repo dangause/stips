@@ -154,10 +154,10 @@ subsets:
       - consolidateSingleVisitStar
       - consolidateVisitSummary
       - analyzeSingleVisitStar
-      # - makeAnalysisSingleVisitStarAstrometricRefMatchNickel
-      # - analyzeSingleVisitStarAstrometricRefMatchNickel
-      # - makeAnalysisSingleVisitStarPhotometricRefMatchNickel
-      # - analyzeSingleVisitStarPhotometricRefMatchNickel
+      - makeAnalysisSingleVisitStarAstrometricRefMatchNickel
+      - analyzeSingleVisitStarAstrometricRefMatchNickel
+      - makeAnalysisSingleVisitStarPhotometricRefMatchNickel
+      - analyzeSingleVisitStarPhotometricRefMatchNickel
     description: |
       A step that consolidates per-detector initial star catalogs and metadata
       to full-focal-plane visit-level versions, and runs analysis on initial
@@ -217,10 +217,10 @@ subsets:
     - consolidateSingleVisitStar
     - consolidateVisitSummary
     - analyzeSingleVisitStar
-    # - makeAnalysisSingleVisitStarAstrometricRefMatchNickel
-    # - analyzeSingleVisitStarAstrometricRefMatchNickel
-    # - makeAnalysisSingleVisitStarPhotometricRefMatchNickel
-    # - analyzeSingleVisitStarPhotometricRefMatchNickel
+    - makeAnalysisSingleVisitStarAstrometricRefMatchNickel
+    - analyzeSingleVisitStarAstrometricRefMatchNickel
+    - makeAnalysisSingleVisitStarPhotometricRefMatchNickel
+    - analyzeSingleVisitStarPhotometricRefMatchNickel
     # # 1c
     # - associateIsolatedStar
     # - analyzeSingleVisitStarAssociation

@@ -10,7 +10,7 @@ config.photometry.applyColorTerms = True
 refname = getattr(config.connections, "photometry_ref_cat", None)
 if not refname:
     # fall back if your tuned config doesn’t set it
-    refname = "panstarrs1_dr2_20250911"  # or "gaia_dr3_20250728"
+    refname = "panstarrs1_dr2"  # or "gaia_dr3"
 config.photometry.photoCatName = refname
 
 # load your library (generated colorterms.py that sets config.data = {...})
