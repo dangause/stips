@@ -2,13 +2,12 @@ import os
 
 OBS_DIR = os.path.dirname(__file__)
 
-# PS1 refcat dataset type (adjust if yours has a date suffix)
+# Use your PS1 dataset type (adjust if yours is different)
 config.connections.refCatalog = "panstarrs1_dr2"
 
-# Enable color terms and load your existing library
+# Enable and load your colorterms
 config.referenceCatalogLoader.doApplyColorTerms = True
 config.referenceCatalogLoader.colorterms.load(os.path.join(OBS_DIR, "colorterms.py"))
 
-# Load a band-letter filter map for Nickel
-# (don't assign column-name strings like gMeanPSFMag here)
+# Load the filter map into the *refObjLoader* (this is where the task looks)
 config.referenceCatalogLoader.refObjLoader.load(os.path.join(OBS_DIR, "filterMap.py"))

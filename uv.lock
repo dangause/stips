@@ -1068,6 +1068,7 @@ dependencies = [
     { name = "pandas" },
     { name = "pre-commit" },
     { name = "pyarrow" },
+    { name = "pyvo" },
 ]
 
 [package.metadata]
@@ -1080,6 +1081,7 @@ requires-dist = [
     { name = "pandas", specifier = ">=2.3.2" },
     { name = "pre-commit", specifier = ">=4.3.0" },
     { name = "pyarrow", specifier = ">=21.0.0" },
+    { name = "pyvo", specifier = ">=1.7" },
 ]
 
 [[package]]
@@ -1314,6 +1316,19 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/f8/bf/abbd3cdfb8fbc7fb3d4d38d320f2441b1e7cbe29be4f23797b4a2b5d8aac/pytz-2025.2.tar.gz", hash = "sha256:360b9e3dbb49a209c21ad61809c7fb453643e048b38924c765813546746e81c3", size = 320884, upload-time = "2025-03-25T02:25:00.538Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/81/c4/34e93fe5f5429d7570ec1fa436f1986fb1f00c3e0f43a589fe2bbcd22c3f/pytz-2025.2-py2.py3-none-any.whl", hash = "sha256:5ddf76296dd8c44c26eb8f4b6f35488f3ccbf6fbbd7adee0b7262d43f0ec2f00", size = 509225, upload-time = "2025-03-25T02:24:58.468Z" },
+]
+
+[[package]]
+name = "pyvo"
+version = "1.7"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "astropy" },
+    { name = "requests" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/b6/27/e5cec6dea4bfe4e4e6819bd940bd74edbc5b168be7cd15fbf0a0712a3995/pyvo-1.7.tar.gz", hash = "sha256:a6fad9efd410732d113e55df43b0201c9acb2e29f27532c71bda56f38ce62320", size = 2095584, upload-time = "2025-06-02T03:06:01.788Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b0/7a/1e561c455e2618617d906f1d09724b92059b882fd529f0cd4ca0408ccaea/pyvo-1.7-py3-none-any.whl", hash = "sha256:f1019a7f62cd0ba8d61908d4cc2b4d2b37410a7d75401ef9cdf7dbc99d232434", size = 1075136, upload-time = "2025-06-02T03:05:58.543Z" },
 ]
 
 [[package]]
