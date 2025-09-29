@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
-# 20_science.sh — Nickel science processing (ProcessCcd + PostProc) with stable run names
+# 20_science.sh — Nickel science processing (ProcessCcd + visit-level analysis subset)
 
 # set -euo pipefail
+
+set -a
+source .env
+set +a
 
 ########## CLI ##########
 NIGHT="${NIGHT:-}"
@@ -24,17 +28,13 @@ USAGE
 done
 [[ -n "$NIGHT" ]] || { echo "Provide --night YYYYMMDD"; exit 2; }
 
-
-########## USER PATHS ##########
-REPO="/Users/dangause/Desktop/lick/lsst/data/nickel/repo"
-OBS_NICKEL="/Users/dangause/Desktop/lick/lsst/lsst_stack/stack/obs_nickel"
-STACK_DIR="/Users/dangause/Desktop/lick/lsst/lsst_stack"
+########## ENVIRONMENT VARS ##########
 INSTRUMENT="lsst.obs.nickel.Nickel"
 
-# Pipeline files (absolute)
+# Pipeline & configs
 PIPE="$OBS_NICKEL/pipelines/DRP.yaml"
 TUNED_CFG_FILE="$OBS_NICKEL/configs/calibrateImage/tuned_configs/best_calib_t071.py"
-POST_PIPE="$OBS_NICKEL/pipelines/PostProcessing.yaml"
+APPLY_CT_CFG="$OBS_NICKEL/configs/apply_colorterms.py"
 
 ########## TIMESTAMPS & COLLECTIONS ##########
 RUN_TS="$(date -u +%Y%m%dT%H%M%SZ)"
@@ -42,96 +42,89 @@ RUN_TS="$(date -u +%Y%m%dT%H%M%SZ)"
 RAW_RUN="Nickel/raw/${NIGHT}/${RUN_TS}"
 CALIB_CHAIN="Nickel/calib/current"
 REFCATS_CHAIN="refcats"
+SKYMAPS_CHAIN="skymaps/nickelRings"   # from 00_bootstrap_repo.sh
 
 SCI_PARENT="Nickel/runs/${NIGHT}/processCcd/${RUN_TS}"
 SCI_RUN="${SCI_PARENT}/run"
 
-POST_PARENT="Nickel/run/postproc/visits/${RUN_TS}"
-POST_RUN="${POST_PARENT}/run"
-
 QG_DIR="$REPO/qgraphs"; mkdir -p "$QG_DIR"
 LOGS_DIR="$OBS_NICKEL/logs"; mkdir -p "$LOGS_DIR"
 
-# Paths (next to your existing QG_* paths)
+QG_SCI="$QG_DIR/processCcd_${NIGHT}_${RUN_TS}.qgraph"
 QG_SCI_DOT="$QG_DIR/processCcd_${NIGHT}_${RUN_TS}.dot"
 QG_SCI_MMD="$QG_DIR/processCcd_${NIGHT}_${RUN_TS}.mmd"
-QG_SCI_SVG="$QG_DIR/processCcd_${NIGHT}_${RUN_TS}.svg"
-
-QG_POST_DOT="$QG_DIR/postproc_visits_${NIGHT}_${RUN_TS}.dot"
-QG_POST_MMD="$QG_DIR/postproc_visits_${NIGHT}_${RUN_TS}.mmd"
-QG_POST_SVG="$QG_DIR/postproc_visits_${NIGHT}_${RUN_TS}.svg"
-
 
 echo "=== [science] night=${NIGHT} @ ${RUN_TS} ==="
 
-########## ENV ##########
+########## STACK ##########
 cd "$STACK_DIR"
 source loadLSST.zsh
 setup lsst_distrib
 setup obs_nickel || true
-butler register-instrument "$REPO" "$INSTRUMENT" || true
+butler register-instrument "$REPO" "$INSTRUMENT" >/dev/null 2>&1 || true
 
 # Validate files
 [[ -s "$PIPE" ]] || { echo "ERROR: pipeline not found: $PIPE"; exit 2; }
 [[ -s "$TUNED_CFG_FILE" ]] || { echo "ERROR: tuned config not found: $TUNED_CFG_FILE"; exit 2; }
-[[ -s "$POST_PIPE" ]] || { echo "ERROR: post pipeline not found: $POST_PIPE"; exit 2; }
+[[ -s "$APPLY_CT_CFG" ]] || { echo "ERROR: color-terms config not found: $APPLY_CT_CFG"; exit 2; }
 
 ########## INPUT SANITY ##########
-# Use the latest RAW run for that night if the fresh timestamped one is not present.
+# If the exact RAW_RUN isn’t present yet, use latest for the night.
 if ! butler query-collections "$REPO" | awk '{print $1}' | grep -qx "$RAW_RUN"; then
   RAW_RUN="$(butler query-collections "$REPO" | awk '{print $1}' | grep -E "^Nickel/raw/${NIGHT}/" | tail -n1 || true)"
 fi
 [[ -n "$RAW_RUN" ]] || { echo "ERROR: No raw run found for night ${NIGHT}"; exit 2; }
-echo "[inputs] RAW_RUN=$RAW_RUN  CALIB_CHAIN=$CALIB_CHAIN  REFCATS=$REFCATS_CHAIN"
+echo "[inputs] RAW_RUN=$RAW_RUN  CALIB_CHAIN=$CALIB_CHAIN  REFCATS=$REFCATS_CHAIN  SKYMAPS=$SKYMAPS_CHAIN"
 
-########## EXCLUSION FILTERS (simple) ##########
-# Gather bad IDs from --bad and/or --bad-file.
+########## EXCLUSIONS ##########
 BAD_LIST="$BAD_EXPOSURES"
 if [[ -n "$BAD_EXPOSURES_FILE" && -f "$BAD_EXPOSURES_FILE" ]]; then
   BAD_LIST="$BAD_LIST
 $(cat "$BAD_EXPOSURES_FILE")"
 fi
+if [[ -n "$BAD_OBSIDS" ]]; then
+  BAD_LIST="$BAD_LIST
+$BAD_OBSIDS"
+fi
+if [[ -n "$BAD_OBSIDS_FILE" && -f "$BAD_OBSIDS_FILE" ]]; then
+  BAD_LIST="$BAD_LIST
+$(cat "$BAD_OBSIDS_FILE")"
+fi
 
-# Normalize: strip comments, turn anything non-digit into newlines, uniq+sort, -> CSV.
 BAD_EXP_CSV="$(
   printf "%s\n" "$BAD_LIST" \
   | sed -E 's/#.*//; s/[^0-9]+/\n/g' \
-  | awk 'NF' \
-  | sort -n -u \
-  | paste -sd, -
+  | awk 'NF' | sort -n -u | paste -sd, -
 )"
-
 BAD_EXPR=""
 if [[ -n "$BAD_EXP_CSV" ]]; then
-  # Exclude by both exposure and visit (covers tasks that key on either)
   BAD_EXPR=" AND NOT (exposure IN (${BAD_EXP_CSV}) OR visit IN (${BAD_EXP_CSV}))"
   echo "[exclude] exposure/visit: ${BAD_EXP_CSV}"
 else
   echo "[exclude] none"
 fi
 
-
-########## BUILD & RUN: ProcessCcd ##########
-QG_SCI="$QG_DIR/processCcd_${NIGHT}_${RUN_TS}.qgraph"
-CFG_ARG="calibrateImage:$TUNED_CFG_FILE"   # build safely to avoid empty -C
-
+########## BUILD QGRAPH (stage1-single-visit subset) ##########
+CFG_ARG="calibrateImage:${TUNED_CFG_FILE}"
 echo "[qgraph] processCcd -> $QG_SCI"
+
 pipetask qgraph \
   -b "$REPO" \
-  -p "$PIPE#processCcd" \
-  -i "$RAW_RUN","$CALIB_CHAIN","$REFCATS_CHAIN" \
+  -p "$PIPE#stage1-single-visit" \
+  -i "$RAW_RUN","$CALIB_CHAIN","$REFCATS_CHAIN","$SKYMAPS_CHAIN" \
   -o "$SCI_PARENT" \
   --output-run "$SCI_RUN" \
   --save-qgraph "$QG_SCI" \
   --config-file "$CFG_ARG" \
-  --config-file "calibrateImage:$OBS_NICKEL/configs/apply_colorterms.py" \
+  --config-file "calibrateImage:${APPLY_CT_CFG}" \
   --qgraph-dot "$QG_SCI_DOT" \
   --qgraph-mermaid "$QG_SCI_MMD" \
   -d "instrument='Nickel' AND exposure.observation_type='science' ${BAD_EXPR}"
 
-# (optional) peek at graph/tasks (no 'counts' — not a valid show item)
+# Quick peek at tasks in the graph
 pipetask qgraph -b "$REPO" -g "$QG_SCI" --show tasks || true
 
+########## RUN ##########
 echo "[run] processCcd ..."
 pipetask run \
   -b "$REPO" \
@@ -140,61 +133,15 @@ pipetask run \
   -j 8 \
   2>&1 | tee "$LOGS_DIR/processCcd_${RUN_TS}.log"
 
-# Ensure parent chain points to child RUN
-butler collection-chain "$REPO" "$SCI_PARENT" "$SCI_RUN" --mode redefine
-
-########## OPTIONAL: Post-processing on visits ##########
-QG_POST="$QG_DIR/postproc_visits_${NIGHT}_${RUN_TS}.qgraph"
-
-echo "[qgraph] postproc (visits) -> $QG_POST"
-pipetask qgraph \
-  -b "$REPO" \
-  -p "$POST_PIPE" \
-  -i "$SCI_PARENT","$CALIB_CHAIN","$REFCATS_CHAIN" \
-  -o "$POST_PARENT" \
-  --output-run "$POST_RUN" \
-  --save-qgraph "$QG_POST" \
-  --qgraph-dot "$QG_POST_DOT" \
-  --qgraph-mermaid "$QG_POST_MMD" \
-  -d "instrument='Nickel' AND exposure.observation_type='science' ${BAD_EXPR}"
-
-echo "[run] postproc (visits) ..."
-pipetask run \
-  -b "$REPO" \
-  -g "$QG_POST" \
-  --register-dataset-types \
-  -j 8 \
-  2>&1 | tee "$LOGS_DIR/postproc_visits_${RUN_TS}.log"
-
-butler collection-chain "$REPO" "$POST_PARENT" "$POST_RUN" --mode redefine
-
-# ########## SKYMAP (discrete) — only if we produced initial_pvi ##########
-# cd "$OBS_NICKEL"
-# SKY_CFG="configs/makeSkyMap_discrete_auto.py"
-
-# if butler query-datasets "$REPO" initial_pvi --collections "$SCI_PARENT" | awk 'NR>1{print}' | grep -q .; then
-#   echo "[skymap] Building discrete skymap config from $SCI_PARENT (initial_pvi)"
-#   python scripts/build_discrete_skymap_config.py \
-#     --repo "$REPO" \
-#     --collections "$SCI_PARENT" \
-#     --dataset-type initial_pvi \
-#     --skymap-id nickel_discrete \
-#     --border-deg 0.05 \
-#     --out "$SKY_CFG"
-
-#   echo "[skymap] Registering"
-#   butler register-skymap "$REPO" -C "$SKY_CFG"
-#   butler query-datasets "$REPO" skyMap --where "skymap='nickel_discrete'" || true
-# else
-#   echo "[skymap] No 'initial_pvi' found in [$SCI_PARENT]; skipping skymap."
-# fi
+# Ensure parent chain points at the run
+butler collection-chain "$REPO" "$SCI_PARENT" "$SCI_RUN" --mode redefine >/dev/null 2>&1 || \
+butler collection-chain "$REPO" "$SCI_PARENT" "$SCI_RUN"
 
 ########## SUMMARY ##########
 echo "=== [science] done ==="
 echo "RAW_RUN     = $RAW_RUN"
 echo "CALIB_CHAIN = $CALIB_CHAIN"
 echo "REFCATS     = $REFCATS_CHAIN"
+echo "SKYMAPS     = $SKYMAPS_CHAIN"
 echo "SCI_PARENT  = $SCI_PARENT"
 echo "SCI_RUN     = $SCI_RUN"
-echo "POST_PARENT = $POST_PARENT"
-echo "POST_RUN    = $POST_RUN"

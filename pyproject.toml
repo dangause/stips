@@ -10,7 +10,13 @@ authors = [{ name = "Dan Gause" }]
 dependencies = [
     "astro_metadata_translator>=0.11.0",
     "astropy",
+    "fastparquet>=2024.11.0",
+    "jupyterlab>=4.4.7",
+    "notebook>=7.4.5",
+    "pandas>=2.3.2",
     "pre-commit>=4.3.0",
+    "pyarrow>=21.0.0",
+    "pyvo>=1.7",
 ]
 
 [tool.setuptools]
