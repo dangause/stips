@@ -33,7 +33,7 @@ tasks:
       doSuspect: true
       doWrite: true
       doVignette: false
-      # Rough fluxMag0T1 seeds (per your file)
+      # Rough fluxMag0T1 seeds
       fluxMag0T1:
         B: 2.0e8
         V: 2.0e8
@@ -121,6 +121,7 @@ tasks:
       connections.source_table_visit: single_visit_star
       connections.isolated_star_sources: isolated_star
       connections.isolated_star_cat: isolated_star_association
+      band_order: ['i', 'z', 'r', 'g', 'y', 'u', 'b', 'v']  # Nickel-specific
   makeInitialVisitDetectorTable:
     class: lsst.pipe.tasks.postprocess.MakeCcdVisitTableTask
     config:
@@ -189,23 +190,23 @@ subsets:
       A skymap constraint is always necessary, to avoid running all tasks
       redundantly on all skymaps in the data repository.
 
-  # step1d-single-visit-global:
-  #   subset:
-  #     - makeInitialVisitDetectorTable
-  #     - makeInitialVisitTable
-  #     - makeAnalysisSingleVisitStarAssociationMetricTable
-  #     - makeAnalysisSingleVisitStarAssociationWholeSkyPlot
-  #   description: |
-  #     A step that consolidates visit[, detector] metadata and analysis into
-  #     full-survey tables and plots.
+  step1d-single-visit-global:
+    subset:
+      - makeInitialVisitDetectorTable
+      - makeInitialVisitTable
+      - makeAnalysisSingleVisitStarAssociationMetricTable
+      - makeAnalysisSingleVisitStarAssociationWholeSkyPlot
+    description: |
+      A step that consolidates visit[, detector] metadata and analysis into
+      full-survey tables and plots.
 
-  #     This step's outputs are not consumed by downstream production tasks and
-  #     may be dropped or deferred by pipelines that don't need a checkpoint
-  #     before multi-epoch calibration.
+      This step's outputs are not consumed by downstream production tasks and
+      may be dropped or deferred by pipelines that don't need a checkpoint
+      before multi-epoch calibration.
 
-  #     An instrument constraint is generally redundant but recommended.
+      An instrument constraint is generally redundant but recommended.
 
-  #     A skymap constraint is generally redundant but recommended.
+      A skymap constraint is generally redundant but recommended.
 
   stage1-single-visit:
     # 1a
@@ -227,11 +228,11 @@ subsets:
     # 1c
     - associateIsolatedStar
     - analyzeSingleVisitStarAssociation
-    # # 1d
-    # - makeInitialVisitDetectorTable
-    # - makeInitialVisitTable
-    # - makeAnalysisSingleVisitStarAssociationMetricTable
-    # - makeAnalysisSingleVisitStarAssociationWholeSkyPlot
+    # 1d
+    - makeInitialVisitDetectorTable
+    - makeInitialVisitTable
+    - makeAnalysisSingleVisitStarAssociationMetricTable
+    - makeAnalysisSingleVisitStarAssociationWholeSkyPlot
 
 
 
@@ -242,8 +243,8 @@ steps:
     dimensions: [visit]
   - label: step1c-single-visit-tracts
     dimensions: [tract]
-  # - label: step1d-single-visit-global
-  #   dimensions: []
+  - label: step1d-single-visit-global
+    dimensions: []
 
 
 
