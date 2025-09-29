@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # 00_bootstrap_repo.sh
-# Bootstrap a Butler repo and ingest GAIA/PS1 + MONSTER (AFW shards) refcats.
+# Bootstrap a Butler repo and ingest GAIA/PS1 + MONSTER (AFW shards) refcats,
+# and register a SkyMap run + chain.
 
 # set -euo pipefail
 
@@ -94,6 +95,7 @@ if compgen -G "$MON_DIR/refcat_htm7_*.fits" > /dev/null; then
   fi
 
   if [[ $NEED_BUILD -eq 1 ]]; then
+    export MON_DIR MON_MAP
     python - <<'PY'
 import os, re, glob
 from astropy.table import Table
@@ -140,6 +142,29 @@ if [[ ${#CHAIN_CHILDREN[@]} -gt 0 ]]; then
   echo "[chain] refcats = ${CHAIN_CHILDREN[*]}"
 else
   echo "[chain] nothing to chain"
+fi
+
+########## SKYMAP: register + make a *separate* chain alias ##########
+SKYMAP_CFG="$OBS_NICKEL/configs/makeSkyMap.py"
+SKYMAP_NAME="nickelRings-v1"
+SKY_CHAIN="skymaps/nickelRings"
+
+# Register (idempotent)
+echo "[skymap] register-skymap -> ${SKYMAP_NAME} (cfg: ${SKYMAP_CFG})"
+butler register-skymap "$REPO" -C "$SKYMAP_CFG"
+
+# Find the run that holds this skyMap
+SKY_RUN="$(butler query-datasets "$REPO" skyMap --where "skymap='${SKYMAP_NAME}'" \
+          | awk 'NR>2{print $2}' | sort -u | tail -n1)"
+
+if [[ -n "$SKY_RUN" ]]; then
+  echo "[skymap] chaining: ${SKY_CHAIN} = ${SKY_RUN}"
+  butler collection-chain "$REPO" "$SKY_CHAIN" "$SKY_RUN" --mode redefine 2>/dev/null \
+    || butler collection-chain "$REPO" "$SKY_CHAIN" "$SKY_RUN"
+else
+  echo "[skymap] ERROR: could not locate a registered run for '${SKYMAP_NAME}'."
+  echo "[skymap] Available skyMap datasets:"
+  butler query-datasets "$REPO" skyMap | sed -n '1,200p'
 fi
 
 echo "=== [bootstrap] done ==="

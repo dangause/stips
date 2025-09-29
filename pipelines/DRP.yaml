@@ -134,7 +134,6 @@ tasks:
       connections.outputCatalog: preliminary_visit_table
 
 
-
 subsets:
   step1a-single-visit-detectors:
     subset:
@@ -174,21 +173,21 @@ subsets:
 
       A skymap constraint is unnecessary and not recommended.
 
-  # step1c-single-visit-tracts:
-  #   subset:
-  #     - associateIsolatedStar
-  #     - analyzeSingleVisitStarAssociation
-  #   description: |
-  #     A step that matches initial star catalogs (running over tracts) and
-  #     runs analysis on those matches.
+  step1c-single-visit-tracts:
+    subset:
+      - associateIsolatedStar
+      - analyzeSingleVisitStarAssociation
+    description: |
+      A step that matches initial star catalogs (running over tracts) and
+      runs analysis on those matches.
 
-  #     Tract constraints may only be used for sharding; tracts with partial
-  #     visit coverage must always be included.
+      Tract constraints may only be used for sharding; tracts with partial
+      visit coverage must always be included.
 
-  #     An instrument constraint is generally redundant but recommended.
+      An instrument constraint is generally redundant but recommended.
 
-  #     A skymap constraint is always necessary, to avoid running all tasks
-  #     redundantly on all skymaps in the data repository.
+      A skymap constraint is always necessary, to avoid running all tasks
+      redundantly on all skymaps in the data repository.
 
   # step1d-single-visit-global:
   #   subset:
@@ -217,7 +216,7 @@ subsets:
     # - analyzeAmpInterfaceOffsetMetadata
     - analyzeCalibrateImageMetadataNickel
     - analyzeInitialSummaryStats
-    # # 1b
+    # 1b
     - consolidateSingleVisitStar
     - consolidateVisitSummary
     - analyzeSingleVisitStar
@@ -225,9 +224,9 @@ subsets:
     - analyzeSingleVisitStarAstrometricRefMatchNickel
     - makeAnalysisSingleVisitStarPhotometricRefMatchNickel
     - analyzeSingleVisitStarPhotometricRefMatchNickel
-    # # 1c
-    # - associateIsolatedStar
-    # - analyzeSingleVisitStarAssociation
+    # 1c
+    - associateIsolatedStar
+    - analyzeSingleVisitStarAssociation
     # # 1d
     # - makeInitialVisitDetectorTable
     # - makeInitialVisitTable
@@ -241,8 +240,8 @@ steps:
     dimensions: [visit, detector]
   - label: step1b-single-visit-visits
     dimensions: [visit]
-  # - label: step1c-single-visit-tracts
-  #   dimensions: [tract]
+  - label: step1c-single-visit-tracts
+    dimensions: [tract]
   # - label: step1d-single-visit-global
   #   dimensions: []
 
