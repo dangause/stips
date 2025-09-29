@@ -66,4 +66,69 @@ config.data = {
             ),
         }
     ),
+    "*monster*": ColortermDict(
+        data={
+            "B": Colorterm(
+                primary="monster_ComCam_g",
+                secondary="monster_ComCam_r",
+                c0=0.0,
+                c1=0.617608,
+                c2=0.0,
+            ),
+            "V": Colorterm(
+                primary="monster_ComCam_g",
+                secondary="monster_ComCam_r",
+                c0=0.0,
+                c1=-0.428548,
+                c2=0.0,
+            ),
+            "R": Colorterm(
+                primary="monster_ComCam_r",
+                secondary="monster_ComCam_i",
+                c0=0.0,
+                c1=-0.129111,
+                c2=0.0,
+            ),
+            "I": Colorterm(
+                primary="monster_ComCam_i",
+                secondary="monster_ComCam_r",
+                c0=0.0,
+                c1=1.031936,
+                c2=0.0,
+            ),
+            # data={
+            #     # Nickel filter -> MONSTER band used as primary magnitude
+            #     "B": Colorterm(
+            #         primary="g",
+            #         secondary="r",
+            #         c0=0.0,
+            #         c1=0.617608,
+            #         c2=0.0,
+            #     ),
+            #     "V": Colorterm(
+            #         primary="g",
+            #         secondary="r",
+            #         c0=0.0,
+            #         c1=-0.428548,
+            #         c2=0.0,
+            #     ),
+            #     "R": Colorterm(
+            #         primary="r",
+            #         secondary="i",
+            #         c0=0.0,
+            #         c1=-0.129111,
+            #         c2=0.0,
+            #     ),
+            #     "I": Colorterm(
+            #         primary="i",
+            #         secondary="r",
+            #         c0=0.0,
+            #         c1=1.031936,
+            #         c2=0.0,
+            #     ),
+            #     # add z/y later if you ingest them:
+            #     # "Z": Colorterm(primary="z", c0=0.0, c1=0.0, c2=0.0),
+            #     # "Y": Colorterm(primary="y", c0=0.0, c1=0.0, c2=0.0),
+        }
+    ),
 }

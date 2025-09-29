@@ -54,7 +54,7 @@ tasks:
       # Calibration file
       file: $OBS_NICKEL/configs/calibrateImage/tuned_configs/best_calib_t071.py
       # --- bootstrap PSF for first-pass detection ---
-      install_simple_psf.fwhm: 7.0
+      install_simple_psf.fwhm: 2.0
       install_simple_psf.width: 35
       # Parameter configurations
       # ---- Source Detection ----
@@ -72,7 +72,8 @@ tasks:
       psf_detection.combinedGrow: true
       # ---- Astrometry ----
       # Use gaia_dr3 registered in bootstrap
-      connections.astrometry_ref_cat: gaia_dr3
+      connections.astrometry_ref_cat: the_monster_20250219_local  # gaia_dr3
+      astrometry_ref_loader.anyFilterMapsToThis: phot_g_mean
       astrometry.forceKnownWcs: false
       astrometry.matcher.maxOffsetPix: 300
       astrometry.matcher.maxRotationDeg: 5.0
@@ -81,16 +82,19 @@ tasks:
       astrometry.matchDistanceSigma: 8.0
       astrometry.maxIter: 12
       # ---- Photometry ----
-      connections.photometry_ref_cat: panstarrs1_dr2
+      connections.photometry_ref_cat: the_monster_20250219_local  # panstarrs1_dr2
       photometry_ref_loader.filterMap:
-        b: gMeanPSFMag
-        v: gMeanPSFMag
-        r: rMeanPSFMag
-        i: iMeanPSFMag
-        u: gMeanPSFMag
+        # B: phot_bp_mean
+        # V: phot_g_mean
+        # R: phot_rp_mean
+        # I: phot_rp_mean
+        b: monster_ComCam_g
+        v: monster_ComCam_g
+        r: monster_ComCam_r
+        i: monster_ComCam_i
       photometry.match.matchRadius: 1.5
       photometry.applyColorTerms: true
-      photometry.photoCatName: panstarrs1_dr2
+      photometry.photoCatName: the_monster_20250219_local  # panstarrs1_dr2
 
 
 
