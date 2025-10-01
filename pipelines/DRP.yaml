@@ -97,7 +97,6 @@ tasks:
       photometry.photoCatName: the_monster_20250219_local  # panstarrs1_dr2
 
 
-
   standardizeSingleVisitStar:
     class: lsst.pipe.tasks.postprocess.TransformSourceTableTask
     config:
@@ -133,6 +132,128 @@ tasks:
     config:
       connections.visitSummaries: preliminary_visit_summary
       connections.outputCatalog: preliminary_visit_table
+
+  # ======================
+  # COADDS (from stage-1)
+  # ======================
+  makeDirectWarp:
+    class: lsst.drp.tasks.make_direct_warp.MakeDirectWarpTask
+    config:
+      connections.calexp_list: preliminary_visit_image
+      connections.visit_summary: preliminary_visit_summary
+      connections.warp: direct_warp
+      connections.masked_fraction_warp: direct_warp_masked_fraction
+      idGenerator.release_id: parameters.release_id
+      useVisitSummaryPsf: false
+      useVisitSummaryWcs: false
+      useVisitSummaryPhotoCalib: false
+
+  makePsfMatchedWarp:
+    class: lsst.drp.tasks.make_psf_matched_warp.MakePsfMatchedWarpTask
+    config:
+      connections.direct_warp: direct_warp
+      connections.psf_matched_warp: psf_matched_warp
+
+  selectDeepCoaddVisits:
+    class: lsst.pipe.tasks.selectImages.BestSeeingSelectVisitsTask
+    config:
+      connections.visitSummaries: preliminary_visit_summary
+      connections.goodVisits: deep_coadd_visit_selection
+      maxPsfFwhm: 2.0         # adjust if Nickel seeing differs
+      nVisitsMax: -1
+
+  selectTemplateCoaddVisits:
+    class: lsst.pipe.tasks.selectImages.BestSeeingQuantileSelectVisitsTask
+    config:
+      connections.visitSummaries: preliminary_visit_summary
+      connections.goodVisits: template_coadd_visit_selection
+
+  assembleDeepCoadd:
+    class: lsst.drp.tasks.assemble_coadd.CompareWarpAssembleCoaddTask
+    config:
+      connections.inputWarps: direct_warp
+      connections.psfMatchedWarps: psf_matched_warp
+      connections.selectedVisits: deep_coadd_visit_selection
+      connections.coaddExposure: deep_coadd_predetection
+      connections.nImage: deep_coadd_n_image
+      connections.inputMap: deep_coadd_input_map
+      connections.templateCoadd: deep_coadd_compare_template
+      doInputMap: true
+      doSelectVisits: true
+      doWriteArtifactMasks: true
+      assembleStaticSkyModel.doSelectVisits: true
+      doOnlineForMean: true
+
+  assembleTemplateCoadd:
+    class: lsst.drp.tasks.assemble_coadd.CompareWarpAssembleCoaddTask
+    config:
+      connections.inputWarps: direct_warp
+      connections.psfMatchedWarps: psf_matched_warp
+      connections.selectedVisits: template_coadd_visit_selection
+      connections.coaddExposure: template_coadd
+      connections.nImage: template_coadd_n_image
+      connections.inputMap: template_coadd_input_map
+      connections.templateCoadd: template_coadd_compare_template
+      doSelectVisits: true
+      assembleStaticSkyModel.doSelectVisits: true
+      doNImage: true
+      doOnlineForMean: true
+
+  # ==========================
+  # DIFFERENCE IMAGING (DIA)
+  # ==========================
+  reprocessVisitImage:
+    class: lsst.drp.tasks.reprocess_visit_image.ReprocessVisitImageTask
+    config:
+      # Drive from stage-1 outputs
+      connections.exposures: post_isr_image
+      connections.background_1: preliminary_visit_image_background
+      connections.exposure: visit_image
+      connections.visit_summary: preliminary_visit_summary
+      remove_initial_photo_calib: false
+      id_generator.release_id: parameters.release_id
+
+  rewarpTemplate:
+    class: lsst.ip.diffim.getTemplate.GetTemplateTask
+    config:
+      connections.bbox: visit_image.bbox
+      connections.wcs: visit_image.wcs
+      connections.coaddExposures: template_coadd
+      connections.template: template_detector
+
+  subtractImages:
+    class: lsst.ip.diffim.subtractImages.AlardLuptonSubtractTask
+    config:
+      allowKernelSourceDetection: true
+      connections.science: visit_image
+      connections.sources: single_visit_star_footprints
+      connections.template: template_detector
+      connections.difference: difference_image_predetection
+      connections.matchedTemplate: template_matched
+      connections.psfMatchingKernel: difference_kernel
+      connections.kernelSources: difference_kernel_sources
+
+  detectAndMeasureDiaSource:
+    class: lsst.ip.diffim.detectAndMeasure.DetectAndMeasureTask
+    config:
+      connections.science: visit_image
+      connections.matchedTemplate: template_matched
+      connections.difference: difference_image_predetection
+      connections.kernelSources: difference_kernel_sources
+      connections.outputSchema: dia_source_schema
+      connections.diaSources: dia_source_unfiltered
+      connections.subtractedMeasuredExposure: difference_image
+      connections.maskedStreaks: difference_streaks
+      doSkySources: true
+      idGenerator.release_id: parameters.release_id
+
+
+
+
+
+
+
+
 
 
 subsets:
@@ -234,6 +355,20 @@ subsets:
     - makeAnalysisSingleVisitStarAssociationMetricTable
     - makeAnalysisSingleVisitStarAssociationWholeSkyPlot
 
+  coadds-only:
+    - makeDirectWarp
+    - makePsfMatchedWarp
+    - selectDeepCoaddVisits
+    - selectTemplateCoaddVisits
+    - assembleDeepCoadd
+    - assembleTemplateCoadd
+
+  difference-imaging:
+    - reprocessVisitImage
+    - rewarpTemplate
+    - subtractImages
+    - detectAndMeasureDiaSource
+
 
 
 steps:
@@ -245,6 +380,10 @@ steps:
     dimensions: [tract]
   - label: step1d-single-visit-global
     dimensions: []
+  - label: coadds-only
+    dimensions: [tract]
+  - label: difference-imaging
+    dimensions: [visit]
 
 
 
