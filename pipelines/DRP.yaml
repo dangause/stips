@@ -147,6 +147,9 @@ tasks:
       useVisitSummaryPsf: false
       useVisitSummaryWcs: false
       useVisitSummaryPhotoCalib: false
+      select.maxEllipResidual: 0.015
+      select.maxScaledSizeScatter: 0.022
+      doPreWarpInterpolation: true
 
   makePsfMatchedWarp:
     class: lsst.drp.tasks.make_psf_matched_warp.MakePsfMatchedWarpTask
