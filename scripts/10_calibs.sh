@@ -20,10 +20,9 @@ done
 
 ########## ENVIRONMENT VARS ##########
 RAWDIR=${RAW_PARENT_DIR}/${NIGHT}/raw
-
 INSTRUMENT="lsst.obs.nickel.Nickel"
 
-# cpPipe pipeline location (same as your monolith; must exist)
+# cpPipe pipeline location (must exist; contains pipelines/_ingredients/*.yaml)
 : "${CP_PIPE_DIR:?Set CP_PIPE_DIR to the cpPipe pipelines root (contains pipelines/_ingredients/*.yaml)}"
 
 ########## TIMESTAMPS & COLLECTION NAMES (single run timestamp) ##########
@@ -97,14 +96,33 @@ butler collection-chain "$REPO" "$CP_RUN_BIAS" "$CP_RUN_BIAS_RUN" --mode redefin
 butler query-collections "$REPO" | awk '{print $1}' | grep -qx "$CP_RUN_BIAS" \
   || { echo "ERROR: bias chained collection still missing: $CP_RUN_BIAS"; exit 2; }
 
+########## CERTIFY BIAS (before cpFlat so time-valid matching works) ##########
+BEGIN_ISO="$(python - "$NIGHT" <<'PY'
+from datetime import datetime, timezone
+import sys
+dt = datetime.strptime(sys.argv[1], "%Y%m%d").replace(tzinfo=timezone.utc)
+print(dt.strftime("%Y-%m-%dT%H:%M:%S"))
+PY
+)"
+END_ISO="$(python - "$NIGHT" <<'PY'
+from datetime import datetime, timezone, timedelta
+import sys
+dt = datetime.strptime(sys.argv[1], "%Y%m%d").replace(tzinfo=timezone.utc) + timedelta(days=2)
+print(dt.strftime("%Y-%m-%dT%H:%M:%S"))
+PY
+)"
+
+echo "[certify] bias -> $CALIB_OUT  ($BEGIN_ISO .. $END_ISO)"
+butler certify-calibrations "$REPO" "$CP_RUN_BIAS" "$CALIB_OUT" bias \
+  --begin-date "$BEGIN_ISO" --end-date "$END_ISO"
 
 ########## cpFlat (qgraph -> run) ##########
 QG_FLAT="$QG_DIR/cp_flat_${NIGHT}_${RUN_TS}.qgraph"
-echo "[cpFlat] inputs=[$CURATED_CHAIN,$RAW_RUN,$CP_RUN_BIAS]  out=$CP_RUN_FLAT  child=$CP_RUN_FLAT_RUN"
+echo "[cpFlat] inputs=[$CURATED_CHAIN,$RAW_RUN,$CALIB_OUT,$CP_RUN_BIAS_RUN]  out=$CP_RUN_FLAT  child=$CP_RUN_FLAT_RUN"
 pipetask qgraph \
   -b "$REPO" \
   -p "$CP_PIPE_DIR/pipelines/_ingredients/cpFlat.yaml" \
-  -i "$CURATED_CHAIN","$RAW_RUN","$CP_RUN_BIAS" \
+  -i "$CURATED_CHAIN","$RAW_RUN","$CALIB_OUT","$CP_RUN_BIAS_RUN" \
   -o "$CP_RUN_FLAT" \
   --output-run "$CP_RUN_FLAT_RUN" \
   --save-qgraph "$QG_FLAT" \
@@ -127,7 +145,6 @@ butler collection-chain "$REPO" "$CP_RUN_FLAT" "$CP_RUN_FLAT_RUN" --mode redefin
 # Sanity: now both should exist
 butler query-collections "$REPO" | awk '{print $1}' | grep -qx "$CP_RUN_FLAT" \
   || { echo "ERROR: flat chained collection still missing: $CP_RUN_FLAT"; exit 2; }
-
 
 ########## DEFECTS (from flats; use the child RUN for deterministic reads) ##########
 echo "[defects] from $CP_RUN_FLAT_RUN -> $DEFECTS_RUN"
@@ -152,42 +169,16 @@ else
   echo "[defects] WARNING: defects run not found ($DEFECTS_RUN); skipping chain update."
 fi
 
-########## CERTIFY NIGHTLY BIAS/FLAT (validity window) ##########
-BEGIN_ISO="$(python - "$NIGHT" <<'PY'
-from datetime import datetime, timezone
-import sys
-dt = datetime.strptime(sys.argv[1], "%Y%m%d").replace(tzinfo=timezone.utc)
-print(dt.strftime("%Y-%m-%dT%H:%M:%S"))
-PY
-)"
-END_ISO="$(python - "$NIGHT" <<'PY'
-from datetime import datetime, timezone, timedelta
-import sys
-dt = datetime.strptime(sys.argv[1], "%Y%m%d").replace(tzinfo=timezone.utc) + timedelta(days=2)
-print(dt.strftime("%Y-%m-%dT%H:%M:%S"))
-PY
-)"
-
-# Quiet, robust pre-checks (avoid throwing when empty)
-HAS_BIAS=0; HAS_FLAT=0
+########## CERTIFY NIGHTLY FLATS (bias already certified above) ##########
+# Quiet, robust pre-check (avoid throwing when empty)
+HAS_FLAT=0
 if butler query-collections "$REPO" | awk '{print $1}' | grep -qx "$CALIB_OUT"; then
   echo "[check] Nightly calib collection exists: $CALIB_OUT"
-  HAS_BIAS=$({ butler query-datasets "$REPO" bias --collections "$CALIB_OUT" \
-                --where "instrument='Nickel'" 2>/dev/null || true; } \
-             | awk 'NR>1{print}' | wc -l | tr -d ' ')
   HAS_FLAT=$({ butler query-datasets "$REPO" flat --collections "$CALIB_OUT" \
                 --where "instrument='Nickel'" 2>/dev/null || true; } \
              | awk 'NR>1{print}' | wc -l | tr -d ' ')
 else
   echo "[check] Nightly calib collection not found yet: $CALIB_OUT (fresh repo)."
-fi
-
-if [ "$HAS_BIAS" -eq 0 ]; then
-  echo "[certify] bias -> $CALIB_OUT  ($BEGIN_ISO .. $END_ISO)"
-  butler certify-calibrations "$REPO" "$CP_RUN_BIAS" "$CALIB_OUT" bias \
-    --begin-date "$BEGIN_ISO" --end-date "$END_ISO"
-else
-  echo "[certify] bias already present in $CALIB_OUT — skipping."
 fi
 
 if [ "$HAS_FLAT" -eq 0 ]; then

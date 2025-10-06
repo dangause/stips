@@ -144,27 +144,18 @@ else
   echo "[chain] nothing to chain"
 fi
 
-########## SKYMAP: register + make a *separate* chain alias ##########
+########## SKYMAP: register + alias to a stable chain ##########
 SKYMAP_CFG="$OBS_NICKEL/configs/makeSkyMap.py"
-SKYMAP_NAME="nickelRings-v1"
-SKY_CHAIN="skymaps/nickelRings"
+echo "[skymap] register-skymap (cfg=${SKYMAP_CFG})"
+butler register-skymap "$REPO" -C "$SKYMAP_CFG" || true
 
-# Register (idempotent)
-echo "[skymap] register-skymap -> ${SKYMAP_NAME} (cfg: ${SKYMAP_CFG})"
-butler register-skymap "$REPO" -C "$SKYMAP_CFG"
+# In 11.0.0 weekly the default RUN is literally 'skymaps'.
+echo "[skymap] chaining: skymaps/nickelRings = skymaps"
+butler collection-chain "$REPO" skymaps/nickelRings skymaps --mode redefine \
+  || butler collection-chain "$REPO" skymaps/nickelRings skymaps
 
-# Find the run that holds this skyMap
-SKY_RUN="$(butler query-datasets "$REPO" skyMap --where "skymap='${SKYMAP_NAME}'" \
-          | awk 'NR>2{print $2}' | sort -u | tail -n1)"
+# (Optional) sanity print
+butler query-datasets "$REPO" skyMap --collections skymaps/nickelRings | sed -n '1,50p'
 
-if [[ -n "$SKY_RUN" ]]; then
-  echo "[skymap] chaining: ${SKY_CHAIN} = ${SKY_RUN}"
-  butler collection-chain "$REPO" "$SKY_CHAIN" "$SKY_RUN" --mode redefine 2>/dev/null \
-    || butler collection-chain "$REPO" "$SKY_CHAIN" "$SKY_RUN"
-else
-  echo "[skymap] ERROR: could not locate a registered run for '${SKYMAP_NAME}'."
-  echo "[skymap] Available skyMap datasets:"
-  butler query-datasets "$REPO" skyMap | sed -n '1,200p'
-fi
 
 echo "=== [bootstrap] done ==="
