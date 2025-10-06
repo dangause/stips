@@ -180,33 +180,33 @@ pipetask run \
 butler collection-chain "$REPO" "$COADD_PARENT" "$COADD_RUN" --mode redefine >/dev/null 2>&1 || \
 butler collection-chain "$REPO" "$COADD_PARENT" "$COADD_RUN"
 
-########## DIFFERENCE IMAGING (visit-level) ##########
-echo "[qgraph] diff -> $QG_DIFF"
+# ########## DIFFERENCE IMAGING (visit-level) ##########
+# echo "[qgraph] diff -> $QG_DIFF"
 
-pipetask qgraph \
-  -b "$REPO" \
-  -p "$PIPE#difference-imaging" \
-  -i "$SCI_PARENT","$COADD_PARENT","$CALIB_CHAIN","$REFCATS_CHAIN","$SKYMAPS_CHAIN" \
-  -o "$DIFF_PARENT" \
-  --output-run "$DIFF_RUN" \
-  --save-qgraph "$QG_DIFF" \
-  --qgraph-dot "$QG_DIFF_DOT" \
-  --qgraph-mermaid "$QG_DIFF_MMD" \
-  -d "instrument='Nickel' AND exposure.observation_type='science' ${BAD_EXPR}"
+# pipetask qgraph \
+#   -b "$REPO" \
+#   -p "$PIPE#difference-imaging" \
+#   -i "$SCI_PARENT","$COADD_PARENT","$CALIB_CHAIN","$REFCATS_CHAIN","$SKYMAPS_CHAIN" \
+#   -o "$DIFF_PARENT" \
+#   --output-run "$DIFF_RUN" \
+#   --save-qgraph "$QG_DIFF" \
+#   --qgraph-dot "$QG_DIFF_DOT" \
+#   --qgraph-mermaid "$QG_DIFF_MMD" \
+#   -d "instrument='Nickel' AND exposure.observation_type='science' ${BAD_EXPR}"
 
-pipetask qgraph -b "$REPO" -g "$QG_DIFF" --show tasks || true
-[[ -s "$QG_DIFF" ]] || { echo "[diff] No qgraph was generated; see logs above."; exit 2; }
+# pipetask qgraph -b "$REPO" -g "$QG_DIFF" --show tasks || true
+# [[ -s "$QG_DIFF" ]] || { echo "[diff] No qgraph was generated; see logs above."; exit 2; }
 
-echo "[run] diff ..."
-pipetask run \
-  -b "$REPO" \
-  -g "$QG_DIFF" \
-  --register-dataset-types \
-  -j 8 \
-  2>&1 | tee "$LOGS_DIR/diff_${RUN_TS}.log"
+# echo "[run] diff ..."
+# pipetask run \
+#   -b "$REPO" \
+#   -g "$QG_DIFF" \
+#   --register-dataset-types \
+#   -j 8 \
+#   2>&1 | tee "$LOGS_DIR/diff_${RUN_TS}.log"
 
-butler collection-chain "$REPO" "$DIFF_PARENT" "$DIFF_RUN" --mode redefine >/dev/null 2>&1 || \
-butler collection-chain "$REPO" "$DIFF_PARENT" "$DIFF_RUN"
+# butler collection-chain "$REPO" "$DIFF_PARENT" "$DIFF_RUN" --mode redefine >/dev/null 2>&1 || \
+# butler collection-chain "$REPO" "$DIFF_PARENT" "$DIFF_RUN"
 
 ########## SUMMARY ##########
 echo "=== [science] done ==="
@@ -218,6 +218,6 @@ echo "SCI_PARENT  = $SCI_PARENT"
 echo "SCI_RUN     = $SCI_RUN"
 echo "COADD_PARENT= $COADD_PARENT"
 echo "COADD_RUN   = $COADD_RUN"
-echo "DIFF_PARENT = $DIFF_PARENT"
-echo "DIFF_RUN    = $DIFF_RUN"
+# echo "DIFF_PARENT = $DIFF_PARENT"
+# echo "DIFF_RUN    = $DIFF_RUN"
 echo "SKYMAP_NAME = $SKYMAP_NAME"
