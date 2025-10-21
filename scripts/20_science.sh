@@ -11,6 +11,8 @@ set +a
 NIGHT="${NIGHT:-}"
 BAD_EXPOSURES=""; BAD_EXPOSURES_FILE=""
 BAD_OBSIDS="";   BAD_OBSIDS_FILE=""
+JOBS="${JOBS:-8}"   # default parallelism
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -n|--night)        NIGHT="${2:-}"; shift 2;;
@@ -18,15 +20,28 @@ while [[ $# -gt 0 ]]; do
     --bad-file)        BAD_EXPOSURES_FILE="${2:-}"; shift 2;;
     --bad-obs)         BAD_OBSIDS="${2:-}"; shift 2;;
     --bad-obs-file)    BAD_OBSIDS_FILE="${2:-}"; shift 2;;
+    -j|--jobs)         JOBS="${2:-}"; shift 2;;
     -h|--help)
       cat <<USAGE
-Usage: $0 --night YYYYMMDD [--bad EXP_IDS] [--bad-file FILE] [--bad-obs OBSNUMS] [--bad-obs-file FILE]
+Usage: $0 --night YYYYMMDD [options]
+
+Options:
+  --bad EXP_IDS             Comma- or space-separated exposure/visit IDs to exclude
+  --bad-file FILE           File containing IDs to exclude (comments allowed)
+  --bad-obs OBSNUMS         Comma- or space-separated OBSNUMs to exclude
+  --bad-obs-file FILE       File containing OBSNUMs to exclude (comments allowed)
+  -j, --jobs N              Number of parallel jobs for pipetask run (default: ${JOBS})
 USAGE
       exit 0;;
     *) echo "Unknown arg: $1"; exit 2;;
   esac
 done
 [[ -n "$NIGHT" ]] || { echo "Provide --night YYYYMMDD"; exit 2; }
+
+# Validate JOBS
+if ! [[ "$JOBS" =~ ^[0-9]+$ ]] || [[ "$JOBS" -lt 1 ]]; then
+  echo "Invalid -j/--jobs value: '$JOBS' (must be a positive integer)"; exit 2;
+fi
 
 ########## ENVIRONMENT VARS ##########
 INSTRUMENT="lsst.obs.nickel.Nickel"
@@ -72,7 +87,7 @@ QG_DIFF="$QG_DIR/diff_${NIGHT}_${RUN_TS}.qgraph"
 QG_DIFF_DOT="$QG_DIR/diff_${NIGHT}_${RUN_TS}.dot"
 QG_DIFF_MMD="$QG_DIR/diff_${NIGHT}_${RUN_TS}.mmd"
 
-echo "=== [science] night=${NIGHT} @ ${RUN_TS} ==="
+echo "=== [science] night=${NIGHT} @ ${RUN_TS} (jobs=${JOBS}) ==="
 
 ########## STACK ##########
 cd "$STACK_DIR"
@@ -145,7 +160,7 @@ pipetask run \
   -b "$REPO" \
   -g "$QG_SCI" \
   --register-dataset-types \
-  -j 8 \
+  -j "$JOBS" \
   2>&1 | tee "$LOGS_DIR/processCcd_${RUN_TS}.log"
 
 # Ensure parent chain points at the run
@@ -174,7 +189,7 @@ pipetask run \
   -b "$REPO" \
   -g "$QG_COADD" \
   --register-dataset-types \
-  -j 8 \
+  -j "$JOBS" \
   2>&1 | tee "$LOGS_DIR/coadds_${RUN_TS}.log"
 
 butler collection-chain "$REPO" "$COADD_PARENT" "$COADD_RUN" --mode redefine >/dev/null 2>&1 || \
@@ -182,7 +197,6 @@ butler collection-chain "$REPO" "$COADD_PARENT" "$COADD_RUN"
 
 # ########## DIFFERENCE IMAGING (visit-level) ##########
 # echo "[qgraph] diff -> $QG_DIFF"
-
 # pipetask qgraph \
 #   -b "$REPO" \
 #   -p "$PIPE#difference-imaging" \
@@ -193,18 +207,15 @@ butler collection-chain "$REPO" "$COADD_PARENT" "$COADD_RUN"
 #   --qgraph-dot "$QG_DIFF_DOT" \
 #   --qgraph-mermaid "$QG_DIFF_MMD" \
 #   -d "instrument='Nickel' AND exposure.observation_type='science' ${BAD_EXPR}"
-
 # pipetask qgraph -b "$REPO" -g "$QG_DIFF" --show tasks || true
 # [[ -s "$QG_DIFF" ]] || { echo "[diff] No qgraph was generated; see logs above."; exit 2; }
-
 # echo "[run] diff ..."
 # pipetask run \
 #   -b "$REPO" \
 #   -g "$QG_DIFF" \
 #   --register-dataset-types \
-#   -j 8 \
+#   -j "$JOBS" \
 #   2>&1 | tee "$LOGS_DIR/diff_${RUN_TS}.log"
-
 # butler collection-chain "$REPO" "$DIFF_PARENT" "$DIFF_RUN" --mode redefine >/dev/null 2>&1 || \
 # butler collection-chain "$REPO" "$DIFF_PARENT" "$DIFF_RUN"
 
@@ -221,3 +232,4 @@ echo "COADD_RUN   = $COADD_RUN"
 # echo "DIFF_PARENT = $DIFF_PARENT"
 # echo "DIFF_RUN    = $DIFF_RUN"
 echo "SKYMAP_NAME = $SKYMAP_NAME"
+echo "JOBS        = $JOBS"
