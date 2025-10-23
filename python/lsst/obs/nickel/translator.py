@@ -166,9 +166,13 @@ class NickelTranslator(FitsTranslator):
             return "pointing"
         return "science"
 
-    @cache_translation
     def to_physical_filter(self) -> str:
-        return str(self._header.get("FILTNAM", "UNKNOWN")).strip()
+        val = str(self._header.get("FILTNAM", "UNKNOWN")).strip().upper()
+        if val in {"OPEN", "C"}:
+            return "clear"
+        if val in {"B", "V", "R", "I"}:
+            return val
+        return "clear"  # safe fallback
 
     @cache_translation
     def to_location(self) -> EarthLocation:
