@@ -45,15 +45,19 @@ config.psf_measure_psf.starSelector["objectSize"].widthStdAllowed = 0.3571430592
 
 # Astrometry matcher (pessimisticB)
 m = config.astrometry.matcher
-m.maxOffsetPix = int(184)
+m.maxOffsetPix = int(500)  # INCREASED from 184 for archival data
 m.maxRotationDeg = 2.3481849888137583
 m.matcherIterations = int(8)
 m.minMatchDistPixels = 2.19105964461907
 m.minMatchedPairs = int(9)
 m.minFracMatchedPairs = 0.06453778850229026
 m.numBrightStars = int(200)
-m.maxRefObjects = int(6498)  # was 6498
+m.maxRefObjects = int(6498)
 m.numPatternConsensus = int(2)
+
+# Astrometry convergence (RELAXED for better matching)
+config.astrometry.maxMeanDistanceArcsec = 100.0  # INCREASED from default 60
+config.astrometry.matchDistanceSigma = 10.0  # INCREASED from default 8
 
 # Astrometry science source S/N
 config.astrometry.sourceSelector["science"].signalToNoise.minimum = 16.27252713241595
@@ -70,6 +74,9 @@ config.psf_normalized_calibration_flux.measure_ap_corr.sourceSelector[
     "science"
 ].signalToNoise.minimum = 22.322792002973504
 
+# ------------- PHOTOMETRIC MATCHING FIXES -------------
+# Fix for "No matches to use for photocal" failures
+config.photometry.match.matchRadius = 3.5  # INCREASED from default 1.5 arcsec
 
 # --- Nickel PreSource compatibility: add measurement plugins & apertures ---
 

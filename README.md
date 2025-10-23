@@ -3,156 +3,466 @@
 Gen3 **obs** package for the **Nickel 1-m telescope (Lick Observatory)**.
 
 This package provides:
-- a single-detector camera model (`camera/nickel.yaml`),
-- a FITS metadata translator (`NickelTranslator`),
-- a raw formatter (`NickelRawFormatter`),
-- filter definitions (Johnson/Bessell **B, V**; Cousins **R, I**),
-- ingest and translator tests, and
-- example pipeline runner(s).
+- Single-detector camera model (`camera/nickel.yaml`)
+- FITS metadata translator (`NickelTranslator`)
+- Raw data formatter (`NickelRawFormatter`)
+- Filter definitions (Johnson/Bessell **B, V**; Cousins **R, I**)
+- Complete DRP pipeline for science processing
+- Calibration pipeline (bias, flats, defects)
+- Ingest and validation tests
 
-> ✅ Tested locally with `lsst-scipipe-10.1.0`. Other recent LSST releases should work too.
-
----
-
-## Quick start
-
-### 0) Load the LSST stack and this package
-
-    cd /path/to/your/stack               # STACK_DIR
-    source loadLSST.zsh
-    setup lsst_distrib
-    # If developing locally:
-    eups declare -r /path/to/obs_nickel obs_nickel -t current
-    setup obs_nickel
-    # optional (tests/ingest examples use it)
-    setup testdata_nickel
-
-### 1) Create a Gen3 repo & register the instrument
-
-    REPO=/path/to/repo
-    INSTRUMENT=lsst.obs.nickel.Nickel
-
-    butler create "$REPO"
-    butler register-instrument "$REPO" "$INSTRUMENT"
-
-### 2) Ingest raws & define visits
-
-    RAWDIR=/path/to/raws  # directory with Nickel FITS
-    RUN="Nickel/raw/all"
-
-    butler ingest-raws "$REPO" "$RAWDIR" --transfer symlink --output-run "$RUN"
-    butler define-visits "$REPO" Nickel
-
-### 3) (Optional) Minimal curated calibrations
-
-This writes the **camera** dataset (and any other built-ins) to a timestamped collection.
-
-    CURATED="Nickel/run/curated/$(date -u +%Y%m%dT%H%M%SZ)"
-    butler write-curated-calibrations "$REPO" Nickel "$RUN" --collection "$CURATED"
-
-    # form a small calib chain
-    CALIB_CHAIN="Nickel/calib/current"
-    butler collection-chain "$REPO" "$CALIB_CHAIN" "$CURATED" --mode redefine
-
-### 4) Run a simple science pipeline (ProcessCcd)
-
-    PIPE=/path/to/obs_nickel/pipelines/ProcessCcd.yaml
-    OUT="Nickel/run/processCcd/$(date +%Y%m%d%H%M%S)"
-
-    pipetask run \
-      -b "$REPO" \
-      -i "$RUN","$CALIB_CHAIN" \
-      -o "$OUT" \
-      -p "$PIPE#processCcd" \
-      -d "instrument='Nickel' AND exposure.observation_type='science'" \
-      -j 8 \
-      --register-dataset-types
+> ✅ Tested with `lsst-scipipe-10.1.0` and `lsst-scipipe-11.0.0`
 
 ---
 
-## Camera overview
+## Quick Start
 
-- **Detector**: single CCD (`CCD0`), **imaging area 1024×1024**, right-side serial overscan **32 columns**
-  (raw amp frame = 1056×1024).
-- **Amplifiers**: 1 (`A00`).
-- **Pixel size**: 15 μm.
-- **Gain / read noise**: defaults set from on-telescope measurements (see YAML).
-- **Saturation/linearity**: filled conservatively for initial release.
+### Prerequisites
 
-See `camera/nickel.yaml` for the authoritative configuration.
+1. **LSST Science Pipelines** installed (tested with v10.1+)
+2. **Reference catalogs** ingested (Gaia DR3, PS1, or the_monster)
+3. **Raw data** from Nickel telescope
+
+### Setup Environment
+
+```bash
+# Navigate to your LSST stack
+cd /path/to/lsst_stack
+source loadLSST.zsh
+
+# Setup the stack and obs_nickel
+setup lsst_distrib
+eups declare -r /path/to/obs_nickel obs_nickel -t current
+setup obs_nickel
+```
+
+### Create Repository (First Time Only)
+
+```bash
+# Set your paths
+export REPO=/path/to/butler/repo
+export INSTRUMENT=lsst.obs.nickel.Nickel
+
+# Create and initialize repository
+butler create "$REPO"
+butler register-instrument "$REPO" "$INSTRUMENT"
+```
 
 ---
 
-## Filters
+## Running the Pipeline
+
+### Environment Variables
+
+Create a `.env` file in the obs_nickel root with your paths:
+
+```bash
+# .env - Edit these paths for your system
+REPO=/path/to/butler/repo
+STACK_DIR=/path/to/lsst_stack
+OBS_NICKEL=/path/to/obs_nickel
+RAW_PARENT_DIR=/path/to/raw/data
+REFCAT_REPO=/path/to/refcat/repo
+CP_PIPE_DIR=${STACK_DIR}/cp_pipe
+```
+
+### Processing Workflow
+
+The pipeline uses a numbered script workflow for clarity:
+
+#### Step 0: Bootstrap Repository (One-Time Setup)
+
+Initialize the Butler repository, ingest reference catalogs, and register the skymap:
+
+```bash
+./scripts/00_bootstrap_repo.sh
+```
+
+This script:
+- Creates Butler repository if needed
+- Ingests Gaia DR3 and PS1 reference catalogs
+- Ingests the_monster catalog (if available)
+- Chains reference catalogs for automatic selection
+- Registers the Nickel skymap
+
+**Run this once** when setting up a new repository.
+
+#### Step 1: Process Calibrations (Per Night)
+
+Build nightly calibration products:
+
+```bash
+./scripts/10_calibs.sh --night YYYYMMDD
+```
+
+This script:
+- Ingests raw data for the night
+- Writes curated calibrations (camera geometry)
+- Constructs combined bias frames
+- Constructs combined flat fields per filter
+- Generates defect masks from flats
+- Updates the `Nickel/calib/current` chain
+
+**Run this for each new night** before science processing.
+
+#### Step 2: Process Science Data (Per Night)
+
+Process science images through the DRP pipeline:
+
+```bash
+# Basic usage
+./scripts/20_science.sh --night YYYYMMDD
+
+# Exclude bad exposures
+./scripts/20_science.sh --night 20210219 --bad 1032,1051,1052
+
+# Exclude from file
+./scripts/20_science.sh --night 20210219 --bad-file bad_exposures.txt
+```
+
+This script:
+- Runs ISR (Instrument Signature Removal)
+- Performs source detection and measurement
+- Computes astrometric solution (WCS)
+- Performs photometric calibration
+- Consolidates visit-level catalogs
+- (Optional) Generates coadds
+- (Optional) Runs difference imaging
+
+**Run this for each night** after calibrations are built.
+
+### Complete Processing Example
+
+```bash
+# First time only: bootstrap the repository
+./scripts/00_bootstrap_repo.sh
+
+# For each new night:
+NIGHT=20210219
+
+# 1. Build calibrations
+./scripts/10_calibs.sh --night $NIGHT
+
+# 2. Process science data
+./scripts/20_science.sh --night $NIGHT --bad 1032,1051,1052
+
+# Check results
+butler query-datasets $REPO preliminary_visit_image \
+  --where "day_obs=20210219"
+```
+
+---
+
+## Pipeline Configuration
+
+### Current Calibration State
+
+The pipeline uses **optimized configurations** tuned for Nickel data:
+
+- **Config file**: `configs/calibrateImage/tuned_configs/best_calib_t071.py`
+- **Key parameters**:
+  - PSF detection threshold: 3.19σ (optimized for Nickel seeing)
+  - Astrometry: Relaxed matching for archival data (max offset 500 pixels)
+  - Photometry: 3.5" matching radius to handle astrometric residuals
+  - Source selection: SNR > 16.3 for astrometry, > 37 for aperture correction
+
+### Reference Catalogs
+
+The pipeline is configured to use:
+- **Astrometry**: the_monster catalog (Gaia DR3 + more)
+- **Photometry**: the_monster catalog with filter mappings:
+  - B → monster_ComCam_g
+  - V → monster_ComCam_g
+  - R → monster_ComCam_r
+  - I → monster_ComCam_i
+
+### Filters
 
 Defined in `python/lsst/obs/nickel/nickelFilters.py`:
 
-- `B` (band `b`) — Johnson/Bessell B
-- `V` (band `v`) — Johnson/Bessell V
-- `R` (band `r`) — Cousins R
-- `I` (band `i`) — Cousins I
-
-The **translator** reads `FILTNAM` and maps directly to the **physical filter** string.
-
----
-
-## Metadata translator (`NickelTranslator`)
-
-Key behavior (matches tests):
-
-- **Instrument**: "Nickel"
-- **Times**:
-  - `to_datetime_begin`: `DATE-BEG` if present, else `DATE-OBS`
-  - `to_datetime_end`: `DATE-END`, else `begin + EXPTIME`
-- **Airmass**: from `AIRMASS` if present
-- **Filter**: `FILTNAM` (stripped)
-- **Location**: `EarthLocation.of_site("Lick Observatory")`
-- **Tracking RA/Dec**: uses **primary WCS center** (`CRVAL1/CRVAL2`) and frame from `RADECSYS`/`RADESYS`
-- **AltAz/pressure**: not provided in v1 (`None`)
-- **Observation typing**: simple rules on `OBSTYPE` and `OBJECT`
-  (`science`, `flat`, `dark`, `bias`, `focus`)
+| Physical Filter | Band | System         | Central λ |
+|----------------|------|----------------|-----------|
+| B              | b    | Johnson/Bessell| ~440 nm   |
+| V              | v    | Johnson/Bessell| ~550 nm   |
+| R              | r    | Cousins        | ~640 nm   |
+| I              | i    | Cousins        | ~790 nm   |
 
 ---
 
-## Running tests
+## Camera Specification
 
-> Requires the `testdata_nickel` package.
+- **Detector**: Single CCD (detector ID: 0)
+- **Format**: 1024×1024 imaging area + 32 column overscan
+- **Raw frame size**: 1056×1024 pixels
+- **Amplifier**: Single readout (A00)
+- **Pixel scale**: 0.37"/pixel
+- **Field of view**: ~6.3' × 6.3'
+- **Gain**: ~1.8 e-/ADU (per camera YAML)
+- **Read noise**: ~7 e- (per camera YAML)
 
-    # after stack + obs_nickel + testdata_nickel are setup
-    pytest -q
-
-- `tests/test_translator.py` validates translator behavior.
-- `tests/test_instrument.py` exercises camera & filter registration.
-- `tests/test_ingest.py` performs a real ingest and **define-visits** check, and reads the raw back.
-- Curated calibrations test is **intentionally skipped** for v1 (you can enable later).
-
----
-
-## Example pipeline runner
-
-A portable runner is provided in `scripts/run_nickel.sh` that:
-- loads the stack,
-- creates/updates a repo,
-- ingests raws and defines visits,
-- (optionally) writes curated calibs, builds CP bias/flats, defects, a calib chain,
-- runs ProcessCcd and post-processing.
-
-Run `scripts/run_nickel.sh -h` for usage.
-If you have your own script, ensure it **doesn’t** hard-code personal paths; prefer flags/env.
+See `camera/nickel.yaml` for complete specifications.
 
 ---
 
-## Contributing / dev hygiene
+## Pipeline Products
 
-- Run formatting & linting pre-commit hooks:
+### Stage 1: Single Visit Processing
 
-      pre-commit install
-      pre-commit run -a
+| Dataset Type | Description |
+|-------------|-------------|
+| `post_isr_image` | ISR-corrected exposures |
+| `preliminary_visit_image` | Calibrated exposures with WCS/PhotoCalib |
+| `single_visit_star` | Detected sources catalog |
+| `preliminary_visit_summary` | Visit-level summary statistics |
 
-- Please include tests for new translator/camera behavior.
+### Stage 2: Coadds (In Development)
+
+| Dataset Type | Description |
+|-------------|-------------|
+| `direct_warp` | Resampled visit images |
+| `deep_coadd` | Combined coadded images |
+| `template_coadd` | Template images for difference imaging |
+
+### Stage 3: Difference Imaging (In Development)
+
+| Dataset Type | Description |
+|-------------|-------------|
+| `difference_image` | Subtracted images |
+| `dia_source` | Difference image sources |
+
+---
+
+## Directory Structure
+
+```
+obs_nickel/
+├── camera/                    # Camera geometry YAML
+├── configs/                   # Pipeline configuration overrides
+│   ├── calibrateImage/
+│   │   └── tuned_configs/    # Optimized configs
+│   └── colorterms.py         # Color term corrections
+├── pipelines/                 # Pipeline definitions
+│   ├── DRP.yaml              # Full data release processing
+│   └── ProcessCcd.yaml       # Single visit processing
+├── python/lsst/obs/nickel/   # Python package
+│   ├── translator.py         # FITS header translator
+│   ├── rawFormatter.py       # Raw data formatter
+│   └── nickelFilters.py      # Filter definitions
+├── scripts/                   # Processing scripts
+│   ├── run_full.sh           # Complete pipeline
+│   ├── 10_calibs.sh          # Calibration only
+│   ├── 20_science.sh         # Science only
+│   └── defects/              # Defect mask tools
+├── tests/                     # Unit tests
+└── tuning/                    # Config optimization tools
+```
+
+---
+
+## Butler Collections
+
+The pipeline uses a hierarchical collection structure:
+
+```
+Nickel/
+├── raw/
+│   └── YYYYMMDD/            # Raw data by night
+│       └── TIMESTAMP/
+├── calib/
+│   ├── current              # CHAIN: Latest calibrations
+│   ├── curated              # CHAIN: Camera geometry
+│   ├── defects/             # Defect masks
+│   ├── YYYYMMDD/            # Nightly calibrations
+│   └── cp/                  # Calibration products
+│       └── YYYYMMDD/
+│           ├── bias/
+│           └── flat/
+├── runs/
+│   └── YYYYMMDD/            # Science processing
+│       ├── processCcd/
+│       ├── coadd/
+│       └── diff/
+└── refcats                   # CHAIN: Reference catalogs
+```
+
+---
+
+## Testing
+
+### Unit Tests
+
+Run the full test suite:
+
+```bash
+# Requires testdata_nickel package
+pytest -v
+```
+
+Individual test modules:
+- `tests/test_translator.py` - FITS header translation
+- `tests/test_instrument.py` - Camera and filter registration
+- `tests/test_ingest.py` - Raw data ingest and visit definition
+
+### Integration Tests
+
+Process test data:
+
+```bash
+# Setup test environment
+export TESTDATA_NICKEL_DIR=/path/to/testdata_nickel
+setup testdata_nickel
+
+# Run simple processing test
+./scripts/run_processCcd_and_visits.sh
+```
+
+---
+
+## Configuration Tuning
+
+The pipeline includes an automated tuning framework in `tuning/calibrate_pipe_tuner/`:
+
+```bash
+# Run parameter optimization
+python -m tuning.calibrate_pipe_tuner.cli \
+  --repo "$REPO" \
+  --obs-nickel "$OBS_NICKEL" \
+  --workdir tuning/results \
+  --trials 50 \
+  --config tuning/tune.yaml
+```
+
+This optimizes:
+- PSF detection thresholds
+- Source selection criteria
+- Astrometric matching parameters
+- Aperture correction settings
+
+---
+
+## Common Issues and Solutions
+
+### Issue: "No matches to use for photocal"
+
+**Cause**: Photometric matching radius too small for astrometric residuals.
+
+**Solution**: Already fixed in `best_calib_t071.py`:
+```python
+config.photometry.match.matchRadius = 3.5  # Increased from 1.5"
+config.photometry.minMatches = 3           # Reduced from ~10
+```
+
+### Issue: Astrometry failures
+
+**Cause**: Poor initial WCS in archival data.
+
+**Solution**: Already relaxed in `best_calib_t071.py`:
+```python
+config.astrometry.matcher.maxOffsetPix = 500        # Increased from 300
+config.astrometry.maxMeanDistanceArcsec = 100.0     # Increased from 60
+```
+
+### Issue: Not enough PSF stars
+
+**Cause**: Detection threshold too high or poor seeing.
+
+**Solution**: Lower threshold in config:
+```python
+config.psf_detection.thresholdValue = 3.2  # Already optimized
+```
+
+---
+
+## Development
+
+### Code Quality
+
+Pre-commit hooks are configured for linting and formatting:
+
+```bash
+# Install hooks
+pre-commit install
+
+# Run manually
+pre-commit run --all-files
+```
+
+### Adding New Features
+
+1. Create feature branch: `git checkout -b feature-name`
+2. Make changes and add tests
+3. Run tests: `pytest`
+4. Run linting: `pre-commit run --all-files`
+5. Submit pull request
+
+### Continuous Integration
+
+GitHub Actions CI runs on all PRs:
+- Linting with ruff
+- Unit tests with pytest
+- Integration tests with test data
+
+See `.github/workflows/ci.yml` for details.
+
+---
+
+## Roadmap
+
+### Current Status (v1.0)
+
+- ✅ Single-visit processing (ISR through calibrateImage)
+- ✅ Optimized config for Nickel data
+- ✅ Calibration pipeline (bias, flats, defects)
+- ✅ Reference catalog integration
+
+### In Development
+
+- 🚧 Coadd generation (warping, selection, assembly)
+- 🚧 Difference imaging pipeline
+- 🚧 Archival data processing mode
+- 🚧 Color term refinement
+
+### Future Plans
+
+- Automated standard star calibration
+- Real-time processing mode
+- Advanced QA metrics and visualization
+- Multi-night calibration tracking
+
+---
+
+## Contributing
+
+Contributions are welcome! Please:
+1. Follow the existing code style
+2. Add tests for new features
+3. Update documentation
+4. Submit pull requests against `main`
+
+---
+
+## References
+
+- **LSST Science Pipelines**: https://pipelines.lsst.io
+- **Butler Gen3**: https://pipelines.lsst.io/modules/lsst.daf.butler
+- **Obs Base**: https://github.com/lsst/obs_base
 
 ---
 
 ## License
 
-This package is intended to be distributed under **GPL-3.0**.
+This package is distributed under **GPL-3.0** license.
+
+---
+
+## Contact
+
+For questions or issues:
+- Create an issue on GitHub
+- Contact the maintainer: Dan Gause
+
+---
+
+## Acknowledgments
+
+Built on the LSST Science Pipelines framework. Thanks to the LSST Data Management team for the excellent infrastructure and documentation.
