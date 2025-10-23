@@ -12,6 +12,7 @@ NIGHT="${NIGHT:-}"
 BAD_EXPOSURES=""; BAD_EXPOSURES_FILE=""
 BAD_OBSIDS="";   BAD_OBSIDS_FILE=""
 JOBS="${JOBS:-8}"   # default parallelism
+OBJECT_FILTER=""    # optional object name filter
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -21,6 +22,7 @@ while [[ $# -gt 0 ]]; do
     --bad-obs)         BAD_OBSIDS="${2:-}"; shift 2;;
     --bad-obs-file)    BAD_OBSIDS_FILE="${2:-}"; shift 2;;
     -j|--jobs)         JOBS="${2:-}"; shift 2;;
+    --object)          OBJECT_FILTER="${2:-}"; shift 2;;
     -h|--help)
       cat <<USAGE
 Usage: $0 --night YYYYMMDD [options]
@@ -31,6 +33,7 @@ Options:
   --bad-obs OBSNUMS         Comma- or space-separated OBSNUMs to exclude
   --bad-obs-file FILE       File containing OBSNUMs to exclude (comments allowed)
   -j, --jobs N              Number of parallel jobs for pipetask run (default: ${JOBS})
+  --object NAME             Filter exposures by OBJECT header value (e.g., '2020wnt')
 USAGE
       exit 0;;
     *) echo "Unknown arg: $1"; exit 2;;
@@ -102,7 +105,7 @@ butler register-instrument "$REPO" "$INSTRUMENT" >/dev/null 2>&1 || true
 [[ -s "$APPLY_CT_CFG" ]] || { echo "ERROR: color-terms config not found: $APPLY_CT_CFG"; exit 2; }
 
 ########## INPUT SANITY ##########
-# If the exact RAW_RUN isn’t present yet, use latest for the night.
+# If the exact RAW_RUN isn't present yet, use latest for the night.
 if ! butler query-collections "$REPO" | awk '{print $1}' | grep -qx "$RAW_RUN"; then
   RAW_RUN="$(butler query-collections "$REPO" | awk '{print $1}' | grep -E "^Nickel/raw/${NIGHT}/" | tail -n1 || true)"
 fi
@@ -136,6 +139,15 @@ BAD_EXPR=""
 
 [[ -n "$BAD_EXP_CSV" ]] && echo "[exclude] exposure/visit: ${BAD_EXP_CSV}" || echo "[exclude] none"
 
+########## OBJECT FILTER ##########
+OBJECT_EXPR=""
+if [[ -n "$OBJECT_FILTER" ]]; then
+  OBJECT_EXPR=" AND exposure.target_name='${OBJECT_FILTER}'"
+  echo "[object filter] ${OBJECT_FILTER}"
+else
+  echo "[object filter] none (processing all science exposures)"
+fi
+
 ########## BUILD QGRAPH (stage1) ##########
 CFG_ARG="calibrateImage:${TUNED_CFG_FILE}"
 echo "[qgraph] processCcd -> $QG_SCI"
@@ -151,7 +163,7 @@ pipetask qgraph \
   --config-file "calibrateImage:${APPLY_CT_CFG}" \
   --qgraph-dot "$QG_SCI_DOT" \
   --qgraph-mermaid "$QG_SCI_MMD" \
-  -d "instrument='Nickel' AND exposure.observation_type='science' ${BAD_EXPR}"
+  -d "instrument='Nickel' AND exposure.observation_type='science'${OBJECT_EXPR}${BAD_EXPR}"
 
 pipetask qgraph -b "$REPO" -g "$QG_SCI" --show tasks || true
 
@@ -206,7 +218,7 @@ butler collection-chain "$REPO" "$COADD_PARENT" "$COADD_RUN"
 #   --save-qgraph "$QG_DIFF" \
 #   --qgraph-dot "$QG_DIFF_DOT" \
 #   --qgraph-mermaid "$QG_DIFF_MMD" \
-#   -d "instrument='Nickel' AND exposure.observation_type='science' ${BAD_EXPR}"
+#   -d "instrument='Nickel' AND exposure.observation_type='science'${OBJECT_EXPR}${BAD_EXPR}"
 # pipetask qgraph -b "$REPO" -g "$QG_DIFF" --show tasks || true
 # [[ -s "$QG_DIFF" ]] || { echo "[diff] No qgraph was generated; see logs above."; exit 2; }
 # echo "[run] diff ..."
@@ -233,3 +245,4 @@ echo "COADD_RUN   = $COADD_RUN"
 # echo "DIFF_RUN    = $DIFF_RUN"
 echo "SKYMAP_NAME = $SKYMAP_NAME"
 echo "JOBS        = $JOBS"
+[[ -n "$OBJECT_FILTER" ]] && echo "OBJECT      = $OBJECT_FILTER"
