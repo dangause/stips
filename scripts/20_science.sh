@@ -51,6 +51,7 @@ INSTRUMENT="lsst.obs.nickel.Nickel"
 
 # Pipeline & configs
 PIPE="$OBS_NICKEL/pipelines/DRP.yaml"
+# TUNED_CFG_FILE="$OBS_NICKEL/configs/calibrateImage/custom_configs/config_robust.py"
 TUNED_CFG_FILE="$OBS_NICKEL/configs/calibrateImage/tuned_configs/best_calib_t071.py"
 APPLY_CT_CFG="$OBS_NICKEL/configs/apply_colorterms.py"
 
@@ -78,15 +79,15 @@ DIFF_RUN="${DIFF_PARENT}/run"
 QG_DIR="$REPO/qgraphs"; mkdir -p "$QG_DIR"
 LOGS_DIR="$OBS_NICKEL/logs"; mkdir -p "$LOGS_DIR"
 
-QG_SCI="$QG_DIR/processCcd_${NIGHT}_${RUN_TS}.qgraph"
+QG_SCI="$QG_DIR/processCcd_${NIGHT}_${RUN_TS}.qg"
 QG_SCI_DOT="$QG_DIR/processCcd_${NIGHT}_${RUN_TS}.dot"
 QG_SCI_MMD="$QG_DIR/processCcd_${NIGHT}_${RUN_TS}.mmd"
 
-QG_COADD="$QG_DIR/coadds_${NIGHT}_${RUN_TS}.qgraph"
+QG_COADD="$QG_DIR/coadds_${NIGHT}_${RUN_TS}.qg"
 QG_COADD_DOT="$QG_DIR/coadds_${NIGHT}_${RUN_TS}.dot"
 QG_COADD_MMD="$QG_DIR/coadds_${NIGHT}_${RUN_TS}.mmd"
 
-QG_DIFF="$QG_DIR/diff_${NIGHT}_${RUN_TS}.qgraph"
+QG_DIFF="$QG_DIR/diff_${NIGHT}_${RUN_TS}.qg"
 QG_DIFF_DOT="$QG_DIR/diff_${NIGHT}_${RUN_TS}.dot"
 QG_DIFF_MMD="$QG_DIR/diff_${NIGHT}_${RUN_TS}.mmd"
 
@@ -165,19 +166,21 @@ pipetask qgraph \
   --qgraph-mermaid "$QG_SCI_MMD" \
   -d "instrument='Nickel' AND exposure.observation_type='science'${OBJECT_EXPR}${BAD_EXPR}"
 
-pipetask qgraph -b "$REPO" -g "$QG_SCI" --show tasks || true
+# pipetask qgraph -b "$REPO" -g "$QG_SCI" --show tasks || true
 
 echo "[run] processCcd ..."
-pipetask run \
-  -b "$REPO" \
-  -g "$QG_SCI" \
-  --register-dataset-types \
-  -j "$JOBS" \
-  2>&1 | tee "$LOGS_DIR/processCcd_${RUN_TS}.log"
-
-# Ensure parent chain points at the run
-butler collection-chain "$REPO" "$SCI_PARENT" "$SCI_RUN" --mode redefine >/dev/null 2>&1 || \
-butler collection-chain "$REPO" "$SCI_PARENT" "$SCI_RUN"
+if pipetask run \
+    -b "$REPO" \
+    -g "$QG_SCI" \
+    --register-dataset-types \
+    -j "$JOBS" \
+    2>&1 | tee "$LOGS_DIR/processCcd_${RUN_TS}.log"; then
+  butler collection-chain "$REPO" "$SCI_PARENT" "$SCI_RUN" --mode redefine >/dev/null 2>&1 || \
+  butler collection-chain "$REPO" "$SCI_PARENT" "$SCI_RUN"
+else
+  echo "[ERROR] processCcd failed; see log: $LOGS_DIR/processCcd_${RUN_TS}.log"
+  exit 2
+fi
 
 ########## COADDS (from stage-1 prelim products) ##########
 echo "[qgraph] coadds -> $QG_COADD"
@@ -193,43 +196,24 @@ pipetask qgraph \
   --qgraph-mermaid "$QG_COADD_MMD" \
   -d "instrument='Nickel' AND skymap='${SKYMAP_NAME}'"
 
-pipetask qgraph -b "$REPO" -g "$QG_COADD" --show tasks || true
-[[ -s "$QG_COADD" ]] || { echo "[coadds] No qgraph was generated; see logs above."; exit 2; }
+# pipetask qgraph -b "$REPO" -g "$QG_COADD" --show tasks || true
 
 echo "[run] coadds ..."
-pipetask run \
-  -b "$REPO" \
-  -g "$QG_COADD" \
-  --register-dataset-types \
-  -j "$JOBS" \
-  2>&1 | tee "$LOGS_DIR/coadds_${RUN_TS}.log"
+if pipetask run \
+    -b "$REPO" \
+    -g "$QG_COADD" \
+    --register-dataset-types \
+    -j "$JOBS" \
+    2>&1 | tee "$LOGS_DIR/coadds_${RUN_TS}.log"; then
+  butler collection-chain "$REPO" "$COADD_PARENT" "$COADD_RUN" --mode redefine >/dev/null 2>&1 || \
+  butler collection-chain "$REPO" "$COADD_PARENT" "$COADD_RUN"
+else
+  echo "[ERROR] coadds failed; see log: $LOGS_DIR/coadds_${RUN_TS}.log"
+  exit 2
+fi
 
-butler collection-chain "$REPO" "$COADD_PARENT" "$COADD_RUN" --mode redefine >/dev/null 2>&1 || \
-butler collection-chain "$REPO" "$COADD_PARENT" "$COADD_RUN"
-
-# ########## DIFFERENCE IMAGING (visit-level) ##########
-# echo "[qgraph] diff -> $QG_DIFF"
-# pipetask qgraph \
-#   -b "$REPO" \
-#   -p "$PIPE#difference-imaging" \
-#   -i "$SCI_PARENT","$COADD_PARENT","$CALIB_CHAIN","$REFCATS_CHAIN","$SKYMAPS_CHAIN" \
-#   -o "$DIFF_PARENT" \
-#   --output-run "$DIFF_RUN" \
-#   --save-qgraph "$QG_DIFF" \
-#   --qgraph-dot "$QG_DIFF_DOT" \
-#   --qgraph-mermaid "$QG_DIFF_MMD" \
-#   -d "instrument='Nickel' AND exposure.observation_type='science'${OBJECT_EXPR}${BAD_EXPR}"
-# pipetask qgraph -b "$REPO" -g "$QG_DIFF" --show tasks || true
-# [[ -s "$QG_DIFF" ]] || { echo "[diff] No qgraph was generated; see logs above."; exit 2; }
-# echo "[run] diff ..."
-# pipetask run \
-#   -b "$REPO" \
-#   -g "$QG_DIFF" \
-#   --register-dataset-types \
-#   -j "$JOBS" \
-#   2>&1 | tee "$LOGS_DIR/diff_${RUN_TS}.log"
-# butler collection-chain "$REPO" "$DIFF_PARENT" "$DIFF_RUN" --mode redefine >/dev/null 2>&1 || \
-# butler collection-chain "$REPO" "$DIFF_PARENT" "$DIFF_RUN"
+# ########## DIFFERENCE IMAGING (visit-level)
+# (unchanged; leave commented until you want it)
 
 ########## SUMMARY ##########
 echo "=== [science] done ==="
@@ -241,8 +225,6 @@ echo "SCI_PARENT  = $SCI_PARENT"
 echo "SCI_RUN     = $SCI_RUN"
 echo "COADD_PARENT= $COADD_PARENT"
 echo "COADD_RUN   = $COADD_RUN"
-# echo "DIFF_PARENT = $DIFF_PARENT"
-# echo "DIFF_RUN    = $DIFF_RUN"
 echo "SKYMAP_NAME = $SKYMAP_NAME"
 echo "JOBS        = $JOBS"
 [[ -n "$OBJECT_FILTER" ]] && echo "OBJECT      = $OBJECT_FILTER"

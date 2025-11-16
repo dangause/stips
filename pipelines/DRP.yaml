@@ -35,10 +35,10 @@ tasks:
       doVignette: false
       # Rough fluxMag0T1 seeds
       fluxMag0T1:
-        B: 2.0e8
-        V: 2.0e8
-        R: 2.0e8
-        I: 2.0e8
+        B: 1.4e12
+        V: 1.6e12
+        R: 2.2e12
+        I: 3.1e12
   calibrateImage:
     class: lsst.pipe.tasks.calibrateImage.CalibrateImageTask
     config:
