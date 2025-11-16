@@ -10,7 +10,7 @@ to ignore bad pixels/columns/blemishes during ISR.
 
    ```bash
    python obs_nickel/calib/defects/make_defects_from_flats.py \
-     --repo ~/Desktop/lick/lsst/data/nickel/062424 \
+     --repo ~/Developer/lick/lsst/data/nickel/062424 \
      --collection Nickel/run/cp_flat/20250730T135912Z \
      --detectors 0 \
      --register --ingest --defects-run Nickel/calib/defects/$(date -u +%Y%m%dT%H%M%SZ) \
