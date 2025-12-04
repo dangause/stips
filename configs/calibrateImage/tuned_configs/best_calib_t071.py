@@ -45,8 +45,8 @@ config.psf_measure_psf.starSelector["objectSize"].widthStdAllowed = 0.3571430592
 
 # Astrometry matcher (pessimisticB)
 m = config.astrometry.matcher
-m.maxOffsetPix = int(184)
-m.maxRotationDeg = 2.3481849888137583
+m.maxOffsetPix = int(900)
+m.maxRotationDeg = 2.0
 m.matcherIterations = int(8)
 m.minMatchDistPixels = 2.19105964461907
 m.minMatchedPairs = int(9)
@@ -54,6 +54,15 @@ m.minFracMatchedPairs = 0.06453778850229026
 m.numBrightStars = int(200)
 m.maxRefObjects = int(6498)  # was 6498
 m.numPatternConsensus = int(2)
+m.numPointsForShape = 5
+m.numPointsForShapeAttempt = 8
+
+config.astrometry_ref_loader.pixelMargin = 250
+
+config.astrometry.referenceSelector.doMagLimit = True
+config.astrometry.referenceSelector.magLimit.minimum = 8.0
+config.astrometry.referenceSelector.magLimit.maximum = 18.0
+config.astrometry.referenceSelector.magLimit.fluxField = "monster_ComCam_g_flux"
 
 # Astrometry science source S/N
 config.astrometry.sourceSelector["science"].signalToNoise.minimum = 16.27252713241595
@@ -69,6 +78,9 @@ config.measure_aperture_correction.numIter = int(5)
 config.psf_normalized_calibration_flux.measure_ap_corr.sourceSelector[
     "science"
 ].signalToNoise.minimum = 22.322792002973504
+
+# --- Photometry matcher tweaks for poor-initial-WCS visits ---
+config.photometry.match.matchRadius = 4.0  # arcsec; tolerate larger residuals
 
 
 # --- Nickel PreSource compatibility: add measurement plugins & apertures ---

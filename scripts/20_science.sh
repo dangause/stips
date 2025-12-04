@@ -153,7 +153,7 @@ fi
 CFG_ARG="calibrateImage:${TUNED_CFG_FILE}"
 echo "[qgraph] processCcd -> $QG_SCI"
 
-pipetask qgraph \
+if ! pipetask qgraph \
   -b "$REPO" \
   -p "$PIPE#stage1-single-visit" \
   -i "$RAW_RUN","$CALIB_CHAIN","$REFCATS_CHAIN","$SKYMAPS_CHAIN" \
@@ -164,7 +164,15 @@ pipetask qgraph \
   --config-file "calibrateImage:${APPLY_CT_CFG}" \
   --qgraph-dot "$QG_SCI_DOT" \
   --qgraph-mermaid "$QG_SCI_MMD" \
-  -d "instrument='Nickel' AND exposure.observation_type='science'${OBJECT_EXPR}${BAD_EXPR}"
+  -d "instrument='Nickel' AND exposure.observation_type='science'${OBJECT_EXPR}${BAD_EXPR}"; then
+  echo "[ERROR] pipetask qgraph (processCcd) failed."
+  exit 2
+fi
+
+if [[ ! -s "$QG_SCI" ]]; then
+  echo "[ERROR] Expected qgraph not created: $QG_SCI"
+  exit 2
+fi
 
 # pipetask qgraph -b "$REPO" -g "$QG_SCI" --show tasks || true
 
@@ -185,7 +193,7 @@ fi
 ########## COADDS (from stage-1 prelim products) ##########
 echo "[qgraph] coadds -> $QG_COADD"
 
-pipetask qgraph \
+if ! pipetask qgraph \
   -b "$REPO" \
   -p "$PIPE#coadds-only" \
   -i "$SCI_PARENT","$CALIB_CHAIN","$REFCATS_CHAIN","$SKYMAPS_CHAIN" \
@@ -194,7 +202,15 @@ pipetask qgraph \
   --save-qgraph "$QG_COADD" \
   --qgraph-dot "$QG_COADD_DOT" \
   --qgraph-mermaid "$QG_COADD_MMD" \
-  -d "instrument='Nickel' AND skymap='${SKYMAP_NAME}'"
+  -d "instrument='Nickel' AND skymap='${SKYMAP_NAME}'"; then
+  echo "[ERROR] pipetask qgraph (coadds) failed."
+  exit 2
+fi
+
+if [[ ! -s "$QG_COADD" ]]; then
+  echo "[ERROR] Expected qgraph not created: $QG_COADD"
+  exit 2
+fi
 
 # pipetask qgraph -b "$REPO" -g "$QG_COADD" --show tasks || true
 
