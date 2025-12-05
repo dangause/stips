@@ -3,6 +3,7 @@
 # Usage: 10_calibs.sh --night YYYYMMDD
 
 # set -euo pipefail
+
 set -a
 source .env
 set +a
@@ -45,31 +46,33 @@ CURATED_CHAIN="Nickel/calib/curated"     # stable alias
 CALIB_OUT="Nickel/calib/${NIGHT}"         # nightly certification target
 CALIB_CHAIN="Nickel/calib/current"        # unified chain for science
 
-QG_DIR="$REPO/qgraphs"                    # where we store .qgraph files
-mkdir -p "$QG_DIR"
+QG_DIR="$REPO/qgraphs"; mkdir -p "$QG_DIR"
 
 echo "=== [calibs] night=${NIGHT} @ ${RUN_TS} ==="
 
-########## ENV ##########
+########## STACK ##########
 cd "$STACK_DIR"
 source loadLSST.zsh
 setup lsst_distrib
 setup obs_nickel || true
 
 ########## INGEST RAWS ##########
-butler register-instrument "$REPO" "$INSTRUMENT" || true
+butler register-instrument "$REPO" "$INSTRUMENT" >/dev/null 2>&1 || true
 
 echo "[ingest] raws -> $RAW_RUN"
+# If re-running, ingest-raws will skip already-present files when transfer=copy.
 butler ingest-raws "$REPO" "$RAWDIR" --transfer copy --output-run "$RAW_RUN"
+
+# Define visits for Nickel (idempotent)
 butler define-visits "$REPO" Nickel
 
-########## CURATED CALIBS (write after ingest; safe to re-run) ##########
+########## CURATED CALIBS ##########
 echo "[curated] write -> $CURATED_RUN (scanning $RAW_RUN)"
 butler write-curated-calibrations "$REPO" Nickel "$RAW_RUN" --collection "$CURATED_RUN"
 butler collection-chain "$REPO" "$CURATED_CHAIN" "$CURATED_RUN" --mode redefine
 
 ########## cpBias (qgraph -> run) ##########
-QG_BIAS="$QG_DIR/cp_bias_${NIGHT}_${RUN_TS}.qgraph"
+QG_BIAS="$QG_DIR/cp_bias_${NIGHT}_${RUN_TS}.qg"
 echo "[cpBias] inputs=[$CURATED_CHAIN,$RAW_RUN]  out=$CP_RUN_BIAS  child=$CP_RUN_BIAS_RUN"
 pipetask qgraph \
   -b "$REPO" \
@@ -80,19 +83,23 @@ pipetask qgraph \
   --save-qgraph "$QG_BIAS" \
   -d "instrument='Nickel' AND exposure.observation_type='bias'"
 
-pipetask run \
-  -b "$REPO" \
-  -g "$QG_BIAS" \
-  --register-dataset-types
+echo "[run] cpBias ..."
+if pipetask run \
+    -b "$REPO" \
+    -g "$QG_BIAS" \
+    --register-dataset-types; then
+  :
+else
+  echo "[ERROR] cpBias failed"; exit 2
+fi
 
-# Ensure child RUN exists, then create/refresh the parent chain
+# Ensure child RUN exists, then (re)define the parent chain
 if ! butler query-collections "$REPO" | awk '{print $1}' | grep -qx "$CP_RUN_BIAS_RUN"; then
-  echo "ERROR: bias child RUN missing: $CP_RUN_BIAS_RUN"
-  exit 2
+  echo "ERROR: bias child RUN missing: $CP_RUN_BIAS_RUN"; exit 2
 fi
 butler collection-chain "$REPO" "$CP_RUN_BIAS" "$CP_RUN_BIAS_RUN" --mode redefine
 
-# Sanity: now both should exist
+# Sanity
 butler query-collections "$REPO" | awk '{print $1}' | grep -qx "$CP_RUN_BIAS" \
   || { echo "ERROR: bias chained collection still missing: $CP_RUN_BIAS"; exit 2; }
 
@@ -117,7 +124,7 @@ butler certify-calibrations "$REPO" "$CP_RUN_BIAS" "$CALIB_OUT" bias \
   --begin-date "$BEGIN_ISO" --end-date "$END_ISO"
 
 ########## cpFlat (qgraph -> run) ##########
-QG_FLAT="$QG_DIR/cp_flat_${NIGHT}_${RUN_TS}.qgraph"
+QG_FLAT="$QG_DIR/cp_flat_${NIGHT}_${RUN_TS}.qg"
 echo "[cpFlat] inputs=[$CURATED_CHAIN,$RAW_RUN,$CALIB_OUT,$CP_RUN_BIAS_RUN]  out=$CP_RUN_FLAT  child=$CP_RUN_FLAT_RUN"
 pipetask qgraph \
   -b "$REPO" \
@@ -130,19 +137,23 @@ pipetask qgraph \
   -c cpFlatIsr:doDark=False \
   -c cpFlatIsr:doOverscan=True
 
-pipetask run \
-  -b "$REPO" \
-  -g "$QG_FLAT" \
-  --register-dataset-types
+echo "[run] cpFlat ..."
+if pipetask run \
+    -b "$REPO" \
+    -g "$QG_FLAT" \
+    --register-dataset-types; then
+  :
+else
+  echo "[ERROR] cpFlat failed"; exit 2
+fi
 
-# Ensure child RUN exists, then create/refresh the parent chain
+# Ensure child RUN exists, then (re)define the parent chain
 if ! butler query-collections "$REPO" | awk '{print $1}' | grep -qx "$CP_RUN_FLAT_RUN"; then
-  echo "ERROR: flat child RUN missing: $CP_RUN_FLAT_RUN"
-  exit 2
+  echo "ERROR: flat child RUN missing: $CP_RUN_FLAT_RUN"; exit 2
 fi
 butler collection-chain "$REPO" "$CP_RUN_FLAT" "$CP_RUN_FLAT_RUN" --mode redefine
 
-# Sanity: now both should exist
+# Sanity
 butler query-collections "$REPO" | awk '{print $1}' | grep -qx "$CP_RUN_FLAT" \
   || { echo "ERROR: flat chained collection still missing: $CP_RUN_FLAT"; exit 2; }
 
@@ -162,15 +173,14 @@ python "$OBS_NICKEL"/scripts/defects/make_defects_from_flats.py \
   --defects-run "$DEFECTS_RUN" \
   --plot
 
-# Only point the current-defects chain if the defects run exists
+# Point the current-defects chain if the defects run exists
 if butler query-collections "$REPO" | awk '{print $1}' | grep -qx "$DEFECTS_RUN"; then
   butler collection-chain "$REPO" Nickel/calib/defects/current "$DEFECTS_RUN" --mode redefine
 else
   echo "[defects] WARNING: defects run not found ($DEFECTS_RUN); skipping chain update."
 fi
 
-########## CERTIFY NIGHTLY FLATS (bias already certified above) ##########
-# Quiet, robust pre-check (avoid throwing when empty)
+########## CERTIFY NIGHTLY FLATS (bias already certified) ##########
 HAS_FLAT=0
 if butler query-collections "$REPO" | awk '{print $1}' | grep -qx "$CALIB_OUT"; then
   echo "[check] Nightly calib collection exists: $CALIB_OUT"
