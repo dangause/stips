@@ -223,12 +223,15 @@ See `camera/nickel.yaml` for complete specifications.
 | `deep_coadd` | Combined coadded images |
 | `template_coadd` | Template images for difference imaging |
 
-### Stage 3: Difference Imaging (In Development)
+### Stage 3: Difference Imaging
 
 | Dataset Type | Description |
 |-------------|-------------|
-| `difference_image` | Subtracted images |
-| `dia_source` | Difference image sources |
+| `template_coadd` | Reference templates for subtraction |
+| `difference_image` | Science - Template subtracted images |
+| `dia_source_unfiltered` | Difference image sources |
+
+**See [DIA.md](DIA.md) for complete DIA workflow and documentation.**
 
 ---
 
@@ -249,9 +252,12 @@ obs_nickel/
 │   ├── rawFormatter.py       # Raw data formatter
 │   └── nickelFilters.py      # Filter definitions
 ├── scripts/                   # Processing scripts
-│   ├── run_full.sh           # Complete pipeline
-│   ├── 10_calibs.sh          # Calibration only
-│   ├── 20_science.sh         # Science only
+│   ├── 00_bootstrap_repo.sh  # Repository setup
+│   ├── 10_calibs.sh          # Calibration processing
+│   ├── 20_science.sh         # Science processing
+│   ├── 30_coadds.sh          # Template building
+│   ├── 40_diff_imaging.sh    # DIA pipeline
+│   ├── run_extract_lightcurve.sh # Light curve extraction
 │   └── defects/              # Defect mask tools
 ├── tests/                     # Unit tests
 └── tuning/                    # Config optimization tools
@@ -415,12 +421,17 @@ See `.github/workflows/ci.yml` for details.
 - ✅ Calibration pipeline (bias, flats, defects)
 - ✅ Reference catalog integration
 
+### Recently Added
+
+- ✅ Coadd generation (template building)
+- ✅ Difference imaging pipeline (DIA)
+- ✅ Light curve extraction
+
 ### In Development
 
-- 🚧 Coadd generation (warping, selection, assembly)
-- 🚧 Difference imaging pipeline
 - 🚧 Archival data processing mode
 - 🚧 Color term refinement
+- 🚧 DIA production integration (enable in DRP.yaml)
 
 ### Future Plans
 

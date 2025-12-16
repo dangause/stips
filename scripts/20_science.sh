@@ -13,6 +13,7 @@ BAD_EXPOSURES=""; BAD_EXPOSURES_FILE=""
 BAD_OBSIDS="";   BAD_OBSIDS_FILE=""
 JOBS="${JOBS:-8}"   # default parallelism
 OBJECT_FILTER=""    # optional object name filter
+SKIP_COADDS=false   # run coadds by default
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -23,6 +24,7 @@ while [[ $# -gt 0 ]]; do
     --bad-obs-file)    BAD_OBSIDS_FILE="${2:-}"; shift 2;;
     -j|--jobs)         JOBS="${2:-}"; shift 2;;
     --object)          OBJECT_FILTER="${2:-}"; shift 2;;
+    --skip-coadds)     SKIP_COADDS=true; shift 1;;
     -h|--help)
       cat <<USAGE
 Usage: $0 --night YYYYMMDD [options]
@@ -34,6 +36,7 @@ Options:
   --bad-obs-file FILE       File containing OBSNUMs to exclude (comments allowed)
   -j, --jobs N              Number of parallel jobs for pipetask run (default: ${JOBS})
   --object NAME             Filter exposures by OBJECT header value (e.g., '2020wnt')
+  --skip-coadds             Skip coadd generation (only run Stage 1 single-visit processing)
 USAGE
       exit 0;;
     *) echo "Unknown arg: $1"; exit 2;;
@@ -191,41 +194,45 @@ else
 fi
 
 ########## COADDS (from stage-1 prelim products) ##########
-echo "[qgraph] coadds -> $QG_COADD"
+if [[ "$SKIP_COADDS" == "false" ]]; then
+  echo "[qgraph] coadds -> $QG_COADD"
 
-if ! pipetask qgraph \
-  -b "$REPO" \
-  -p "$PIPE#coadds-only" \
-  -i "$SCI_PARENT","$CALIB_CHAIN","$REFCATS_CHAIN","$SKYMAPS_CHAIN" \
-  -o "$COADD_PARENT" \
-  --output-run "$COADD_RUN" \
-  --save-qgraph "$QG_COADD" \
-  --qgraph-dot "$QG_COADD_DOT" \
-  --qgraph-mermaid "$QG_COADD_MMD" \
-  -d "instrument='Nickel' AND skymap='${SKYMAP_NAME}'"; then
-  echo "[ERROR] pipetask qgraph (coadds) failed."
-  exit 2
-fi
-
-if [[ ! -s "$QG_COADD" ]]; then
-  echo "[ERROR] Expected qgraph not created: $QG_COADD"
-  exit 2
-fi
-
-# pipetask qgraph -b "$REPO" -g "$QG_COADD" --show tasks || true
-
-echo "[run] coadds ..."
-if pipetask run \
+  if ! pipetask qgraph \
     -b "$REPO" \
-    -g "$QG_COADD" \
-    --register-dataset-types \
-    -j "$JOBS" \
-    2>&1 | tee "$LOGS_DIR/coadds_${RUN_TS}.log"; then
-  butler collection-chain "$REPO" "$COADD_PARENT" "$COADD_RUN" --mode redefine >/dev/null 2>&1 || \
-  butler collection-chain "$REPO" "$COADD_PARENT" "$COADD_RUN"
+    -p "$PIPE#coadds-only" \
+    -i "$SCI_PARENT","$CALIB_CHAIN","$REFCATS_CHAIN","$SKYMAPS_CHAIN" \
+    -o "$COADD_PARENT" \
+    --output-run "$COADD_RUN" \
+    --save-qgraph "$QG_COADD" \
+    --qgraph-dot "$QG_COADD_DOT" \
+    --qgraph-mermaid "$QG_COADD_MMD" \
+    -d "instrument='Nickel' AND skymap='${SKYMAP_NAME}'"; then
+    echo "[ERROR] pipetask qgraph (coadds) failed."
+    exit 2
+  fi
+
+  if [[ ! -s "$QG_COADD" ]]; then
+    echo "[ERROR] Expected qgraph not created: $QG_COADD"
+    exit 2
+  fi
+
+  # pipetask qgraph -b "$REPO" -g "$QG_COADD" --show tasks || true
+
+  echo "[run] coadds ..."
+  if pipetask run \
+      -b "$REPO" \
+      -g "$QG_COADD" \
+      --register-dataset-types \
+      -j "$JOBS" \
+      2>&1 | tee "$LOGS_DIR/coadds_${RUN_TS}.log"; then
+    butler collection-chain "$REPO" "$COADD_PARENT" "$COADD_RUN" --mode redefine >/dev/null 2>&1 || \
+    butler collection-chain "$REPO" "$COADD_PARENT" "$COADD_RUN"
+  else
+    echo "[ERROR] coadds failed; see log: $LOGS_DIR/coadds_${RUN_TS}.log"
+    exit 2
+  fi
 else
-  echo "[ERROR] coadds failed; see log: $LOGS_DIR/coadds_${RUN_TS}.log"
-  exit 2
+  echo "[coadds] Skipped (--skip-coadds flag set)"
 fi
 
 # ########## DIFFERENCE IMAGING (visit-level)

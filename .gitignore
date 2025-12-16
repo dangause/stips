@@ -178,3 +178,13 @@ notebooks
 logs
 .DS_Store
 */defects/defects/*
+
+# DIA pipeline outputs
+*.csv
+lc_*.csv
+test_*.csv
+FIXES_NEEDED.md
+
+# Quantum graphs (stored in Butler repo)
+*.qg
+*.dot
