@@ -64,11 +64,26 @@ OBS_NICKEL=/path/to/obs_nickel
 RAW_PARENT_DIR=/path/to/raw/data
 REFCAT_REPO=/path/to/refcat/repo
 CP_PIPE_DIR=${STACK_DIR}/cp_pipe
+# Optional: archive client for auto-downloads
+LICK_ARCHIVE_DIR=/path/to/lick_searchable_archive
+LICK_ARCHIVE_URL=https://archive.ucolick.org/archive
 ```
 
 ### Processing Workflow
 
 The pipeline uses a numbered script workflow for clarity:
+
+#### Step -1 (optional): Fetch raws from the Lick archive
+
+Download a night's raws directly into the layout expected by the ingest scripts:
+
+```bash
+# If you haven't pip-installed the archive client, point to your clone:
+export LICK_ARCHIVE_DIR=~/Developer/lick/lick_searchable_archive
+
+# Pull raws for a local observing night (noon→noon Pacific) into $RAW_PARENT_DIR/20210219/raw/
+./scripts/fetch_archive_night.py --night 20210219
+```
 
 #### Step 0: Bootstrap Repository (One-Time Setup)
 

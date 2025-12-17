@@ -1,0 +1,145 @@
+#!/usr/bin/env bash
+# 00_download_archive.sh — Download Nickel data from Lick Archive
+#
+# Usage:
+#   ./scripts/00_download_archive.sh --night YYYYMMDD [options]
+
+set -a
+source .env
+set +a
+
+########## CLI ##########
+NIGHT=""
+OVERWRITE=false
+VERBOSE=false
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -n|--night)
+      NIGHT="${2:-}"
+      shift 2
+      ;;
+    --overwrite)
+      OVERWRITE=true
+      shift
+      ;;
+    -v|--verbose)
+      VERBOSE=true
+      shift
+      ;;
+    -h|--help)
+      cat <<USAGE
+Usage: $0 --night YYYYMMDD [options]
+
+Download Nickel telescope data from the Lick Searchable Archive.
+
+Required:
+  -n, --night YYYYMMDD      Observing night to download
+
+Options:
+  --overwrite               Re-download files even if they exist
+  -v, --verbose             Enable verbose output
+  -h, --help                Show this help message
+
+Environment variables (from .env):
+  RAW_PARENT_DIR            Destination for raw data downloads
+  LICK_ARCHIVE_DIR          Path to lick_searchable_archive repo
+  LICK_ARCHIVE_URL          Archive API URL
+  LICK_ARCHIVE_INSTR        Instrument filter (default: NICKEL)
+
+Example:
+  # Download all data for a night
+  $0 --night 20201207
+
+  # Re-download even if files exist
+  $0 --night 20201207 --overwrite
+
+The data will be downloaded to: \$RAW_PARENT_DIR/\${NIGHT}/raw/
+USAGE
+      exit 0
+      ;;
+    *)
+      echo "ERROR: Unknown argument: $1" >&2
+      echo "Use --help for usage information" >&2
+      exit 2
+      ;;
+  esac
+done
+
+# Validate required arguments
+if [[ -z "$NIGHT" ]]; then
+  echo "ERROR: --night is required" >&2
+  exit 2
+fi
+
+if [[ -z "$RAW_PARENT_DIR" ]]; then
+  echo "ERROR: RAW_PARENT_DIR not set in .env" >&2
+  exit 2
+fi
+
+# Use LSST Python environment
+PYTHON=/opt/anaconda3/envs/lsst-scipipe-12.0.0/bin/python
+
+# Check if lick_archive is installed or LICK_ARCHIVE_DIR is set
+if ! $PYTHON -c "import lick_archive" 2>/dev/null; then
+  if [[ -z "$LICK_ARCHIVE_DIR" ]]; then
+    echo "ERROR: lick_archive not installed and LICK_ARCHIVE_DIR not set" >&2
+    echo "" >&2
+    echo "Option 1 (Recommended): Install into LSST conda environment" >&2
+    echo "  /opt/anaconda3/envs/lsst-scipipe-12.0.0/bin/pip install -e ~/Developer/lick/lick_searchable_archive" >&2
+    echo "" >&2
+    echo "Option 2: Set LICK_ARCHIVE_DIR in .env (already configured)" >&2
+    echo "  LICK_ARCHIVE_DIR=~/Developer/lick/lick_searchable_archive" >&2
+    exit 2
+  fi
+fi
+
+########## SETUP ##########
+echo "=== [00_download_archive] night=${NIGHT} ==="
+echo ""
+
+# Build command
+CMD=("${OBS_NICKEL}/scripts/fetch_archive_night.py")
+CMD+=(--night "$NIGHT")
+CMD+=(--raw-root "$RAW_PARENT_DIR")
+
+if [[ "$OVERWRITE" == true ]]; then
+  CMD+=(--overwrite)
+fi
+
+# Export environment for Python script
+export RAW_PARENT_DIR
+export LICK_ARCHIVE_URL
+export LICK_ARCHIVE_INSTR
+
+# Add lick_archive to PYTHONPATH if not installed
+if ! $PYTHON -c "import lick_archive" 2>/dev/null; then
+  export LICK_ARCHIVE_DIR
+  export PYTHONPATH="${LICK_ARCHIVE_DIR}:${PYTHONPATH:-}"
+  echo "Using lick_archive from: $LICK_ARCHIVE_DIR"
+else
+  echo "Using installed lick_archive package"
+fi
+
+# Run download script
+echo "Downloading data from Lick Archive..."
+echo "Archive: $LICK_ARCHIVE_URL"
+echo "Instrument: ${LICK_ARCHIVE_INSTR:-NICKEL}"
+echo "Destination: $RAW_PARENT_DIR/$NIGHT/raw/"
+echo ""
+
+if $PYTHON "${CMD[@]}"; then
+  echo ""
+  echo "=== [00_download_archive] SUCCESS ==="
+  echo "Night:  $NIGHT"
+  echo "Output: $RAW_PARENT_DIR/$NIGHT/raw/"
+  echo ""
+  echo "Next step: Run calibration pipeline"
+  echo "  ./scripts/10_calibs.sh --night $NIGHT"
+  echo ""
+else
+  echo ""
+  echo "=== [00_download_archive] FAILED ===" >&2
+  echo "Check the log above for errors" >&2
+  exit 1
+fi

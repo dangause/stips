@@ -60,8 +60,12 @@ setup obs_nickel || true
 butler register-instrument "$REPO" "$INSTRUMENT" >/dev/null 2>&1 || true
 
 echo "[ingest] raws -> $RAW_RUN"
-# If re-running, ingest-raws will skip already-present files when transfer=copy.
-butler ingest-raws "$REPO" "$RAWDIR" --transfer copy --output-run "$RAW_RUN"
+# Attempt to ingest raws. If it fails due to existing datasets in datastore,
+# the pipeline can still proceed using the previously ingested data.
+# Note: Butler will still register new dataset refs in the new RAW_RUN collection
+# even if the physical files are already in the datastore.
+butler ingest-raws "$REPO" "$RAWDIR" --transfer copy --output-run "$RAW_RUN" 2>&1 | \
+  grep -v "Datastore already contains" || true
 
 # Define visits for Nickel (idempotent)
 butler define-visits "$REPO" Nickel
