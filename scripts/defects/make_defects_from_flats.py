@@ -19,13 +19,20 @@ import warnings
 from datetime import datetime, timezone
 from typing import Iterable, List, Optional, Tuple
 
-import matplotlib
 import numpy as np
 import pandas as pd
 
-matplotlib.use("Agg")  # safe in headless
-import matplotlib.patches as patches
-import matplotlib.pyplot as plt
+try:
+    import matplotlib
+
+    matplotlib.use("Agg")  # safe in headless
+    import matplotlib.patches as patches
+    import matplotlib.pyplot as plt
+
+    HAS_MATPLOTLIB = True
+except ImportError:
+    HAS_MATPLOTLIB = False
+    print("WARNING: matplotlib not available, plots will be skipped")
 from lsst.daf.butler import Butler, DatasetType
 from lsst.geom import Box2I, Extent2I, Point2I
 from scipy.ndimage import binary_opening, find_objects, gaussian_filter, label
@@ -137,6 +144,9 @@ def ensure_defects_dataset_type(b: Butler):
 def save_overlay_png(
     img: np.ndarray, rects: List[Tuple[int, int, int, int]], title: str, out_png: str
 ):
+    if not HAS_MATPLOTLIB:
+        print(f"WARNING: Skipping plot {out_png} (matplotlib not available)")
+        return
     fig, ax = plt.subplots(figsize=(8, 6))
     ax.imshow(img, origin="lower")
     for x0, y0, w, h in rects:
@@ -152,6 +162,9 @@ def save_overlay_png(
 def save_mask_png(
     img: np.ndarray, rects: List[Tuple[int, int, int, int]], out_png: str
 ):
+    if not HAS_MATPLOTLIB:
+        print(f"WARNING: Skipping plot {out_png} (matplotlib not available)")
+        return
     mask = np.zeros_like(img, dtype=bool)
     for x0, y0, w, h in rects:
         mask[y0 : y0 + h, x0 : x0 + w] = True

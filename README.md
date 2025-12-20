@@ -166,6 +166,49 @@ butler query-datasets $REPO preliminary_visit_image \
   --where "day_obs=20210219"
 ```
 
+### Batch Processing Multiple Nights
+
+For processing multiple nights efficiently, use the batch processing script. **It automatically downloads data from the Lick archive:**
+
+```bash
+# Create a nights list file
+cat > my_nights.txt <<EOF
+20210219
+20210220
+20210221
+EOF
+
+# Download from archive + process all nights (download → calibs → science → coadds)
+./scripts/batch_process_nights.sh --nights-file my_nights.txt
+
+# Process existing data (skip download)
+./scripts/batch_process_nights.sh --nights-file my_nights.txt --skip-download
+
+# With more options
+./scripts/batch_process_nights.sh \
+  --nights-file my_nights.txt \
+  -j 16 \
+  --continue-on-error \
+  --build-template \
+  --template-tract 1099 \
+  --template-band r
+```
+
+**Helper scripts for batch processing:**
+
+```bash
+# Generate nights list from date range
+./scripts/generate_nights_list.py --start 20210219 --end 20210228 -o nights.txt
+
+# Auto-discover nights from raw data directory
+./scripts/generate_nights_list.py --auto-discover -o nights.txt
+
+# Monitor batch processing progress
+./scripts/monitor_batch.sh
+```
+
+See [scripts/BATCH_PROCESSING.md](scripts/BATCH_PROCESSING.md) for detailed documentation.
+
 ---
 
 ## Pipeline Configuration

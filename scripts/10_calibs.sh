@@ -163,7 +163,8 @@ butler query-collections "$REPO" | awk '{print $1}' | grep -qx "$CP_RUN_FLAT" \
 
 ########## DEFECTS (from flats; use the child RUN for deterministic reads) ##########
 echo "[defects] from $CP_RUN_FLAT_RUN -> $DEFECTS_RUN"
-python "$OBS_NICKEL"/scripts/defects/make_defects_from_flats.py \
+# Use explicit LSST Python to avoid picking up system/homebrew Python
+/opt/anaconda3/envs/lsst-scipipe-12.0.0/bin/python "$OBS_NICKEL"/scripts/defects/make_defects_from_flats.py \
   --repo "$REPO" \
   --collection "$CP_RUN_FLAT_RUN" \
   --invert-manual-y \
@@ -204,10 +205,18 @@ else
 fi
 
 ########## UNIFIED CALIB CHAIN FOR SCIENCE ##########
-echo "[calib-chain] $CALIB_CHAIN = [$CALIB_OUT, Nickel/calib/defects/current, $CURATED_CHAIN]"
-butler collection-chain "$REPO" "$CALIB_CHAIN" \
-  "$CALIB_OUT" Nickel/calib/defects/current "$CURATED_CHAIN" \
-  --mode redefine
+# Build the chain with defects if available, otherwise without
+CHAIN_MEMBERS=("$CALIB_OUT")
+if butler query-collections "$REPO" | awk '{print $1}' | grep -qx "Nickel/calib/defects/current"; then
+  echo "[calib-chain] $CALIB_CHAIN = [$CALIB_OUT, Nickel/calib/defects/current, $CURATED_CHAIN]"
+  CHAIN_MEMBERS+=("Nickel/calib/defects/current")
+else
+  echo "[calib-chain] WARNING: Nickel/calib/defects/current not found; creating chain without defects"
+  echo "[calib-chain] $CALIB_CHAIN = [$CALIB_OUT, $CURATED_CHAIN]"
+fi
+CHAIN_MEMBERS+=("$CURATED_CHAIN")
+
+butler collection-chain "$REPO" "$CALIB_CHAIN" "${CHAIN_MEMBERS[@]}" --mode redefine
 
 ########## SUMMARY ##########
 echo "=== [calibs] done ==="
