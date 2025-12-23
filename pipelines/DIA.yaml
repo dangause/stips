@@ -1,0 +1,236 @@
+# DIA.yaml - Production Difference Image Analysis Pipeline for obs_nickel
+#
+# This pipeline performs image subtraction for transient/variable source detection
+# using deep coadd templates. It includes:
+#   1. Visit image reprocessing with calibrated metadata
+#   2. Template warping to match science image geometry
+#   3. PSF-matched image subtraction (Alard-Lupton)
+#   4. Difference source detection and measurement
+#   5. Source consolidation and catalog building
+#
+# Usage:
+#   pipetask run -b $REPO \
+#     -p $OBS_NICKEL/pipelines/DIA.yaml \
+#     -i <raw>,<calib>,<refcats>,<skymaps>,<templates> \
+#     -o <output_run> \
+#     -d "instrument='Nickel' AND visit=12345"
+
+description: >
+  Difference Image Analysis pipeline for Nickel 1-meter telescope.
+  Optimized for transient and variable source detection.
+
+parameters:
+  release_id: 0
+
+tasks:
+  # ==========================
+  # Stage 1: Visit Reprocessing
+  # ==========================
+  # Reprocess visit images with proper visit-level metadata
+  # This ensures consistent WCS and photometric calibration
+  reprocessVisitImage:
+    class: lsst.drp.tasks.reprocess_visit_image.ReprocessVisitImageTask
+    config:
+      # Input connections
+      connections.exposures: post_isr_image
+      connections.background_1: preliminary_visit_image_background
+      connections.visit_summary: preliminary_visit_summary
+
+      # Output connections
+      connections.exposure: visit_image
+
+      # Don't remove initial photo calib - we want to keep it
+      remove_initial_photo_calib: false
+
+      # ID generator for source IDs
+      id_generator.release_id: parameters.release_id
+
+  # ==========================
+  # Stage 2: Template Warping
+  # ==========================
+  # Warp deep coadd template to match science visit geometry
+  rewarpTemplate:
+    class: lsst.ip.diffim.getTemplate.GetTemplateTask
+    config:
+      # Get bounding box and WCS from visit image
+      connections.bbox: visit_image.bbox
+      connections.wcs: visit_image.wcs
+
+      # Input template coadds (from 30_coadds.sh or external)
+      connections.coaddExposures: template_coadd
+
+      # Output warped template
+      connections.template: template_detector
+
+      # Warping configuration
+      # Use Lanczos warping for best quality
+      warp.warpingKernelName: "lanczos4"
+
+  # ==========================
+  # Stage 3: Image Subtraction
+  # ==========================
+  # Subtract template from science using Alard-Lupton PSF matching
+  subtractImages:
+    class: lsst.ip.diffim.subtractImages.AlardLuptonSubtractTask
+    config:
+      # Allow kernel source detection for PSF matching
+      # This finds bright, isolated stars for kernel fitting
+      allowKernelSourceDetection: true
+
+      # Input connections
+      connections.science: visit_image
+      connections.sources: single_visit_star_footprints  # From calibrateImage
+      connections.template: template_detector
+
+      # Output connections
+      connections.difference: difference_image_predetection
+      connections.matchedTemplate: template_matched
+      connections.psfMatchingKernel: difference_kernel
+      connections.kernelSources: difference_kernel_sources
+
+      # Kernel configuration
+      # Spatial variation: polynomial order for kernel spatial variation
+      makeKernel.spatialOrder: 2
+
+      # Kernel size: larger for poor seeing
+      makeKernel.kernelSize: 21
+
+      # Background subtraction
+      doSubtractBackground: true
+
+      # Detection for kernel sources
+      # Use moderately bright, isolated stars
+      detection.thresholdValue: 50.0
+      detection.thresholdType: "pixel_stdev"
+      detection.minPixels: 5
+
+  # ==========================
+  # Stage 4: DIA Source Detection
+  # ==========================
+  # Detect and measure sources in difference images
+  detectAndMeasureDiaSource:
+    class: lsst.ip.diffim.detectAndMeasure.DetectAndMeasureTask
+    config:
+      # Input connections
+      connections.science: visit_image
+      connections.matchedTemplate: template_matched
+      connections.difference: difference_image_predetection
+      connections.kernelSources: difference_kernel_sources
+
+      # Output connections
+      connections.outputSchema: dia_source_schema
+      connections.diaSources: dia_source_unfiltered
+      connections.subtractedMeasuredExposure: difference_image
+      connections.maskedStreaks: difference_streaks
+
+      # Detection configuration
+      # Lower threshold for transients (3-sigma)
+      detection.thresholdValue: 3.0
+      detection.thresholdType: "stdev"
+      detection.minPixels: 5
+
+      # Enable dipole detection (for moving objects, cosmic rays)
+      doMeasurement: true
+
+      # Sky sources for false positive estimation
+      doSkySources: true
+      skySources.avoidMask: ["DETECTED", "DETECTED_NEGATIVE", "BAD", "SAT", "NO_DATA"]
+
+      # Measurement configuration
+      # Include both positive and negative detections
+      measurement.plugins.names: [
+        "base_PsfFlux",
+        "base_CircularApertureFlux",
+        "base_GaussianFlux",
+        "base_SkyCoord",
+        "base_PixelFlags",
+        "base_SdssShape",
+        "ext_shapeHSM_HsmSourceMoments",
+      ]
+
+      # PSF flux measurement (primary for point sources)
+      measurement.plugins["base_PsfFlux"].doMeasure: true
+
+      # Aperture flux in multiple radii
+      measurement.slots.apFlux: "base_CircularApertureFlux_12_0"
+
+      # ID generator
+      id_generator.release_id: parameters.release_id
+
+      # Enable writeExposure to save difference image with detections
+      doWriteSubtractedExp: true
+
+  # ==========================
+  # Stage 5: DIA Source Consolidation
+  # ==========================
+  # Transform DIA sources to common coordinate system
+  transformDiaSourceCat:
+    class: lsst.pipe.tasks.postprocess.TransformSourceTableTask
+    config:
+      connections.inputCatalog: dia_source_unfiltered
+      connections.referenceCatalog: single_visit_star_footprints
+      connections.outputCatalog: dia_source_table
+
+      # Coordinate system transformation
+      doApplyExternalPhotoCalib: true
+      doApplyExternalSkyWcs: true
+
+  # Consolidate per-detector catalogs into visit-level table
+  consolidateDiaSourceTable:
+    class: lsst.pipe.tasks.postprocess.ConsolidateSourceTableTask
+    config:
+      connections.inputCatalogs: dia_source_table
+      connections.outputCatalog: dia_source_consolidated
+
+      # Include all measurements
+      include_measurement_indices: true
+
+# ==========================
+# Pipeline Subsets
+# ==========================
+subsets:
+  # Full DIA pipeline (default)
+  dia-full:
+    subset:
+      - reprocessVisitImage
+      - rewarpTemplate
+      - subtractImages
+      - detectAndMeasureDiaSource
+      - transformDiaSourceCat
+      - consolidateDiaSourceTable
+    description: >
+      Complete DIA pipeline: visit reprocessing, template warping,
+      image subtraction, and source detection.
+
+  # Quick DIA (skip reprocessing if visit_image already exists)
+  dia-quick:
+    subset:
+      - rewarpTemplate
+      - subtractImages
+      - detectAndMeasureDiaSource
+    description: >
+      Quick DIA pipeline assuming visit_image already exists.
+      Suitable for re-running with different templates.
+
+  # Subtraction only (for testing)
+  dia-subtract-only:
+    subset:
+      - rewarpTemplate
+      - subtractImages
+    description: >
+      Image subtraction only, no source detection.
+      Useful for visual inspection of difference images.
+
+# ==========================
+# Processing Steps
+# ==========================
+steps:
+  # DIA runs per-visit after single-visit processing completes
+  - label: dia-full
+    dimensions: [visit, detector]
+
+  - label: dia-quick
+    dimensions: [visit, detector]
+
+  - label: dia-subtract-only
+    dimensions: [visit, detector]

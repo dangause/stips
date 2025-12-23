@@ -202,53 +202,69 @@ tasks:
       doNImage: true
       doOnlineForMean: true
 
-  # # ==========================
-  # # DIFFERENCE IMAGING (DIA)
-  # # ==========================
-  # reprocessVisitImage:
-  #   class: lsst.drp.tasks.reprocess_visit_image.ReprocessVisitImageTask
-  #   config:
-  #     # Drive from stage-1 outputs
-  #     connections.exposures: post_isr_image
-  #     connections.background_1: preliminary_visit_image_background
-  #     connections.exposure: visit_image
-  #     connections.visit_summary: preliminary_visit_summary
-  #     remove_initial_photo_calib: false
-  #     id_generator.release_id: parameters.release_id
+  # ==========================
+  # DIFFERENCE IMAGING (DIA)
+  # ==========================
+  reprocessVisitImage:
+    class: lsst.drp.tasks.reprocess_visit_image.ReprocessVisitImageTask
+    config:
+      # Drive from stage-1 outputs
+      connections.exposures: post_isr_image
+      connections.background_1: preliminary_visit_image_background
+      connections.exposure: visit_image
+      connections.visit_summary: preliminary_visit_summary
+      remove_initial_photo_calib: false
+      id_generator.release_id: parameters.release_id
 
-  # rewarpTemplate:
-  #   class: lsst.ip.diffim.getTemplate.GetTemplateTask
-  #   config:
-  #     connections.bbox: visit_image.bbox
-  #     connections.wcs: visit_image.wcs
-  #     connections.coaddExposures: template_coadd
-  #     connections.template: template_detector
+  rewarpTemplate:
+    class: lsst.ip.diffim.getTemplate.GetTemplateTask
+    config:
+      connections.bbox: visit_image.bbox
+      connections.wcs: visit_image.wcs
+      connections.coaddExposures: template_coadd
+      connections.template: template_detector
+      # Use Lanczos warping for best quality
+      warp.warpingKernelName: "lanczos4"
 
-  # subtractImages:
-  #   class: lsst.ip.diffim.subtractImages.AlardLuptonSubtractTask
-  #   config:
-  #     allowKernelSourceDetection: true
-  #     connections.science: visit_image
-  #     connections.sources: single_visit_star_footprints
-  #     connections.template: template_detector
-  #     connections.difference: difference_image_predetection
-  #     connections.matchedTemplate: template_matched
-  #     connections.psfMatchingKernel: difference_kernel
-  #     connections.kernelSources: difference_kernel_sources
+  subtractImages:
+    class: lsst.ip.diffim.subtractImages.AlardLuptonSubtractTask
+    config:
+      allowKernelSourceDetection: true
+      connections.science: visit_image
+      connections.sources: single_visit_star_footprints
+      connections.template: template_detector
+      connections.difference: difference_image_predetection
+      connections.matchedTemplate: template_matched
+      connections.psfMatchingKernel: difference_kernel
+      connections.kernelSources: difference_kernel_sources
+      # Kernel configuration for Nickel
+      makeKernel.spatialOrder: 2
+      makeKernel.kernelSize: 21
+      doSubtractBackground: true
+      # Detection for kernel sources
+      detection.thresholdValue: 50.0
+      detection.thresholdType: "pixel_stdev"
+      detection.minPixels: 5
 
-  # detectAndMeasureDiaSource:
-  #   class: lsst.ip.diffim.detectAndMeasure.DetectAndMeasureTask
-  #   config:
-  #     connections.science: visit_image
-  #     connections.matchedTemplate: template_matched
-  #     connections.difference: difference_image_predetection
-  #     connections.kernelSources: difference_kernel_sources
-  #     connections.outputSchema: dia_source_schema
-  #     connections.diaSources: dia_source_unfiltered
-  #     connections.subtractedMeasuredExposure: difference_image
-  #     connections.maskedStreaks: difference_streaks
-  #     doSkySources: true
-  #     idGenerator.release_id: parameters.release_id
+  detectAndMeasureDiaSource:
+    class: lsst.ip.diffim.detectAndMeasure.DetectAndMeasureTask
+    config:
+      connections.science: visit_image
+      connections.matchedTemplate: template_matched
+      connections.difference: difference_image_predetection
+      connections.kernelSources: difference_kernel_sources
+      connections.outputSchema: dia_source_schema
+      connections.diaSources: dia_source_unfiltered
+      connections.subtractedMeasuredExposure: difference_image
+      connections.maskedStreaks: difference_streaks
+      doSkySources: true
+      idGenerator.release_id: parameters.release_id
+      # Detection threshold: 3-sigma for transients
+      detection.thresholdValue: 3.0
+      detection.thresholdType: "stdev"
+      detection.minPixels: 5
+      doMeasurement: true
+      doWriteSubtractedExp: true
 
 
 
@@ -366,11 +382,16 @@ subsets:
     - assembleDeepCoadd
     - assembleTemplateCoadd
 
-  # difference-imaging:
-  #   - reprocessVisitImage
-  #   - rewarpTemplate
-  #   - subtractImages
-  #   - detectAndMeasureDiaSource
+  difference-imaging:
+    subset:
+      - reprocessVisitImage
+      - rewarpTemplate
+      - subtractImages
+      - detectAndMeasureDiaSource
+    description: |
+      Difference imaging for transient/variable detection.
+      Requires template_coadd in input collections.
+      Run after single-visit processing (step1a/step1b) completes.
 
 
 
@@ -385,8 +406,8 @@ steps:
     dimensions: []
   - label: coadds-only
     dimensions: [tract]
-  # - label: difference-imaging
-  #   dimensions: [visit]
+  - label: difference-imaging
+    dimensions: [visit, detector]
 
 
 

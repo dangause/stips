@@ -177,7 +177,7 @@ notebooks
 .vscode
 logs
 .DS_Store
-*/defects/defects/*
+/defects/defects
 
 # DIA pipeline outputs
 *.csv
