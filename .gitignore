@@ -172,12 +172,18 @@ pyrightconfig.json
 
 
 data
+# Allow tracked code/data helpers under scripts/python/data
+!scripts/python/data/
+!scripts/python/data/**
 notebooks
 .virtual_documents
 .vscode
 logs
 .DS_Store
 /defects/defects
+# defect visualization outputs from make_defects_from_flats.py
+scripts/python/defects_tools/defects/defects/
+**/defects/defects/
 
 # DIA pipeline outputs
 *.csv
