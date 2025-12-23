@@ -11,4 +11,4 @@ setup lsst_distrib
 setup obs_nickel || true
 
 # Run the Python script with all arguments
-/opt/anaconda3/envs/lsst-scipipe-12.0.0/bin/python "$OBS_NICKEL/scripts/python/data/extract_lightcurve.py" "$@"
+/opt/anaconda3/envs/lsst-scipipe-12.0.0/bin/python "$OBS_NICKEL/scripts/python/pipeline_tools/extract_lightcurve.py" "$@"

@@ -204,7 +204,7 @@ if [[ "$AUTO_TEMPLATE" == "true" ]]; then
   if [[ -n "$EXCLUDE_DATES_START" && -n "$EXCLUDE_DATES_END" ]]; then
     echo "  Date filtering: excluding $EXCLUDE_DATES_START to $EXCLUDE_DATES_END"
 
-    TEMPLATE_META_SCRIPT="$OBS_NICKEL/scripts/python/data/template_metadata.py"
+    TEMPLATE_META_SCRIPT="$OBS_NICKEL/scripts/python/pipeline_tools/template_metadata.py"
     if [[ ! -f "$TEMPLATE_META_SCRIPT" ]]; then
       echo "ERROR: Template metadata script not found: $TEMPLATE_META_SCRIPT"
       echo "Cannot perform date-based template filtering."
@@ -493,7 +493,7 @@ if pipetask run \
   echo ""
   echo "2. EXTRACT LIGHT CURVE for specific transient/variable:"
   echo "   By coordinates:"
-  echo "     python scripts/python/data/extract_lightcurve.py \\"
+  echo "     python scripts/python/pipeline_tools/extract_lightcurve.py \\"
   echo "       --repo \$REPO \\"
   echo "       --collection '$DIFF_RUN' \\"
   echo "       --ra YOUR_RA --dec YOUR_DEC \\"
@@ -501,7 +501,7 @@ if pipetask run \
   echo "       --output lightcurve.csv"
   echo ""
   echo "   By object name (requires SIMBAD/NED):"
-  echo "     python scripts/python/data/extract_lightcurve.py \\"
+  echo "     python scripts/python/pipeline_tools/extract_lightcurve.py \\"
   echo "       --repo \$REPO \\"
   echo "       --collection '$DIFF_RUN' \\"
   echo "       --object 'AT2024abc' \\"

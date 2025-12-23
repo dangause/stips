@@ -383,7 +383,7 @@ if [[ "$SKIP_LIGHTCURVE" == "false" && -n "$RA" && -n "$DEC" ]]; then
     LIGHTCURVE_OUTPUT="$OUTPUT_DIR/${TRANSIENT_NAME}_lightcurve.ecsv"
 
     # Check if light curve extraction script exists
-    EXTRACT_SCRIPT="$OBS_NICKEL/scripts/python/data/extract_lightcurve.py"
+    EXTRACT_SCRIPT="$OBS_NICKEL/scripts/python/pipeline_tools/extract_lightcurve.py"
 
     if [[ -f "$EXTRACT_SCRIPT" ]]; then
         run_or_dry /opt/anaconda3/envs/lsst-scipipe-12.0.0/bin/python "$EXTRACT_SCRIPT" \
@@ -424,7 +424,7 @@ log ""
 QUALITY_REPORT="$OUTPUT_DIR/${TRANSIENT_NAME}_quality_report.txt"
 
 # Run quality assessment for each night
-ASSESS_SCRIPT="$OBS_NICKEL/scripts/python/data/assess_dia_quality.py"
+ASSESS_SCRIPT="$OBS_NICKEL/scripts/python/pipeline_tools/assess_dia_quality.py"
 
 if [[ -f "$ASSESS_SCRIPT" ]]; then
     for night in "${DIA_NIGHTS[@]}"; do

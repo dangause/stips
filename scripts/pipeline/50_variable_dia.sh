@@ -520,7 +520,7 @@ if [[ "$SKIP_LIGHTCURVES" == "false" && -n "$TARGETS_FILE" ]]; then
     log "=========================================="
     log ""
 
-    EXTRACT_SCRIPT="$OBS_NICKEL/scripts/python/data/extract_lightcurve.py"
+    EXTRACT_SCRIPT="$OBS_NICKEL/scripts/python/pipeline_tools/extract_lightcurve.py"
 
     if [[ -f "$EXTRACT_SCRIPT" ]]; then
         # Read targets file
@@ -573,7 +573,7 @@ log "Stage 4: Quality Assessment"
 log "=========================================="
 log ""
 
-ASSESS_SCRIPT="$OBS_NICKEL/scripts/python/data/assess_dia_quality.py"
+ASSESS_SCRIPT="$OBS_NICKEL/scripts/python/pipeline_tools/assess_dia_quality.py"
 
 if [[ -f "$ASSESS_SCRIPT" ]]; then
     # Create combined quality report

@@ -99,7 +99,7 @@ Download a night's raw data from the Lick Observatory archive:
 ./scripts/pipeline/01_download_archive.sh --night 20210219
 
 # Or use the Python script directly for more options
-./scripts/python/data/fetch_archive_night.py --night 20210219 --overwrite
+./scripts/python/pipeline_tools/fetch_archive_night.py --night 20210219 --overwrite
 ```
 
 **Skip this step** if you already have raw data locally.
@@ -274,10 +274,10 @@ EOF
 
 ```bash
 # Generate nights list from date range
-./scripts/python/data/generate_nights_list.py --start 20210219 --end 20210228 -o nights.txt
+./scripts/python/pipeline_tools/generate_nights_list.py --start 20210219 --end 20210228 -o nights.txt
 
 # Auto-discover nights from raw data directory
-./scripts/python/data/generate_nights_list.py --auto-discover -o nights.txt
+./scripts/python/pipeline_tools/generate_nights_list.py --auto-discover -o nights.txt
 
 # Monitor batch processing progress
 ./scripts/utilities/monitor_batch.sh
@@ -482,7 +482,7 @@ Extract photometry for a specific transient/variable:
 
 ```bash
 # By coordinates
-python scripts/python/data/extract_lightcurve.py \
+python scripts/python/pipeline_tools/extract_lightcurve.py \
   --repo $REPO \
   --collection "Nickel/runs/*/diff/*/run" \
   --ra 123.456 --dec +12.345 \
@@ -490,14 +490,14 @@ python scripts/python/data/extract_lightcurve.py \
   --output lightcurve.csv
 
 # By object name (SIMBAD/NED lookup)
-python scripts/python/data/extract_lightcurve.py \
+python scripts/python/pipeline_tools/extract_lightcurve.py \
   --repo $REPO \
   --collection "Nickel/runs/20210*/diff/*/run" \
   --object "AT2021abc" \
   --output lightcurve_AT2021abc.csv
 
 # Filter by band and minimum S/N
-python scripts/python/data/extract_lightcurve.py \
+python scripts/python/pipeline_tools/extract_lightcurve.py \
   --repo $REPO \
   --collection "Nickel/runs/*/diff/*/run" \
   --ra 123.456 --dec +12.345 \
@@ -513,7 +513,7 @@ Output CSV contains: MJD, band, visit, RA, Dec, flux, flux_err, mag, mag_err, S/
 Assess DIA processing quality for a night:
 
 ```bash
-python scripts/python/data/assess_dia_quality.py \
+python scripts/python/pipeline_tools/assess_dia_quality.py \
   --repo $REPO \
   --collection "Nickel/runs/20210219/diff/*/run" \
   --night 20210219 \
@@ -611,10 +611,10 @@ For a supernova campaign from Feb 19-28, 2021:
 
 ```bash
 # List all template metadata
-python scripts/python/data/template_metadata.py list --repo $REPO
+python scripts/python/pipeline_tools/template_metadata.py list --repo $REPO
 
 # Manually record metadata for external template
-python scripts/python/data/template_metadata.py record \
+python scripts/python/pipeline_tools/template_metadata.py record \
   --repo $REPO \
   --collection templates/external/r \
   --start 20200101 \
@@ -623,7 +623,7 @@ python scripts/python/data/template_metadata.py record \
   --band r
 
 # Query templates excluding specific dates
-python scripts/python/data/template_metadata.py query \
+python scripts/python/pipeline_tools/template_metadata.py query \
   --repo $REPO \
   --exclude-start 20210219 \
   --exclude-end 20210228 \
@@ -644,7 +644,7 @@ butler ingest-files $REPO <template_files> --dataset-type template_coadd
 butler collection-chain $REPO templates/external template_coadd_run
 
 # 3. Record metadata for date filtering
-python scripts/python/data/template_metadata.py record \
+python scripts/python/pipeline_tools/template_metadata.py record \
   --repo $REPO \
   --collection templates/external \
   --start 20200101 \

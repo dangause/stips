@@ -255,17 +255,17 @@ if [[ -z "$BAND" ]]; then
     # Auto-detect bands from butler registry
     log "No --band specified, detecting available bands from repository..."
     if [[ -n "${BUTLER_REPO:-}" ]]; then
-        # Query butler for available bands from processCcd outputs (Nickel: b,v,r,i,clear)
+        # Query butler for available bands from processCcd outputs (Nickel: b,v,r,i)
         BANDS=($(butler query-dimension-records "$BUTLER_REPO" band 2>/dev/null | awk 'NF{print $1}' | tr -d ' ' | sort -u || echo ""))
         if [[ ${#BANDS[@]} -eq 0 ]]; then
             # Fallback: check raw data for available bands
             log "Could not query butler, checking raw data for bands..."
-            BANDS=(b v r i clear)  # Default to Nickel filters
+            BANDS=(b v r i)  # Default to Nickel filters
         fi
     else
         # No butler repo yet, process all standard bands
-        log "No BUTLER_REPO set, defaulting to Nickel bands (b, v, r, i, clear)"
-        BANDS=(b v r i clear)
+        log "No BUTLER_REPO set, defaulting to Nickel bands (b, v, r, i)"
+        BANDS=(b v r i)
     fi
     log "Will process bands: ${BANDS[*]}"
 else
@@ -340,7 +340,7 @@ if [[ "$SKIP_DOWNLOAD" == "false" ]]; then
     log ""
 
     # Check if download script exists
-    DOWNLOAD_SCRIPT="$OBS_NICKEL/scripts/python/data/fetch_archive_night.py"
+    DOWNLOAD_SCRIPT="$OBS_NICKEL/scripts/python/pipeline_tools/fetch_archive_night.py"
     if [[ ! -f "$DOWNLOAD_SCRIPT" ]]; then
         log "WARNING: Download script not found: $DOWNLOAD_SCRIPT"
         log "Assuming raw data already downloaded to RAW_PARENT_DIR"

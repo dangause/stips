@@ -172,9 +172,9 @@ pyrightconfig.json
 
 
 data
-# Allow tracked code/data helpers under scripts/python/data
-!scripts/python/data/
-!scripts/python/data/**
+# Allow tracked pipeline helpers under scripts/python/pipeline_tools
+!scripts/python/pipeline_tools/
+!scripts/python/pipeline_tools/**
 notebooks
 .virtual_documents
 .vscode

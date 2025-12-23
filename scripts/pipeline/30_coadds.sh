@@ -285,7 +285,7 @@ if pipetask run \
     END_DATE="${SORTED_NIGHTS[-1]}"
 
     # Record metadata
-    TEMPLATE_META_SCRIPT="$OBS_NICKEL/scripts/python/data/template_metadata.py"
+    TEMPLATE_META_SCRIPT="$OBS_NICKEL/scripts/python/pipeline_tools/template_metadata.py"
     if [[ -f "$TEMPLATE_META_SCRIPT" ]]; then
       /opt/anaconda3/envs/lsst-scipipe-12.0.0/bin/python "$TEMPLATE_META_SCRIPT" record \
         --repo "$REPO" \

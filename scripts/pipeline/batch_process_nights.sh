@@ -414,9 +414,9 @@ for i in "${!NIGHTS_ARRAY[@]}"; do
     [[ -n "${RAW_PARENT_DIR:-}" ]] && DOWNLOAD_ARGS+=(--raw-root "$RAW_PARENT_DIR")
 
     # Use venv Python if available, otherwise system Python
-    PYTHON_CMD="$OBS_NICKEL/scripts/python/data/fetch_archive_night.py"
+    PYTHON_CMD="$OBS_NICKEL/scripts/python/pipeline_tools/fetch_archive_night.py"
     if [[ -n "${LICK_ARCHIVE_DIR:-}" && -f "${LICK_ARCHIVE_DIR}/.venv/bin/python" ]]; then
-      PYTHON_CMD="${LICK_ARCHIVE_DIR}/.venv/bin/python $OBS_NICKEL/scripts/python/data/fetch_archive_night.py"
+      PYTHON_CMD="${LICK_ARCHIVE_DIR}/.venv/bin/python $OBS_NICKEL/scripts/python/pipeline_tools/fetch_archive_night.py"
     fi
 
     if run_or_dry $PYTHON_CMD "${DOWNLOAD_ARGS[@]}" 2>&1 | tee -a "$BATCH_LOG"; then
