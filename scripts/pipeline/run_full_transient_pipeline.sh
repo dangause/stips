@@ -444,7 +444,7 @@ if [[ "$SKIP_PROCESSCCD" == "false" ]]; then
     for night in "${ALL_NIGHTS[@]}"; do
         log "Processing night: $night"
 
-        if run_or_dry "$OBS_NICKEL/scripts/pipeline/20_science.sh" --night "$night" -j "$JOBS" --skip-coadds; then
+        if run_or_dry "$OBS_NICKEL/scripts/pipeline/20_science.sh" --night "$night" --object "$TRANSIENT_NAME" -j "$JOBS" --skip-coadds; then
             ((PROCESSCCD_SUCCESS_COUNT++))
             log "  ✓ ProcessCcd completed for $night"
         else

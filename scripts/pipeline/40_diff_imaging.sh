@@ -14,7 +14,7 @@
 #   1. Single-visit processing completed (20_science.sh)
 #   2. Template coadds built (30_coadds.sh) OR external templates available
 
-set -euo pipefail
+# set -euo pipefail
 
 set -a
 source .env
@@ -34,6 +34,7 @@ BAND=""
 JOBS="${JOBS:-8}"
 PIPELINE_MODE="standalone"  # standalone (DIA.yaml) or integrated (DRP.yaml#difference-imaging)
 FORCE_REPROCESS=false
+BAD_SUB_THRESH=""
 
 show_usage() {
   cat <<USAGE
@@ -62,6 +63,7 @@ Optional:
   -j, --jobs N              Number of parallel jobs (default: ${JOBS})
   --pipeline MODE           Pipeline mode: standalone (DIA.yaml) or integrated (DRP.yaml)
   --force-reprocess         Force reprocessing of visit images (slower)
+  --bad-sub-threshold NUM   Override badSubtractionRatioThreshold (default task value is 0.2)
 
 Examples:
   # Auto-discover template (recommended)
@@ -79,6 +81,9 @@ Examples:
 
   # Use integrated DRP pipeline
   $0 --night 20240625 --auto-template --pipeline integrated
+
+  # Relax bad subtraction threshold when residuals are high (e.g., 0.5)
+  $0 --night 20240625 --auto-template --bad-sub-threshold 0.5
 
 USAGE
   exit 0
@@ -99,6 +104,7 @@ while [[ $# -gt 0 ]]; do
     -j|--jobs)            JOBS="${2:-}"; shift 2;;
     --pipeline)           PIPELINE_MODE="${2:-}"; shift 2;;
     --force-reprocess)    FORCE_REPROCESS=true; shift 1;;
+    --bad-sub-threshold)  BAD_SUB_THRESH="${2:-}"; shift 2;;
     -h|--help)            show_usage;;
     *) echo "Unknown arg: $1"; show_usage;;
   esac
@@ -114,6 +120,15 @@ fi
 if [[ "$PIPELINE_MODE" != "standalone" && "$PIPELINE_MODE" != "integrated" ]]; then
   echo "ERROR: Invalid --pipeline mode: '$PIPELINE_MODE' (must be 'standalone' or 'integrated')";
   exit 2;
+fi
+
+# Validate bad subtraction threshold (float > 0) if provided
+if [[ -n "$BAD_SUB_THRESH" ]]; then
+  if ! [[ "$BAD_SUB_THRESH" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+    echo "ERROR: --bad-sub-threshold must be a positive number";
+    exit 2;
+  fi
+  echo "[config] badSubtractionRatioThreshold=${BAD_SUB_THRESH} (detectAndMeasureDiaSource)"
 fi
 
 # Template discovery validation
@@ -142,6 +157,9 @@ fi
 
 ########## ENVIRONMENT ##########
 INSTRUMENT="lsst.obs.nickel.Nickel"
+
+# Some Conda deactivate hooks expect this to be defined; keep empty if unset.
+export RUBIN_EUPS_PATH="${RUBIN_EUPS_PATH:-}"
 
 if [[ "$PIPELINE_MODE" == "standalone" ]]; then
   PIPE="$OBS_NICKEL/pipelines/DIA.yaml"
@@ -177,9 +195,11 @@ echo "[mode] Pipeline: $PIPELINE_MODE ($PIPE$SUBSET)"
 
 ########## LSST STACK ##########
 cd "$STACK_DIR"
+set +u  # Temporarily disable unbound variable check for conda activation
 source loadLSST.zsh
 setup lsst_distrib
 setup obs_nickel || true
+set -u  # Re-enable unbound variable check
 butler register-instrument "$REPO" "$INSTRUMENT" >/dev/null 2>&1 || true
 
 # Validate files
@@ -333,7 +353,7 @@ echo "[science] Using: $SCI_PARENT"
 # Verify science run has required datasets
 if ! butler query-datasets "$REPO" preliminary_visit_image \
   --collections "$SCI_PARENT" \
-  --where "instrument='Nickel' AND day_obs=${NIGHT}" 2>/dev/null | head -1 | grep -q .; then
+  --where "instrument='Nickel'" 2>/dev/null | tail -n +2 | head -1 | grep -q .; then
   echo "ERROR: Science run $SCI_PARENT has no preliminary_visit_image datasets"
   echo "Re-run science processing:"
   echo "  scripts/pipeline/20_science.sh --night ${NIGHT}"
@@ -377,7 +397,10 @@ if [[ -n "$BAND" ]]; then
 fi
 
 ########## BUILD DATA ID QUERY ##########
-DATA_ID_QUERY="instrument='Nickel' AND exposure.observation_type='science' AND day_obs=${NIGHT}${OBJECT_EXPR}${BAD_EXPR}${SPATIAL_EXPR}"
+# NOTE: Removed day_obs filter because directory night (e.g. 20220105) may differ from
+# metadata day_obs (e.g. 20220106) due to UT midnight crossing.
+# We're already constrained by the processCcd collection which is specific to the night directory.
+DATA_ID_QUERY="instrument='Nickel' AND exposure.observation_type='science'${OBJECT_EXPR}${BAD_EXPR}${SPATIAL_EXPR}"
 
 echo ""
 echo "[where] $DATA_ID_QUERY"
@@ -388,14 +411,15 @@ echo "[qgraph] Generating quantum graph -> $QG_FILE"
 
 # Build config options
 CONFIG_OPTS=()
-if [[ -f "$TUNED_CFG_FILE" ]]; then
-  CONFIG_OPTS+=("--config-file" "calibrateImage:${TUNED_CFG_FILE}")
-fi
+# Note: calibrateImage config is not needed for DIA pipeline (only for processCcd)
 if [[ -f "$DIA_SUBTRACT_CFG" ]]; then
   CONFIG_OPTS+=("--config-file" "subtractImages:${DIA_SUBTRACT_CFG}")
 fi
 if [[ -f "$DIA_DETECT_CFG" ]]; then
   CONFIG_OPTS+=("--config-file" "detectAndMeasureDiaSource:${DIA_DETECT_CFG}")
+fi
+if [[ -n "$BAD_SUB_THRESH" ]]; then
+  CONFIG_OPTS+=("--config" "detectAndMeasureDiaSource:badSubtractionRatioThreshold=${BAD_SUB_THRESH}")
 fi
 
 if ! pipetask qgraph \
@@ -464,17 +488,37 @@ if pipetask run \
   echo "[outputs] Difference images:"
   DIFF_IMG_COUNT="$(butler query-datasets "$REPO" difference_image \
     --collections "$DIFF_RUN" \
-    --where "instrument='Nickel' AND day_obs=${NIGHT}" \
-    2>/dev/null | wc -l || echo "0")"
-  echo "  → Created $DIFF_IMG_COUNT difference images"
+    --where "instrument='Nickel'" \
+    2>/dev/null | tail -n +3 | wc -l || echo "0")"
+  echo "  → Created $DIFF_IMG_COUNT difference images (all day_obs)"
+  if [[ "$DIFF_IMG_COUNT" -gt 0 ]]; then
+    DIFF_DAYS="$(butler query-datasets "$REPO" difference_image \
+      --collections "$DIFF_RUN" \
+      --where "instrument='Nickel'" \
+      2>/dev/null | awk 'NR>2 {print $8}' | sort -u | paste -sd, - || true)"
+    [[ -n "$DIFF_DAYS" ]] && echo "    day_obs present: $DIFF_DAYS"
+    if [[ "$DIFF_DAYS" != *"$NIGHT"* ]]; then
+      echo "    note: night dir ${NIGHT} crosses UT → day_obs may differ (common around midnight)"
+    fi
+  fi
 
   echo ""
   echo "[outputs] DIA sources detected:"
   DIA_SRC_COUNT="$(butler query-datasets "$REPO" dia_source_unfiltered \
     --collections "$DIFF_RUN" \
-    --where "instrument='Nickel' AND day_obs=${NIGHT}" \
-    2>/dev/null | wc -l || echo "0")"
-  echo "  → Created $DIA_SRC_COUNT DIA source catalogs"
+    --where "instrument='Nickel'" \
+    2>/dev/null | tail -n +3 | wc -l || echo "0")"
+  echo "  → Created $DIA_SRC_COUNT DIA source catalogs (all day_obs)"
+  if [[ "$DIA_SRC_COUNT" -gt 0 ]]; then
+    DIA_DAYS="$(butler query-datasets "$REPO" dia_source_unfiltered \
+      --collections "$DIFF_RUN" \
+      --where "instrument='Nickel'" \
+      2>/dev/null | awk 'NR>2 {print $8}' | sort -u | paste -sd, - || true)"
+    [[ -n "$DIA_DAYS" ]] && echo "    day_obs present: $DIA_DAYS"
+    if [[ "$DIA_DAYS" != *"$NIGHT"* ]]; then
+      echo "    note: night dir ${NIGHT} crosses UT → day_obs may differ (common around midnight)"
+    fi
+  fi
 
   # Show sample of DIA sources
   echo ""

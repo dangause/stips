@@ -10,14 +10,19 @@ set +a
 
 ########## CLI ##########
 NIGHT="${NIGHT:-}"
+JOBS="${JOBS:-4}"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -n|--night) NIGHT="${2:-}"; shift 2;;
-    -h|--help)  echo "Usage: $0 --night YYYYMMDD"; exit 0;;
+    -j|--jobs)  JOBS="${2:-}"; shift 2;;
+    -h|--help)  echo "Usage: $0 --night YYYYMMDD [--jobs N]"; exit 0;;
     *) echo "Unknown arg: $1"; exit 2;;
   esac
 done
 [[ -n "$NIGHT" ]] || { echo "Provide --night YYYYMMDD"; exit 2; }
+if ! [[ "$JOBS" =~ ^[0-9]+$ ]] || [[ "$JOBS" -lt 1 ]]; then
+  echo "ERROR: --jobs must be a positive integer (got '$JOBS')"; exit 2;
+fi
 
 ########## ENVIRONMENT VARS ##########
 RAWDIR=${RAW_PARENT_DIR}/${NIGHT}/raw
@@ -91,6 +96,7 @@ echo "[run] cpBias ..."
 if pipetask run \
     -b "$REPO" \
     -g "$QG_BIAS" \
+    -j "$JOBS" \
     --register-dataset-types; then
   :
 else
@@ -145,6 +151,7 @@ echo "[run] cpFlat ..."
 if pipetask run \
     -b "$REPO" \
     -g "$QG_FLAT" \
+    -j "$JOBS" \
     --register-dataset-types; then
   :
 else
