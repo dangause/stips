@@ -48,7 +48,7 @@
 #   - .env populated (REPO, STACK_DIR, OBS_NICKEL, etc.)
 #   - Raw data already present (or download separately with 01_download_archive.sh)
 
-set -euo pipefail
+# set -euo pipefail
 
 #######################################
 # Helpers
@@ -255,15 +255,22 @@ if [[ -z "$TEMPLATE_COLLECTION" && "$AUTO_TEMPLATE" == "false" && "$SKIP_TEMPLAT
 
   run_or_dry ./scripts/pipeline/30_coadds.sh "${COADD_ARGS[@]}"
 
-  # Pick latest template collection for this tract/band
+  # Pick latest template RUN for this tract/band; prefer run, fallback to parent chain
   TEMPLATE_COLLECTION="$(butler query-collections "$REPO" 2>/dev/null | awk '{print $1}' \
-    | grep "templates/deep/tract${TRACT}/${BAND}" | tail -n1 || true)"
+    | grep "templates/deep/tract${TRACT}/${BAND}/" | tail -n1 || true)"
 
   if [[ -z "$TEMPLATE_COLLECTION" ]]; then
-    echo "ERROR: Could not find template collection after 30_coadds" >&2
-    exit 2
+    PARENT_CANDIDATE="templates/deep/tract${TRACT}/${BAND}"
+    if butler query-collections "$REPO" 2>/dev/null | awk '{print $1}' | grep -qx "$PARENT_CANDIDATE"; then
+      TEMPLATE_COLLECTION="$PARENT_CANDIDATE"
+      log "Using template parent chain: $TEMPLATE_COLLECTION"
+    else
+      echo "ERROR: Could not find template collection after 30_coadds" >&2
+      exit 2
+    fi
+  else
+    log "Using built template: $TEMPLATE_COLLECTION"
   fi
-  log "Using built template: $TEMPLATE_COLLECTION"
 fi
 
 #######################################

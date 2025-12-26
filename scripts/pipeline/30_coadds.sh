@@ -282,7 +282,8 @@ if pipetask run \
     # Find min and max dates
     SORTED_NIGHTS=($(printf '%s\n' "${NIGHTS_ARRAY[@]}" | sort))
     START_DATE="${SORTED_NIGHTS[0]}"
-    END_DATE="${SORTED_NIGHTS[-1]}"
+    LAST_IDX=$((${#SORTED_NIGHTS[@]} - 1))
+    END_DATE="${SORTED_NIGHTS[$LAST_IDX]}"
 
     # Record metadata
     TEMPLATE_META_SCRIPT="$OBS_NICKEL/scripts/python/pipeline_tools/template_metadata.py"
