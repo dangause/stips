@@ -66,7 +66,7 @@
 #       --skip-calibs
 #
 
-set -euo pipefail
+# set -euo pipefail
 
 # ==========================================
 # Configuration

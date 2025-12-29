@@ -48,7 +48,7 @@
 #     20210225
 #
 
-set -euo pipefail
+# set -euo pipefail
 
 # ==========================================
 # Configuration
@@ -386,7 +386,16 @@ if [[ "$SKIP_LIGHTCURVE" == "false" && -n "$RA" && -n "$DEC" ]]; then
     EXTRACT_SCRIPT="$OBS_NICKEL/scripts/python/pipeline_tools/extract_lightcurve.py"
 
     if [[ -f "$EXTRACT_SCRIPT" ]]; then
-        run_or_dry /opt/anaconda3/envs/lsst-scipipe-12.0.0/bin/python "$EXTRACT_SCRIPT" \
+        # Setup LSST stack environment for Python script
+        cd "$STACK_DIR"
+        set +u
+        source loadLSST.zsh
+        setup lsst_distrib
+        setup obs_nickel
+        set -u
+        cd "$OBS_NICKEL"
+
+        run_or_dry python "$EXTRACT_SCRIPT" \
             --repo "${REPO:-/Users/dangause/Developer/lick/lsst/data/nickel/repo}" \
             --collection "$DIA_OUTPUT_COLLECTION" \
             --ra "$RA" \

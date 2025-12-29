@@ -43,7 +43,7 @@
 #   --skip-lightcurve               Skip light curve extraction
 #   --dry-run                       Print commands without running
 
-set -euo pipefail
+# set -euo pipefail
 
 #######################################
 # Configuration

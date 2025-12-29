@@ -65,7 +65,7 @@
 #     20201223  2.1
 #
 
-set -euo pipefail
+# set -euo pipefail
 
 # ==========================================
 # Configuration

@@ -43,7 +43,7 @@
 #   --extract-catalog           Extract full DIA catalog for all sources
 #   --dry-run                   Print commands without running
 
-set -euo pipefail
+# set -euo pipefail
 
 #######################################
 # Configuration

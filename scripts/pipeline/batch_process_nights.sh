@@ -11,7 +11,7 @@
 #   3. 30_coadds.sh  (optional multi-night coadd at the end)
 #   4. 40_diff_imaging.sh (optional difference imaging for transients)
 
-set -euo pipefail
+# set -euo pipefail
 
 set -a
 source .env

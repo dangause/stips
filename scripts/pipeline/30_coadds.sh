@@ -243,6 +243,8 @@ echo "      Log: $LOG_FILE"
 if pipetask run \
     -b "$REPO" \
     -g "$QG_FILE" \
+    -o "$TEMPLATE_PARENT" \
+    --output-run "$TEMPLATE_RUN" \
     --register-dataset-types \
     -j "$JOBS" \
     2>&1 | tee "$LOG_FILE"; then
