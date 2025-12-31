@@ -206,10 +206,28 @@ butler register-instrument "$REPO" "$INSTRUMENT" >/dev/null 2>&1 || true
 # Validate files
 [[ -s "$PIPE" ]] || { echo "ERROR: Pipeline not found: $PIPE"; exit 2; }
 
+########## OBSERVING NIGHT → UT DAY_OBS CONVERSION ##########
+# NIGHT variable is observing night (local date when observations began)
+# DAY_OBS is UT date in FITS headers (typically obs_night + 1 day for CA observations)
+# Collections are organized by observing night, but Butler queries use day_obs
+obs_night_to_day_obs() {
+  local obs_night="$1"
+  # Use Python date arithmetic (obs_night + 1 day)
+  python3 -c "from datetime import datetime, timedelta; dt = datetime.strptime('$obs_night', '%Y%m%d'); print((dt + timedelta(days=1)).strftime('%Y%m%d'))"
+}
+
+DAY_OBS="$(obs_night_to_day_obs "$NIGHT")"
+echo "[night] Observing night: $NIGHT (local date)"
+echo "[night] UT day_obs: $DAY_OBS (FITS header date)"
+
 ########## INPUT SANITY ##########
-# Find latest raw run for this night (needed for data ID queries)
-RAW_RUN="$(butler query-collections "$REPO" | awk '{print $1}' | grep -E "^Nickel/raw/${NIGHT}/" | tail -n1 || true)"
-[[ -n "$RAW_RUN" ]] || { echo "ERROR: No raw run found for night ${NIGHT}"; exit 2; }
+# Find raw collection for this observing night
+# Collections are named by observing night: Nickel/raw/YYYYMMDD/timestamp
+RAW_RUN="$(butler query-collections "$REPO" 2>/dev/null | \
+  awk '{print $1}' | \
+  grep -E "^Nickel/raw/${NIGHT}/" | \
+  tail -n1 || true)"
+[[ -n "$RAW_RUN" ]] || { echo "ERROR: No raw collection found for observing night ${NIGHT}"; exit 2; }
 
 echo "[inputs] RAW_RUN=$RAW_RUN"
 echo "[inputs] CALIB=$CALIB_CHAIN"
@@ -330,18 +348,19 @@ echo "[template] Found $TEMPLATE_COUNT template coadds in $TEMPLATE_COLLECTION"
 # Need to find the science processing run with preliminary_visit_image
 # This is the input to DIA pipeline
 echo ""
-echo "[science] Finding science processing run for night ${NIGHT}..."
+echo "[science] Finding science processing run for observing night ${NIGHT}..."
 
+# Science runs are organized by observing night: Nickel/runs/YYYYMMDD/processCcd/...
 SCI_PARENT="$(butler query-collections "$REPO" 2>/dev/null | \
   awk '{print $1}' | \
   grep -E "^Nickel/runs/${NIGHT}/(processCcd|science)/" | \
   tail -n1 || true)"
 
 if [[ -z "$SCI_PARENT" ]]; then
-  echo "ERROR: No science processing run found for night ${NIGHT}"
+  echo "ERROR: No science processing run found for observing night ${NIGHT}"
   echo ""
   echo "Available runs for this night:"
-  butler query-collections "$REPO" | grep "Nickel/runs/${NIGHT}/" || echo "  (none)"
+  butler query-collections "$REPO" 2>/dev/null | grep "Nickel/runs/${NIGHT}/" || echo "  (none)"
   echo ""
   echo "Run science processing first:"
   echo "  scripts/pipeline/20_science.sh --night ${NIGHT}"
@@ -386,22 +405,25 @@ else
   echo "[object filter] none (processing all science exposures)"
 fi
 
-########## TRACT/BAND FILTER ##########
-SPATIAL_EXPR=""
-if [[ -n "$TRACT" ]]; then
-  SPATIAL_EXPR=" AND tract=${TRACT}"
-  echo "[tract filter] ${TRACT}"
-fi
+########## BAND FILTER ##########
+BAND_EXPR=""
 if [[ -n "$BAND" ]]; then
-  SPATIAL_EXPR="${SPATIAL_EXPR} AND band='${BAND}'"
+  BAND_EXPR=" AND band='${BAND}'"
   echo "[band filter] ${BAND}"
 fi
 
+# Tract filter - note: tract is NOT included in the data ID query because
+# preliminary_visit_image doesn't have tract dimension. The tract filter is
+# applied via template collection selection and spatial matching.
+if [[ -n "$TRACT" ]]; then
+  echo "[tract filter] ${TRACT} (applied via template selection, not data query)"
+fi
+
 ########## BUILD DATA ID QUERY ##########
-# NOTE: NIGHT should be the UT date (day_obs) from FITS headers, NOT the local observing night.
-# For Lick Observatory, observations taken on evening of 2021-07-21 local have day_obs=20210722.
-# Use scripts/utilities/observing_night_to_ut.sh to convert if needed.
-DATA_ID_QUERY="instrument='Nickel' AND exposure.observation_type='science' AND day_obs=${NIGHT}${OBJECT_EXPR}${BAD_EXPR}${SPATIAL_EXPR}"
+# NOTE: Use DAY_OBS (UT date from FITS headers) for Butler queries
+# Observing night 20201207 (local) has day_obs=20201208 (UT) in FITS headers
+# NOTE: Do NOT include tract in query - preliminary_visit_image doesn't have tract dimension
+DATA_ID_QUERY="instrument='Nickel' AND exposure.observation_type='science' AND day_obs=${DAY_OBS}${OBJECT_EXPR}${BAD_EXPR}${BAND_EXPR}"
 
 echo ""
 echo "[where] $DATA_ID_QUERY"
@@ -489,12 +511,12 @@ if pipetask run \
   # Query and show created datasets
   DIFF_IMG_COUNT="$(butler query-datasets "$REPO" difference_image \
     --collections "$DIFF_RUN" \
-    --where "instrument='Nickel' AND day_obs=${NIGHT}" \
+    --where "instrument='Nickel' AND day_obs=${DAY_OBS}" \
     2>/dev/null | tail -n +3 | wc -l || echo "0")"
 
   DIA_SRC_COUNT="$(butler query-datasets "$REPO" dia_source_unfiltered \
     --collections "$DIFF_RUN" \
-    --where "instrument='Nickel' AND day_obs=${NIGHT}" \
+    --where "instrument='Nickel' AND day_obs=${DAY_OBS}" \
     2>/dev/null | tail -n +3 | wc -l || echo "0")"
 
   echo "[outputs] Created $DIFF_IMG_COUNT difference images, $DIA_SRC_COUNT DIA source catalogs"

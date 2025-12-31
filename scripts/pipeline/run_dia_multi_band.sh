@@ -24,6 +24,8 @@ TEMPLATE_NIGHTS_FILE=""
 SCIENCE_NIGHTS_FILE=""
 OBS_TEMPLATE_NIGHTS_FILE=""
 OBS_SCIENCE_NIGHTS_FILE=""
+TEMPLATE_REFERENCE_FILE=""
+SCIENCE_REFERENCE_FILE=""
 NIGHT_TIMEZONE="${NIGHT_TIMEZONE:-America/Los_Angeles}"
 BANDS="r"
 TRACT=""
@@ -52,12 +54,18 @@ usage() {
   cat <<USAGE
 Usage: $0 --template-nights FILE --science-nights FILE --bands "r,i" [--tract TRACT | --ra RA --dec DEC] [options]
 
-Required (choose either UT day_obs files or observing-night files):
-  --template-nights FILE   UT day_obs nights file for template build (YYYYMMDD per line)
-  --science-nights FILE    UT day_obs nights file for science/DIA (YYYYMMDD per line)
-    OR
-  --observing-template-nights FILE   Observing-night file (local date) to auto-convert to UT day_obs
-  --observing-science-nights FILE    Observing-night file (local date) to auto-convert to UT day_obs
+Required (choose one method):
+  Method 1: UT day_obs files (simple text files)
+    --template-nights FILE   UT day_obs nights file for template build (YYYYMMDD per line)
+    --science-nights FILE    UT day_obs nights file for science/DIA (YYYYMMDD per line)
+
+  Method 2: Observing-night files (auto-convert to UT day_obs)
+    --observing-template-nights FILE   Observing-night file (local date) to auto-convert to UT day_obs
+    --observing-science-nights FILE    Observing-night file (local date) to auto-convert to UT day_obs
+
+  Method 3: Reference YAML files (maps observing nights → UT day_obs, recommended)
+    --template-reference FILE   YAML file mapping template observing nights to UT day_obs
+    --science-reference FILE    YAML file mapping science observing nights to UT day_obs
 
   --bands LIST             Comma-separated bands (e.g., "r" or "b,v,r,i")
 
@@ -83,6 +91,17 @@ Pipeline Control:
   --skip-science           Skip science processing (20_science.sh)
   --continue-on-error      Continue processing remaining nights/bands after failures
   --dry-run                Print commands without executing
+
+Reference YAML Format:
+  object: "TARGET_NAME"
+  nights:
+    20201207:                 # Observing night (local date, used for collection paths)
+      day_obs: 20201208       # UT date in FITS headers (for Butler queries)
+      filters:
+        v: [76482094]         # Visit IDs for each filter
+        r: [76482095, 76482092]
+        b: [76482093]
+        i: [76482096]
 USAGE
   exit 1
 }
@@ -93,6 +112,8 @@ while [[ $# -gt 0 ]]; do
     --science-nights)  SCIENCE_NIGHTS_FILE="${2:-}"; shift; shift;;
     --observing-template-nights) OBS_TEMPLATE_NIGHTS_FILE="${2:-}"; shift; shift;;
     --observing-science-nights)  OBS_SCIENCE_NIGHTS_FILE="${2:-}"; shift; shift;;
+    --template-reference) TEMPLATE_REFERENCE_FILE="${2:-}"; shift; shift;;
+    --science-reference)  SCIENCE_REFERENCE_FILE="${2:-}"; shift; shift;;
     --night-timezone) NIGHT_TIMEZONE="${2:-}"; shift; shift;;
     --bands)           BANDS="${2:-}"; shift; shift;;
     --tract)           TRACT="${2:-}"; shift; shift;;
@@ -122,19 +143,34 @@ done
 
 [[ -f ".env" ]] && { set -a; source .env; set +a; }
 
-if [[ -n "$TEMPLATE_NIGHTS_FILE" && -n "$OBS_TEMPLATE_NIGHTS_FILE" ]]; then
-  echo "ERROR: Use either --template-nights (UT day_obs) or --observing-template-nights, not both"; exit 2;
+# Validate that only one method is used per nights type (template/science)
+TEMPLATE_METHODS=0
+[[ -n "$TEMPLATE_NIGHTS_FILE" ]] && ((TEMPLATE_METHODS++))
+[[ -n "$OBS_TEMPLATE_NIGHTS_FILE" ]] && ((TEMPLATE_METHODS++))
+[[ -n "$TEMPLATE_REFERENCE_FILE" ]] && ((TEMPLATE_METHODS++))
+if [[ $TEMPLATE_METHODS -gt 1 ]]; then
+  echo "ERROR: Use only one of: --template-nights, --observing-template-nights, or --template-reference"; exit 2;
 fi
-if [[ -n "$SCIENCE_NIGHTS_FILE" && -n "$OBS_SCIENCE_NIGHTS_FILE" ]]; then
-  echo "ERROR: Use either --science-nights (UT day_obs) or --observing-science-nights, not both"; exit 2;
+if [[ $TEMPLATE_METHODS -eq 0 ]]; then
+  echo "ERROR: Must specify template nights using one of: --template-nights, --observing-template-nights, or --template-reference"; usage;
 fi
 
-if [[ -z "$TEMPLATE_NIGHTS_FILE" && -z "$OBS_TEMPLATE_NIGHTS_FILE" ]]; then usage; fi
-if [[ -z "$SCIENCE_NIGHTS_FILE" && -z "$OBS_SCIENCE_NIGHTS_FILE" ]]; then usage; fi
+SCIENCE_METHODS=0
+[[ -n "$SCIENCE_NIGHTS_FILE" ]] && ((SCIENCE_METHODS++))
+[[ -n "$OBS_SCIENCE_NIGHTS_FILE" ]] && ((SCIENCE_METHODS++))
+[[ -n "$SCIENCE_REFERENCE_FILE" ]] && ((SCIENCE_METHODS++))
+if [[ $SCIENCE_METHODS -gt 1 ]]; then
+  echo "ERROR: Use only one of: --science-nights, --observing-science-nights, or --science-reference"; exit 2;
+fi
+if [[ $SCIENCE_METHODS -eq 0 ]]; then
+  echo "ERROR: Must specify science nights using one of: --science-nights, --observing-science-nights, or --science-reference"; usage;
+fi
 [[ -n "$TEMPLATE_NIGHTS_FILE" && ! -f "$TEMPLATE_NIGHTS_FILE" ]] && { echo "Template nights file not found: $TEMPLATE_NIGHTS_FILE"; exit 2; }
 [[ -n "$SCIENCE_NIGHTS_FILE" && ! -f "$SCIENCE_NIGHTS_FILE" ]] && { echo "Science nights file not found: $SCIENCE_NIGHTS_FILE"; exit 2; }
 [[ -n "$OBS_TEMPLATE_NIGHTS_FILE" && ! -f "$OBS_TEMPLATE_NIGHTS_FILE" ]] && { echo "Observing-template nights file not found: $OBS_TEMPLATE_NIGHTS_FILE"; exit 2; }
 [[ -n "$OBS_SCIENCE_NIGHTS_FILE" && ! -f "$OBS_SCIENCE_NIGHTS_FILE" ]] && { echo "Observing-science nights file not found: $OBS_SCIENCE_NIGHTS_FILE"; exit 2; }
+[[ -n "$TEMPLATE_REFERENCE_FILE" && ! -f "$TEMPLATE_REFERENCE_FILE" ]] && { echo "Template reference file not found: $TEMPLATE_REFERENCE_FILE"; exit 2; }
+[[ -n "$SCIENCE_REFERENCE_FILE" && ! -f "$SCIENCE_REFERENCE_FILE" ]] && { echo "Science reference file not found: $SCIENCE_REFERENCE_FILE"; exit 2; }
 
 # Tract validation and auto-determination from RA/Dec
 if [[ -n "$TRACT" && ( -n "$RA" || -n "$DEC" ) ]]; then
@@ -289,6 +325,61 @@ read_nights() {
   printf "%s\n" "${out[@]}"
 }
 
+# Parse YAML reference file and extract observing nights
+# Input: $1 = YAML file path, $2 = optional band filter (e.g., "v")
+# Output: Prints observing night values (one per line) to stdout
+# Note: Observing nights are the keys under "nights:" section
+parse_reference_yaml() {
+  local yaml_file="$1"
+  local band_filter="${2:-}"
+  local tmp_file
+  tmp_file="$(mktemp)"
+  TEMP_FILES+=("$tmp_file")
+
+  # New schema: nights → observing_night → day_obs + filters → band → visits
+  # Extract observing night values (numeric keys under "nights:")
+
+  if [[ -n "$band_filter" ]]; then
+    # Extract only nights that have data for the specified band
+    # Look for numeric keys (observing nights) that have the filter
+    awk -v band="$band_filter" '
+      /^  [0-9]{8}:/ {
+        current_night = substr($1, 1, length($1)-1)
+        has_band = 0
+      }
+      /^      [a-z]:/ && current_night != "" {
+        filter_name = substr($1, 1, length($1)-1)
+        if (filter_name == band) {
+          has_band = 1
+        }
+      }
+      /^  [0-9]{8}:/ && current_night != "" && has_band {
+        print current_night
+        current_night = ""
+        has_band = 0
+      }
+      END {
+        if (current_night != "" && has_band) {
+          print current_night
+        }
+      }
+    ' "$yaml_file" | sort -u > "$tmp_file"
+  else
+    # Extract all observing nights (numeric keys at 2-space indent under "nights:")
+    grep -E '^\s{2}[0-9]{8}:' "$yaml_file" | \
+      awk '{gsub(/:/, "", $1); print $1}' | \
+      sort -u > "$tmp_file"
+  fi
+
+  if [[ ! -s "$tmp_file" ]]; then
+    echo "ERROR: No valid observing nights found in reference file: $yaml_file" >&2
+    [[ -n "$band_filter" ]] && echo "       (filter: $band_filter)" >&2
+    return 1
+  fi
+
+  cat "$tmp_file"
+}
+
 uniq_list() { tr ' ' '\n' | sed '/^\s*$/d' | sort -u; }
 
 # Check if a template collection exists and has template_coadd datasets
@@ -367,20 +458,49 @@ fi
 ########################################
 # Nights
 ########################################
-if [[ -n "$OBS_TEMPLATE_NIGHTS_FILE" ]]; then
+# Handle template nights (choose one of three methods)
+if [[ -n "$TEMPLATE_REFERENCE_FILE" ]]; then
+  # Method 3: Parse YAML reference file
+  log "[nights] Parsing template reference: $TEMPLATE_REFERENCE_FILE"
+  TMP_TEMPLATE_FILE="$(mktemp)"
+  TEMP_FILES+=("$TMP_TEMPLATE_FILE")
+  if ! parse_reference_yaml "$TEMPLATE_REFERENCE_FILE" > "$TMP_TEMPLATE_FILE"; then
+    echo "ERROR: Failed to parse template reference file: $TEMPLATE_REFERENCE_FILE"
+    exit 2
+  fi
+  TEMPLATE_NIGHTS_FILE="$TMP_TEMPLATE_FILE"
+  log "[nights] Extracted $(wc -l < "$TEMPLATE_NIGHTS_FILE" | tr -d ' ') template nights from reference"
+elif [[ -n "$OBS_TEMPLATE_NIGHTS_FILE" ]]; then
+  # Method 2: Convert observing nights to UT day_obs
   if ! TEMPLATE_NIGHTS_FILE="$(convert_observing_nights "$OBS_TEMPLATE_NIGHTS_FILE" "template")"; then
     echo "ERROR: Failed to convert observing template nights. Ensure LSST stack is loaded and butler is available."
     exit 2
   fi
   log "[nights] Converted observing template nights -> $TEMPLATE_NIGHTS_FILE (UTC day_obs)"
 fi
-if [[ -n "$OBS_SCIENCE_NIGHTS_FILE" ]]; then
+# else: Method 1 - TEMPLATE_NIGHTS_FILE is already set
+
+# Handle science nights (choose one of three methods)
+if [[ -n "$SCIENCE_REFERENCE_FILE" ]]; then
+  # Method 3: Parse YAML reference file
+  log "[nights] Parsing science reference: $SCIENCE_REFERENCE_FILE"
+  TMP_SCIENCE_FILE="$(mktemp)"
+  TEMP_FILES+=("$TMP_SCIENCE_FILE")
+  if ! parse_reference_yaml "$SCIENCE_REFERENCE_FILE" > "$TMP_SCIENCE_FILE"; then
+    echo "ERROR: Failed to parse science reference file: $SCIENCE_REFERENCE_FILE"
+    exit 2
+  fi
+  SCIENCE_NIGHTS_FILE="$TMP_SCIENCE_FILE"
+  log "[nights] Extracted $(wc -l < "$SCIENCE_NIGHTS_FILE" | tr -d ' ') science nights from reference"
+elif [[ -n "$OBS_SCIENCE_NIGHTS_FILE" ]]; then
+  # Method 2: Convert observing nights to UT day_obs
   if ! SCIENCE_NIGHTS_FILE="$(convert_observing_nights "$OBS_SCIENCE_NIGHTS_FILE" "science")"; then
     echo "ERROR: Failed to convert observing science nights. Ensure LSST stack is loaded and butler is available."
     exit 2
   fi
   log "[nights] Converted observing science nights -> $SCIENCE_NIGHTS_FILE (UTC day_obs)"
 fi
+# else: Method 1 - SCIENCE_NIGHTS_FILE is already set
 
 TEMPLATE_NIGHTS=($(read_nights "$TEMPLATE_NIGHTS_FILE"))
 SCIENCE_NIGHTS=($(read_nights "$SCIENCE_NIGHTS_FILE"))
