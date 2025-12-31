@@ -1,8 +1,0 @@
-# Example nights file for batch_process_nights.sh
-# List one night per line in YYYYMMDD format
-# Lines starting with # are comments and will be ignored
-
-
-20230523
-20240512
-20240624
