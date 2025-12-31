@@ -10,6 +10,9 @@ set -a
 source .env
 set +a
 
+# Source logging utilities
+source "$(dirname "$0")/../utilities/logging.sh"
+
 ########## CLI ##########
 NIGHTS_FILE=""
 NIGHTS_LIST=""
@@ -83,7 +86,6 @@ REFCATS_CHAIN="refcats"
 
 RUN_TS="$(date -u +%Y%m%dT%H%M%SZ)"
 QG_DIR="$REPO/qgraphs"; mkdir -p "$QG_DIR"
-LOGS_DIR="$OBS_NICKEL/logs"; mkdir -p "$LOGS_DIR"
 
 # Default output collection
 if [[ -z "$OUTPUT_COLLECTION" ]]; then
@@ -94,9 +96,17 @@ TEMPLATE_RUN="${OUTPUT_COLLECTION}"
 
 QG_FILE="$QG_DIR/template_t${TRACT}_${BAND}_${RUN_TS}.qg"
 QG_DOT="$QG_DIR/template_t${TRACT}_${BAND}_${RUN_TS}.dot"
-LOG_FILE="$LOGS_DIR/template_t${TRACT}_${BAND}_${RUN_TS}.log"
 
-echo "=== [30_coadds] Building deep template: tract=${TRACT} band=${BAND} @ ${RUN_TS} ==="
+# Setup logging (creates LOG_DIR and LOG_FILE)
+setup_logging "templates" "" "$BAND" "$TRACT"
+
+# Redirect all output to log file
+exec > >(tee -a "$LOG_FILE") 2>&1
+
+log_section "Template Building"
+log_info "Tract: $TRACT"
+log_info "Band: $BAND"
+log_info "RUN_TS: $RUN_TS"
 
 ########## LSST STACK ##########
 # Save critical variables (LSST stack setup may clear them)
@@ -237,8 +247,8 @@ pipetask qgraph -b "$REPO" -g "$QG_FILE" --show tasks 2>/dev/null || true
 echo ""
 
 ########## RUN COADD PIPELINE ##########
-echo "[run] Building deep template coadds (jobs=${JOBS})..."
-echo "      Log: $LOG_FILE"
+log_section "Running Template Build"
+log_info "Jobs: $JOBS"
 
 if pipetask run \
     -b "$REPO" \
@@ -246,31 +256,28 @@ if pipetask run \
     -o "$TEMPLATE_PARENT" \
     --output-run "$TEMPLATE_RUN" \
     --register-dataset-types \
-    -j "$JOBS" \
-    2>&1 | tee "$LOG_FILE"; then
+    -j "$JOBS"; then
 
   # Create/update collection chain
   butler collection-chain "$REPO" "$TEMPLATE_PARENT" "$TEMPLATE_RUN" --mode prepend >/dev/null 2>&1 || \
   butler collection-chain "$REPO" "$TEMPLATE_PARENT" "$TEMPLATE_RUN"
 
-  echo ""
-  echo "=== [30_coadds] SUCCESS ==="
-  echo "Template collection: $TEMPLATE_RUN"
-  echo "Template parent:     $TEMPLATE_PARENT"
-  echo "Tract:               $TRACT"
-  echo "Band:                $BAND"
-  echo "Input nights:        ${#NIGHTS_ARRAY[@]}"
-  echo ""
+  log_section "Template Building Complete"
+  log_info "Template collection: $TEMPLATE_RUN"
+  log_info "Template parent: $TEMPLATE_PARENT"
+  log_info "Tract: $TRACT"
+  log_info "Band: $BAND"
+  log_info "Input nights: ${#NIGHTS_ARRAY[@]}"
 
   # Query and show created datasets
-  echo "[outputs] Deep coadds created:"
+  log_info "Deep coadds created:"
   butler query-datasets "$REPO" deep_coadd_predetection \
     --collections "$TEMPLATE_RUN" \
     --where "instrument='Nickel' AND tract=${TRACT} AND band='${BAND}'" \
     2>/dev/null | head -20 || true
 
   echo ""
-  echo "[outputs] Template coadds created:"
+  log_info "Template coadds created:"
   butler query-datasets "$REPO" template_coadd \
     --collections "$TEMPLATE_RUN" \
     --where "instrument='Nickel' AND tract=${TRACT} AND band='${BAND}'" \
@@ -302,8 +309,12 @@ if pipetask run \
     fi
   fi
 
+  print_log_summary
+  exit 0
+
 else
-  echo ""
-  echo "[ERROR] Template building failed; see log: $LOG_FILE"
+  log_error "Template building failed"
+  log_error "Check log: $LOG_FILE"
+  print_log_summary
   exit 2
 fi

@@ -7,6 +7,9 @@ set -a
 source .env
 set +a
 
+# Source logging utilities
+source "$(dirname "$0")/../utilities/logging.sh"
+
 ########## CLI ##########
 NIGHT="${NIGHT:-}"
 BAD_EXPOSURES=""; BAD_EXPOSURES_FILE=""
@@ -80,7 +83,6 @@ DIFF_PARENT="Nickel/runs/${NIGHT}/diff/${RUN_TS}"
 DIFF_RUN="${DIFF_PARENT}/run"
 
 QG_DIR="$REPO/qgraphs"; mkdir -p "$QG_DIR"
-LOGS_DIR="$OBS_NICKEL/logs"; mkdir -p "$LOGS_DIR"
 
 QG_SCI="$QG_DIR/processCcd_${NIGHT}_${RUN_TS}.qg"
 QG_SCI_DOT="$QG_DIR/processCcd_${NIGHT}_${RUN_TS}.dot"
@@ -94,7 +96,16 @@ QG_DIFF="$QG_DIR/diff_${NIGHT}_${RUN_TS}.qg"
 QG_DIFF_DOT="$QG_DIR/diff_${NIGHT}_${RUN_TS}.dot"
 QG_DIFF_MMD="$QG_DIR/diff_${NIGHT}_${RUN_TS}.mmd"
 
-echo "=== [science] night=${NIGHT} @ ${RUN_TS} (jobs=${JOBS}) ==="
+# Setup logging (creates LOG_DIR and LOG_FILE)
+setup_logging "science" "$NIGHT"
+
+# Redirect all output to log file
+exec > >(tee -a "$LOG_FILE") 2>&1
+
+log_section "Science Processing"
+log_info "Night: $NIGHT"
+log_info "Jobs: $JOBS"
+log_info "RUN_TS: $RUN_TS"
 
 ########## STACK ##########
 cd "$STACK_DIR"
@@ -179,23 +190,30 @@ fi
 
 # pipetask qgraph -b "$REPO" -g "$QG_SCI" --show tasks || true
 
-echo "[run] processCcd ..."
+log_section "Running ProcessCcd"
+PROCESSCCD_LOG="$(get_task_log "processCcd")"
+log_info "ProcessCcd log: $PROCESSCCD_LOG"
+
 if pipetask run \
     -b "$REPO" \
     -g "$QG_SCI" \
     --register-dataset-types \
     -j "$JOBS" \
-    2>&1 | tee "$LOGS_DIR/processCcd_${RUN_TS}.log"; then
+    2>&1 | tee "$PROCESSCCD_LOG"; then
   butler collection-chain "$REPO" "$SCI_PARENT" "$SCI_RUN" --mode redefine >/dev/null 2>&1 || \
   butler collection-chain "$REPO" "$SCI_PARENT" "$SCI_RUN"
+  log_info "ProcessCcd completed successfully"
 else
-  echo "[ERROR] processCcd failed; see log: $LOGS_DIR/processCcd_${RUN_TS}.log"
+  log_error "ProcessCcd failed"
+  log_error "Check log: $PROCESSCCD_LOG"
+  print_log_summary
   exit 2
 fi
 
 ########## COADDS (from stage-1 prelim products) ##########
 if [[ "$SKIP_COADDS" == "false" ]]; then
-  echo "[qgraph] coadds -> $QG_COADD"
+  log_section "Running Coadds"
+  log_info "Quantum graph: $QG_COADD"
 
   if ! pipetask qgraph \
     -b "$REPO" \
@@ -207,33 +225,43 @@ if [[ "$SKIP_COADDS" == "false" ]]; then
     --qgraph-dot "$QG_COADD_DOT" \
     --qgraph-mermaid "$QG_COADD_MMD" \
     -d "instrument='Nickel' AND skymap='${SKYMAP_NAME}'"; then
-    echo "[ERROR] pipetask qgraph (coadds) failed."
+    log_error "Quantum graph generation (coadds) failed"
+    print_log_summary
     exit 2
   fi
 
   if [[ ! -s "$QG_COADD" ]]; then
-    echo "[ERROR] Expected qgraph not created: $QG_COADD"
+    log_error "Expected quantum graph not created: $QG_COADD"
+    print_log_summary
     exit 2
   fi
 
   # pipetask qgraph -b "$REPO" -g "$QG_COADD" --show tasks || true
 
-  echo "[run] coadds ..."
+  COADD_LOG="$(get_task_log "coadds")"
+  log_info "Coadd log: $COADD_LOG"
+
   if pipetask run \
       -b "$REPO" \
       -g "$QG_COADD" \
       --register-dataset-types \
       -j "$JOBS" \
-      2>&1 | tee "$LOGS_DIR/coadds_${RUN_TS}.log"; then
+      2>&1 | tee "$COADD_LOG"; then
     butler collection-chain "$REPO" "$COADD_PARENT" "$COADD_RUN" --mode redefine >/dev/null 2>&1 || \
     butler collection-chain "$REPO" "$COADD_PARENT" "$COADD_RUN"
+    log_info "Coadds completed successfully"
   else
-    echo "[ERROR] coadds failed; see log: $LOGS_DIR/coadds_${RUN_TS}.log"
+    log_error "Coadds failed"
+    log_error "Check log: $COADD_LOG"
+    print_log_summary
     exit 2
   fi
 else
-  echo "[coadds] Skipped (--skip-coadds flag set)"
+  log_info "Coadds skipped (--skip-coadds flag set)"
 fi
+
+log_section "Science Processing Complete"
+print_log_summary
 
 # ########## DIFFERENCE IMAGING (visit-level)
 # (unchanged; leave commented until you want it)

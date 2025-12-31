@@ -14,8 +14,12 @@
 #   - Runs 10_calibs and 20_science once per night (no repetition per band)
 #   - Builds a template per band (30_coadds) unless --skip-template-build or --auto-template is set
 #   - Runs DIA (40_diff_imaging) per science night per band
+#   - Uses hierarchical logging system
 #
 # set -euo pipefail
+
+# Source logging utilities
+source "$(dirname "$0")/../utilities/logging.sh"
 
 ########################################
 # Defaults / CLI
@@ -202,10 +206,25 @@ if [[ -z "${REPO:-}" ]]; then
 fi
 
 ########################################
+# Setup logging and RUN_ID
+########################################
+# Create RUN_ID for entire pipeline execution
+export RUN_ID="dia_multiband_$(date -u +%Y%m%d_%H%M%S)_$$"
+
+# Setup logging for orchestrator
+setup_logging "other" "" "" "" "run_dia_multi_band"
+
+# Redirect all output to log file
+exec > >(tee -a "$LOG_FILE") 2>&1
+
+log_section "Multi-band DIA Pipeline"
+log_info "RUN_ID: $RUN_ID"
+
+########################################
 # Helpers
 ########################################
-log() { /bin/echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
-run_or_dry() { if [[ "$DRY_RUN" == "true" ]]; then /bin/echo "[DRY-RUN] $*"; else log "Running: $*"; "$@"; fi; }
+# Note: log() function now provided by logging.sh (log_info)
+run_or_dry() { if [[ "$DRY_RUN" == "true" ]]; then /bin/echo "[DRY-RUN] $*"; else log_info "Running: $*"; "$@"; fi; }
 
 ensure_butler_available() {
   # Already present?
@@ -620,11 +639,38 @@ for BAND in "${BAND_ARRAY[@]}"; do
   done
 done
 
-log "All bands complete."
+log_section "Pipeline Complete"
+log_info "All bands complete"
+
+# Write summary
+SUMMARY_TEXT="$(cat <<EOF
+Multi-band DIA Pipeline Summary
+================================
+
+RUN_ID: $RUN_ID
+Bands: $BANDS
+Total nights: ${#SCIENCE_NIGHTS[@]}
+
+Results:
+$(if [[ ${#FAILED_CALIBS[@]} -gt 0 ]]; then echo "  Failed calibs: ${FAILED_CALIBS[*]}"; else echo "  All calibs succeeded"; fi)
+$(if [[ ${#FAILED_SCIENCE[@]} -gt 0 ]]; then echo "  Failed science: ${FAILED_SCIENCE[*]}"; else echo "  All science succeeded"; fi)
+$(if [[ ${#FAILED_TEMPLATE[@]} -gt 0 ]]; then echo "  Failed templates: ${FAILED_TEMPLATE[*]}"; else echo "  All templates succeeded"; fi)
+$(if [[ ${#FAILED_DIA[@]} -gt 0 ]]; then echo "  Failed DIA: ${FAILED_DIA[*]}"; else echo "  All DIA succeeded"; fi)
+
+Exit code: $EXIT_CODE
+EOF
+)"
+
+write_summary "$SUMMARY_TEXT"
+
 if [[ "$CONTINUE_ON_ERROR" == "true" ]]; then
-  [[ ${#FAILED_CALIBS[@]} -gt 0 ]] && log "Failed calibs: ${FAILED_CALIBS[*]}"
-  [[ ${#FAILED_SCIENCE[@]} -gt 0 ]] && log "Failed science: ${FAILED_SCIENCE[*]}"
-  [[ ${#FAILED_TEMPLATE[@]} -gt 0 ]] && log "Failed template builds: ${FAILED_TEMPLATE[*]}"
-  [[ ${#FAILED_DIA[@]} -gt 0 ]] && log "Failed DIA: ${FAILED_DIA[*]}"
+  [[ ${#FAILED_CALIBS[@]} -gt 0 ]] && log_warn "Failed calibs: ${FAILED_CALIBS[*]}"
+  [[ ${#FAILED_SCIENCE[@]} -gt 0 ]] && log_warn "Failed science: ${FAILED_SCIENCE[*]}"
+  [[ ${#FAILED_TEMPLATE[@]} -gt 0 ]] && log_warn "Failed template builds: ${FAILED_TEMPLATE[*]}"
+  [[ ${#FAILED_DIA[@]} -gt 0 ]] && log_warn "Failed DIA: ${FAILED_DIA[*]}"
 fi
+
+# Print final log summary
+print_log_summary
+
 exit $EXIT_CODE

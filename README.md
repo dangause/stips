@@ -893,6 +893,35 @@ EOF
 
 ---
 
+## Logging
+
+Pipeline scripts write logs to `logs/{RUN_ID}/` with nested organization by stage:
+
+```
+logs/
+  └── YYYYMMDD_HHMMSS_{pid}/
+      ├── run_info.txt           # Run metadata
+      ├── summary.txt            # Final statistics
+      ├── bootstrap/             # 00_bootstrap_repo.sh
+      ├── calibs/{night}/        # 10_calibs.sh
+      │   ├── calibs.log
+      │   ├── cpBias.log
+      │   └── cpFlat.log
+      ├── science/{night}/       # 20_science.sh
+      │   ├── science.log
+      │   ├── processCcd.log
+      │   └── coadds.log
+      ├── templates/{band}/tract_{tract}/  # 30_coadds.sh
+      └── dia/{night}/{band}/    # 40_diff_imaging.sh
+          ├── dia.log
+          ├── quantum.log
+          └── results.txt
+```
+
+All logs include timestamps and are saved to both file and console. Each pipeline run gets a unique `RUN_ID` that groups all related logs together.
+
+---
+
 ## Directory Structure
 
 ```

@@ -9,6 +9,7 @@
 #   - Support for both DIA.yaml (standalone) and DRP.yaml#difference-imaging
 #   - Quality metrics and source counting
 #   - Light curve extraction guidance
+#   - Hierarchical logging system
 #
 # Requirements:
 #   1. Single-visit processing completed (20_science.sh)
@@ -19,6 +20,9 @@
 set -a
 source .env
 set +a
+
+# Source logging utilities
+source "$(dirname "$0")/../utilities/logging.sh"
 
 ########## CLI ##########
 NIGHT="${NIGHT:-}"
@@ -185,14 +189,21 @@ DIFF_PARENT="Nickel/runs/${NIGHT}/diff/${RUN_TS}"
 DIFF_RUN="${DIFF_PARENT}/run"
 
 QG_DIR="$REPO/qgraphs"; mkdir -p "$QG_DIR"
-LOGS_DIR="$OBS_NICKEL/logs"; mkdir -p "$LOGS_DIR"
 
 QG_FILE="$QG_DIR/diff_${NIGHT}_${RUN_TS}.qg"
 QG_DOT="$QG_DIR/diff_${NIGHT}_${RUN_TS}.dot"
-LOG_FILE="$LOGS_DIR/diff_${NIGHT}_${RUN_TS}.log"
 
-echo "=== [40_diff_imaging] night=${NIGHT} @ ${RUN_TS} ==="
-echo "[mode] Pipeline: $PIPELINE_MODE ($PIPE$SUBSET)"
+# Setup logging (creates LOG_DIR and LOG_FILE)
+setup_logging "dia" "$NIGHT" "$BAND"
+
+# Redirect all output to log file
+exec > >(tee -a "$LOG_FILE") 2>&1
+
+log_section "Difference Imaging Pipeline"
+log_info "Night: $NIGHT"
+log_info "Band: ${BAND:-all}"
+log_info "Pipeline mode: $PIPELINE_MODE ($PIPE$SUBSET)"
+log_info "RUN_TS: $RUN_TS"
 
 ########## LSST STACK ##########
 cd "$STACK_DIR"
@@ -217,27 +228,30 @@ obs_night_to_day_obs() {
 }
 
 DAY_OBS="$(obs_night_to_day_obs "$NIGHT")"
-echo "[night] Observing night: $NIGHT (local date)"
-echo "[night] UT day_obs: $DAY_OBS (FITS header date)"
+log_info "Observing night (local): $NIGHT"
+log_info "UT day_obs (FITS header): $DAY_OBS"
 
 ########## INPUT SANITY ##########
+log_section "Input Collection Discovery"
+
 # Find raw collection for this observing night
 # Collections are named by observing night: Nickel/raw/YYYYMMDD/timestamp
 RAW_RUN="$(butler query-collections "$REPO" 2>/dev/null | \
   awk '{print $1}' | \
   grep -E "^Nickel/raw/${NIGHT}/" | \
   tail -n1 || true)"
-[[ -n "$RAW_RUN" ]] || { echo "ERROR: No raw collection found for observing night ${NIGHT}"; exit 2; }
+[[ -n "$RAW_RUN" ]] || { log_error "No raw collection found for observing night ${NIGHT}"; exit 2; }
 
-echo "[inputs] RAW_RUN=$RAW_RUN"
-echo "[inputs] CALIB=$CALIB_CHAIN"
-echo "[inputs] REFCATS=$REFCATS_CHAIN"
-echo "[inputs] SKYMAPS=$SKYMAPS_CHAIN"
+log_info "Raw collection: $RAW_RUN"
+log_info "Calibs: $CALIB_CHAIN"
+log_info "Refcats: $REFCATS_CHAIN"
+log_info "Skymaps: $SKYMAPS_CHAIN"
 
 ########## TEMPLATE DISCOVERY ##########
+log_section "Template Discovery"
+
 if [[ "$AUTO_TEMPLATE" == "true" ]]; then
-  echo ""
-  echo "[template] Auto-discovering templates..."
+  log_info "Auto-discovering templates..."
 
   # Use metadata-based filtering if date exclusion requested
   if [[ -n "$EXCLUDE_DATES_START" && -n "$EXCLUDE_DATES_END" ]]; then
@@ -329,7 +343,7 @@ else
     echo ""
     exit 2
   fi
-  echo "[template] Using: $TEMPLATE_COLLECTION"
+  log_info "Using template: $TEMPLATE_COLLECTION"
 fi
 
 # Verify template has data
@@ -342,13 +356,13 @@ if [[ "$TEMPLATE_COUNT" -eq 0 ]]; then
   exit 2
 fi
 
-echo "[template] Found $TEMPLATE_COUNT template coadds in $TEMPLATE_COLLECTION"
+log_info "Found $TEMPLATE_COUNT template coadds in $TEMPLATE_COLLECTION"
 
 ########## FIND SCIENCE PARENT RUN ##########
 # Need to find the science processing run with preliminary_visit_image
 # This is the input to DIA pipeline
 echo ""
-echo "[science] Finding science processing run for observing night ${NIGHT}..."
+log_info "Finding science processing run for observing night $NIGHT..."
 
 # Science runs are organized by observing night: Nickel/runs/YYYYMMDD/processCcd/...
 SCI_PARENT="$(butler query-collections "$REPO" 2>/dev/null | \
@@ -368,7 +382,7 @@ if [[ -z "$SCI_PARENT" ]]; then
   exit 2
 fi
 
-echo "[science] Using: $SCI_PARENT"
+log_info "Using science collection: $SCI_PARENT"
 
 # Verify science run has required datasets
 if ! butler query-datasets "$REPO" preliminary_visit_image \
@@ -425,12 +439,12 @@ fi
 # NOTE: Do NOT include tract in query - preliminary_visit_image doesn't have tract dimension
 DATA_ID_QUERY="instrument='Nickel' AND exposure.observation_type='science' AND day_obs=${DAY_OBS}${OBJECT_EXPR}${BAD_EXPR}${BAND_EXPR}"
 
-echo ""
-echo "[where] $DATA_ID_QUERY"
-echo ""
+log_section "Quantum Graph Generation"
+log_info "WHERE clause: $DATA_ID_QUERY"
 
-########## GENERATE QUANTUM GRAPH ##########
-echo "[qgraph] Generating quantum graph -> $QG_FILE"
+# Create quantum graph log
+QUANTUM_LOG="$(get_task_log "quantum")"
+log_info "Quantum graph log: $QUANTUM_LOG"
 
 # Build config options
 CONFIG_OPTS=()
@@ -454,8 +468,9 @@ if ! pipetask qgraph \
   --save-qgraph "$QG_FILE" \
   --qgraph-dot "$QG_DOT" \
   "${CONFIG_OPTS[@]}" \
-  -d "$DATA_ID_QUERY"; then
-  echo "[ERROR] Quantum graph generation failed"
+  -d "$DATA_ID_QUERY" \
+  2>&1 | tee "$QUANTUM_LOG"; then
+  log_error "Quantum graph generation failed"
   echo ""
   echo "Common issues:"
   echo "  1. No exposures match the query (check observing_day=${NIGHT}, object filter, exclusions)"
@@ -483,30 +498,24 @@ pipetask qgraph -b "$REPO" -g "$QG_FILE" --show tasks 2>/dev/null || true
 echo ""
 
 ########## RUN DIFFERENCE IMAGING ##########
-echo "[run] Running difference imaging pipeline (jobs=${JOBS})..."
-echo "      Log: $LOG_FILE"
-echo ""
+log_section "Executing Pipeline"
+log_info "Running difference imaging pipeline (jobs=$JOBS)"
 
 if pipetask run \
     -b "$REPO" \
     -g "$QG_FILE" \
     --register-dataset-types \
-    -j "$JOBS" \
-    2>&1 | tee "$LOG_FILE"; then
+    -j "$JOBS"; then
 
   # Create/update collection chain
   butler collection-chain "$REPO" "$DIFF_PARENT" "$DIFF_RUN" --mode redefine >/dev/null 2>&1 || \
   butler collection-chain "$REPO" "$DIFF_PARENT" "$DIFF_RUN"
 
-  echo ""
-  echo "================================================================================"
-  echo "=== [40_diff_imaging] SUCCESS ==="
-  echo "================================================================================"
-  echo "Night:               $NIGHT"
-  echo "Template:            $TEMPLATE_COLLECTION"
-  echo "DIA collection:      $DIFF_RUN"
-  echo "DIA parent:          $DIFF_PARENT"
-  echo ""
+  log_section "Output Summary"
+  log_info "Night: $NIGHT"
+  log_info "Template: $TEMPLATE_COLLECTION"
+  log_info "DIA collection: $DIFF_RUN"
+  log_info "DIA parent: $DIFF_PARENT"
 
   # Query and show created datasets
   DIFF_IMG_COUNT="$(butler query-datasets "$REPO" difference_image \
@@ -519,12 +528,44 @@ if pipetask run \
     --where "instrument='Nickel' AND day_obs=${DAY_OBS}" \
     2>/dev/null | tail -n +3 | wc -l || echo "0")"
 
-  echo "[outputs] Created $DIFF_IMG_COUNT difference images, $DIA_SRC_COUNT DIA source catalogs"
-  echo ""
+  DIFF_IMG_COUNT="$(echo "$DIFF_IMG_COUNT" | xargs)"
+  DIA_SRC_COUNT="$(echo "$DIA_SRC_COUNT" | xargs)"
+
+  log_info "Difference images: $DIFF_IMG_COUNT"
+  log_info "DIA source catalogs: $DIA_SRC_COUNT"
+
+  # Write results summary file
+  RESULTS_FILE="$LOG_DIR/results.txt"
+  {
+    echo "DIA Results Summary"
+    echo "==================="
+    echo ""
+    echo "Night: $NIGHT"
+    echo "Band: ${BAND:-all}"
+    echo "UT day_obs: $DAY_OBS"
+    echo "Template: $TEMPLATE_COLLECTION"
+    echo ""
+    echo "Outputs:"
+    echo "  Difference images: $DIFF_IMG_COUNT"
+    echo "  DIA sources: $DIA_SRC_COUNT"
+    echo "  Collection: $DIFF_RUN"
+    echo ""
+    echo "Files:"
+    echo "  Quantum graph: $QG_FILE"
+    echo "  Log: $LOG_FILE"
+  } > "$RESULTS_FILE"
+
+  log_info "Results summary: $RESULTS_FILE"
+
+  # Print final log summary
+  print_log_summary
+
+  log_section "DIA Processing Complete"
+  exit 0
 
 else
-  echo ""
-  echo "[ERROR] Difference imaging failed; see log: $LOG_FILE"
+  log_error "Difference imaging failed"
+  log_error "Check log: $LOG_FILE"
   echo ""
   echo "Common failure modes:"
   echo "  1. Template/science PSF mismatch (check seeing in both)"
@@ -532,5 +573,6 @@ else
   echo "  3. Insufficient kernel stars for PSF matching"
   echo "  4. Memory issues (try reducing -j/--jobs)"
   echo ""
+  print_log_summary
   exit 2
 fi

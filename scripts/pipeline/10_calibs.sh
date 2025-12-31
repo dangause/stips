@@ -8,6 +8,9 @@ set -a
 source .env
 set +a
 
+# Source logging utilities
+source "$(dirname "$0")/../utilities/logging.sh"
+
 ########## CLI ##########
 NIGHT="${NIGHT:-}"
 JOBS="${JOBS:-4}"
@@ -53,7 +56,16 @@ CALIB_CHAIN="Nickel/calib/current"        # unified chain for science
 
 QG_DIR="$REPO/qgraphs"; mkdir -p "$QG_DIR"
 
-echo "=== [calibs] night=${NIGHT} @ ${RUN_TS} ==="
+# Setup logging (creates LOG_DIR and LOG_FILE)
+setup_logging "calibs" "$NIGHT"
+
+# Redirect all output to log file
+exec > >(tee -a "$LOG_FILE") 2>&1
+
+log_section "Calibration Processing"
+log_info "Night: $NIGHT"
+log_info "Jobs: $JOBS"
+log_info "RUN_TS: $RUN_TS"
 
 ########## STACK ##########
 cd "$STACK_DIR"
@@ -92,15 +104,22 @@ pipetask qgraph \
   --save-qgraph "$QG_BIAS" \
   -d "instrument='Nickel' AND exposure.observation_type='bias'"
 
-echo "[run] cpBias ..."
+log_section "Running cpBias"
+BIAS_LOG="$(get_task_log "cpBias")"
+log_info "cpBias log: $BIAS_LOG"
+
 if pipetask run \
     -b "$REPO" \
     -g "$QG_BIAS" \
     -j "$JOBS" \
-    --register-dataset-types; then
-  :
+    --register-dataset-types \
+    2>&1 | tee "$BIAS_LOG"; then
+  log_info "cpBias completed successfully"
 else
-  echo "[ERROR] cpBias failed"; exit 2
+  log_error "cpBias failed"
+  log_error "Check log: $BIAS_LOG"
+  print_log_summary
+  exit 2
 fi
 
 # Ensure child RUN exists, then (re)define the parent chain
@@ -147,15 +166,22 @@ pipetask qgraph \
   -c cpFlatIsr:doDark=False \
   -c cpFlatIsr:doOverscan=True
 
-echo "[run] cpFlat ..."
+log_section "Running cpFlat"
+FLAT_LOG="$(get_task_log "cpFlat")"
+log_info "cpFlat log: $FLAT_LOG"
+
 if pipetask run \
     -b "$REPO" \
     -g "$QG_FLAT" \
     -j "$JOBS" \
-    --register-dataset-types; then
-  :
+    --register-dataset-types \
+    2>&1 | tee "$FLAT_LOG"; then
+  log_info "cpFlat completed successfully"
 else
-  echo "[ERROR] cpFlat failed"; exit 2
+  log_error "cpFlat failed"
+  log_error "Check log: $FLAT_LOG"
+  print_log_summary
+  exit 2
 fi
 
 # Ensure child RUN exists, then (re)define the parent chain
@@ -232,13 +258,15 @@ else
 fi
 
 ########## SUMMARY ##########
-echo "=== [calibs] done ==="
-echo "RAW_RUN         = $RAW_RUN"
-echo "CURATED_RUN     = $CURATED_RUN"
-echo "CP_RUN_BIAS     = $CP_RUN_BIAS"
-echo "CP_RUN_BIAS_RUN = $CP_RUN_BIAS_RUN"
-echo "CP_RUN_FLAT     = $CP_RUN_FLAT"
-echo "CP_RUN_FLAT_RUN = $CP_RUN_FLAT_RUN"
-echo "DEFECTS_RUN     = $DEFECTS_RUN"
-echo "CALIB_OUT       = $CALIB_OUT"
-echo "CALIB_CHAIN     = $CALIB_CHAIN"
+log_section "Calibration Processing Complete"
+log_info "RAW_RUN: $RAW_RUN"
+log_info "CURATED_RUN: $CURATED_RUN"
+log_info "CP_RUN_BIAS: $CP_RUN_BIAS"
+log_info "CP_RUN_BIAS_RUN: $CP_RUN_BIAS_RUN"
+log_info "CP_RUN_FLAT: $CP_RUN_FLAT"
+log_info "CP_RUN_FLAT_RUN: $CP_RUN_FLAT_RUN"
+log_info "DEFECTS_RUN: $DEFECTS_RUN"
+log_info "CALIB_OUT: $CALIB_OUT"
+log_info "CALIB_CHAIN: $CALIB_CHAIN"
+
+print_log_summary
