@@ -95,13 +95,11 @@ Pipeline Control:
 Reference YAML Format:
   object: "TARGET_NAME"
   nights:
-    20201207:                 # Observing night (local date, used for collection paths)
-      day_obs: 20201208       # UT date in FITS headers (for Butler queries)
-      filters:
-        v: [76482094]         # Visit IDs for each filter
-        r: [76482095, 76482092]
-        b: [76482093]
-        i: [76482096]
+    20201207:               # Observing night (local date, used for collection paths)
+      v: [76482094]         # Visit IDs for each filter
+      r: [76482095, 76482092]
+      b: [76482093]
+      i: [76482096]
 USAGE
   exit 1
 }
@@ -336,7 +334,7 @@ parse_reference_yaml() {
   tmp_file="$(mktemp)"
   TEMP_FILES+=("$tmp_file")
 
-  # New schema: nights → observing_night → day_obs + filters → band → visits
+  # Schema: nights → observing_night → filter → visits
   # Extract observing night values (numeric keys under "nights:")
 
   if [[ -n "$band_filter" ]]; then
@@ -347,7 +345,7 @@ parse_reference_yaml() {
         current_night = substr($1, 1, length($1)-1)
         has_band = 0
       }
-      /^      [a-z]:/ && current_night != "" {
+      /^    [a-z]:/ && current_night != "" {
         filter_name = substr($1, 1, length($1)-1)
         if (filter_name == band) {
           has_band = 1

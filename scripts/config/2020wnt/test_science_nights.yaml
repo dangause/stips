@@ -1,0 +1,14 @@
+# Science nights reference for 2020wnt (bright SN epochs)
+# Schema: observing_night → filter → visit IDs
+# Generated: 2025-12-31
+#
+# Observing night = local date when observations BEGIN (used for collection paths like Nickel/raw/YYYYMMDD)
+# The pipeline automatically computes UT day_obs from observing night for Butler queries
+
+object: "2020wnt"
+
+nights:
+  20201219:
+    v: [76606105]
+    r: [76606103, 76606106]
+    i: [76606107]

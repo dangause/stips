@@ -38,20 +38,20 @@ def query_visits(db_path, object_name):
     results = cursor.fetchall()
     conn.close()
 
-    # Organize by obs_night → day_obs → filter → visits
+    # Organize by obs_night → filter → visits
     nights = {}
     for day_obs, filter_name, visit_str in results:
         obs_night = day_obs_to_obs_night(day_obs)
 
         if obs_night not in nights:
-            nights[obs_night] = {"day_obs": day_obs, "filters": {}}
+            nights[obs_night] = {}
 
         # Convert filter names (V, R, B, I) to lowercase (v, r, b, i)
         filter_lower = filter_name.lower()
 
         # Parse visit IDs
         visits = [int(v.strip()) for v in visit_str.split(",")]
-        nights[obs_night]["filters"][filter_lower] = visits
+        nights[obs_night][filter_lower] = visits
 
     return nights
 
@@ -60,31 +60,30 @@ def write_yaml(nights, output_path, object_name, description):
     """Write nights data to YAML file."""
     with open(output_path, "w") as f:
         f.write(f"# {description}\n")
-        f.write("# Schema: observing_night → day_obs → filter → visit IDs\n")
+        f.write("# Schema: observing_night → filter → visit IDs\n")
         f.write(f"# Generated: {datetime.now().strftime('%Y-%m-%d')}\n")
         f.write("#\n")
         f.write(
             "# Observing night = local date when observations BEGIN (used for collection paths like Nickel/raw/YYYYMMDD)\n"
         )
-        f.write("# day_obs = UT date in FITS headers (used for Butler WHERE clauses)\n")
-        f.write("# For California (UTC-8), day_obs is typically obs_night + 1 day\n")
+        f.write(
+            "# The pipeline automatically computes UT day_obs from observing night for Butler queries\n"
+        )
         f.write("\n")
         f.write(f'object: "{object_name}"\n')
         f.write("\n")
         f.write("nights:\n")
 
         for obs_night in sorted(nights.keys()):
-            night_data = nights[obs_night]
+            filters = nights[obs_night]
             f.write(f"  {obs_night}:\n")
-            f.write(f"    day_obs: {night_data['day_obs']}\n")
-            f.write("    filters:\n")
 
             # Write filters in canonical order: v, r, b, i
             for filter_name in ["v", "r", "b", "i"]:
-                if filter_name in night_data["filters"]:
-                    visits = night_data["filters"][filter_name]
+                if filter_name in filters:
+                    visits = filters[filter_name]
                     visits_str = ", ".join(str(v) for v in visits)
-                    f.write(f"      {filter_name}: [{visits_str}]\n")
+                    f.write(f"    {filter_name}: [{visits_str}]\n")
             f.write("\n")
 
 
@@ -121,16 +120,19 @@ def main():
     # Query all visits
     all_nights = query_visits(str(db_path), args.object)
 
-    # Apply date filtering if specified
+    # Apply date filtering if specified (filter by observing night directly)
     if args.start_date or args.end_date:
         filtered_nights = {}
-        for obs_night, night_data in all_nights.items():
-            day_obs = night_data["day_obs"]
+        for obs_night, filters in all_nights.items():
+            # Convert obs_night back to day_obs for comparison
+            dt = datetime.strptime(str(obs_night), "%Y%m%d")
+            day_obs = int((dt + timedelta(days=1)).strftime("%Y%m%d"))
+
             if args.start_date and day_obs < args.start_date:
                 continue
             if args.end_date and day_obs > args.end_date:
                 continue
-            filtered_nights[obs_night] = night_data
+            filtered_nights[obs_night] = filters
         nights = filtered_nights
         print(f"Date filter: {args.start_date or 'any'} to {args.end_date or 'any'}")
         print(f"Filtered: {len(nights)}/{len(all_nights)} nights")
