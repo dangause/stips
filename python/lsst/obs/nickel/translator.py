@@ -181,13 +181,97 @@ class NickelTranslator(FitsTranslator):
 
     @cache_translation
     def to_tracking_radec(self):
-        # Use primary WCS center; RA/Dec in degrees; frame from RADECSYS/RADESYS.
-        return tracking_from_degree_headers(
-            self,
-            ("RADECSYS", "RADESYS"),
-            (("CRVAL1", "CRVAL2"),),
-            unit=u.deg,
-        )
+        """Get tracking RA/Dec with validation against telescope position.
+
+        Nickel telescope has a known issue where CRVAL1/CRVAL2 (WCS keywords)
+        sometimes disagree with RA/DEC (telescope control system keywords).
+        This implements a tiered approach:
+
+        1. Try CRVAL1/CRVAL2 (preferred WCS solution)
+        2. If available, compare with RA/DEC keywords
+        3. If they disagree by more than tolerance, use RA/DEC instead
+        4. Log a warning when coordinates are corrected
+
+        Tolerance is set to 1 degree to catch major discrepancies while
+        allowing for small pointing adjustments or proper motion.
+        """
+        from astropy.coordinates import SkyCoord
+
+        tolerance_deg = 1.0  # Degree tolerance for coordinate agreement
+
+        # Try to get CRVAL coordinates (WCS solution)
+        crval_coord = None
+        try:
+            crval_coord = tracking_from_degree_headers(
+                self,
+                ("RADECSYS", "RADESYS"),
+                (("CRVAL1", "CRVAL2"),),
+                unit=u.deg,
+            )
+        except Exception as e:
+            log.warning(f"Failed to read CRVAL1/CRVAL2: {e}")
+
+        # Try to get RA/DEC coordinates (telescope control system)
+        radec_coord = None
+        try:
+            # RA/DEC are in sexagesimal format, need to parse them
+            ra_str = self._header.get("RA")
+            dec_str = self._header.get("DEC")
+
+            if ra_str and dec_str:
+                # Parse sexagesimal coordinates (HH:MM:SS.SS format)
+                ra_angle = Angle(ra_str, unit=u.hourangle)
+                dec_angle = Angle(dec_str, unit=u.deg)
+
+                # Get reference frame from RADECSYS/RADESYS
+                ref_system = (
+                    self._header.get("RADECSYS")
+                    or self._header.get("RADESYS")
+                    or "ICRS"
+                )
+
+                # Create SkyCoord to match the format from tracking_from_degree_headers
+                radec_coord = SkyCoord(ra_angle, dec_angle, frame=ref_system.lower())
+        except Exception as e:
+            log.debug(f"Failed to read RA/DEC keywords: {e}")
+
+        # If we have both, validate they agree
+        if crval_coord and radec_coord:
+            # Extract RA/Dec values from SkyCoord objects
+            crval_ra = crval_coord.ra.to(u.deg).value
+            crval_dec = crval_coord.dec.to(u.deg).value
+            radec_ra = radec_coord.ra.to(u.deg).value
+            radec_dec = radec_coord.dec.to(u.deg).value
+
+            # Calculate angular separation
+            ra_diff = abs(crval_ra - radec_ra)
+            dec_diff = abs(crval_dec - radec_dec)
+
+            # Handle RA wrap-around at 0/360 degrees
+            if ra_diff > 180:
+                ra_diff = 360 - ra_diff
+
+            # Check if coordinates disagree
+            if ra_diff > tolerance_deg or dec_diff > tolerance_deg:
+                log.warning(
+                    f"CRVAL1/CRVAL2 ({crval_ra:.4f}, {crval_dec:.4f}) "
+                    f"disagrees with RA/DEC ({radec_ra:.4f}, {radec_dec:.4f}) "
+                    f"by ΔRA={ra_diff:.2f}°, ΔDec={dec_diff:.2f}°. "
+                    f"Using RA/DEC from telescope control system."
+                )
+                return radec_coord
+
+        # Use CRVAL if available and validated (or RA/DEC not available)
+        if crval_coord:
+            return crval_coord
+
+        # Fall back to RA/DEC if CRVAL not available
+        if radec_coord:
+            log.info("CRVAL1/CRVAL2 not available, using RA/DEC keywords")
+            return radec_coord
+
+        # If we get here, we have no coordinates at all
+        raise ValueError("No valid tracking coordinates found in FITS header")
 
     @cache_translation
     def to_temperature(self) -> u.Quantity:

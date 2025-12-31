@@ -43,7 +43,8 @@ Usage: $0 --night YYYYMMDD [options]
 Run difference imaging pipeline for transient/variable detection.
 
 Required:
-  -n, --night YYYYMMDD      Night to process
+  -n, --night YYYYMMDD      Observing night to process (local date, e.g., 20210721)
+                            Note: Uses observing_day dimension, not UT date
 
 Template Options (choose one):
   -t, --template COLLECTION Template coadd collection
@@ -397,10 +398,10 @@ if [[ -n "$BAND" ]]; then
 fi
 
 ########## BUILD DATA ID QUERY ##########
-# NOTE: Removed day_obs filter because directory night (e.g. 20220105) may differ from
-# metadata day_obs (e.g. 20220106) due to UT midnight crossing.
-# We're already constrained by the processCcd collection which is specific to the night directory.
-DATA_ID_QUERY="instrument='Nickel' AND exposure.observation_type='science'${OBJECT_EXPR}${BAD_EXPR}${SPATIAL_EXPR}"
+# NOTE: NIGHT should be the UT date (day_obs) from FITS headers, NOT the local observing night.
+# For Lick Observatory, observations taken on evening of 2021-07-21 local have day_obs=20210722.
+# Use scripts/utilities/observing_night_to_ut.sh to convert if needed.
+DATA_ID_QUERY="instrument='Nickel' AND exposure.observation_type='science' AND day_obs=${NIGHT}${OBJECT_EXPR}${BAD_EXPR}${SPATIAL_EXPR}"
 
 echo ""
 echo "[where] $DATA_ID_QUERY"
@@ -435,9 +436,10 @@ if ! pipetask qgraph \
   echo "[ERROR] Quantum graph generation failed"
   echo ""
   echo "Common issues:"
-  echo "  1. No exposures match the query (check day_obs, object filter, exclusions)"
+  echo "  1. No exposures match the query (check observing_day=${NIGHT}, object filter, exclusions)"
   echo "  2. Template doesn't cover the tract/patch of your science exposures"
   echo "  3. Missing preliminary_visit_image in science run"
+  echo "  4. observing_day dimension not populated (need to re-ingest data)"
   echo ""
   exit 2
 fi
@@ -485,82 +487,17 @@ if pipetask run \
   echo ""
 
   # Query and show created datasets
-  echo "[outputs] Difference images:"
   DIFF_IMG_COUNT="$(butler query-datasets "$REPO" difference_image \
     --collections "$DIFF_RUN" \
-    --where "instrument='Nickel'" \
+    --where "instrument='Nickel' AND day_obs=${NIGHT}" \
     2>/dev/null | tail -n +3 | wc -l || echo "0")"
-  echo "  → Created $DIFF_IMG_COUNT difference images (all day_obs)"
-  if [[ "$DIFF_IMG_COUNT" -gt 0 ]]; then
-    DIFF_DAYS="$(butler query-datasets "$REPO" difference_image \
-      --collections "$DIFF_RUN" \
-      --where "instrument='Nickel'" \
-      2>/dev/null | awk 'NR>2 {print $8}' | sort -u | paste -sd, - || true)"
-    [[ -n "$DIFF_DAYS" ]] && echo "    day_obs present: $DIFF_DAYS"
-    if [[ "$DIFF_DAYS" != *"$NIGHT"* ]]; then
-      echo "    note: night dir ${NIGHT} crosses UT → day_obs may differ (common around midnight)"
-    fi
-  fi
 
-  echo ""
-  echo "[outputs] DIA sources detected:"
   DIA_SRC_COUNT="$(butler query-datasets "$REPO" dia_source_unfiltered \
     --collections "$DIFF_RUN" \
-    --where "instrument='Nickel'" \
-    2>/dev/null | tail -n +3 | wc -l || echo "0")"
-  echo "  → Created $DIA_SRC_COUNT DIA source catalogs (all day_obs)"
-  if [[ "$DIA_SRC_COUNT" -gt 0 ]]; then
-    DIA_DAYS="$(butler query-datasets "$REPO" dia_source_unfiltered \
-      --collections "$DIFF_RUN" \
-      --where "instrument='Nickel'" \
-      2>/dev/null | awk 'NR>2 {print $8}' | sort -u | paste -sd, - || true)"
-    [[ -n "$DIA_DAYS" ]] && echo "    day_obs present: $DIA_DAYS"
-    if [[ "$DIA_DAYS" != *"$NIGHT"* ]]; then
-      echo "    note: night dir ${NIGHT} crosses UT → day_obs may differ (common around midnight)"
-    fi
-  fi
-
-  # Show sample of DIA sources
-  echo ""
-  echo "Sample DIA source catalogs:"
-  butler query-datasets "$REPO" dia_source_unfiltered \
-    --collections "$DIFF_RUN" \
     --where "instrument='Nickel' AND day_obs=${NIGHT}" \
-    2>/dev/null | head -5 | sed 's/^/  /' || true
+    2>/dev/null | tail -n +3 | wc -l || echo "0")"
 
-  echo ""
-  echo "================================================================================"
-  echo "Next steps:"
-  echo ""
-  echo "1. INSPECT DIFFERENCE IMAGES (visual QA)"
-  echo "   Use DS9 or Firefly to view difference images and check quality"
-  echo ""
-  echo "2. EXTRACT LIGHT CURVE for specific transient/variable:"
-  echo "   By coordinates:"
-  echo "     python scripts/python/pipeline_tools/extract_lightcurve.py \\"
-  echo "       --repo \$REPO \\"
-  echo "       --collection '$DIFF_RUN' \\"
-  echo "       --ra YOUR_RA --dec YOUR_DEC \\"
-  echo "       --radius 1.0 \\"
-  echo "       --output lightcurve.csv"
-  echo ""
-  echo "   By object name (requires SIMBAD/NED):"
-  echo "     python scripts/python/pipeline_tools/extract_lightcurve.py \\"
-  echo "       --repo \$REPO \\"
-  echo "       --collection '$DIFF_RUN' \\"
-  echo "       --object 'AT2024abc' \\"
-  echo "       --output lightcurve_AT2024abc.csv"
-  echo ""
-  echo "3. ASSESS DIA QUALITY:"
-  echo "   Check logs for warnings: $LOG_FILE"
-  echo "   Query DIA metrics:"
-  echo "     butler query-datasets \$REPO \\"
-  echo "       --collections '$DIFF_RUN' \\"
-  echo "       difference_image"
-  echo ""
-  echo "4. MULTI-NIGHT PROCESSING:"
-  echo "   Process more nights and combine light curves across dates"
-  echo "================================================================================"
+  echo "[outputs] Created $DIFF_IMG_COUNT difference images, $DIA_SRC_COUNT DIA source catalogs"
   echo ""
 
 else

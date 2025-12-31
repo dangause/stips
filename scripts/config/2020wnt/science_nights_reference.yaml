@@ -1,0 +1,23 @@
+# Science nights reference for 2020wnt
+# Simple mapping: observing night label → UT day_obs values for Butler queries
+# Repository: /Users/dangause/Developer/lick/lsst/data/nickel/2020wnt_dia_repo2
+# Created: 2025-12-31
+
+object: "2020wnt"
+
+# Simple list: each entry maps an observing night to its UT day_obs value(s)
+nights:
+  20201207: [20201208]
+  20201219: [20201220]
+  20210208: [20210209]
+  20210218: [20210219]
+  20210228: [20210301]
+  20210306: [20210307]
+  20210321: [20210322]
+  20210324: [20210325]
+  20210706: [20210707]
+  20210712: [20210713]
+  20210715: [20210716]
+  20210721: [20210722]
+  20210724: [20210725]
+  20210810: [20210811]
