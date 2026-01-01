@@ -58,6 +58,22 @@ SKIP_INGEST=false
 VERBOSE=false
 
 # ==========================================
+# Setup Logging
+# ==========================================
+
+# Source logging utilities if available
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -f "$SCRIPT_DIR/../utilities/logging.sh" ]]; then
+    source "$SCRIPT_DIR/../utilities/logging.sh"
+else
+    # Fallback logging functions if logging.sh not available
+    log_info() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] [INFO] $*"; }
+    log_error() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] [ERROR] $*" >&2; }
+    log_warn() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] [WARN] $*"; }
+    log_section() { echo ""; echo "========================================"; echo "  $*"; echo "========================================"; }
+fi
+
+# ==========================================
 # Functions
 # ==========================================
 
@@ -66,12 +82,8 @@ usage() {
     exit 1
 }
 
-log() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"
-}
-
 error() {
-    echo "[ERROR] $*" >&2
+    log_error "$*"
     exit 1
 }
 
@@ -160,7 +172,7 @@ fi
 # Setup LSST Stack
 # ==========================================
 
-log "Setting up LSST Stack..."
+log_info "Setting up LSST Stack..."
 
 cd "$STACK_DIR"
 source loadLSST.zsh
@@ -211,42 +223,38 @@ PYTHON_ARGS=(
 # Print Configuration
 # ==========================================
 
-log "=========================================="
-log "PS1 Template Ingestion"
-log "=========================================="
-log ""
-log "Target coordinates:    RA=$RA, Dec=$DEC"
-log "Nickel band:           $BAND"
-log "Collection:            $COLLECTION"
-[[ -n "$TRACT" ]] && log "Tract:                 $TRACT" || log "Tract:                 auto-determine"
-log "Cutout size:           ${CUTOUT_SIZE}°"
-log "Output directory:      $OUTPUT_DIR"
-log ""
+log_section "PS1 Template Ingestion"
+log_info ""
+log_info "Target coordinates:    RA=$RA, Dec=$DEC"
+log_info "Nickel band:           $BAND"
+log_info "Collection:            $COLLECTION"
+[[ -n "$TRACT" ]] && log_info "Tract:                 $TRACT" || log_info "Tract:                 auto-determine"
+log_info "Cutout size:           ${CUTOUT_SIZE}°"
+log_info "Output directory:      $OUTPUT_DIR"
+log_info ""
 
 # ==========================================
 # Run Ingestion
 # ==========================================
 
-log "Running PS1 template ingestion..."
-log ""
+log_info "Running PS1 template ingestion..."
+log_info ""
 
 if "$PYTHON_CMD" "${PYTHON_ARGS[@]}"; then
-    log ""
-    log "=========================================="
-    log "PS1 Template Ingestion Complete"
-    log "=========================================="
-    log ""
-    log "Template collection: $COLLECTION"
-    log ""
-    log "Verify ingestion:"
-    log "  butler query-datasets $REPO template_coadd \\"
-    log "    --collections $COLLECTION"
-    log ""
-    log "Use in DIA pipeline:"
-    log "  ./scripts/pipeline/40_diff_imaging.sh \\"
-    log "    --night YYYYMMDD \\"
-    log "    --template $COLLECTION"
-    log ""
+    log_info ""
+    log_section "PS1 Template Ingestion Complete"
+    log_info ""
+    log_info "Template collection: $COLLECTION"
+    log_info ""
+    log_info "Verify ingestion:"
+    log_info "  butler query-datasets $REPO template_coadd \\"
+    log_info "    --collections $COLLECTION"
+    log_info ""
+    log_info "Use in DIA pipeline:"
+    log_info "  ./scripts/pipeline/40_diff_imaging.sh \\"
+    log_info "    --night YYYYMMDD \\"
+    log_info "    --template $COLLECTION"
+    log_info ""
     exit 0
 else
     error "PS1 template ingestion failed"

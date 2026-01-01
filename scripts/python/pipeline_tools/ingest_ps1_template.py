@@ -494,10 +494,13 @@ def ingest_exposure_to_butler(butler, exposure, ra, dec, band, collection, tract
     dims = None
     try:
         dt = butler.registry.getDatasetType("template_coadd")
-        dims = tuple(dt.dimensions)
-        log.debug(f"Found template_coadd dims: {dims}")
+        dims = tuple(
+            dt.dimensions.names
+        )  # Use .names to get iterable list of dimension names
+        log.info(f"Found existing template_coadd with dimensions: {dims}")
     except Exception:
         # Default to instrument-aware dimensions used by diffim templates
+        # This matches the Nickel-built templates
         dims = ("instrument", "skymap", "tract", "patch", "band")
         log.info(
             "Dataset type 'template_coadd' not found; registering it with dims %s", dims
@@ -550,12 +553,15 @@ def ingest_exposure_to_butler(butler, exposure, ra, dec, band, collection, tract
     log.info(f"Target tract={tract}, patch={patch}")
 
     # Build data ID matching dataset type dimensions
+    # Note: For PS1 templates, we don't include instrument dimension to match DIA pipeline expectations
     data_id = {
         "skymap": skymap_name,
         "tract": tract,
         "patch": patch,
         "band": band,
     }
+    # Only add instrument/physical_filter if they're in the dataset type dimensions
+    # (PS1 templates should NOT have these to work with DIA pipeline)
     if dims and "instrument" in dims:
         data_id["instrument"] = "Nickel"
     if dims and "physical_filter" in dims:
@@ -676,8 +682,13 @@ Examples:
 
     # Optional: Save as LSST FITS for inspection
     lsst_fits_path = Path(args.output_dir) / f"lsst_template_{args.band}.fits"
-    exposure.writeFits(str(lsst_fits_path))
-    log.info(f"Saved LSST Exposure to: {lsst_fits_path}")
+
+    # Only write if it doesn't already exist (avoid overwriting when using --ps1-fits)
+    if not lsst_fits_path.exists() or str(lsst_fits_path) != ps1_fits_path:
+        exposure.writeFits(str(lsst_fits_path))
+        log.info(f"Saved LSST Exposure to: {lsst_fits_path}")
+    else:
+        log.info(f"Using existing LSST Exposure: {lsst_fits_path}")
 
     if args.skip_ingest:
         log.info("Skipping Butler ingest (--skip-ingest)")
