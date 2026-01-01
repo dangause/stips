@@ -1,0 +1,28 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "nickel-refcats"
+version = "0.1.0"
+description = "Monster refcat cones → HTM7 → export (RSP) → import (local) for obs_nickel"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "astropy",
+    "astroquery",
+    "dotenv",
+    "ipykernel",
+    "numpy",
+    "pandas",
+]
+# LSST libs are optional and imported lazily in functions that need them.
+
+[project.scripts]
+nickel-refcats = "nickel_refcats.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/nickel_refcats"]
+
+[tool.hatch.build.targets.editable]
+packages = ["src/nickel_refcats"]

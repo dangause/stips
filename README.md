@@ -13,6 +13,28 @@ This package provides:
 
 > ✅ Tested with `lsst-scipipe-10.1.0` and `lsst-scipipe-11.0.0`
 
+## Monorepo layout
+
+- `packages/obs_nickel/` – instrument package (camera, configs, pipelines, Python)
+- `packages/archive_tools/` – archive/download, PS1 template ingest, skymap + DIA helpers (old `scripts/python/pipeline_tools`, `scripts/python/skymap`)
+- `packages/lick_searchable_archive/` – local copy of the Lick archive client/service code (frontend + API); original at `$LICK_ARCHIVE_DIR`
+- `packages/colorterms/` – Nickel colorterm fitting utilities and docs
+- `packages/defects/` – defect tooling + generated masks (legacy path still at `scripts/python/defects_tools`)
+- `packages/refcats/` – refcat manifests/helpers; upstream refcats code mirrored under `packages/refcats/upstream` (data excluded; see `data-manifests/`)
+- `packages/testdata/` – small fixtures for tests; upstream Nickel testdata mirrored under `packages/testdata/upstream`
+- `data-manifests/` – versioned pointers to refcats/defects/templates/archive bundles
+- `scripts/` – pipeline runners and utilities (unchanged; compatible with symlinks)
+
+From the repo root:
+
+```bash
+make setup-dev        # editable install of all packages
+make bootstrap        # run 00_bootstrap_repo.sh (source .env inside)
+make calibs NIGHT=... # run 10_calibs.sh
+make science NIGHT=...# run 20_science.sh
+make dia NIGHT=...    # run 40_diff_imaging.sh
+```
+
 ---
 
 ## Quick Start

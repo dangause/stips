@@ -1,0 +1,12 @@
+- name: Local init
+  hosts: 127.0.0.1
+  connection: local
+  roles:
+    - local_init
+
+- name: Ingest Watchdog Remote Deploy Playbook
+  hosts: backend
+  roles:
+    - common
+    - common_sw
+    - ingest_watchdog

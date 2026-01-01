@@ -1,35 +1,27 @@
-[build-system]
-requires = ["setuptools>=61"]
-build-backend = "setuptools.build_meta"
+[tool.uv.workspace]
+members = ["packages/*"]
 
-[project]
-name = "obs-nickel"
-version = "0.1.0"
-description = "LSST obs package for the Nickel telescope"
-authors = [{ name = "Dan Gause" }]
-dependencies = [
-    "astro_metadata_translator>=0.11.0",
-    "astropy",
-    "fastparquet>=2024.11.0",
-    "jupyterlab>=4.4.7",
-    "lsst-rsp>=0.10.0",
-    "notebook>=7.4.5",
-    "pandas>=2.3.2",
-    "pre-commit>=4.3.0",
-    "pyarrow>=21.0.0",
-    "pyvo>=1.7",
-]
-
-[tool.setuptools]
-packages = { find = { where = ["python"] } }
-
-[project.entry-points."astro_metadata_translator.translators"]
-Nickel = "lsst.obs.nickel.translator:NickelTranslator"
+[dependency-groups]
+dev = ["ruff", "pyright"]
 
 [tool.ruff]
 line-length = 110
-target-version = "py311"
-exclude = ["__init__.py"]
+target-version = "py312"
+src = [
+    "packages/obs_nickel",
+    "packages/archive_tools",
+    "packages/defects",
+    "packages/refcats",
+    "packages/testdata",
+    "scripts",
+]
+extend-exclude = [
+    # vendor mirrors
+    "packages/lick_searchable_archive/**",
+    "packages/refcats/upstream/**",
+    "packages/testdata/upstream/**",
+]
+force-exclude = true
 
 [tool.ruff.lint]
 ignore = ["N802", "N803", "N806", "N812", "N813", "N815", "N816", "N999"]

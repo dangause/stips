@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Mt. Hamilton Data Repository Search</title>
+    <link id="theme_link" rel="stylesheet" type="text/css" href="style/dark_theme.css"/>
+    <link rel="stylesheet" type="text/css" href="style/lick_archive_base.css"/>
+    {% block extra_stylesheets %}{% endblock %}
+</head>
+<body>
+<header>
+    <h1><img class="header_image" src="images/lick_logo.png" width="1150" height="1033" alt="Lick Observatory Logo">Mt. Hamilton Data Repository</h1>
+    <div id = "header_controls" class="header_controls">
+        <span id="user_section" class="user_section">
+            You are not logged in. <em id="user_name" class="user_name" hidden>no user</em><button id="loginout_button" class="header_button" name="login">Login</button>
+        </span>
+        <button id="theme_button" class="header_button">Switch to Light Theme</button>
+    </div>
+</header>
+<nav class="nav_sidebar">
+    <section class="nav_section">
+        <h1>Links</h1>
+        <ul class="nav_links_list">
+        <li>
+            {{ '<a href="index.html">' if pagename != "index" else '<span class="current_page_link">' }}
+            Search the repository
+            {{"</a>" if pagename != "index" else "</span>"}}
+        </li>
+        <li>
+            <a href="https://mthamilton.ucolick.org/data/">Browse the repository by date<br>(Use previous archive)</a>
+        </li>
+        <li><a href="https://mthamilton.ucolick.org/">Mt Hamilton Home Page</a></li>
+        <li><a href="https://www.ucobservatories.org/">UC Observatories Home Page</a></li>
+        </ul>
+    </section>
+    <section class = "nav_section">
+        <h1>Documentation</h1>
+        <ul class="nav_links_list">
+        <li>
+            {{ '<a href="how_to_use.html">' if pagename != "how_to_use" else '<span class="current_page_link">' }}
+            How to use the repository
+            {{"</a>" if pagename != "how_to_use" else "</span>"}}
+        </li>
+        <li>
+            {{ '<a href="fields.html">' if pagename != "fields" else '<span class="current_page_link">' }}
+            Description of all fields
+            {{"</a>" if pagename != "fields" else "</span>"}}
+        </li>
+    </ul>
+    </section>
+    {% block contents %}
+    {% endblock %}
+</nav>
+<main>
+{% block body %}
+{% endblock %}
+</main>
+<!--
+<footer>
+Footer text?
+</footer>
+-->
+{% block scripts %}
+{% endblock %}
+</body>
+</html>

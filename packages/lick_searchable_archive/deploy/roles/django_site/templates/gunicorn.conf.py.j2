@@ -1,0 +1,50 @@
+# gunicorn settings, see https://docs.gunicorn.org/en/latest/settings.html#logging
+wsgi_app = "lick_archive.lick_archive_site.wsgi:application"
+
+# Create a pidfile
+pidfile="/var/run/gunicorn/gunicorn.pid"
+
+# Number of workers.
+workers=2
+
+# Type of worker, multi threaded to help support streaming tar files
+worker_class = "gthread"
+threads = 2
+
+# Worker timeout. Set based on the timeout on retries set in dbutils. Note there is still an timeout from "graceful_timeout" default
+timeout=65
+
+{% if archive_config == "ops" %}
+bind = ['127.0.0.1:{{ api_port }}']
+{% else %}
+bind = ['0.0.0.0:{{ api_port }}']
+{% endif %}
+
+# Logging configuration
+
+{% if archive_config == "ops" %}
+loglevel = 'INFO'
+{% else %}
+loglevel = 'DEBUG'
+{% endif %}
+
+accesslog = "{{ archive_log_dir }}/gunicorn_access.log"
+errorlog = "{{ archive_log_dir }}/gunicorn_error.log"
+capture_output = True
+
+# Make logs group writeable so that scripts/tools run as admin users can
+# write logs
+umask=2
+
+# Hook to print stack trace if a worker aborts.
+def worker_abort(worker):
+    import traceback
+    stack_trace_lines = traceback.format_stack()
+    worker.log.error("".join(stack_trace_lines))
+
+
+{% if remote_watchdog %}
+# SSL certs
+keyfile="{{ archive_config_dir }}/ssl/private/{{ cert_basename }}_private.pem"
+certfile="{{ archive_config_dir }}/ssl/certs/{{ cert_basename }}.cert"
+{% endif %}

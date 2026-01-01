@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "obs-nickel"
+version = "0.1.0"
+description = "LSST obs package for the Nickel telescope"
+authors = [{ name = "Dan Gause" }]
+requires-python = ">=3.12"
+dependencies = [
+    "astro_metadata_translator>=0.11.0",
+    "astropy",
+    "fastparquet>=2024.11.0",
+    "jupyterlab>=4.4.7",
+    "lsst-rsp>=0.10.0",
+    "notebook>=7.4.5",
+    "pandas>=2.3.2",
+    "pre-commit>=4.3.0",
+    "pyarrow>=21.0.0",
+    "pyvo>=1.7",
+]
+readme = "README.md"
+
+[project.entry-points."astro_metadata_translator.translators"]
+Nickel = "lsst.obs.nickel.translator:NickelTranslator"
+
+[tool.setuptools.packages.find]
+where = ["python"]

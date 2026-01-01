@@ -1,0 +1,72 @@
+[ingest_watchdog]
+# Path to the archive directory
+data_root = {{ archive_data_root }}
+
+# How far back to scan directories when
+# resyncing at start up. In days.
+startup_resync_age = 7
+
+# The method used to detect new files.
+# "inotify" Uses the kernel inotify API, and does not have a delay. However,
+# it does not work over NFS.
+# "polling" Periodically scans the archive directory for files, and does
+# work over NFS.
+{% if remote_watchdog %}
+method = inotify
+{% else %}
+method = polling
+{% endif %}
+
+# The interval the watchdog will poll the archive directory with the
+# polling method
+polling_interval = 60
+
+# A "search" is the name for one of the polling tasks to periodically conduct.
+# They are comprised of an interval in seconds, and an age in days indicating
+# which directories in the archive to search for new files.
+#
+# For example: If the date is 2022-01-10, and the search string is "10:2,60:7"
+# There will be two searches.
+# The first runs every 10 seconds, and searches the directories for
+# the dates 2022-01-09 and 2022-01-10.
+# The second runs every 60 seconds, and searches the directories for
+# the dates 2022-01-04 through 2022-01-10.
+#
+# The searches do not duplicate effort, and may run late if the interval is
+# not a multiple of "polling_interval"
+polling_searches=60:2,300:7
+
+# The polling write delay, controls how long the polling method waits to
+# notify the archive after discovering a file. This gives time for the file
+# to be fully written to disk.
+polling_write_delay = 60
+
+# How far back (in days) the inotify method will look for new files.
+inotify_age = 7
+
+# The supported instrument directories
+instrument_dirs = {{ supported_instrument_dirs|join(', ') }}
+
+# The URL for notifying the archive software of new files
+{% if remote_watchdog %}
+ingest_url = https://{{ groups['backend']|first }}:{{api_port}}/{{archive_url_path_prefix}}/
+
+# Public key for the self-signed cert used to verify the server. This is optional, if it is not
+# provided the connection needs to be either http, or the server must have a
+# properly signed cert.
+# TODO will we ever do this? Get rid of remote watchdog variable?
+ingest_key = {{ archive_config_dir }}/ssl/public/{{ cert_basename }}_public.pem
+{% else %}
+ingest_url = {{ api_scheme }}://{{ api_server }}:{{ api_port }}/{{archive_url_path_prefix}}/
+{% endif %}
+
+# The maximum delay between retries when an error is detected contacting
+# the archive's ingest_url. The actual delay is a random number up to this
+ingest_retry_max_delay = 10
+
+# The maximum time to wait while retyring calls to the archive's ingst_url
+ingest_retry_max_time=120
+
+# How long to wait on a single call to the archive's ingest_url before
+# considering it a failure and retrying
+ingest_request_timeout=30

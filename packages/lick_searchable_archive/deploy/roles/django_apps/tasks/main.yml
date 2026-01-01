@@ -1,0 +1,49 @@
+- name: Install packages needed on all backend hosts
+  ansible.builtin.pip:
+    name: djangorestframework, sqlalchemy
+    virtualenv: "{{ venv_root }}"
+    virtualenv_command: python{{ python_version }} -m venv
+  become: yes
+  become_user: "{{ archive_service_user }}"
+  notify: "restart web services"
+  when: "'backend' in group_names"
+- name: Install passlib
+  ansible.builtin.pip:
+    name: passlib
+    virtualenv: "{{ venv_root }}"
+    virtualenv_command: python{{ python_version }} -m venv
+  become: yes
+  become_user: "{{ archive_service_user }}"
+  notify: "restart web services"
+  when: "'archive_auth' in archive_apps or 'archive_admin' in archive_apps"
+- name: Copy django apps
+  ansible.builtin.copy:
+    src: "{{ archive_source_dir }}/lick_archive/apps/{{ item }}"
+    dest: "{{ package_install_dir }}/lick_archive/apps"
+    owner: "{{ archive_service_user }}"
+    group: "{{ archive_service_group }}"
+    mode: 0660
+    directory_mode: 0770
+  become: yes
+  loop: "{{ archive_apps }}"
+  notify: "restart web services"
+- name: Gather Django static files
+  ansible.builtin.command:
+    cmd: "{{ venv_root }}/bin/python {{ venv_root }}/bin/manage.py collectstatic --no-input --clear"
+  become: yes
+  become_user: "{{ archive_service_user }}"
+  notify: "restart web services"
+  when: "'archive_admin' in archive_apps"
+- name: Copy Django static files
+  ansible.builtin.copy:
+    src: "{{ venv_root }}/static/"
+    dest: "/var/www/archive_static/archive/static/"
+    remote_src: true
+    owner: "{{ archive_service_user }}"
+    group: "{{ archive_service_group }}"
+    mode: 0770
+    directory_mode: 0770
+  become: yes
+  loop: "{{ archive_apps }}"
+  notify: "restart web services"
+  when: "'archive_admin' in archive_apps"

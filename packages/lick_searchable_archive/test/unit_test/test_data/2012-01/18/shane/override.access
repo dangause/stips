@@ -1,0 +1,4 @@
+# Test comments in an override.access file
+
+r1234.fits obstype flat
+r[12]* access ownerhint1 ownerhint2

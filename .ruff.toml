@@ -1,6 +1,14 @@
 # .ruff.toml
 target-version = "py312"
-line-length = 100
+line-length = 110
+
+# Keep vendored/upstream code out of linting.
+extend-exclude = [
+    "packages/lick_searchable_archive",
+    "packages/refcats/upstream",
+    "packages/testdata/upstream",
+]
+force-exclude = true
 
 [lint]
 # Keep basic sanity checks + import sorting; Black handles formatting.

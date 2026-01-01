@@ -1,0 +1,1 @@
+This is a simple text file that is not a fits file.

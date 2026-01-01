@@ -1,0 +1,14 @@
+{
+    "instruments":   {"KAST":      {"human_name": "Kast", "category": true, "parent": "", "children": ["KAST_BLUE", "KAST_RED"]},
+                      "KAST_BLUE": {"human_name": "Kast Blue", "category": false, "parent": "KAST"},
+                      "KAST_RED":  {"human_name": "Kast Red",  "category": false, "parent": "KAST"},
+                      "SHARCS":    {"human_name": "ShaneAO/ShARCS", "category": false, "parent":""}
+    },
+    "backendURLBase":   "archive/",
+    "resultFieldOrder": ["filename", "header", "instrument", "frame_type", "obs_date", "object", "exptime", "ra", "dec"],
+    "searchFields":     ["object", "obs_date", "filename", "coord"],
+    "searchArgs":       {"object": 1, "obs_date": 2, "filename": 1, "coord": 3},
+    "defaults":         {"page_size": 500} ,
+    "instrumentOrder":  ["KAST", "KAST_BLUE", "KAST_RED", "SHARCS"],
+    "defaultTheme":     "light"
+}

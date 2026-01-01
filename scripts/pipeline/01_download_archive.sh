@@ -99,7 +99,7 @@ echo "=== [00_download_archive] night=${NIGHT} ==="
 echo ""
 
 # Build command
-CMD=("${OBS_NICKEL}/scripts/fetch_archive_night.py")
+CMD=("${OBS_NICKEL}/scripts/python/pipeline_tools/fetch_archive_night.py")
 CMD+=(--night "$NIGHT")
 CMD+=(--raw-root "$RAW_PARENT_DIR")
 

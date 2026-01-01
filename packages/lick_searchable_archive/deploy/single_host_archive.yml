@@ -1,0 +1,23 @@
+- name: Local init
+  hosts: 127.0.0.1
+  connection: local
+  roles:
+    - local_init
+
+- name: Deploys lick searchable archive to a single node
+  hosts: backend
+  roles:
+    - common
+    - common_sw
+    - admin_tools
+    - database
+    - archive_mount_nfs
+    - django_site
+    - django_apps
+    - webserver
+    - frontend
+  tasks:
+    - name: Install services
+      include_role:
+        name: "{{ item }}"
+      loop: "{{ services }}"

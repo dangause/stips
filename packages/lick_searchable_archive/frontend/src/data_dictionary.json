@@ -1,0 +1,124 @@
+{
+    "resultFields":  {
+        "id": {
+            "human_name": "Internal Id",
+            "units": ""
+        },
+        "telescope": {
+            "human_name": "Telescope",
+            "units": ""
+        },
+        "instrument": {
+            "human_name": "Instrument",
+            "units": ""
+        },
+        "obs_date": {
+            "human_name": "Observation Date",
+            "units": "date"
+        },
+        "exptime": {
+            "human_name": "Exposure Time",
+            "units": "seconds"
+        },
+        "ra": {
+            "human_name": "Right Ascension",
+            "units": "angle"
+        },
+        "dec": {
+            "human_name": "Declination",
+            "units": "angle"
+        },
+        "object": {
+            "human_name": "Object",
+            "units": ""
+        },
+        "airmass": {
+            "human_name": "Airmass",
+            "units": ""
+        },
+        "frame_type": {
+            "human_name": "Frame Type",
+            "units": ""
+        },
+        "filename": {
+            "human_name": "File Name",
+            "units": ""
+        },
+        "program": {
+            "human_name": "Program",
+            "units": ""
+        },
+        "coversheet": {
+            "human_name": "Coversheet Id",
+            "units": ""
+        },
+        "observer": {
+            "human_name": "Observers",
+            "units": ""
+        },
+        "file_size": {
+            "human_name": "File size",
+            "units": "bytes"
+        },
+        "mtime": {
+            "human_name": "File Modification Time",
+            "units": "date"
+        },
+        "public_date": {
+            "human_name": "Date File Becomes Public",
+            "units": ""
+        },
+        "header": {
+            "human_name": "Header",
+            "units": ""
+        },
+        "slit_name": {
+            "human_name": "Slit Name",
+            "units": ""
+        },
+        "beam_splitter_pos": {
+            "human_name": "Beam Splitter Position",
+            "units": ""
+        },
+        "grism": {
+            "human_name": "Grism  (Blue only)",
+            "units": ""
+        },
+        "grating_name": {
+            "human_name": "Grating Name  (Red only)",
+            "units": ""
+        },
+        "grating_tilt": {
+            "human_name": "Grating Tilt",
+            "units": ""
+        },
+        "apername": {
+            "human_name": "Aperture Position",
+            "units": ""
+        },
+        "filter1": {
+            "human_name": "Filter 1",
+            "units": ""
+        },
+        "filter2": {
+            "human_name": "Filter 2",
+            "units": ""
+        },
+        "sci_filter": {
+            "human_name": "Science Filter",
+            "units": ""
+        },
+        "coadds_done": {
+            "human_name": "Number of Coadds",
+            "units": ""
+        },
+        "true_int_time": {
+            "human_name": "True Integration Time",
+            "units": "seconds"
+        },
+        "download_link": {
+            "human_name": "Download Link",
+            "units": ""
+        }
+    }
+}

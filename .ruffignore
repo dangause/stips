@@ -1,0 +1,4 @@
+# Vendor and mirrored upstream content that we keep unmodified.
+packages/lick_searchable_archive/**
+packages/refcats/upstream/**
+packages/testdata/upstream/**

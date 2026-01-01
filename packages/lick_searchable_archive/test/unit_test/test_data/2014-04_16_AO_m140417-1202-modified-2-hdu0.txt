@@ -1,0 +1,210 @@
+SIMPLE  =                    T / C# FITS: 4/16/2014 2:35:34 PM
+BITPIX  =                  -32
+NAXIS   =                    2 / Dimensionality
+NAXIS1  =                 2048
+NAXIS2  =                 2048
+LONGSTRN= 'OGIP 1.0'           / The OGIP Long String Convention may be used.
+EXTEND  =                    T / Extensions are permitted
+BUNIT   = 'ADU per coadd'      / Units of the pixel value
+DATE-OBS= '2014-04-16'         / UT start date of exposure
+TIME-OBS= '21:35:13.973'       / UT start time of exposure
+TIME-END= '21:35:32.676'       / UT end time of exposure (after last read)
+ITIME0  =             15000000 / Requested itime per coadd in microseconds
+COADDS0 =                    1 / Requested number of coadditions
+SMPMODE0=                    4 / Requested samp mode (1:Sing,2:CDS,3:MCDS,4:UTR)
+READS0  =                    1 / Requested sampling mode reads
+TRUITIME=              14.5479 / True integration time in seconds (per coadd)
+RMPRESET=                    1 / Number of resets in ramp
+RMPREADS=                    1 / Number of reads in ramp
+RMPDROP =                    9 / Number of drop frames in ramp
+RMPGROUP=                    2 / Number of groups in ramp
+RDITIME =              14.5479 / Time between sampling groups in seconds
+ABORTED =                    F / Exposure was stopped before completion
+COADDONE=                    1 / Number of coadds actually completed
+READDONE=                    2 / Reads actually completed in this coadd
+GRPSDONE=                    2 / Groups actually completed in this coadd
+IGNORDRD=                    0 / Number of discarded initial reads
+VRPSTYPE= 'channel '           / Vertical reference pixel subtraction type
+HRPSTYPE= 'none    '           / Horizontal reference pixel subtraction type
+SATURATE=                33000 / Detector saturation level (DN) from config file
+DTGAINNM=                    9 / Detector gain setting [0-15]
+DTGAINDB= '15.05 db (low)'     / Detector gain in dB
+DETGAIN =              5.65685 / Detector gain factor
+SYSGAIN =                 2.15 / System gain in e-/ADU
+VRESET  =               0.3011 / Reset voltage in V, obtained from ASIC
+DSUB    =               0.6002 / Substrate voltage in V, obtained from ASIC
+VBIASGAT=               2.0507 / Gate voltage of SCA in V, obtained from ASIC
+VBIASPWR=                  3.3 / Source voltage of SCA in V, obtained from ASIC
+CELLDRAN=                    0 / Celldrain (pix src follower) in V (from ASIC)
+DRAIN   =                    0 / Drain (output buffer) in V, obtained from ASIC
+VDDA    =               3.2453 / Analog SCA supply voltage in V (from ASIC)
+VDD     =               3.2453 / Digital SCA power supply in V (from ASIC)
+VREFMAIN=                1.173 / Ref voltage from bias block in V (from ASIC)
+VPREMDRF=               1.0362 / Mid ADC ref volt from bias blk in V (from ASIC)
+VPRAMRF1=               1.2512 / Ref volt 1 for internal preamp DAC in V (ASIC)
+HXRGCFG1= '0002 0020 0001 0000 0000 0000 0000 0000' / ASIC Regs 0x4010:0x4017
+HXRGCFG2= '0000 0001 0009 0000 0005 0000 0003 0001' / ASIC Regs 0x4018:0x401F
+HXRGVERS= '2.3     '           / HxRG timing code version
+COMMENT ------------------------------------------------------------------------
+COMMENT keyheader version 1.33
+COMMENT Location: /opt/kroot/bin/keyheader
+COMMENT Configuration: /usr/local/lick/data/ShaneAO/sharcs/keyheader.conf
+COMMENT Hostname: covert.ucolick.org
+COMMENT Program start time: 2014-04-16T21:35:14.445329
+COMMENT ------------------------------------------------------------------------
+COMMENT
+COMMENT - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+COMMENT keyheader section [ExposureBegin]
+COMMENT Snapshot timestamp: 2014-04-16T21:35:14.441375
+COMMENT - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+COMMENT
+COMMENT The following records correspond to the beginning of the exposure,
+COMMENT as recorded in the DATE-BEG record.
+ASICCFG = 'C:\SHARCSColdSidecarControlConfig.xml' / Sidecar config file name
+ASICHOST= 'stealthie.ucolick.org' / Sidecar server host name
+ASICPORT=                10051 / Sidecar server TCP port
+CD1_1   =                    0 / Degrees of RA per pixel in x
+CD1_2   =                    0 / Degrees of RA per pixel in y
+CD2_1   =                    0 / Degrees of DEC per pixel in x
+CD2_2   =                    0 / Degrees of DEC per pixel in y
+COADDS  =                    1 / Number of coadds
+CRPIX1  =                    0 / X coordinate of center pixel
+CRPIX2  =                    0 / Y coordinate of center pixel
+CRVAL1  =                    0 / RA of center pixel (degrees)
+CRVAL2  =                    0 / DEC of center pixel (degrees)
+CTYPE1  = '<undef> '           / Coordinate type of WCS axis 1
+CTYPE2  = '<undef> '           / Coordinate type of WCS axis 2
+DATAFILE= 'm140417_1201'       / Datafile name
+ENDX    =                 2047 / Sub-array end x pixel
+ENDY    =                 2047 / Sub-array end y pixel
+FRAMDESC= 'comment '           / Comment
+FRAMENUM=                 1201 / Frame number
+GROUPS  =                    2 / Number of sampling groups
+ITIME   =                15000 / Integratime time of each coadd
+LTM1_1  =                    0 / CCD to image pixel scale in X
+LTM2_2  =                    0 / CCD to image pixel scale in Y
+NUMREADS=                    1 / Number of reads
+OBJECT  = 'Modified arc'       / Object name
+OBSERVER= 'Rosalie '           / Observer name
+PROGRAM = 'commissioning1'     / Program name
+PSCALE  =                    0 / Pixel scale for science camera
+RADECSYS= '<undef> '           / Coordinate system
+READTIME=              1.45479 / Detector readout time (sec)
+RESETS  =                    1 / Number of resets before exposure
+SAMPMODE= 'UTR     '           / Sampling Mode
+STARTX  =                    0 / Sub-array start x pixel
+STARTY  =                    0 / Sub-array start y pixel
+TIMFILE = '<undef> '           / Personality MCD code file name
+CALXNAM = 'Unknown '           / Cal X named posn
+CALXORD =                 -999 / Cal X ordinal posn
+CALXRAW =                -4091 / Cal X load encoder counts
+CALYNAM = 'Modified'           / Cal Y named posn
+CALYORD =                    2 / Cal Y ordinal posn
+CALYRAW =                -1519 / Cal Y load encoder counts
+APERNAM = 'Open    '           / Dewar aperture wheel, named posn
+APERORD =                    4 / Dewar aperture wheel, ordinal posn
+APERRAW =                 2676 / Dewar aperture wheel, load encoder
+FILT1NAM= 'Unknown '           / Dewar filterwheel 1, named posn
+FILT1ORD=                 -999 / Dewar filterwheel 1, ordinal posn
+FILT1RAW=                 9625 / Dewar filterwheel 1, load encoder
+FILT2NAM= 'Open    '           / Dewar filterwheel 2, named posn
+FILT2ORD=                    3 / Dewar filterwheel 2, ordinal posn
+FILT2RAW=                 4966 / Dewar filterwheel 2, load encoder
+FM1RXORD=                    0 / Fold mirror Rx, ordinal posn
+FM1RXNAM=                   -2 / Fold mirror Rx, load encoder counts
+FM1RYNAM= 'Unknown '           / Fold mirror Ry, named posn
+FM1RYORD=                 -999 / Fold mirror Ry, ordinal posn
+FM1RYRAW=                 -265 / Fold mirror Ry, load encoder counts
+LENSLETN= 'Unknown '           / Lenslet, named posn
+LENSLETO=                 -999 / Lenslet, ordinal posn
+LENSLETR=                 3402 / Lenslet, load encoder counts
+STER1RXN= 'Home    '           / WFS steering mirror 1, Rx, named posn
+STER1RXO=                    0 / WFS steering mirror 1, Rx, ordinal posn
+STER1RXR=                    2 / WFS steering mirror 1, Rx, load encoder counts
+STER1RYN= 'Home    '           / WFS steering mirror 1, Ry, named posn
+STER1RYO=                    0 / WFS steering mirror 1, Ry, ordinal posn
+STER1RYR=                    2 / WFS steering mirror 1, Ry, load encoder counts
+STER2RXN= 'Home    '           / WFS steering mirror 2, Rx, named posn
+STER2RXO=                    0 / WFS steering mirror 2, Rx, ordinal posn
+STER2RXR=                    0 / WFS steering mirror 2, Rx, load encoder counts
+STER2RYN= 'Unknown '           / WFS steering mirror 2, Ry, named posn
+STER2RYO=                 -999 / WFS steering mirror 2, Ry, named posn
+STER2RYR=                    6 / WFS steering mirror 2, Ry, load encoder counts
+TTCAMXN = 'Home    '           / Tip/Tilt camera X, named posn
+TTCAMXO =                    0 / Tip/Tilt camera X, ordinal posn
+TTCAMXR =                   -1 / Tip/Tilt camera X, load encoder counts
+TTCAMYN = 'Unknown '           / Tip/Tilt camera X, named posn
+TTCAMYO =                 -999 / Tip/Tilt camera X, ordinal posn
+TTCAMYR =                   14 / Tip/Tilt camera Y, load encoder counts
+TTDICHRN= 'Splitter'           / Tip/Tilt dichroic
+TTDICHRO=                    2 /
+TTDICHRR=                13008 / load encoder counts
+WFSDICRN= 'Unknown '           / WFS dichroic named posn
+WFSDICRO=                 -999 / WFS dichroic ordinal posn
+WFSDICRR=                   -5 / WFS dichroic load encoder counts
+WAT0_001= '<undef> '           / Pixel coordinate system
+WAT1_001= '<undef> '           / WCS projection for axis 1
+WAT2_001= '<undef> '           / WCS projection for axis 2
+WCSDIM  =                    0 / Number of WCS dimensions
+AUTOCLOS=                    T / Autoclose AO loops after a nod
+AUTOOPEN=                    T / Autoopen AO loops before a nod
+FPCLIP  =                    T / Calculated field steering clip status
+FPSTR1RX=               -40696 / Calculated field steering, 1RX
+FPSTR1RY=               -23124 / Calculated field steering, 1RY
+FPSTR2RX=               -38766 / Calculated field steering, 2RX
+FPSTR2RY=               -32791 / Calculated field steering, 2RY
+FPDISPX =                    0 / Field steering displacement, X
+FPDISPY =                    0 / Field steering displacement, Y
+NEXPOSE =                    0 / Number of completed exposures in series
+NOD_TELE=                    T / Nod telescope when sequencing exposures
+NOD_WFS =                    T / Nod WFS field steering mirrors in exp seq
+LOOPSTAT= 'Open    '           / AO loop state
+LOOPGAIN=                    0 / AO loop gain
+TUBANGLE=           1.57603231 / TUB angle, rad
+TELFOCUS=               321.59 / Telescope secondary position
+TEMP_OUT=                 60.4 / 120in outside temperature, degF
+TEMP_IN = '        '           / 120in inside temperature, degF
+COMMENT Data not available for keyword 'TEMP_IN'
+RH_OUT  =                   54 / 120in outside relative humidity
+RH_IN   =                   29 / 120in inside relative humidity
+AIRPRESS=                25.67 / 120in air pressure, in Hg
+M3DOWN  =                    0 / 120in met station current downtime, sec
+LAMPSTA1=                    F / Shane flatflield lamp #1 status
+LAMPSTA2=                    F / Shane flatflield lamp #1 status
+LAMPSTA3=                    F / Shane flatflield lamp #1 status
+LAMPSTA4=                    F / Shane flatflield lamp #1 status
+LAMPSTA5=                    T / Shane flatflield lamp #1 status
+LAMPNAM1= 'Blue    '           / Shane flatfield lamp #1 name
+LAMPNAM2= 'Red     '           / Shane flatfield lamp #2 name
+LAMPNAM3= 'Spare3  '           / Shane flatfield lamp #3 name
+LAMPNAM4= 'Spare4  '           / Shane flatfield lamp #4 name
+LAMPNAM5= 'Sup_Blue'           / Shane flatfield lamp #5 name
+LAMPSTAA=                    T / Shane line lamp #A status
+LAMPSTAB=                    T / Shane line lamp #B status
+LAMPSTAC=                    T / Shane line lamp #C status
+LAMPSTAD=                    T / Shane line lamp #D status
+LAMPSTAE=                    T / Shane line lamp #E status
+LAMPSTAF=                    T / Shane line lamp #F status
+LAMPSTAG=                    T / Shane line lamp #G status
+LAMPSTAH=                    T / Shane line lamp #H status
+LAMPSTAI=                    T / Shane line lamp #I status
+LAMPSTAJ=                    T / Shane line lamp #J status
+LAMPSTAK=                    T / Shane line lamp #K status
+LAMPNAMA= 'Spare1  '           / Shane line lamp #A name
+LAMPNAMB= 'Spare2  '           / Shane line lamp #B name
+LAMPNAMC= 'Spare3  '           / Shane line lamp #C name
+LAMPNAMD= 'Spare_Ar'           / Shane line lamp #D name
+LAMPNAME= 'Dim_Neon'           / Shane line lamp #E name
+LAMPNAMF= 'He      '           / Shane line lamp #F name
+LAMPNAMG= 'Hg-Cd   '           / Shane line lamp #G name
+LAMPNAMH= 'Hg-A    '           / Shane line lamp #H name
+LAMPNAMI= 'Spare9  '           / Shane line lamp #I name
+LAMPNAMJ= 'Neon    '           / Shane line lamp #J name
+LAMPNAMK= 'Laser   '           / Shane line lamp #K name
+COMMENT No further records from the beginning of the exposure.
+COMMENT
+COMMENT ------------------------------------------------------------------------
+COMMENT End of keyheader output
+COMMENT Program start time: 2014-04-16T21:35:14.445329
+COMMENT Program end time:   2014-04-16T21:35:17.807055
+COMMENT ------------------------------------------------------------------------

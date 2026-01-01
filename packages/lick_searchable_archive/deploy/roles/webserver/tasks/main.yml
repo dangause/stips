@@ -1,0 +1,53 @@
+- name: Install Apache and mod_xsendfile
+  ansible.builtin.apt:
+    name: apache2, libapache2-mod-xsendfile, libapache2-mpm-itk
+    state: present
+  become: yes
+- name: Copy Apache2 configuration
+  ansible.builtin.copy:
+    backup: true
+    mode: 0644
+    owner: root
+    group: root
+    src: files/apache2.conf
+    dest: "/etc/apache2/apache2.conf"
+  become: yes
+  notify: "restart web server"
+- name: Copy Apache2 port settings
+  ansible.builtin.template:
+    mode: 0644
+    owner: root
+    group: root
+    src: templates/ports.conf.j2
+    dest: "/etc/apache2/ports.conf"
+  become: yes
+  notify: "restart web server"
+- name: Copy Archive Virtual Host settings
+  ansible.builtin.template:
+    mode: 0644
+    owner: root
+    group: root
+    src: templates/archive.conf.j2
+    dest: "/etc/apache2/sites-available/archive.conf"
+  become: yes
+  notify: "restart web server"
+- name: Enable Apache Modules
+  community.general.apache2_module:
+    name: "{{ item }}"
+    state: present
+  become: yes
+  notify: "restart web server"
+  loop:
+    - proxy
+    - proxy_http
+    - ssl
+    - headers
+    - xsendfile
+    - mpm_itk
+- name: Link Archive Virtual Host
+  ansible.builtin.file:
+    src: "/etc/apache2/sites-available/archive.conf"
+    path: "/etc/apache2/sites-enabled/archive.conf"
+    state: "link"
+  become: yes
+  notify: "restart web server"

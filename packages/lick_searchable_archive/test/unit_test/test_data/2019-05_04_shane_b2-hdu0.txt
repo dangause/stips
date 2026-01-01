@@ -1,0 +1,32 @@
+SIMPLE  =                    T / NORMAL FITS IMAGE
+BITPIX  =                   16 / DATA PRECISION
+NAXIS   =                    2 / NUMBER OF IMAGE DIMENSIONS
+NAXIS1  =                 2112 / NUMBER OF COLUMNS
+NAXIS2  =                  330 / NUMBER OF ROWS
+CRVAL1U =                    0 / COLUMN ORIGIN
+CRVAL2U =                 1235 / ROW ORIGIN
+CDELT1U =                    1 / COLUMN CHANGE PER PIXEL
+CDELT2U =                   -1 / ROW CHANGE PER PIXEL
+OBSNUM  =                    2 / OBSERVATION NUMBER
+IDNUM   =                    4 / IMAGE ID
+UGEOM   =                    6 / UCAM READOUT GEOMETRY
+DGEOM   =                    6 / DESCRAMBLE GEOMETRY
+AMPSROW =                    2 / AMPLIFIERS PER ROW
+AMPSCOL =                    1 / AMPLIFIERS PER COLUMN
+OBSTYPE = 'OBJECT'             / IMAGE TYPE
+EXPTIME =                   20 / Exp time (not counting shutter error)
+BSCALE  =                    1 / DATA SCALE FACTOR
+BZERO   =                32768 / DATA ZERO POINT
+COMMENT    Real Value = FITS*BSCALE+BZERO
+PROGRAM = 'NEWCAM'             / New Lick Camera
+VERSION = 'kastb'              / Data acquisition version
+TSEC    =           1557015573 / CLOCK TICK - SECONDS
+TUSEC   =                56707 / CLOCK TICK - MICROSECONDS
+DATE    = '2019-05-05T00:19:33.05' / UT of CCD readout & descramble
+DATASEC = '[1:2048,1:330]'         / IRAF/NOAO-style data section
+COMMENT End of cards hard-coded in fits_cards
+COMMENT Begin of cards from other times
+CKSUMOK =                    T / cd: CHECKSUMS MATCH
+CAMCKSUM=                20644 / cd: CAMERA-COMPUTED CHECKSUM
+SFTCKSUM=                20644 / cd: SOFTWARE-COMPUTED CHECKSUM
+COMMENT End of cards from other times

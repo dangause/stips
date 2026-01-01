@@ -1,0 +1,155 @@
+#===============================================================================
+# Configuration values specific to this host
+#===============================================================================
+[Host]
+
+type            = {{ host_type }}
+app_names       = {{ archive_apps|join(',') }}
+url_path_prefix = {{ archive_url_path_prefix }}
+api_url         = {{ api_scheme }}://{{ api_server }}:{{api_port}}/{{ archive_url_path_prefix }}
+frontend_url    = {{ frontend_url }}
+
+#===============================================================================
+# Configuration for accessng the archive's metadata database
+#===============================================================================
+[Database]
+
+archive_db     = {{ db_name }}
+db_query_user  = {{ db_query_user }}
+db_ingest_user = {{ db_ingest_user }}
+
+#===============================================================================
+# Configuration for the querying the archive
+#===============================================================================
+[Query]
+
+file_header_url_format = {{ frontend_url }}/data/{}/header
+default_search_radius  = {{ default_search_radius }}
+
+#===============================================================================
+# Configuration for ingesting new files into the archive
+#===============================================================================
+[Ingest]
+
+archive_root_dir      = {{ archive_data_root }}
+supported_directories = {{ supported_instrument_dirs|join(',') }}
+insert_batch_size     = 1000
+
+#===============================================================================
+# Configuration for determining who can see/download what
+#===============================================================================
+[Authorization]
+
+# The default proprietary period for files in the archive.
+# The units can be "day", "days", "month", "months", "year" or "years" and are case insensitivie.
+default_proprietary_period = 2 years
+sched_db_host              = {{ schedule_db_host }}
+sched_db_name              = {{ schedule_db_name }}
+sched_db_user_info         = {{ archive_config_dir }}/sched_db_user_info.txt
+gshow_path                 = {{ gshow_path }}
+public_observers           = Public.Observer, Public.Viewing
+public_ownerhint_pattern   = RECUR_.100
+
+#===============================================================================
+# Configuration for downloading files from the archive
+#===============================================================================
+[Download]
+file_download_url_format = {{ frontend_url }}/data/{}
+max_tarball_files = 20000
+# Maximum total size of all files in a tarball, in MiB
+max_tarball_size = 51200
+
+#===============================================================================
+# Mapping of archive leaf directory name to the "telescope name".
+#
+# As a special case, we may also provide entries that aren't
+# actually directly used by the archiver system, but are
+# helpful for users running reports.
+#
+# The telescope name is the correct name for use in telescope
+# schedule database lookups.  Names like "Allsky" and "Webcam"
+# are pseudo-names, of course: there is no actual telescope
+# of that name, and there may or may not be an entry
+# in the schedule database tables.
+# All directory names *must* be listed here.
+#===============================================================================
+[Telescope Names]
+
+# Directory  Telescope
+# ---------  ---------
+
+allsky     = Allsky
+AO         = Shane
+AOsample   = Shane
+AOtelemetry= Shane
+apfcam     = Webcam
+APF        = APF
+APFguide   = APF
+CAT        = CAT
+gemini     = Shane
+ham120     = Shane
+hamcam1    = Webcam
+hamcam2    = Webcam
+nickel     = Nickel
+PEAS       = Peas
+pfcam      = Shane
+shane      = Shane
+skycam2    = Allsky
+
+#===============================================================================
+# Some instruments' data are always owned by a particular user.
+# For them, no schedule lookup is needed.
+#
+# The instrument names here correspond to the Instrument enum in
+# lick_archive/data_dictionary
+#===============================================================================
+[Fixed Owners]
+
+# The default is no fixed user
+default =
+
+#
+# Instr       Owner
+# --------    ---------------
+
+All Sky     = Public.Observer
+AOsample    = Public.Observer
+AOtelemetry = Public.Observer
+APF Cam     = Public.Observer
+Ham Cam1    = Public.Observer
+Ham Cam2    = Public.Observer
+PEAS        = Emily.Martin
+SkyCam 2    = Public.Observer
+
+#===============================================================================
+# For a given instrument, any file with one of these suffixes
+# is always public.
+# If the instrument name is not listed, the 'default' line is substituted.
+#===============================================================================
+[Public Suffixes]
+
+# The APF instrument has no always-public suffixes:
+APF =
+
+# Other instruments use these always-public suffixes:
+default = jpg, jpeg, mpg, mp4
+
+#===============================================================================
+# If an instrument has its schedule available via KTL service,
+# give that servicename here.
+
+# Here the telescope names correspond to the Telescope enum in
+# lick_archive/data_dictionary.py
+[Schedule Services]
+
+Shane    :   shaneschedule
+APF      :   apfschedule
+Nickel   :   nickelschedule
+
+#===============================================================================
+# The MIME file types for each instrument
+#===============================================================================
+[File Types]
+
+# Other instruments use these always-public suffixes:
+default =  image/fits

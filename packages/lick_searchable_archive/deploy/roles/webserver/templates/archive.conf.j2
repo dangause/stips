@@ -1,0 +1,30 @@
+{% if "archive_admin" in archive_apps %}
+# Serve the Admin Page on localhost:8080
+<VirtualHost localhost:8080>
+    DocumentRoot /var/www/archive_static
+    ProxyPass "/archive/admin/" "http://localhost:8000/{{ archive_url_path_prefix }}/admin/"
+    AssignUserId www-data stuff
+    ProxyPassReverse "/{{ archive_url_path_prefix }}/admin/" "http://localhost:8000/{{ archive_url_path_prefix }}/admin/"
+    ErrorLog ${APACHE_LOG_DIR}/static_error.log
+    CustomLog ${APACHE_LOG_DIR}/static_access.log combined
+</VirtualHost>
+{% endif %}
+
+# Serve the archive frontend and proxy api calls to gunicorn
+<VirtualHost *:443>
+    ServerName {{ frontend_host }}
+    SSLEngine On
+    SSLCertificateFile {{ ssl_cert }}
+    SSLCertificateKeyFile {{ ssl_private_key }}
+    AssignUserId {{ webserver_user }} {{ webserver_group }}
+    DocumentRoot /var/www/archive
+    XSendFile On
+    XSendFilePath /data
+    RequestHeader set "X-Forwarded-Proto" expr=%{REQUEST_SCHEME}
+    ProxyPass "/{{ archive_url_path_prefix }}/data" "{{ api_scheme }}://{{ api_server }}:{{ api_port }}/{{ archive_url_path_prefix }}/data"
+    ProxyPassReverse "/{{ archive_url_path_prefix }}/data" "{{ api_scheme }}://{{ api_server }}:{{ api_port }}/{{ archive_url_path_prefix }}/data"
+    ProxyPass "/{{ archive_url_path_prefix }}/api" "{{ api_scheme }}://{{ api_server }}:{{ api_port }}/{{ archive_url_path_prefix }}/api"
+    ProxyPassReverse "/{{ archive_url_path_prefix }}/api" "{{ api_scheme }}://{{ api_server }}:{{ api_port }}/{{ archive_url_path_prefix }}/api"
+    ErrorLog ${APACHE_LOG_DIR}/error.log
+    CustomLog ${APACHE_LOG_DIR}/access.log combined
+</VirtualHost>

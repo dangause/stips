@@ -1,0 +1,149 @@
+  # Perform tasks on the remote common to all types of remote nodes
+- name: Setup group for archive service (unspecified gid)
+  ansible.builtin.group:
+    name: "{{ archive_service_group }}"
+  become: yes
+  when: archive_service_gid is undefined
+- name: Setup group for archive service (specified gid)
+  ansible.builtin.group:
+    name: "{{ archive_service_group }}"
+    gid: "{{ archive_service_gid }}"
+  become: yes
+  when: archive_service_gid is defined
+- name: Add local user to archive group
+  ansible.builtin.user:
+    name:   "{{ ansible_user_id }}"
+    groups: "{{ archive_service_group }}"
+    append: yes
+  become: yes
+- name: Setup user for archive service (unspecified uid)
+  ansible.builtin.user:
+    name: "{{ archive_service_user }}"
+    create_home: no
+    group: "{{ archive_service_group }}"
+    password: '*'
+    shell: /usr/sbin/nologin
+  become: yes
+  when: archive_service_uid is undefined
+- name: Setup user for archive service (specified uid)
+  ansible.builtin.user:
+    name: "{{ archive_service_user }}"
+    uid: "{{ archive_service_uid }}"
+    create_home: no
+    group: "{{ archive_service_group }}"
+    password: '*'
+    shell: /usr/sbin/nologin
+  become: yes
+  when: archive_service_uid is defined
+- name: Install Desired Python Version
+  ansible.builtin.apt:
+    name: python{{ python_version }}, python{{ python_version }}-venv
+    state: present
+  become: yes
+- name: Install ACL so that ansible can use it
+  ansible.builtin.apt:
+    name: acl
+    state: present
+  become: yes
+- name: Create virtual env directory
+  ansible.builtin.file:
+    path: "{{ venv_root }}"
+    mode: 0750
+    state: directory
+    owner: "{{ archive_service_user }}"
+    group: "{{ archive_service_group }}"
+  become: yes
+- name: Create virtual python environment
+  ansible.builtin.pip:
+    name: tenacity, requests, astropy, python-dateutil
+    virtualenv: "{{ venv_root }}"
+    virtualenv_command: python{{ python_version }} -m venv
+  become: yes
+  become_user: "{{ archive_service_user }}"
+  notify: "common config changed"
+- name: Add KROOT and LROOT to archive.pth file
+  ansible.builtin.template:
+    mode: 0660
+    owner: "{{ archive_service_user }}"
+    group: "{{ archive_service_group }}"
+    src: templates/archive.pth.j2
+    dest: "{{ package_install_dir }}/archive.pth"
+  become: yes
+  notify: "common config changed"
+- name: Copy common lick_archive python code
+  ansible.builtin.copy:
+    src: "{{ archive_source_dir }}/{{ item }}"
+    dest: "{{ package_install_dir }}"
+    owner: "{{ archive_service_user }}"
+    group: "{{ archive_service_group }}"
+    mode: 0660
+    directory_mode: 0770
+  become: yes
+  become_user: "{{ archive_service_user }}"
+  loop: ["lick_archive"]
+  notify: "common config changed"
+- name: Copy test utilities
+  ansible.builtin.copy:
+    src: "{{ archive_source_dir }}/test/ext_test/{{ item }}"
+    dest: "{{ venv_root }}/bin/ext_test/"
+    owner: "{{ archive_service_user }}"
+    group: "{{ archive_service_group }}"
+    mode: 0660
+    directory_mode: 0770
+  become: yes
+  become_user: "{{ archive_service_user }}"
+  loop: ["ext_test_common.py", "server_init.py", "server_cleanup.py"]
+- name: Create config directory
+  ansible.builtin.file:
+    mode: 0770
+    owner: "{{ archive_service_user }}"
+    group: "{{ archive_service_group }}"
+    state: directory
+    dest: "{{ archive_config_dir }}"
+  become: yes
+  notify: "restart web services"
+- name: Create logging directory
+  ansible.builtin.file:
+    mode: 0770
+    owner: "{{ archive_service_user }}"
+    group: "{{ archive_service_group }}"
+    state: directory
+    dest: "{{ archive_log_dir }}"
+  become: yes
+  notify: "restart web services"
+- name: Setup logrotate
+  ansible.builtin.template:
+    mode: 0644
+    owner: root
+    group: root
+    src: templates/archive_logrotate.j2
+    dest: "/etc/logrotate.d/lick_archive"
+  become: yes
+- name: Copy dev environment tests
+  ansible.builtin.copy:
+    src: "{{ archive_source_dir }}/test/dev_test"
+    dest: "{{ venv_root }}/"
+    owner: "{{ archive_service_user }}"
+    group: "{{ archive_service_group }}"
+    mode: 0660
+    directory_mode: 0770
+  become: yes
+  when: archive_config == "dev"
+- name: Install development packages
+  ansible.builtin.pip:
+    name: pytest
+    virtualenv: "{{ venv_root }}"
+    virtualenv_command: python{{ python_version }} -m venv
+  become: yes
+  become_user: "{{ archive_service_user }}"
+  when: archive_config == "dev"
+  notify: "restart web services"
+- name: Create archive ini file
+  ansible.builtin.template:
+    mode: 0660
+    owner: "{{ archive_service_user }}"
+    group: "{{ archive_service_group }}"
+    src: templates/archive_config.ini.j2
+    dest: "{{ archive_config_dir }}/archive_config.ini"
+  become: yes
+  notify: "common config changed"

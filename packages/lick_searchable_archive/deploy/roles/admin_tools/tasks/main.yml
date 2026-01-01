@@ -1,0 +1,16 @@
+- name: Install python packages needed for admin scripts
+  ansible.builtin.pip:
+    name: psycopg2-binary, sqlalchemy, astropy
+    state: present
+    virtualenv: "{{ venv_root }}"
+    virtualenv_command: python{{ python_version }} -m venv
+  become: yes
+  become_user: "{{ archive_service_user }}"
+- name: Copy admin scripts
+  ansible.builtin.copy:
+    src: "{{ archive_source_dir }}/scripts/admin_scripts/"
+    dest: "{{ venv_root }}/bin/"
+    owner: "{{ archive_service_user }}"
+    group: "{{ archive_service_group }}"
+    mode: 0770
+  become: yes

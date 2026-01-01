@@ -1,0 +1,17 @@
+{# This is a docutils template to convert reStructredText to a jinja template
+   that will be converted to HTML when building the frontend.
+#}
+{%% extends "templates/archive_base_template.jinja" %%}
+{%% block body %%}
+<section id = "error_section" class="search_error">
+</section>
+%(body)s
+{%% endblock %%}
+{%% block scripts %%}
+<script type="module" src="scripts/docs.js"></script>
+{%% endblock %%}
+{%% block extra_stylesheets %%}
+    <link rel="stylesheet" type="text/css" href="style/docs.css"/>
+{%% endblock %%}
+{%% block contents %%}
+{%% endblock %%}
