@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "obs-nickel-tuning"
+version = "0.1.0"
+description = "Calibration parameter optimization tools for Nickel telescope"
+authors = [{ name = "Dan Gause" }]
+requires-python = ">=3.12"
+dependencies = [
+    "numpy",
+    "scipy",
+    "matplotlib",
+    "pyyaml",
+]
+readme = "README.md"
+
+[tool.setuptools]
+packages = []

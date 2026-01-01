@@ -2,7 +2,28 @@
 members = ["packages/*"]
 
 [dependency-groups]
-dev = ["ruff", "pyright"]
+dev = [
+    # Code quality tools
+    "ruff",
+    "pyright",
+    "pre-commit>=4.3.0",
+]
+notebooks = [
+    # Jupyter/notebook support for analysis
+    "jupyterlab>=4.4.7",
+    "notebook>=7.4.5",
+]
+analysis = [
+    # Data analysis libraries
+    "pandas>=2.3.2",
+    "pyarrow>=21.0.0",
+    "fastparquet>=2024.11.0",
+    "pyvo>=1.7",
+]
+rsp = [
+    # Rubin Science Platform integration
+    "lsst-rsp>=0.10.0",
+]
 
 [tool.ruff]
 line-length = 110
@@ -13,6 +34,8 @@ src = [
     "packages/defects",
     "packages/refcats",
     "packages/testdata",
+    "packages/tuning",
+    "packages/colorterms",
     "scripts",
 ]
 extend-exclude = [
@@ -40,3 +63,60 @@ max-doc-length = 79
 
 [tool.ruff.lint.pydocstyle]
 convention = "numpy"
+
+[tool.pytest.ini_options]
+testpaths = ["packages/obs_nickel/tests"]
+# Exclude vendor packages from test discovery
+norecursedirs = [
+    ".git",
+    ".venv",
+    "build",
+    "dist",
+    "*.egg-info",
+    "packages/lick_searchable_archive",
+    "packages/refcats/upstream",
+    "packages/testdata/upstream",
+]
+
+[tool.pyright]
+pythonVersion = "3.12"
+venvPath = "."
+venv = ".venv"
+include = [
+    "packages/obs_nickel",
+    "packages/archive_tools",
+    "packages/defects",
+    "packages/refcats",
+    "packages/testdata",
+    "packages/tuning",
+    "packages/colorterms",
+    "scripts",
+]
+exclude = [
+    ".venv",
+    ".uv-cache",
+    "logs",
+    "**/build",
+    "**/dist",
+    "packages/lick_searchable_archive",
+    "packages/refcats/upstream",
+    "packages/testdata/upstream",
+]
+ignore = [
+    # LSST pipeline configs are executed with an injected `config` object.
+    "packages/obs_nickel/configs",
+]
+# Keep noise down when LSST/Rubin dependencies are not in the active venv.
+reportMissingImports = "warning"
+reportMissingModuleSource = "warning"
+reportOptionalMemberAccess = "warning"
+reportOptionalOperand = "warning"
+reportOptionalCall = "warning"
+reportAttributeAccessIssue = "warning"
+reportGeneralTypeIssues = "warning"
+reportArgumentType = "warning"
+reportReturnType = "warning"
+reportOperatorIssue = "warning"
+reportUnsupportedDunderAll = "warning"
+reportCallIssue = "warning"
+typeCheckingMode = "basic"

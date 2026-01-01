@@ -15,13 +15,26 @@ members = [
     "obs-nickel-defects",
     "obs-nickel-refcats",
     "obs-nickel-testdata",
+    "obs-nickel-tuning",
 ]
 
 [manifest.dependency-groups]
+analysis = [
+    { name = "fastparquet", specifier = ">=2024.11.0" },
+    { name = "pandas", specifier = ">=2.3.2" },
+    { name = "pyarrow", specifier = ">=21.0.0" },
+    { name = "pyvo", specifier = ">=1.7" },
+]
 dev = [
+    { name = "pre-commit", specifier = ">=4.3.0" },
     { name = "pyright" },
     { name = "ruff" },
 ]
+notebooks = [
+    { name = "jupyterlab", specifier = ">=4.4.7" },
+    { name = "notebook", specifier = ">=7.4.5" },
+]
+rsp = [{ name = "lsst-rsp", specifier = ">=0.10.0" }]
 
 [[package]]
 name = "amqp"
@@ -1741,28 +1754,12 @@ source = { editable = "packages/obs_nickel" }
 dependencies = [
     { name = "astro-metadata-translator" },
     { name = "astropy" },
-    { name = "fastparquet" },
-    { name = "jupyterlab" },
-    { name = "lsst-rsp" },
-    { name = "notebook" },
-    { name = "pandas" },
-    { name = "pre-commit" },
-    { name = "pyarrow" },
-    { name = "pyvo" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "astro-metadata-translator", specifier = ">=0.11.0" },
     { name = "astropy" },
-    { name = "fastparquet", specifier = ">=2024.11.0" },
-    { name = "jupyterlab", specifier = ">=4.4.7" },
-    { name = "lsst-rsp", specifier = ">=0.10.0" },
-    { name = "notebook", specifier = ">=7.4.5" },
-    { name = "pandas", specifier = ">=2.3.2" },
-    { name = "pre-commit", specifier = ">=4.3.0" },
-    { name = "pyarrow", specifier = ">=21.0.0" },
-    { name = "pyvo", specifier = ">=1.7" },
 ]
 
 [[package]]
@@ -1821,6 +1818,25 @@ requires-dist = [{ name = "pyyaml" }]
 name = "obs-nickel-testdata"
 version = "0.1.0"
 source = { editable = "packages/testdata" }
+
+[[package]]
+name = "obs-nickel-tuning"
+version = "0.1.0"
+source = { editable = "packages/tuning" }
+dependencies = [
+    { name = "matplotlib" },
+    { name = "numpy" },
+    { name = "pyyaml" },
+    { name = "scipy" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "matplotlib" },
+    { name = "numpy" },
+    { name = "pyyaml" },
+    { name = "scipy" },
+]
 
 [[package]]
 name = "packaging"

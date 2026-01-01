@@ -122,6 +122,8 @@ celerybeat.pid
 
 # Environments
 .env
+*.env
+!.env.example
 .venv
 env/
 venv/
@@ -194,3 +196,7 @@ FIXES_NEEDED.md
 # Quantum graphs (stored in Butler repo)
 *.qg
 *.dot
+
+# Legacy upstream repositories (kept as backup, not part of monorepo)
+packages/testdata/upstream/
+packages/refcats/upstream/

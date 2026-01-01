@@ -14,7 +14,8 @@
 set -euo pipefail
 
 RELEASE=""
-PREFIX="${LSST_STACKS_ROOT:-$HOME/lsst_stacks}"
+# Default install root: LSST_STACKS_ROOT > STACK_DIR > ~/lsst_stacks
+PREFIX="${LSST_STACKS_ROOT:-${STACK_DIR:-$HOME/lsst_stacks}}"
 LSSTINSTALL_BIN="${LSSTINSTALL_BIN:-}"
 PYVER=""  # optional, passed to lsstinstall (-P)
 
