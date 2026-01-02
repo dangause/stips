@@ -4,8 +4,13 @@
 # Usage:
 #   ./scripts/06_process_template.sh --template-tag template_2020wnt --jobs 1
 
+ENV_FILE="${ENV_FILE:-.env}"
+EXTRA_ENV="${EXTRA_ENV:-}"
+
 set -a
-source .env
+for f in $ENV_FILE $EXTRA_ENV; do
+  [ -n "$f" ] && [ -f "$f" ] && source "$f"
+done
 set +a
 
 ########## CLI ##########

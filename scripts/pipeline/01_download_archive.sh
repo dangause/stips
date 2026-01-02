@@ -4,8 +4,13 @@
 # Usage:
 #   ./scripts/00_download_archive.sh --night YYYYMMDD [options]
 
+ENV_FILE="${ENV_FILE:-.env}"
+EXTRA_ENV="${EXTRA_ENV:-}"
+
 set -a
-source .env
+for f in $ENV_FILE $EXTRA_ENV; do
+  [ -n "$f" ] && [ -f "$f" ] && source "$f"
+done
 set +a
 
 ########## CLI ##########
@@ -77,16 +82,33 @@ if [[ -z "$RAW_PARENT_DIR" ]]; then
   exit 2
 fi
 
-# Use LSST Python environment
-PYTHON=/opt/anaconda3/envs/lsst-scipipe-12.0.0/bin/python
+# Default to workspace copy if not explicitly set
+if [[ -z "${LICK_ARCHIVE_DIR:-}" && -d "${OBS_NICKEL}/packages/lick_searchable_archive" ]]; then
+  LICK_ARCHIVE_DIR="${OBS_NICKEL}/packages/lick_searchable_archive"
+fi
+
+# Use LSST Python environment (prefer current active Python)
+CONDA_ENV="${LSST_CONDA_ENV_NAME:-lsst-scipipe-12.0.0}"
+PYTHON="${LSST_PYTHON:-$(command -v python)}"
+if [[ -z "$PYTHON" ]]; then
+  PYTHON="/opt/anaconda3/envs/${CONDA_ENV}/bin/python"
+fi
+# Prefer lick_searchable_archive's venv when available (ensures client deps like tenacity are installed)
+if [[ -n "${LICK_ARCHIVE_DIR:-}" && -x "${LICK_ARCHIVE_DIR}/.venv/bin/python" ]]; then
+  PYTHON="${LICK_ARCHIVE_DIR}/.venv/bin/python"
+fi
 
 # Check if lick_archive is installed or LICK_ARCHIVE_DIR is set
+if [[ -n "$LICK_ARCHIVE_DIR" ]]; then
+  export PYTHONPATH="$LICK_ARCHIVE_DIR${PYTHONPATH:+:$PYTHONPATH}"
+fi
+
 if ! $PYTHON -c "import lick_archive" 2>/dev/null; then
   if [[ -z "$LICK_ARCHIVE_DIR" ]]; then
     echo "ERROR: lick_archive not installed and LICK_ARCHIVE_DIR not set" >&2
     echo "" >&2
     echo "Option 1 (Recommended): Install into LSST conda environment" >&2
-    echo "  /opt/anaconda3/envs/lsst-scipipe-12.0.0/bin/pip install -e ~/Developer/lick/lick_searchable_archive" >&2
+    echo "  ${PYTHON%/python}/pip install -e ~/Developer/lick/lick_searchable_archive" >&2
     echo "" >&2
     echo "Option 2: Set LICK_ARCHIVE_DIR in .env (already configured)" >&2
     echo "  LICK_ARCHIVE_DIR=~/Developer/lick/lick_searchable_archive" >&2

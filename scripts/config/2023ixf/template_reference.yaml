@@ -1,0 +1,96 @@
+object: "2023ixf"
+# Template reference nights (later 2023 observations when SN has faded)
+nights:
+  20230714:
+    b: []
+    v: []
+    r: []
+    i: []
+  20230728:
+    b: []
+    v: []
+    r: []
+    i: []
+  20230801:
+    b: []
+    v: []
+    r: []
+    i: []
+  20230817:
+    b: []
+    v: []
+    r: []
+    i: []
+  20230905:
+    b: []
+    v: []
+    r: []
+    i: []
+  20230910:
+    b: []
+    v: []
+    r: []
+    i: []
+  20231211:
+    b: []
+    v: []
+    r: []
+    i: []
+
+# Note: Nights from 20240416 onward are still proprietary and not available for download
+# Uncomment these nights once the data becomes public
+#  20240416:
+#    b: []
+#    v: []
+#    r: []
+#    i: []
+#  20240429:
+#    b: []
+#    v: []
+#    r: []
+#    i: []
+#  20240516:
+#    b: []
+#    v: []
+#    r: []
+#    i: []
+#  20240521:
+#    b: []
+#    v: []
+#    r: []
+#    i: []
+#  20240526:
+#    b: []
+#    v: []
+#    r: []
+#    i: []
+#  20240616:
+#    b: []
+#    v: []
+#    r: []
+#    i: []
+#  20240715:
+#    b: []
+#    v: []
+#    r: []
+#    i: []
+#  20240719:
+#    b: []
+#    v: []
+#    r: []
+#    i: []
+#  20240808:
+#    b: []
+#    v: []
+#    r: []
+#    i: []
+#  20240812:
+#    b: []
+#    v: []
+#    r: []
+#    i: []
+#  20240816:
+#    b: []
+#    v: []
+#    r: []
+#    i: []

@@ -45,7 +45,7 @@ def _import_client():
         )
     except ImportError as err:
         msg = (
-            "Could not import lick_archive client. "
+            f"Could not import lick_archive client (ImportError: {err}). "
             "Set LICK_ARCHIVE_DIR or use --client-path to point at the "
             "lick_searchable_archive clone, or pip install -e that repo."
         )

@@ -145,13 +145,18 @@ fi
 # Environment setup
 #######################################
 
-if [[ ! -f ".env" ]]; then
-  echo "ERROR: .env not found. Run from obs_nickel root."
+ENV_FILE="${ENV_FILE:-.env}"
+EXTRA_ENV="${EXTRA_ENV:-}"
+
+if [[ ! -f "$ENV_FILE" ]]; then
+  echo "ERROR: $ENV_FILE not found. Run from obs_nickel root or set ENV_FILE."
   exit 2
 fi
 
 set -a
-source .env
+for f in $ENV_FILE $EXTRA_ENV; do
+  [ -n "$f" ] && [ -f "$f" ] && source "$f"
+done
 set +a
 
 # Default output directory
@@ -192,7 +197,8 @@ set -u
 
 cd "$OBS_NICKEL"
 
-TRACT=$(/opt/anaconda3/envs/lsst-scipipe-12.0.0/bin/python3 << PYEOF
+CONDA_ENV="${LSST_CONDA_ENV_NAME:-lsst-scipipe-12.0.0}"
+TRACT=$(/opt/anaconda3/envs/${CONDA_ENV}/bin/python3 << PYEOF
 import lsst.daf.butler as dafButler
 import lsst.geom as geom
 
@@ -302,7 +308,7 @@ if [[ "$SKIP_LIGHTCURVE" == "false" && "$DRY_RUN" == "false" ]]; then
     log "Extracting light curve to: $LC_OUTPUT"
 
     if [[ -f "scripts/python/pipeline_tools/extract_lightcurve.py" ]]; then
-      /opt/anaconda3/envs/lsst-scipipe-12.0.0/bin/python \
+      /opt/anaconda3/envs/${CONDA_ENV}/bin/python \
         scripts/python/pipeline_tools/extract_lightcurve.py \
         --repo "$REPO" \
         --collection "$DIA_COLLECTIONS" \

@@ -199,7 +199,8 @@ if [[ ! -f "$PYTHON_SCRIPT" ]]; then
 fi
 
 # Use LSST Python
-PYTHON_CMD="/opt/anaconda3/envs/lsst-scipipe-12.0.0/bin/python"
+CONDA_ENV="${LSST_CONDA_ENV_NAME:-lsst-scipipe-12.0.0}"
+PYTHON_CMD="/opt/anaconda3/envs/${CONDA_ENV}/bin/python"
 
 PYTHON_ARGS=(
     "$PYTHON_SCRIPT"

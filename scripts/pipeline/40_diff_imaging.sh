@@ -17,8 +17,13 @@
 
 # set -euo pipefail
 
+ENV_FILE="${ENV_FILE:-.env}"
+EXTRA_ENV="${EXTRA_ENV:-}"
+
 set -a
-source .env
+for f in $ENV_FILE $EXTRA_ENV; do
+  [ -n "$f" ] && [ -f "$f" ] && source "$f"
+done
 set +a
 
 # Source logging utilities
@@ -269,7 +274,8 @@ if [[ "$AUTO_TEMPLATE" == "true" ]]; then
     [[ -n "$BAND" ]] && QUERY_ARGS+=(--band "$BAND")
     [[ -n "$TRACT" ]] && QUERY_ARGS+=(--tract "$TRACT")
 
-    TEMPLATE_CANDIDATES="$(/opt/anaconda3/envs/lsst-scipipe-12.0.0/bin/python "$TEMPLATE_META_SCRIPT" "${QUERY_ARGS[@]}" 2>&1 | \
+    CONDA_ENV="${LSST_CONDA_ENV_NAME:-lsst-scipipe-12.0.0}"
+    TEMPLATE_CANDIDATES="$(/opt/anaconda3/envs/${CONDA_ENV}/bin/python "$TEMPLATE_META_SCRIPT" "${QUERY_ARGS[@]}" 2>&1 | \
       grep -E '^\s+templates/' | awk '{print $1}' || true)"
 
     if [[ -z "$TEMPLATE_CANDIDATES" ]]; then
@@ -277,7 +283,7 @@ if [[ "$AUTO_TEMPLATE" == "true" ]]; then
       echo "ERROR: No templates found matching date exclusion criteria"
       echo ""
       echo "Available templates (use template_metadata.py list to see all):"
-      /opt/anaconda3/envs/lsst-scipipe-12.0.0/bin/python "$TEMPLATE_META_SCRIPT" list --repo "$REPO" || true
+      /opt/anaconda3/envs/${CONDA_ENV}/bin/python "$TEMPLATE_META_SCRIPT" list --repo "$REPO" || true
       echo ""
       echo "Options:"
       echo "  1. Build templates from different date range"

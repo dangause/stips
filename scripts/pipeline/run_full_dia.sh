@@ -155,13 +155,18 @@ fi
 # Environment
 #######################################
 
-if [[ ! -f ".env" ]]; then
-  echo "ERROR: .env not found. Run from repo root." >&2
+ENV_FILE="${ENV_FILE:-.env}"
+EXTRA_ENV="${EXTRA_ENV:-}"
+
+if [[ ! -f "$ENV_FILE" ]]; then
+  echo "ERROR: $ENV_FILE not found. Run from repo root or set ENV_FILE." >&2
   exit 2
 fi
 
 set -a
-source .env
+for f in $ENV_FILE $EXTRA_ENV; do
+  [ -n "$f" ] && [ -f "$f" ] && source "$f"
+done
 set +a
 
 #######################################

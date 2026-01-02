@@ -3,8 +3,13 @@
 
 # set -euo pipefail
 
+ENV_FILE="${ENV_FILE:-.env}"
+EXTRA_ENV="${EXTRA_ENV:-}"
+
 set -a
-source .env
+for f in $ENV_FILE $EXTRA_ENV; do
+  [ -n "$f" ] && [ -f "$f" ] && source "$f"
+done
 set +a
 
 # Source logging utilities
@@ -58,7 +63,9 @@ INSTRUMENT="lsst.obs.nickel.Nickel"
 # Pipeline & configs
 PIPE="$OBS_NICKEL/pipelines/DRP.yaml"
 # TUNED_CFG_FILE="$OBS_NICKEL/configs/calibrateImage/custom_configs/config_robust.py"
-TUNED_CFG_FILE="$OBS_NICKEL/configs/calibrateImage/tuned_configs/best_calib_t071.py"
+# TUNED_CFG_FILE="$OBS_NICKEL/configs/calibrateImage/tuned_configs/best_calib_t071.py"
+# Using relaxed config for 2023ixf with poor initial WCS
+TUNED_CFG_FILE="$OBS_NICKEL/configs/calibrateImage/tuned_configs/2023ixf_relaxed.py"
 APPLY_CT_CFG="$OBS_NICKEL/configs/apply_colorterms.py"
 
 # Skymap (bootstrap chains this: skymaps/nickelRings -> skymaps)

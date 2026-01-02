@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# run_dia_multi_band.sh — Calibs+science once, then DIA across multiple bands
+# run_dia_multi_band.sh — Download (optional) + calibs + science once, then DIA across multiple bands
 # Usage example:
 #   ./scripts/pipeline/run_dia_multi_band.sh \
 #     --template-nights scripts/config/2020wnt/template_nights.txt \
@@ -11,6 +11,7 @@
 #     --jobs 4
 #
 # Notes:
+#   - Optionally downloads raws from archive per night (01_download_archive.sh)
 #   - Runs 10_calibs and 20_science once per night (no repetition per band)
 #   - Builds a template per band (30_coadds) unless --skip-template-build or --auto-template is set
 #   - Runs DIA (40_diff_imaging) per science night per band
@@ -21,6 +22,14 @@
 # Source logging utilities
 source "$(dirname "$0")/../utilities/logging.sh"
 
+ENV_FILE="${ENV_FILE:-.env}"
+EXTRA_ENV="${EXTRA_ENV:-}"
+
+set -a
+for f in $ENV_FILE $EXTRA_ENV; do
+  [ -n "$f" ] && [ -f "$f" ] && source "$f"
+done
+set +a
 ########################################
 # Defaults / CLI
 ########################################
@@ -39,6 +48,8 @@ SKYMAP="${SKYMAP:-nickelRings-v1}"
 OBJECT_FILTER=""
 JOBS="${JOBS:-4}"
 BAD_SUB_THRESH=""
+SKIP_DOWNLOAD=false
+DOWNLOAD_OVERWRITE=false
 SKIP_TEMPLATE_BUILD=false
 AUTO_TEMPLATE=false
 DRY_RUN=false
@@ -49,6 +60,7 @@ SKIP_SCIENCE=false
 
 # Exit codes: 0=success, 1=failures with --continue-on-error, 2=fatal error
 EXIT_CODE=0
+FAILED_DOWNLOADS=()
 FAILED_CALIBS=()
 FAILED_SCIENCE=()
 FAILED_TEMPLATE=()
@@ -84,6 +96,8 @@ Optional:
   --object NAME            OBJECT filter for science/DIA
   --jobs N                 Parallel jobs for pipeline tasks (default: ${JOBS})
   --bad-sub-threshold X    Override badSubtractionRatioThreshold for DIA
+  --skip-download          Skip archive downloads (assumes raw data already present)
+  --download-overwrite     Re-download even if files exist (passes --overwrite)
 
 Template Options:
   --skip-template-build    Skip 30_coadds (use existing templates)
@@ -125,6 +139,8 @@ while [[ $# -gt 0 ]]; do
     --object)          OBJECT_FILTER="${2:-}"; shift; shift;;
     --jobs|-j)         JOBS="${2:-4}"; shift; shift;;
     --bad-sub-threshold) BAD_SUB_THRESH="${2:-}"; shift; shift;;
+    --skip-download)   SKIP_DOWNLOAD=true; shift;;
+    --download-overwrite) DOWNLOAD_OVERWRITE=true; shift;;
     --skip-template-build) SKIP_TEMPLATE_BUILD=true; shift;;
     --auto-template)   AUTO_TEMPLATE=true; shift;;
     --dry-run)         DRY_RUN=true; shift;;
@@ -142,8 +158,6 @@ while [[ $# -gt 0 ]]; do
     usage;;
   esac
 done
-
-[[ -f ".env" ]] && { set -a; source .env; set +a; }
 
 # Validate that only one method is used per nights type (template/science)
 TEMPLATE_METHODS=0
@@ -264,9 +278,11 @@ ensure_butler_available() {
   fi
 
   # Common fallback installs
+  # Use LSST_CONDA_ENV_NAME if set, otherwise fall back to common versions
+  CONDA_ENV="${LSST_CONDA_ENV_NAME:-lsst-scipipe-12.0.0}"
   for candidate in \
-    "/opt/anaconda3/envs/lsst-scipipe-12.0.0/bin/butler" \
-    "/opt/rubin/envs/lsst-scipipe-12.0.0/bin/butler" \
+    "/opt/anaconda3/envs/${CONDA_ENV}/bin/butler" \
+    "/opt/rubin/envs/${CONDA_ENV}/bin/butler" \
     "/opt/lsst/software/stack/bin/butler"; do
     if [[ -x "$candidate" ]]; then
       PATH="$(dirname "$candidate"):$PATH"
@@ -441,14 +457,16 @@ if [[ -n "$RA" && -n "$DEC" ]] && [[ -z "$TRACT" ]]; then
     echo "ERROR: radec_to_tract.py not found at $RADEC_SCRIPT"; exit 2;
   fi
 
-  # Use LSST Python to run the script (hardcoded path like other scripts)
+  # Use LSST Python to run the script
   # Must load LSST environment for Python imports to work
   if [[ -n "${STACK_DIR:-}" && -f "${STACK_DIR}/loadLSST.bash" ]]; then
     source "${STACK_DIR}/loadLSST.bash" >/dev/null 2>&1
     setup lsst_distrib >/dev/null 2>&1
   fi
 
-  PYTHON_CMD="/opt/anaconda3/envs/lsst-scipipe-12.0.0/bin/python"
+  # Use LSST_CONDA_ENV_NAME if set, otherwise fall back to common version
+  CONDA_ENV="${LSST_CONDA_ENV_NAME:-lsst-scipipe-12.0.0}"
+  PYTHON_CMD="/opt/anaconda3/envs/${CONDA_ENV}/bin/python"
   if [[ ! -x "$PYTHON_CMD" ]]; then
     # Fallback to environment Python
     if [[ -n "${LSST_PYTHON:-}" && -x "$LSST_PYTHON" ]]; then
@@ -522,6 +540,24 @@ fi
 TEMPLATE_NIGHTS=($(read_nights "$TEMPLATE_NIGHTS_FILE"))
 SCIENCE_NIGHTS=($(read_nights "$SCIENCE_NIGHTS_FILE"))
 ALL_NIGHTS=($(printf "%s\n" "${TEMPLATE_NIGHTS[@]}" "${SCIENCE_NIGHTS[@]}" | uniq_list))
+
+########################################
+# Stage 0.5: Archive download (once per night)
+########################################
+if [[ "$SKIP_DOWNLOAD" == "true" ]]; then
+  log "Skipping archive download (--skip-download)"
+else
+  for night in "${ALL_NIGHTS[@]}"; do
+    DL_ARGS=(--night "$night")
+    [[ "$DOWNLOAD_OVERWRITE" == "true" ]] && DL_ARGS+=(--overwrite)
+    if ! run_or_dry ./scripts/pipeline/01_download_archive.sh "${DL_ARGS[@]}"; then
+      log "[WARN] Archive download failed for night $night"
+      FAILED_DOWNLOADS+=("$night")
+      EXIT_CODE=1
+      [[ "$CONTINUE_ON_ERROR" == "true" ]] || exit 2
+    fi
+  done
+fi
 
 ########################################
 # Stage 1: Calibs (once per night)
@@ -652,6 +688,7 @@ Bands: $BANDS
 Total nights: ${#SCIENCE_NIGHTS[@]}
 
 Results:
+$(if [[ ${#FAILED_DOWNLOADS[@]} -gt 0 ]]; then echo "  Failed downloads: ${FAILED_DOWNLOADS[*]}"; else echo "  All downloads succeeded (or skipped)"; fi)
 $(if [[ ${#FAILED_CALIBS[@]} -gt 0 ]]; then echo "  Failed calibs: ${FAILED_CALIBS[*]}"; else echo "  All calibs succeeded"; fi)
 $(if [[ ${#FAILED_SCIENCE[@]} -gt 0 ]]; then echo "  Failed science: ${FAILED_SCIENCE[*]}"; else echo "  All science succeeded"; fi)
 $(if [[ ${#FAILED_TEMPLATE[@]} -gt 0 ]]; then echo "  Failed templates: ${FAILED_TEMPLATE[*]}"; else echo "  All templates succeeded"; fi)
@@ -664,6 +701,7 @@ EOF
 write_summary "$SUMMARY_TEXT"
 
 if [[ "$CONTINUE_ON_ERROR" == "true" ]]; then
+  [[ ${#FAILED_DOWNLOADS[@]} -gt 0 ]] && log_warn "Failed downloads: ${FAILED_DOWNLOADS[*]}"
   [[ ${#FAILED_CALIBS[@]} -gt 0 ]] && log_warn "Failed calibs: ${FAILED_CALIBS[*]}"
   [[ ${#FAILED_SCIENCE[@]} -gt 0 ]] && log_warn "Failed science: ${FAILED_SCIENCE[*]}"
   [[ ${#FAILED_TEMPLATE[@]} -gt 0 ]] && log_warn "Failed template builds: ${FAILED_TEMPLATE[*]}"

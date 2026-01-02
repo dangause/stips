@@ -11,5 +11,8 @@ requires-python = ">=3.12"
 dependencies = ["pyyaml"]
 readme = "README.md"
 
+[project.scripts]
+nickel-refcats = "nickel_refcats.cli:main"
+
 [tool.setuptools.packages.find]
 where = ["src"]

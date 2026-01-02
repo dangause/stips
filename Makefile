@@ -1,28 +1,31 @@
 SHELL := /bin/bash
 ENV_FILE ?= .env
+EXTRA_ENV ?=
 PYTHON ?= python
 PIP ?= $(PYTHON) -m pip
 PACKAGES := packages/obs_nickel packages/archive_tools packages/defects packages/refcats packages/testdata packages/tuning packages/colorterms
 
-# Multi-repo support: Allow REPO override via environment variable
-# Usage: REPO=/path/to/repo2 make calibs NIGHT=20240625
-# Or:    ENV_FILE=repo2.env make calibs NIGHT=20240625
+# Multi-repo support:
+# - Switch primary env file:   ENV_FILE=repo2.env make calibs NIGHT=20240625
+# - Layer common overrides:    EXTRA_ENV=".env.common .env.prod" make calibs NIGHT=20240625
+define load_envs
+for f in $(ENV_FILE) $(EXTRA_ENV); do \
+	if [[ -n "$$f" && -f "$$f" ]]; then \
+		set -a; source "$$f"; set +a; \
+	elif [[ -n "$$f" && "$$f" != ".env" ]]; then \
+		echo "Warning: env file $$f not found" >&2; \
+	fi; \
+done; \
+export REPO="$${REPO:-}"; \
+export LSST_CONDA_ENV_NAME="$${LSST_CONDA_ENV_NAME:-}"
+endef
+
 define envsource
-if [ -f "$(ENV_FILE)" ]; then \
-	source $(ENV_FILE); \
-elif [ "$(ENV_FILE)" != ".env" ]; then \
-	echo "Warning: ENV_FILE=$(ENV_FILE) not found, using defaults"; \
-fi; \
-export REPO="$${REPO:-}";
+$(load_envs)
 endef
 
 define setup_stack
-if [ -f "$(ENV_FILE)" ]; then \
-	set -a; source $(ENV_FILE); set +a; \
-elif [ "$(ENV_FILE)" != ".env" ]; then \
-	echo "Warning: ENV_FILE=$(ENV_FILE) not found"; \
-fi; \
-export REPO="$${REPO:-}"; \
+$(load_envs); \
 if [ -f "$${STACK_DIR}/loadLSST.zsh" ]; then \
 	source "$${STACK_DIR}/loadLSST.zsh"; \
 	setup lsst_distrib; \
@@ -92,6 +95,20 @@ endif
 dia-multiband: ## Run multi-band DIA helper (wraps run_dia_multi_band.sh)
 	$(SHELL) -lc '$(setup_stack) ./scripts/pipeline/run_dia_multi_band.sh $(ARGS)'
 
+.PHONY: refcat-cones
+refcat-cones: ## Generate cones.csv + htm7_list.txt via nickel-refcats (pass ARGS="--ras ... --decs ...")
+	$(SHELL) -lc 'cd $(PWD) && $(setup_stack) \
+		PYTHONPATH=$${PYTHONPATH}:$${PWD}/packages/refcats/src python -u -m nickel_refcats cones $(ARGS)'
+
+.PHONY: declare-eups
+declare-eups: ## Declare obs_nickel and testdata_nickel in the current stack (uses STACK_DIR and env files)
+	$(SHELL) -lc '$(envsource) \
+	  if [ -f "$${STACK_DIR}/loadLSST.zsh" ]; then source "$${STACK_DIR}/loadLSST.zsh"; \
+	  elif [ -f "$${STACK_DIR}/loadLSST.bash" ]; then source "$${STACK_DIR}/loadLSST.bash"; \
+	  else echo "STACK_DIR loader not found (loadLSST)"; exit 1; fi; \
+	  eups declare obs_nickel git -r "$(PWD)/packages/obs_nickel" -m ups -t current || true; \
+	  eups declare testdata_nickel git -r "$(PWD)/packages/testdata" -m ups -t current || true'
+
 .PHONY: batch
 batch: ## Batch process nights file. NIGHTS_FILE=path/to/nights.txt
 ifndef NIGHTS_FILE
@@ -108,11 +125,11 @@ stack-install: ## Install an LSST stack release (TAG=w_2025_10 or r_28_0_0). Doe
 ifndef TAG
 	$(error TAG is required, e.g. TAG=w_2025_10)
 endif
-	$(SHELL) -lc '$(envsource); \
+	$(SHELL) -lc '$(envsource) \
 	  prefix="$${STACK_PREFIX:-}"; \
 	  if [[ -z "$$prefix" && -n "$$STACK_DIR" ]]; then prefix="$$STACK_DIR"; fi; \
 	  if [[ -z "$$prefix" ]]; then prefix="$$HOME/lsst_stacks"; fi; \
-	  ./scripts/utilities/install_stack_version.sh --release $(TAG) --prefix "$$prefix"'
+	  ./scripts/utilities/install_stack_version.sh --release $(TAG) --prefix "$$prefix" $(if $(INSTALL_DISTRIB),--install-distrib,)'
 
 .PHONY: lint
 lint: ## Ruff lint across the workspace
@@ -131,6 +148,15 @@ notebook: ## Start Jupyter Lab with LSST stack + UV venv active
 	@echo "Starting Jupyter Lab with LSST stack..."
 	@echo "Note: You may need to select the .venv kernel in Jupyter"
 	$(SHELL) -lc '$(setup_stack) source .venv/bin/activate && jupyter lab'
+
+.PHONY: env-info
+env-info: ## Show which env file(s) will be loaded and key paths
+	$(SHELL) -lc '$(load_envs); \
+		echo "ENV_FILE=$(ENV_FILE)"; \
+		echo "EXTRA_ENV=$(EXTRA_ENV)"; \
+		printf "STACK_DIR=%s\nREPO=%s\nOBS_NICKEL=%s\nCP_PIPE_DIR=%s\nLSST_CONDA_ENV_NAME=%s\n" \
+			"$${STACK_DIR:-<unset>}" "$${REPO:-<unset>}" "$${OBS_NICKEL:-<unset>}" "$${CP_PIPE_DIR:-<unset>}" "$${LSST_CONDA_ENV_NAME:-<unset>}"; \
+	'
 
 .PHONY: help
 help: ## Show this help message

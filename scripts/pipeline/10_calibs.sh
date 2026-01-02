@@ -4,8 +4,13 @@
 
 # set -euo pipefail
 
+ENV_FILE="${ENV_FILE:-.env}"
+EXTRA_ENV="${EXTRA_ENV:-}"
+
 set -a
-source .env
+for f in $ENV_FILE $EXTRA_ENV; do
+  [ -n "$f" ] && [ -f "$f" ] && source "$f"
+done
 set +a
 
 # Source logging utilities
@@ -197,7 +202,8 @@ butler query-collections "$REPO" | awk '{print $1}' | grep -qx "$CP_RUN_FLAT" \
 ########## DEFECTS (from flats; use the child RUN for deterministic reads) ##########
 echo "[defects] from $CP_RUN_FLAT_RUN -> $DEFECTS_RUN"
 # Use explicit LSST Python to avoid picking up system/homebrew Python
-/opt/anaconda3/envs/lsst-scipipe-12.0.0/bin/python "$OBS_NICKEL"/scripts/python/defects_tools/defects/make_defects_from_flats.py \
+CONDA_ENV="${LSST_CONDA_ENV_NAME:-lsst-scipipe-12.0.0}"
+/opt/anaconda3/envs/${CONDA_ENV}/bin/python "$OBS_NICKEL"/scripts/python/defects_tools/defects/make_defects_from_flats.py \
   --repo "$REPO" \
   --collection "$CP_RUN_FLAT_RUN" \
   --invert-manual-y \

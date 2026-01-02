@@ -356,7 +356,8 @@ if [[ "$SKIP_DOWNLOAD" == "false" ]]; then
             [[ -n "${RAW_PARENT_DIR:-}" ]] && DOWNLOAD_ARGS+=(--raw-root "$RAW_PARENT_DIR")
 
             # Use venv Python if available, otherwise LSST Python
-            PYTHON_CMD="/opt/anaconda3/envs/lsst-scipipe-12.0.0/bin/python"
+            CONDA_ENV="${LSST_CONDA_ENV_NAME:-lsst-scipipe-12.0.0}"
+            PYTHON_CMD="/opt/anaconda3/envs/${CONDA_ENV}/bin/python"
             if [[ -n "${LICK_ARCHIVE_DIR:-}" && -f "${LICK_ARCHIVE_DIR}/.venv/bin/python" ]]; then
                 PYTHON_CMD="${LICK_ARCHIVE_DIR}/.venv/bin/python"
             fi

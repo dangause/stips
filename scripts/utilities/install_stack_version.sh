@@ -18,6 +18,7 @@ RELEASE=""
 PREFIX="${LSST_STACKS_ROOT:-${STACK_DIR:-$HOME/lsst_stacks}}"
 LSSTINSTALL_BIN="${LSSTINSTALL_BIN:-}"
 PYVER=""  # optional, passed to lsstinstall (-P)
+INSTALL_DISTRIB=false
 
 usage() {
   cat <<USAGE
@@ -39,6 +40,7 @@ while [[ $# -gt 0 ]]; do
     --prefix) PREFIX="${2:-}"; shift 2;;
     --lsstinstall) LSSTINSTALL_BIN="${2:-}"; shift 2;;
     --python) PYVER="${2:-}"; shift 2;;
+    --install-distrib) INSTALL_DISTRIB=true; shift 1;;
     -h|--help) usage; exit 0;;
     *) echo "Unknown arg: $1" >&2; usage; exit 2;;
   esac
@@ -80,6 +82,25 @@ cmd+=("$RELEASE")
 echo "[info] Installing stack release '$RELEASE' into $TARGET"
 echo "[info] Command: ${cmd[*]}"
 "${cmd[@]}"
+
+if [[ "$INSTALL_DISTRIB" == "true" ]]; then
+  echo "[info] Installing lsst_distrib with tag $RELEASE"
+  if [[ ! -f "$TARGET/loadLSST.sh" ]]; then
+    echo "ERROR: loadLSST.sh not found at $TARGET; cannot install lsst_distrib" >&2
+    exit 2
+  fi
+  # Honor user-provided LSST_CONDA_ENV_NAME if set in the environment
+  # shellcheck disable=SC1090
+  source "$TARGET/loadLSST.sh"
+  if ! command -v eups >/dev/null 2>&1; then
+    echo "ERROR: eups not available after sourcing $TARGET/loadLSST.sh" >&2
+    exit 2
+  fi
+  if ! eups distrib install -t "$RELEASE" lsst_distrib; then
+    echo "ERROR: eups distrib install failed for tag $RELEASE" >&2
+    exit 2
+  fi
+fi
 
 cat <<DONE
 [ok] Installed $RELEASE at $TARGET

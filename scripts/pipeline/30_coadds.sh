@@ -6,8 +6,13 @@
 
 # set -euo pipefail
 
+ENV_FILE="${ENV_FILE:-.env}"
+EXTRA_ENV="${EXTRA_ENV:-}"
+
 set -a
-source .env
+for f in $ENV_FILE $EXTRA_ENV; do
+  [ -n "$f" ] && [ -f "$f" ] && source "$f"
+done
 set +a
 
 # Source logging utilities
@@ -297,7 +302,8 @@ if pipetask run \
     # Record metadata
     TEMPLATE_META_SCRIPT="$OBS_NICKEL/scripts/python/pipeline_tools/template_metadata.py"
     if [[ -f "$TEMPLATE_META_SCRIPT" ]]; then
-      /opt/anaconda3/envs/lsst-scipipe-12.0.0/bin/python "$TEMPLATE_META_SCRIPT" record \
+      CONDA_ENV="${LSST_CONDA_ENV_NAME:-lsst-scipipe-12.0.0}"
+      /opt/anaconda3/envs/${CONDA_ENV}/bin/python "$TEMPLATE_META_SCRIPT" record \
         --repo "$REPO" \
         --collection "$TEMPLATE_PARENT" \
         --start "$START_DATE" \

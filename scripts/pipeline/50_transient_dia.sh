@@ -436,11 +436,12 @@ QUALITY_REPORT="$OUTPUT_DIR/${TRANSIENT_NAME}_quality_report.txt"
 ASSESS_SCRIPT="$OBS_NICKEL/scripts/python/pipeline_tools/assess_dia_quality.py"
 
 if [[ -f "$ASSESS_SCRIPT" ]]; then
+    CONDA_ENV="${LSST_CONDA_ENV_NAME:-lsst-scipipe-12.0.0}"
     for night in "${DIA_NIGHTS[@]}"; do
         log "Assessing quality for night: $night"
 
         if [[ "$DRY_RUN" == "false" ]]; then
-            /opt/anaconda3/envs/lsst-scipipe-12.0.0/bin/python "$ASSESS_SCRIPT" \
+            /opt/anaconda3/envs/${CONDA_ENV}/bin/python "$ASSESS_SCRIPT" \
                 --repo "${REPO:-/Users/dangause/Developer/lick/lsst/data/nickel/repo}" \
                 --collection "$DIA_OUTPUT_COLLECTION" \
                 --night "$night" \

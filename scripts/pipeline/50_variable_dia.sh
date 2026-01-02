@@ -530,9 +530,10 @@ if [[ "$SKIP_LIGHTCURVES" == "false" && -n "$TARGETS_FILE" ]]; then
             log "Extracting light curve for: $name (RA=$ra, Dec=$dec)"
 
             LIGHTCURVE_OUTPUT="$OUTPUT_DIR/${FIELD_NAME}_${name}_lightcurve.ecsv"
+            CONDA_ENV="${LSST_CONDA_ENV_NAME:-lsst-scipipe-12.0.0}"
 
             if [[ "$DRY_RUN" == "false" ]]; then
-                /opt/anaconda3/envs/lsst-scipipe-12.0.0/bin/python "$EXTRACT_SCRIPT" \
+                /opt/anaconda3/envs/${CONDA_ENV}/bin/python "$EXTRACT_SCRIPT" \
                     --repo "${REPO:-/Users/dangause/Developer/lick/lsst/data/nickel/repo}" \
                     --collection "$DIA_OUTPUT_COLLECTION" \
                     --ra "$ra" \
@@ -587,10 +588,11 @@ if [[ -f "$ASSESS_SCRIPT" ]]; then
         echo "" >> "$QUALITY_REPORT"
 
         # Assess each night
+        CONDA_ENV="${LSST_CONDA_ENV_NAME:-lsst-scipipe-12.0.0}"
         for night in "${DIA_NIGHTS[@]}"; do
             log "Assessing quality for night: $night"
 
-            /opt/anaconda3/envs/lsst-scipipe-12.0.0/bin/python "$ASSESS_SCRIPT" \
+            /opt/anaconda3/envs/${CONDA_ENV}/bin/python "$ASSESS_SCRIPT" \
                 --repo "${REPO:-/Users/dangause/Developer/lick/lsst/data/nickel/repo}" \
                 --collection "$DIA_OUTPUT_COLLECTION" \
                 --night "$night" \

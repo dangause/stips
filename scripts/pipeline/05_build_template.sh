@@ -11,8 +11,13 @@
 # 3. Downloads those observations
 # 4. Ingests them for template building
 
+ENV_FILE="${ENV_FILE:-.env}"
+EXTRA_ENV="${EXTRA_ENV:-}"
+
 set -a
-source .env
+for f in $ENV_FILE $EXTRA_ENV; do
+  [ -n "$f" ] && [ -f "$f" ] && source "$f"
+done
 set +a
 
 ########## CLI ##########
@@ -73,7 +78,8 @@ if [[ -z "$RAW_PARENT_DIR" ]]; then
 fi
 
 # Python path
-PYTHON=/opt/anaconda3/envs/lsst-scipipe-12.0.0/bin/python
+CONDA_ENV="${LSST_CONDA_ENV_NAME:-lsst-scipipe-12.0.0}"
+PYTHON=/opt/anaconda3/envs/${CONDA_ENV}/bin/python
 
 # Check if lick_archive is available
 if ! $PYTHON -c "import lick_archive" 2>/dev/null; then

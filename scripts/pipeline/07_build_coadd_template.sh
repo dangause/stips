@@ -6,8 +6,13 @@
 #       --science-run "Nickel/templates/template_2020wnt/science/20251217T123456Z" \
 #       --jobs 1
 
+ENV_FILE="${ENV_FILE:-.env}"
+EXTRA_ENV="${EXTRA_ENV:-}"
+
 set -a
-source .env
+for f in $ENV_FILE $EXTRA_ENV; do
+  [ -n "$f" ] && [ -f "$f" ] && source "$f"
+done
 set +a
 
 ########## CLI ##########
