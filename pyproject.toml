@@ -30,7 +30,7 @@ line-length = 110
 target-version = "py312"
 src = [
     "packages/obs_nickel",
-    "packages/archive_tools",
+    "packages/data_tools",
     "packages/defects",
     "packages/refcats",
     "packages/testdata",
@@ -84,7 +84,7 @@ venvPath = "."
 venv = ".venv"
 include = [
     "packages/obs_nickel",
-    "packages/archive_tools",
+    "packages/data_tools",
     "packages/defects",
     "packages/refcats",
     "packages/testdata",

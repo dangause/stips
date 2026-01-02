@@ -8,6 +8,6 @@ Suggested workflow:
 
 1. Edit the manifest entry with the new bundle version + checksum.
 2. Upload the bundle to your object store.
-3. Run the fetcher (to be added under `archive_tools`) to download/verify into
+3. Run the fetcher (to be added under `data_tools`) to download/verify into
    `${OBS_NICKEL_DATA:-$HOME/.cache/obs_nickel}`.
 4. Commit the manifest change alongside the code/config that expects it.

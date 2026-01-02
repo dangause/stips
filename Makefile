@@ -3,7 +3,7 @@ ENV_FILE ?= .env
 EXTRA_ENV ?=
 PYTHON ?= python
 PIP ?= $(PYTHON) -m pip
-PACKAGES := packages/obs_nickel packages/archive_tools packages/defects packages/refcats packages/testdata packages/tuning packages/colorterms
+PACKAGES := packages/obs_nickel packages/data_tools packages/defects packages/refcats packages/testdata packages/tuning packages/colorterms
 
 # Multi-repo support:
 # - Switch primary env file:   ENV_FILE=repo2.env make calibs NIGHT=20240625

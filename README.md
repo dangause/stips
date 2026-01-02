@@ -48,12 +48,13 @@ See detailed workflows below.
 - **Difference imaging (DIA)**: transient/variable detection
 - **Batch processing**: multi-night orchestration
 
-### Analysis Tools
-- Archive data download (`archive_tools`)
-- PS1 template ingest
-- SkyMap generation
-- Light curve extraction
-- DIA quality assessment
+### Data Access & Analysis Tools
+- **Archive exploration & download** (`data_tools`)
+- **EDA tools**: Query archive metadata, inspect Butler repositories
+- **PS1 template ingest**
+- **SkyMap generation**
+- **Light curve extraction**
+- **DIA quality assessment**
 - Defect mask generation (`defects`)
 - Color term fitting (`colorterms`)
 
@@ -65,7 +66,7 @@ See detailed workflows below.
 obs_nickel/
 ├── packages/
 │   ├── obs_nickel/           # LSST instrument package (camera, configs, pipelines)
-│   ├── archive_tools/        # Archive download, PS1 templates, skymap, DIA tools
+│   ├── data_tools/           # Data access, EDA, archive download, PS1 templates, skymap, DIA tools
 │   ├── defects/              # Defect mask tooling and generated masks
 │   ├── refcats/              # Reference catalog scripts and helpers
 │   ├── testdata/             # Test fixtures (small FITS files)
