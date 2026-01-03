@@ -57,6 +57,7 @@ CONTINUE_ON_ERROR=false
 SKIP_BOOTSTRAP=false
 SKIP_CALIBS=false
 SKIP_SCIENCE=false
+OVERWRITE_TEMPLATES=false
 
 # Exit codes: 0=success, 1=failures with --continue-on-error, 2=fatal error
 EXIT_CODE=0
@@ -102,6 +103,7 @@ Optional:
 Template Options:
   --skip-template-build    Skip 30_coadds (use existing templates)
   --auto-template          Let 40_diff_imaging auto-discover templates (skips 30)
+  --overwrite-templates    Force rebuild templates even if collections/runs already exist
 
 Pipeline Control:
   --skip-bootstrap         Skip repository bootstrap (fail if repo doesn't exist)
@@ -143,6 +145,7 @@ while [[ $# -gt 0 ]]; do
     --download-overwrite) DOWNLOAD_OVERWRITE=true; shift;;
     --skip-template-build) SKIP_TEMPLATE_BUILD=true; shift;;
     --auto-template)   AUTO_TEMPLATE=true; shift;;
+    --overwrite-templates) OVERWRITE_TEMPLATES=true; shift;;
     --dry-run)         DRY_RUN=true; shift;;
     --continue-on-error) CONTINUE_ON_ERROR=true; shift;;
     --skip-bootstrap)  SKIP_BOOTSTRAP=true; shift;;
@@ -435,9 +438,39 @@ template_exists() {
   return 1
 }
 
+# Remove existing template runs/collections for a band when overwriting
+purge_template_band() {
+  local tract="$1"
+  local band="$2"
+  local template_parent="templates/deep/tract${tract}/${band}"
+  local template_dir="$REPO/$template_parent"
+
+  log "[band $band] Overwrite requested; removing existing template data: $template_parent"
+
+  if [[ "$DRY_RUN" == "true" ]]; then
+    echo "[DRY-RUN] butler remove-collections \"$REPO\" \"$template_parent\" --purge-children"
+    echo "[DRY-RUN] rm -rf \"$template_dir\""
+    return 0
+  fi
+
+  # Remove collection chain (and child runs if supported)
+  if ensure_butler_available; then
+    butler remove-collections "$REPO" "$template_parent" --purge-children >/dev/null 2>&1 || \
+      butler collection-chain "$REPO" "$template_parent" --mode=replace >/dev/null 2>&1 || true
+  else
+    log "[WARN] butler not available; skipping collection removal for $template_parent"
+  fi
+
+  rm -rf "$template_dir"
+}
+
 ########################################
 # Stage 0: Bootstrap if needed
 ########################################
+if [[ "$OVERWRITE_TEMPLATES" == "true" && ( "$SKIP_TEMPLATE_BUILD" == "true" || "$AUTO_TEMPLATE" == "true" ) ]]; then
+  log "[WARN] --overwrite-templates specified but template build is disabled (skip-template-build/auto-template); flag will be ignored"
+fi
+
 if [[ ! -f "$REPO/butler.yaml" ]]; then
   if [[ "$SKIP_BOOTSTRAP" == "true" ]]; then
     echo "ERROR: Repo not found ($REPO) and --skip-bootstrap set"; exit 2;
@@ -604,19 +637,25 @@ for BAND in "${BAND_ARRAY[@]}"; do
   log "=== Band: $BAND ==="
 
   TEMPLATE_COLLECTION=""
+  TEMPLATE_PARENT="templates/deep/tract${TRACT}/${BAND}"
+  TEMPLATE_DIR="$REPO/$TEMPLATE_PARENT"
 
   if [[ "$AUTO_TEMPLATE" == "false" && "$SKIP_TEMPLATE_BUILD" == "false" ]]; then
-    # Check if template already exists with data
-    TEMPLATE_DIR="$REPO/templates/deep/tract${TRACT}/${BAND}"
-    if [[ -d "$TEMPLATE_DIR" ]] && find "$TEMPLATE_DIR" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | grep -q .; then
-      TEMPLATE_COLLECTION="templates/deep/tract${TRACT}/${BAND}"
-      log "[band $BAND] Template already exists: $TEMPLATE_COLLECTION (skipping rebuild)"
+    if [[ "$OVERWRITE_TEMPLATES" == "true" ]]; then
+      purge_template_band "$TRACT" "$BAND"
+    fi
+
+    if [[ "$OVERWRITE_TEMPLATES" == "false" ]] && template_exists "$TRACT" "$BAND"; then
+      TEMPLATE_COLLECTION="$TEMPLATE_PARENT"
+      log "[band $BAND] Template already exists: $TEMPLATE_COLLECTION (skipping rebuild; use --overwrite-templates to force)"
     else
       # Build new template
       TMP_NIGHTS_FILE="$(mktemp)"
       TEMP_FILES+=("$TMP_NIGHTS_FILE")
       printf "%s\n" "${TEMPLATE_NIGHTS[@]}" > "$TMP_NIGHTS_FILE"
-      if ! run_or_dry ./scripts/pipeline/30_coadds.sh --nights-file "$TMP_NIGHTS_FILE" --band "$BAND" --tract "$TRACT" -j "$JOBS"; then
+      COADD_CMD=(./scripts/pipeline/30_coadds.sh --nights-file "$TMP_NIGHTS_FILE" --band "$BAND" --tract "$TRACT" -j "$JOBS")
+      [[ "$OVERWRITE_TEMPLATES" == "true" ]] && COADD_CMD+=(--rebase)
+      if ! run_or_dry "${COADD_CMD[@]}"; then
         log "[WARN] Template build failed for band $BAND"
         FAILED_TEMPLATE+=("$BAND")
         EXIT_CODE=1
@@ -628,10 +667,9 @@ for BAND in "${BAND_ARRAY[@]}"; do
       # The 30_coadds.sh script creates both:
       #   - templates/deep/tract1825/i/TIMESTAMP (RUN collection)
       #   - templates/deep/tract1825/i (CHAINED collection pointing to the run)
-      TEMPLATE_COLLECTION="templates/deep/tract${TRACT}/${BAND}"
+      TEMPLATE_COLLECTION="$TEMPLATE_PARENT"
 
       # Verify it exists by checking the filesystem (faster than butler query)
-      TEMPLATE_DIR="$REPO/templates/deep/tract${TRACT}/${BAND}"
       if [[ ! -d "$TEMPLATE_DIR" ]]; then
         log "[WARN] Template directory not found: $TEMPLATE_DIR"
         log "[WARN] Checking for run collections..."

@@ -1,6 +1,31 @@
 object: "2023ixf"
 # Template reference nights (later 2023 observations when SN has faded)
 nights:
+  20230611:
+    b: []
+    v: []
+    r: []
+    i: []
+  20230618:
+    b: []
+    v: []
+    r: []
+    i: []
+  20230625:
+    b: []
+    v: []
+    r: []
+    i: []
+  20230629:
+    b: []
+    v: []
+    r: []
+    i: []
+  20230706:
+    b: []
+    v: []
+    r: []
+    i: []
   20230714:
     b: []
     v: []

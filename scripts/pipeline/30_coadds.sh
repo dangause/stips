@@ -27,6 +27,7 @@ PATCH=""
 INPUT_COLLECTIONS=""
 OUTPUT_COLLECTION=""
 JOBS="${JOBS:-8}"
+REBASE=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -38,6 +39,7 @@ while [[ $# -gt 0 ]]; do
     -i|--input)        INPUT_COLLECTIONS="${2:-}"; shift 2;;
     -o|--output)       OUTPUT_COLLECTION="${2:-}"; shift 2;;
     -j|--jobs)         JOBS="${2:-}"; shift 2;;
+    --rebase)          REBASE=true; shift;;
     -h|--help)
       cat <<USAGE
 Usage: $0 --tract TRACT --band BAND [options]
@@ -55,6 +57,7 @@ Optional:
   -i, --input COLLECTIONS   Input collections (default: auto-discover from nights)
   -o, --output COLLECTION   Output collection (default: templates/deep/{tract}/{band})
   -j, --jobs N              Number of parallel jobs (default: ${JOBS})
+  --rebase                  Rebase/replace output collection if it exists (overwrite chain; clears existing template collections/runs)
 
 Examples:
   # Build r-band template for tract 1099 from all available nights
@@ -112,6 +115,9 @@ log_section "Template Building"
 log_info "Tract: $TRACT"
 log_info "Band: $BAND"
 log_info "RUN_TS: $RUN_TS"
+if [[ "$REBASE" == "true" ]]; then
+  log_info "Rebasing: existing template collections/runs for ${TEMPLATE_PARENT} will be removed before rebuild"
+fi
 
 ########## LSST STACK ##########
 # Save critical variables (LSST stack setup may clear them)
@@ -142,6 +148,16 @@ JOBS="$_SAVED_JOBS"
 
 # Validate files
 [[ -s "$PIPE" ]] || { echo "ERROR: Pipeline not found: $PIPE"; exit 2; }
+
+# If rebasing, remove prior collections/runs to avoid chained-collection input mismatches
+if [[ "$REBASE" == "true" ]]; then
+  echo "[rebase] Removing existing template collections/runs for ${TEMPLATE_PARENT}"
+  # Best-effort cleanup; tolerate failures if nothing to remove
+  butler collection-chain "$REPO" "$TEMPLATE_PARENT" --mode redefine 2>/dev/null || true
+  butler remove-collections "$REPO" "$TEMPLATE_PARENT" 2>/dev/null || true
+  butler remove-runs "$REPO" ${TEMPLATE_PARENT}/* 2>/dev/null || true
+  rm -rf "$REPO/$TEMPLATE_PARENT"
+fi
 
 ########## BUILD INPUT COLLECTION LIST ##########
 if [[ -n "$INPUT_COLLECTIONS" ]]; then
@@ -228,6 +244,11 @@ echo "[where] $DATA_ID_QUERY"
 ########## GENERATE QUANTUM GRAPH ##########
 echo "[qgraph] Generating quantum graph -> $QG_FILE"
 
+QGRAPH_REBASE=()
+if [[ "$REBASE" == "true" ]]; then
+  QGRAPH_REBASE+=(--rebase)
+fi
+
 if ! pipetask qgraph \
   -b "$REPO" \
   -p "$PIPE#coadds-only" \
@@ -236,6 +257,7 @@ if ! pipetask qgraph \
   --output-run "$TEMPLATE_RUN" \
   --save-qgraph "$QG_FILE" \
   --qgraph-dot "$QG_DOT" \
+  "${QGRAPH_REBASE[@]}" \
   -d "$DATA_ID_QUERY"; then
   echo "[ERROR] Quantum graph generation failed"
   exit 2

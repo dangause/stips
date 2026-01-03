@@ -1,0 +1,16 @@
+# Test nights for 2020wnt recalibration pipeline
+# These nights have multi-band observations across the campaign
+# Good for testing FGCM (needs multiple nights/bands) and GBDES (needs overlap)
+
+# December 2020 (early SN, bright)
+20201207
+20201219
+
+# February 2021 (mid SN)
+20210208
+20210218
+20210228
+
+# March 2021 (fading SN)
+20210306
+20210321

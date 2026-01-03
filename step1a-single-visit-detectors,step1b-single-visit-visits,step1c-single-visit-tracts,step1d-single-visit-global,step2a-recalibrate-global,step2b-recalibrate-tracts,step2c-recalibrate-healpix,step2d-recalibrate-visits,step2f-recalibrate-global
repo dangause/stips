@@ -1,0 +1,1259 @@
+description: |
+  DRP pipeline with stage2 multi-epoch recalibration (FGCM/GBDES) for Nickel.
+  This is a test copy so you can try recalibration without touching the main DRP pipeline.
+instrument: lsst.obs.nickel.Nickel
+parameters:
+  release_id: 0
+tasks:
+  analyzeCalibrateImageMetadata:
+    class: lsst.analysis.tools.tasks.TaskMetadataAnalysisTask
+    config:
+    - python: 'from lsst.analysis.tools.atools import TaskMetadataMetricTool
+
+        '
+      connections.inputName: calibrateImage_metadata
+      connections.outputName: calibrateImage_metadata
+      connections.storageClass: TaskMetadata
+      raiseNoWorkFoundOnIncompleteMetadata: true
+      inputDimensions:
+      - instrument
+      - visit
+      - detector
+      atools.calibrateImageMetadataMetrics: TaskMetadataMetricTool
+      atools.calibrateImageMetadataMetrics.taskName: calibrateImage
+      atools.calibrateImageMetadataMetrics.metrics:
+        initial_psf_positive_footprint_count: ct
+        initial_psf_negative_footprint_count: ct
+        initial_psf_positive_peak_count: ct
+        initial_psf_negative_peak_count: ct
+        simple_psf_positive_footprint_count: ct
+        simple_psf_negative_footprint_count: ct
+        simple_psf_positive_peak_count: ct
+        simple_psf_negative_peak_count: ct
+        bad_mask_fraction: ''
+        cr_mask_fraction: ''
+        crosstalk_mask_fraction: ''
+        detected_mask_fraction: ''
+        detected_negative_mask_fraction: ''
+        edge_mask_fraction: ''
+        intrp_mask_fraction: ''
+        no_data_mask_fraction: ''
+        sat_mask_fraction: ''
+        suspect_mask_fraction: ''
+        unmaskednan_mask_fraction: ''
+        numAvailStars: ct
+        numGoodStars: ct
+        sky_footprint_count: ct
+        post_deblend_source_count: ct
+        star_count: ct
+        saturated_source_count: ct
+        bad_source_count: ct
+        cosmic_ray_count: ct
+        matched_psf_star_count: ct
+        final_psf_sigma: pixel
+        astrometry_matches_count: ct
+        photometry_matches_count: ct
+        bg_subtracted_skyPixel_instFlux_median: adu
+        bg_subtracted_skyPixel_instFlux_stdev: adu
+        bg_subtracted_skySource_flux_median: nJy
+        bg_subtracted_skySource_flux_stdev: nJy
+        adaptive_threshold_value: ''
+        initial_to_final_wcs: arcsec
+        astrom_offset_mean: arcsec
+        astrom_offset_std: arcsec
+        astrom_offset_median: arcsec
+        failed_deblend_source_count: ct
+      atools.calibrateImageMetadataMetrics.subTaskNames:
+        numAvailStars: psf_measure_psf
+        numGoodStars: psf_measure_psf
+        sky_footprint_count: star_sky_sources
+        cosmic_ray_count: psf_repair
+      atools.calibrateImageMetadataMetrics.newNames:
+        numAvailStars: psf_available_star_count
+        numGoodStars: psf_good_star_count
+        adaptive_threshold_value: final_adaptive_threshold_value
+  analyzeAmpOffsetMetadata:
+    class: lsst.analysis.tools.tasks.MetadataExposureDetectorAnalysisTask
+    config:
+    - python: 'from lsst.analysis.tools.atools import TaskMetadataMetricTool
+
+        '
+      connections.inputName: isr_metadata
+      connections.outputName: isrAmpOffsetMetadata
+      atools.isrAmpOffsetMetadataMetric: TaskMetadataMetricTool
+      atools.isrAmpOffsetMetadataMetric.parameterizedBand: false
+      atools.isrAmpOffsetMetadataMetric.taskName: isr
+      atools.isrAmpOffsetMetadataMetric.metrics:
+        AMPOFFSET_PEDESTALS: adu
+      atools.isrAmpOffsetMetadataMetric.subTaskNames:
+        AMPOFFSET_PEDESTALS: ampOffset
+  analyzeAmpInterfaceOffsetMetadata:
+    class: lsst.analysis.tools.tasks.DatasetMetadataAnalysisTask
+    config:
+    - python: 'from lsst.analysis.tools.atools import DatasetMetadataMetricTool
+
+        '
+      connections.inputName: postISRCCD
+      connections.outputName: ampOffset_metadata
+      connections.storageClass: Exposure
+      inputDimensions:
+      - instrument
+      - exposure
+      - detector
+      atools.isrAmpInterfaceOffsetMetadataMetric: DatasetMetadataMetricTool
+      atools.isrAmpInterfaceOffsetMetadataMetric.parameterizedBand: false
+      atools.isrAmpInterfaceOffsetMetadataMetric.metrics:
+        LSST ISR AMPOFFSET INTERFACEOFFSET: adu
+      atools.isrAmpInterfaceOffsetMetadataMetric.metricsPrefixedWithBaseKeys:
+        LSST ISR AMPOFFSET INTERFACEOFFSET: true
+    - connections.inputName: post_isr_image
+  analyzeInitialSummaryStats:
+    class: lsst.analysis.tools.tasks.CalexpSummaryAnalysisTask
+    config:
+    - python: from lsst.analysis.tools.atools import *
+      connections.data: preliminary_visit_image.summaryStats
+      connections.outputName: initial_summary_stats
+      atools.calexpSummaryMetrics: CalexpSummaryMetrics
+  analyzeSingleVisitStar:
+    class: lsst.analysis.tools.tasks.SourceTableVisitAnalysisTask
+    config:
+    - file:
+      - $ANALYSIS_TOOLS_DIR/config/sourceTableCore.py
+      connections.data: single_visit_star
+      connections.outputName: single_visit_star
+  makeAnalysisSingleVisitStarAstrometricRefMatch:
+    class: lsst.analysis.tools.tasks.astrometricCatalogMatch.AstrometricCatalogMatchVisitTask
+    config:
+    - connections.targetCatalog: single_visit_star
+      connections.visitSummaryTable: preliminary_visit_summary
+      connections.matchedCatalog: '{targetCatalog}_ref_match_astrom'
+  analyzeSingleVisitStarAstrometricRefMatch:
+    class: lsst.analysis.tools.tasks.refCatSourceAnalysis.RefCatSourceAnalysisTask
+    config:
+    - file:
+      - $ANALYSIS_TOOLS_DIR/config/refCatSourceAstrometricCore.py
+      connections.targetCatalog: single_visit_star
+      connections.data: '{targetCatalog}_ref_match_astrom'
+      connections.outputName: single_visit_star_ref_match_astrom
+  makeAnalysisSingleVisitStarPhotometricRefMatch:
+    class: lsst.analysis.tools.tasks.photometricCatalogMatch.PhotometricCatalogMatchVisitTask
+    config:
+    - connections.targetCatalog: single_visit_star
+      connections.visitSummaryTable: preliminary_visit_summary
+      connections.matchedCatalog: '{targetCatalog}_ref_match_photom'
+  analyzeSingleVisitStarPhotometricRefMatch:
+    class: lsst.analysis.tools.tasks.refCatSourcePhotometricAnalysis.RefCatSourcePhotometricAnalysisTask
+    config:
+    - file:
+      - $ANALYSIS_TOOLS_DIR/config/refCatSourcePhotometricCore.py
+      connections.targetCatalog: single_visit_star
+      connections.data: '{targetCatalog}_ref_match_photom'
+      connections.outputName: single_visit_star_ref_match_photom
+  analyzeSingleVisitStarAssociation:
+    class: lsst.analysis.tools.tasks.AssociatedSourcesTractAnalysisTask
+    config:
+    - file:
+      - $ANALYSIS_TOOLS_DIR/config/matchedVisitCore.py
+      connections.sourceCatalogs: single_visit_star
+      connections.associatedSources: isolated_star
+      connections.associatedSourceIds: isolated_star_association
+      connections.outputName: single_visit_star_association
+      applyAstrometricCorrections: false
+  makeAnalysisSingleVisitStarAssociationMetricTable:
+    class: lsst.analysis.tools.tasks.MakeMetricTableTask
+    config:
+    - connections.metricBundleName: single_visit_star_association_metrics
+      connections.metricTable: single_visit_star_association_metrics_table
+      inputDataDimensions:
+      - instrument
+      - skymap
+      - tract
+  makeAnalysisSingleVisitStarAssociationWholeSkyPlot:
+    class: lsst.analysis.tools.tasks.WholeSkyAnalysisTask
+    config:
+    - file:
+      - $ANALYSIS_TOOLS_DIR/config/matchedVisitCoreWholeSkyPlot.py
+      connections.inputName: single_visit_star_association_metrics_table
+      connections.outputName: single_visit_star_association_whole_sky
+  analyzeRecalibratedStar:
+    class: lsst.analysis.tools.tasks.SourceTableVisitAnalysisTask
+    config:
+    - file:
+      - $ANALYSIS_TOOLS_DIR/config/sourceTableCore.py
+      connections.data: recalibrated_star
+      connections.outputName: recalibrated_star
+  makeAnalysisRecalibratedStarAstrometricRefMatch:
+    class: lsst.analysis.tools.tasks.astrometricCatalogMatch.AstrometricCatalogMatchVisitTask
+    config:
+    - connections.targetCatalog: recalibrated_star
+      connections.visitSummaryTable: visit_summary
+      connections.matchedCatalog: '{targetCatalog}_ref_match_astrom'
+  analyzeRecalibratedStarAstrometricRefMatch:
+    class: lsst.analysis.tools.tasks.refCatSourceAnalysis.RefCatSourceAnalysisTask
+    config:
+    - file:
+      - $ANALYSIS_TOOLS_DIR/config/refCatSourceAstrometricCore.py
+      connections.targetCatalog: recalibrated_star
+      connections.data: '{targetCatalog}_ref_match_astrom'
+      connections.outputName: recalibrated_star_ref_match_astrom
+  makeAnalysisRecalibratedStarPhotometricRefMatch:
+    class: lsst.analysis.tools.tasks.photometricCatalogMatch.PhotometricCatalogMatchVisitTask
+    config:
+    - connections.targetCatalog: recalibrated_star
+      connections.visitSummaryTable: visit_summary
+      connections.matchedCatalog: '{targetCatalog}_ref_match_photom'
+  analyzeRecalibratedStarPhotometricRefMatch:
+    class: lsst.analysis.tools.tasks.refCatSourcePhotometricAnalysis.RefCatSourcePhotometricAnalysisTask
+    config:
+    - file:
+      - $ANALYSIS_TOOLS_DIR/config/refCatSourcePhotometricCore.py
+      connections.targetCatalog: recalibrated_star
+      connections.data: '{targetCatalog}_ref_match_photom'
+      connections.outputName: recalibrated_star_ref_match_photom
+  analyzeRecalibratedStarObjectMatch:
+    class: lsst.analysis.tools.tasks.SourceObjectTableAnalysisTask
+    config:
+    - connections.data: recalibrated_star
+      connections.associatedSources: isolated_star
+      connections.associatedSourceIds: isolated_star_association
+      connections.refCat: object_patch
+      connections.visitTable: visit_table
+  analyzeRecalibratedStarAssociation:
+    class: lsst.analysis.tools.tasks.AssociatedSourcesTractAnalysisTask
+    config:
+    - file:
+      - $ANALYSIS_TOOLS_DIR/config/matchedVisitCore.py
+      connections.sourceCatalogs: recalibrated_star
+      connections.associatedSources: isolated_star
+      connections.associatedSourceIds: isolated_star_association
+      connections.outputName: recalibrated_star_association
+      connections.visitTable: preliminary_visit_table
+      applyAstrometricCorrections: true
+  makeAnalysisRecalibratedStarAssociationMetricTable:
+    class: lsst.analysis.tools.tasks.MakeMetricTableTask
+    config:
+    - connections.metricBundleName: recalibrated_star_association_metrics
+      connections.metricTable: recalibrated_star_association_metrics_table
+      inputDataDimensions:
+      - instrument
+      - skymap
+      - tract
+  makeAnalysisRecalibratedStarAssociationWholeSkyPlot:
+    class: lsst.analysis.tools.tasks.WholeSkyAnalysisTask
+    config:
+    - file:
+      - $ANALYSIS_TOOLS_DIR/config/matchedVisitCoreWholeSkyPlot.py
+      connections.inputName: recalibrated_star_association_metrics_table
+      connections.outputName: recalibrated_star_association_whole_sky
+  analyzeObjectTableCore:
+    class: lsst.analysis.tools.tasks.ObjectTableTractAnalysisTask
+    config:
+    - python: |
+        from lsst.analysis.tools.atools import *
+        from lsst.analysis.tools.contexts import *
+      connections.outputName: objectTableCore
+      atools.shapeSizeFractionalDiff: ShapeSizeFractionalDiffScatter
+      atools.e1Diff: E1DiffScatter
+      atools.e2Diff: E2DiffScatter
+      atools.skyFluxStatisticMetric: SkyFluxStatisticMetric
+      atools.skyFluxStatisticMetric.applyContext: CoaddContext
+      atools.wPerpPSF: WPerpPSF
+      atools.wPerpCModel: WPerpCModel
+      atools.xPerpPSF: XPerpPSF
+      atools.xPerpCModel: XPerpCModel
+      atools.yPerpPSF: YPerpPSF
+      atools.yPerpCModel: YPerpCModel
+      atools.skyObjectSky: SkyObjectSkyPlot
+      atools.skyObjectFlux: SkyObjectHistPlot
+      atools.psfCModelScatter: PsfCModelScatterPlot
+      atools.shapeSizeDetRadiusVsCmodelMag: SizeMagnitudePlot
+      atools.shapeSizeDetRadiusVsCmodelMag.size_type: determinantRadius
+      atools.shapeSizeDetRadiusVsCmodelMag.mag_x: cmodel_err
+      atools.shapeSizeDetRadiusVsCmodelMag.size_y: shape_slot
+      atools.shapeSizeDetRadiusVsCmodelMag.produce.plot.xLims: (17, 29)
+      atools.shapeSizeDetRadiusVsCmodelMag.produce.plot.yLims: (-4, 3)
+      atools.shapeSizeDetRadiusVsCmodelMag.applyContext: CoaddContext
+      atools.shapeSizeDetRadiusVsPsfMag: SizeMagnitudePlot
+      atools.shapeSizeDetRadiusVsPsfMag.size_type: determinantRadius
+      atools.shapeSizeDetRadiusVsPsfMag.mag_x: psf_err
+      atools.shapeSizeDetRadiusVsPsfMag.size_y: shape_slot
+      atools.shapeSizeDetRadiusVsPsfMag.applyContext: CoaddContext
+      atools.cModelBulgeSizeVsCmodelBulgeMag: SizeMagnitudePlot
+      atools.cModelBulgeSizeVsCmodelBulgeMag.size_type: singleColumnSize
+      atools.cModelBulgeSizeVsCmodelBulgeMag.mag_x: bulge_err
+      atools.cModelBulgeSizeVsCmodelBulgeMag.size_y: bulge
+      atools.cModelBulgeSizeVsCmodelBulgeMag.produce.plot.xLims: (17, 29)
+      atools.cModelBulgeSizeVsCmodelBulgeMag.produce.plot.yLims: (-4, 3)
+      atools.cModelBulgeSizeVsCmodelBulgeMag.applyContext: CoaddContext
+      atools.cModelDiskSizeVsCmodelDiskMag: SizeMagnitudePlot
+      atools.cModelDiskSizeVsCmodelDiskMag.size_type: singleColumnSize
+      atools.cModelDiskSizeVsCmodelDiskMag.mag_x: disk_err
+      atools.cModelDiskSizeVsCmodelDiskMag.size_y: disk
+      atools.cModelDiskSizeVsCmodelDiskMag.produce.plot.xLims: (17, 29)
+      atools.cModelDiskSizeVsCmodelDiskMag.produce.plot.yLims: (-4, 3)
+      atools.cModelDiskSizeVsCmodelDiskMag.applyContext: CoaddContext
+      atools.sersicSizeVsSersicMag: SizeMagnitudePlot
+      atools.sersicSizeVsSersicMag.config_moments.xx: reff_x
+      atools.sersicSizeVsSersicMag.config_moments.yy: reff_y
+      atools.sersicSizeVsSersicMag.config_moments.xy: rho
+      atools.sersicSizeVsSersicMag.is_covariance: false
+      atools.sersicSizeVsSersicMag.mag_x: sersic_err
+      atools.sersicSizeVsSersicMag.size_type: determinantRadius
+      atools.sersicSizeVsSersicMag.size_y: sersic
+      atools.sersicSizeVsSersicMag.produce.plot.xLims: (17, 29)
+      atools.sersicSizeVsSersicMag.produce.plot.yLims: (-4, 3)
+      atools.sersicSizeVsSersicMag.applyContext: CoaddContext
+      atools.sersicIndexVsSersicMag: ColumnMagnitudeScatterPlot
+      atools.sersicIndexVsSersicMag.mag_x: sersic_err
+      atools.sersicIndexVsSersicMag.key_y: sersic_index
+      atools.sersicIndexVsSersicMag.produce.plot.yAxisLabel: "S\xE9rsic index"
+      atools.sersicIndexVsSersicMag.produce.plot.xLims: (17, 29)
+      atools.sersicIndexVsSersicMag.produce.plot.yLims: (0.4, 6.1)
+      atools.sersicIndexVsSersicMag.produce.plot.legendLocation: upper right
+      atools.sersicIndexVsSersicMag.applyContext: CoaddContext
+      atools.coaddInputCount: CoaddInputCount
+      atools.coaddPatchCount: CountPatches
+    - connections.data: object_all
+      connections.inputName: object
+      connections.outputName: object
+  analyzeObjectParentTableCore:
+    class: lsst.analysis.tools.tasks.ObjectTableTractAnalysisTask
+    config:
+    - python: |
+        from lsst.analysis.tools.atools import *
+        from lsst.analysis.tools.contexts import *
+      connections.data: object_parent
+      connections.inputName: object_parent
+      connections.outputName: objectParentTableCore
+      atools.parentDeblenderMetrics: ParentDeblenderMetrics
+      atools.skippedDeblenderMetrics: SkippedDeblenderMetrics
+      atools.blendMetrics: BlendMetrics
+      atools.isolatedDeblenderMetrics: IsolatedDeblenderMetrics
+    - connections.data: object_parent
+      connections.inputName: object_parent
+      connections.outputName: object_parent
+  analyzeObjectTableSurveyCore:
+    class: lsst.analysis.tools.tasks.ObjectTableSurveyAnalysisTask
+    config:
+    - python: |
+        from lsst.analysis.tools.atools import *
+        from lsst.analysis.tools.contexts import *
+        from lsst.analysis.tools.actions.plot import *
+      connections.outputName: objectTableSurvey
+      atools.rhoStatistics: RhoStatistics
+      bands:
+      - i
+    - connections.data: object_all
+      connections.input: deep
+      connections.outputName: object_survey
+  catalogMatchTract:
+    class: lsst.analysis.tools.tasks.astrometricCatalogMatch.AstrometricCatalogMatchTask
+    config:
+    - connections.catalog: object_all
+      connections.targetCatalog: object
+      connections.matchedCatalog: '{targetCatalog}_ref_match_astrom'
+  refCatObjectTract:
+    class: lsst.analysis.tools.tasks.refCatObjectAnalysis.RefCatObjectAnalysisTask
+    config:
+    - python: |
+        from lsst.analysis.tools.atools import *
+        from lsst.analysis.tools.contexts import *
+      atools.astromDiffRAScatterPlot: TargetRefCatDeltaRAScatterPlot
+      atools.astromDiffDecScatterPlot: TargetRefCatDeltaDecScatterPlot
+      atools.astromDiffRASkyPlot: TargetRefCatDeltaRASkyPlot
+      atools.astromDiffDecSkyPlot: TargetRefCatDeltaDecSkyPlot
+      atools.astromDiffMetrics: TargetRefCatDeltaMetrics
+      atools.astromDiffMetrics.applyContext: CoaddContext
+    - connections.targetCatalog: object
+      connections.data: '{targetCatalog}_ref_match_astrom'
+      connections.outputName: object_ref_match_astrom
+  photometricCatalogMatch:
+    class: lsst.analysis.tools.tasks.photometricCatalogMatch.PhotometricCatalogMatchTask
+    config:
+    - connections.catalog: object_all
+      connections.targetCatalog: object
+      connections.matchedCatalog: '{targetCatalog}_ref_match_photom'
+  photometricRefCatObjectTract:
+    class: lsst.analysis.tools.tasks.refCatObjectPhotometricAnalysis.RefCatObjectPhotometricAnalysisTask
+    config:
+    - python: |
+        from lsst.analysis.tools.atools import *
+        from lsst.analysis.tools.contexts import *
+      atools.targetRefCatDeltaPsfScatterPlot: TargetRefCatDeltaPsfScatterPlot
+      atools.targetRefCatDeltaCModelScatterPlot: TargetRefCatDeltaCModelScatterPlot
+      atools.targetRefCatDeltaPsfSkyPlot: TargetRefCatDeltaPsfSkyPlot
+      atools.targetRefCatDeltaCModelSkyPlot: TargetRefCatDeltaCModelSkyPlot
+      atools.photomDiffMetrics: TargetRefCatDeltaPhotomMetrics
+      atools.photomDiffMetrics.applyContext: CoaddContext
+    - connections.targetCatalog: object
+      connections.data: '{targetCatalog}_ref_match_photom'
+      connections.outputName: object_ref_match_photom
+  plotPropertyMapTract:
+    class: lsst.analysis.tools.tasks.PerTractPropertyMapAnalysisTask
+    config:
+    - python: 'from lsst.analysis.tools.atools import PerTractPropertyMapTool
+
+        '
+      connections.outputName: propertyMapTract
+      zoomFactors:
+      - 2
+      - 8
+      projectionKwargs:
+        celestial: true
+        gridlines: true
+        min_lon_ticklabel_delta: 0.12
+      colorbarKwargs:
+        cmap: viridis
+      atools.deepCoadd_dcr_ddec_map_weighted_mean: PerTractPropertyMapTool
+      atools.deepCoadd_dcr_dra_map_weighted_mean: PerTractPropertyMapTool
+      atools.deepCoadd_dcr_e1_map_weighted_mean: PerTractPropertyMapTool
+      atools.deepCoadd_dcr_e2_map_weighted_mean: PerTractPropertyMapTool
+      atools.deepCoadd_epoch_map_min: PerTractPropertyMapTool
+      atools.deepCoadd_epoch_map_max: PerTractPropertyMapTool
+      atools.deepCoadd_epoch_map_mean: PerTractPropertyMapTool
+      atools.deepCoadd_exposure_time_map_sum: PerTractPropertyMapTool
+      atools.deepCoadd_exposure_time_map_sum.nBinsHist: 35
+      atools.deepCoadd_psf_e1_map_weighted_mean: PerTractPropertyMapTool
+      atools.deepCoadd_psf_e2_map_weighted_mean: PerTractPropertyMapTool
+      atools.deepCoadd_psf_maglim_map_weighted_mean: PerTractPropertyMapTool
+      atools.deepCoadd_psf_size_map_weighted_mean: PerTractPropertyMapTool
+      atools.deepCoadd_sky_background_map_weighted_mean: PerTractPropertyMapTool
+      atools.deepCoadd_sky_noise_map_weighted_mean: PerTractPropertyMapTool
+  makeBinnedCoaddImage:
+    class: lsst.analysis.tools.tasks.MakeBinnedCoaddTask
+    config:
+    - binFactor: 16
+      doBinInnerBBox: true
+      connections.coadd: deep_coadd
+      connections.binnedCoadd: deep_coadd_bin
+  makeWholeTractImage:
+    class: lsst.analysis.tools.tasks.WholeTractImageAnalysisTask
+    config:
+    - python: 'from lsst.analysis.tools.atools import *
+
+        '
+      connections.outputName: deep
+      atools.coaddImage: WholeTractImageTool
+      atools.clippedMask: WholeTractClippedMaskTool
+      atools.coaddImagePostageStamp: WholeTractPostageStampTool
+    - connections.data: deep_coadd_bin
+      connections.outputName: deep
+  makeBinnedTemplateNImage:
+    class: lsst.analysis.tools.tasks.MakeBinnedCoaddTask
+    config:
+    - connections.coadd: goodSeeingCoadd_nImage
+      connections.binnedCoadd: goodSeeingCoadd_nImage_bin
+      coaddStorageClass: ImageU
+      binFactor: 16
+      doBinInnerBBox: true
+    - connections.coadd: template_coadd_n_image
+      connections.binnedCoadd: template_coadd_n_image_bin
+  makeWholeTractTemplateNImage:
+    class: lsst.analysis.tools.tasks.WholeTractImageAnalysisTask
+    config:
+    - python: 'from lsst.analysis.tools.atools import *
+
+        '
+      connections.data: goodSeeingCoadd_nImage_bin
+      connections.outputName: goodSeeing
+      dataStorageClass: ImageU
+      atools.nImage: WholeTractNImageTool
+    - connections.data: template_coadd_n_image_bin
+      connections.outputName: template
+  makeBinnedDeepNImage:
+    class: lsst.analysis.tools.tasks.MakeBinnedCoaddTask
+    config:
+    - connections.coadd: deepCoadd_nImage
+      connections.binnedCoadd: deepCoadd_nImage_bin
+      coaddStorageClass: ImageU
+      binFactor: 16
+      doBinInnerBBox: true
+    - connections.coadd: deep_coadd_n_image
+      connections.binnedCoadd: deep_coadd_n_image_bin
+  makeWholeTractDeepNImage:
+    class: lsst.analysis.tools.tasks.WholeTractImageAnalysisTask
+    config:
+    - python: 'from lsst.analysis.tools.atools import *
+
+        '
+      connections.data: deepCoadd_nImage_bin
+      connections.outputName: deep
+      dataStorageClass: ImageU
+      atools.nImage: WholeTractNImageTool
+    - connections.data: deep_coadd_n_image_bin
+      connections.outputName: deep
+  validateObjectTableCore:
+    class: lsst.analysis.tools.tasks.ObjectTableTractAnalysisTask
+    config:
+    - python: |
+        from lsst.analysis.tools.atools import *
+        from lsst.analysis.tools.contexts import *
+      connections.outputName: objectTableColumnValidate
+      atools.validPsfFluxMetric: ValidFracColumnMetric
+      atools.validPsfFluxMetric.vectorKey: psfFlux
+      atools.validPsfFluxMetric.applyContext: CoaddContext
+      atools.validCmodelFluxMetric: ValidFracColumnMetric
+      atools.validCmodelFluxMetric.vectorKey: cModelFlux
+      atools.validCmodelFluxMetric.applyContext: CoaddContext
+    - connections.data: object_all
+      connections.outputName: object_column_validate
+  makeMetricTableObjectTableCore:
+    class: lsst.analysis.tools.tasks.MakeMetricTableTask
+    config:
+    - connections.metricBundleName: objectTableCore_metrics
+      connections.outputTableName: objectTableCore_metricsTable
+    - connections.metricBundleName: object_metrics
+      connections.metricTable: object_metrics_table
+  objectTableCoreWholeSkyPlot:
+    class: lsst.analysis.tools.tasks.WholeSkyAnalysisTask
+    config:
+    - file:
+      - $ANALYSIS_TOOLS_DIR/config/objectTableCoreWholeSkyPlot.py
+    - connections.inputName: object_metrics_table
+      connections.outputName: object_whole_sky
+  makeMetricTableObjectParentTableCore:
+    class: lsst.analysis.tools.tasks.MakeMetricTableTask
+    config:
+    - connections.metricBundleName: objectParentTableCore_metrics
+      connections.outputTableName: objectParentTableCore_metricsTable
+    - connections.metricBundleName: object_parent_metrics
+      connections.metricTable: object_parent_metrics_table
+  objectParentTableCoreWholeSkyPlot:
+    class: lsst.analysis.tools.tasks.WholeSkyAnalysisTask
+    config:
+    - file:
+      - $ANALYSIS_TOOLS_DIR/config/objectParentTableCoreWholeSkyPlot.py
+      connections.inputName: objectParentTableCore_metricsTable
+      connections.outputName: objectParentTableCore_wholeSky
+    - connections.inputName: object_parent_metrics_table
+      connections.outputName: object_parent_whole_sky
+  makeMetricTableObjectTableCoreRefCatMatch:
+    class: lsst.analysis.tools.tasks.MakeMetricTableTask
+    config:
+    - connections.metricBundleName: objectTable_tract_gaia_dr3_20230707_match_astrom_metrics
+      connections.outputTableName: objectTable_tract_gaia_dr3_20230707_match_astrom_metricsTable
+    - connections.metricBundleName: object_ref_match_astrom_metrics
+      connections.metricTable: object_ref_match_astrom_metrics_table
+  objectTableCoreRefCatMatchWholeSkyPlot:
+    class: lsst.analysis.tools.tasks.WholeSkyAnalysisTask
+    config:
+    - python: 'from lsst.analysis.tools.atools import *
+
+        '
+      file:
+      - $ANALYSIS_TOOLS_DIR/config/objectTableCoreRefCatMatchWholeSkyPlot.py
+      connections.inputName: objectTable_tract_gaia_dr3_20230707_match_astrom_metricsTable
+      connections.outputName: objectTableCoreRefCatMatch_wholeSky
+    - connections.inputName: object_ref_match_astrom_metrics_table
+      connections.outputName: object_ref_match_astrom_whole_sky
+  plotPropertyMapSurvey:
+    class: lsst.analysis.tools.tasks.SurveyWidePropertyMapAnalysisTask
+    config:
+    - python: 'from lsst.analysis.tools.atools import SurveyWidePropertyMapTool
+
+        '
+      connections.outputName: propertyMapSurvey
+      autozoom: true
+      projection: McBryde
+      projectionKwargs:
+        celestial: true
+        gridlines: true
+        lon_0: 0
+      colorbarKwargs:
+        location: top
+        cmap: viridis
+      atools.deepCoadd_dcr_ddec_consolidated_map_weighted_mean: SurveyWidePropertyMapTool
+      atools.deepCoadd_dcr_dra_consolidated_map_weighted_mean: SurveyWidePropertyMapTool
+      atools.deepCoadd_dcr_e1_consolidated_map_weighted_mean: SurveyWidePropertyMapTool
+      atools.deepCoadd_dcr_e2_consolidated_map_weighted_mean: SurveyWidePropertyMapTool
+      atools.deepCoadd_epoch_consolidated_map_min: SurveyWidePropertyMapTool
+      atools.deepCoadd_epoch_consolidated_map_max: SurveyWidePropertyMapTool
+      atools.deepCoadd_epoch_consolidated_map_mean: SurveyWidePropertyMapTool
+      atools.deepCoadd_exposure_time_consolidated_map_sum: SurveyWidePropertyMapTool
+      atools.deepCoadd_psf_e1_consolidated_map_weighted_mean: SurveyWidePropertyMapTool
+      atools.deepCoadd_psf_e2_consolidated_map_weighted_mean: SurveyWidePropertyMapTool
+      atools.deepCoadd_psf_maglim_consolidated_map_weighted_mean: SurveyWidePropertyMapTool
+      atools.deepCoadd_psf_size_consolidated_map_weighted_mean: SurveyWidePropertyMapTool
+      atools.deepCoadd_sky_background_consolidated_map_weighted_mean: SurveyWidePropertyMapTool
+      atools.deepCoadd_sky_noise_consolidated_map_weighted_mean: SurveyWidePropertyMapTool
+  analyzeSource:
+    class: lsst.analysis.tools.tasks.SourceTableVisitAnalysisTask
+    config:
+    - file:
+      - $ANALYSIS_TOOLS_DIR/config/sourceTableCore.py
+      connections.data: source_all
+      connections.outputName: source
+  makeAnalysisSourceAstrometricRefMatch:
+    class: lsst.analysis.tools.tasks.astrometricCatalogMatch.AstrometricCatalogMatchVisitTask
+    config:
+    - connections.catalog: source_all
+      connections.targetCatalog: source
+      connections.visitSummaryTable: visit_summary
+      connections.matchedCatalog: '{targetCatalog}_ref_match_astrom'
+  analyzeSourceAstrometricRefMatch:
+    class: lsst.analysis.tools.tasks.refCatSourceAnalysis.RefCatSourceAnalysisTask
+    config:
+    - file:
+      - $ANALYSIS_TOOLS_DIR/config/refCatSourceAstrometricCore.py
+      connections.targetCatalog: source
+      connections.data: '{targetCatalog}_ref_match_astrom'
+      connections.outputName: source_ref_match_astrom
+  makeAnalysisSourcePhotometricRefMatch:
+    class: lsst.analysis.tools.tasks.photometricCatalogMatch.PhotometricCatalogMatchVisitTask
+    config:
+    - connections.catalog: source_all
+      connections.targetCatalog: source
+      connections.visitSummaryTable: visit_summary
+      connections.matchedCatalog: '{targetCatalog}_ref_match_photom'
+  analyzeSourcePhotometricRefMatch:
+    class: lsst.analysis.tools.tasks.refCatSourcePhotometricAnalysis.RefCatSourcePhotometricAnalysisTask
+    config:
+    - file:
+      - $ANALYSIS_TOOLS_DIR/config/refCatSourcePhotometricCore.py
+      connections.targetCatalog: source
+      connections.data: '{targetCatalog}_ref_match_photom'
+      connections.outputName: source_ref_match_photom
+  associateAnalysisSource:
+    class: lsst.pipe.tasks.isolatedStarAssociation.IsolatedStarAssociationTask
+    config:
+    - connections.source_table_visit: source_all
+      connections.isolated_star_sources: isolated_analysis_source
+      connections.isolated_star_cat: isolated_analysis_source_association
+  analyzeSourceAssociation:
+    class: lsst.analysis.tools.tasks.AssociatedSourcesTractAnalysisTask
+    config:
+    - file:
+      - $ANALYSIS_TOOLS_DIR/config/matchedVisitCore.py
+      connections.sourceCatalogs: source_all
+      connections.associatedSources: isolated_analysis_source
+      connections.associatedSourceIds: isolated_analysis_source_association
+      connections.outputName: analysis_source_association
+      connections.visitTable: visit_table
+      applyAstrometricCorrections: true
+  makeAnalysisSourceAssociationMetricTable:
+    class: lsst.analysis.tools.tasks.MakeMetricTableTask
+    config:
+    - connections.metricBundleName: analysis_source_association_metrics
+      connections.metricTable: analysis_source_association_metrics_table
+      inputDataDimensions:
+      - instrument
+      - skymap
+      - tract
+  makeAnalysisSourceAssociationWholeSkyPlot:
+    class: lsst.analysis.tools.tasks.WholeSkyAnalysisTask
+    config:
+    - file:
+      - $ANALYSIS_TOOLS_DIR/config/matchedVisitCoreWholeSkyPlot.py
+      connections.inputName: analysis_source_association_metrics_table
+      connections.outputName: analysis_source_association_whole_sky
+  analyzeDiaSourceTableTract:
+    class: lsst.analysis.tools.tasks.DiaSourceTableTractAnalysisTask
+    config:
+    - python: 'from lsst.analysis.tools.atools import *
+
+        '
+      connections.outputName: diaSourceTableTract
+      atools.NumDiaSources: NumDiaSourcesMetric
+      atools.NumStreakDiaSources: NumStreakDiaSourcesMetric
+      atools.NumStreakCenterDiaSources: NumStreakCenterDiaSourcesMetric
+      atools.streakDiaSourcePlot: PlotStreakDiaSources
+    - python: 'from lsst.analysis.tools.atools import *
+
+        '
+      connections.data: dia_source
+      connections.outputName: dia_source
+  analyzeCalibrateImageMetadataNickel:
+    class: lsst.analysis.tools.tasks.TaskMetadataAnalysisTask
+    config:
+    - python: 'from lsst.analysis.tools.atools import TaskMetadataMetricTool
+
+        '
+      connections.inputName: calibrateImage_metadata
+      connections.outputName: calibrateImage_metadata
+      connections.storageClass: TaskMetadata
+      raiseNoWorkFoundOnIncompleteMetadata: true
+      inputDimensions:
+      - instrument
+      - visit
+      - detector
+      atools.calibrateImageMetadataMetrics: TaskMetadataMetricTool
+      atools.calibrateImageMetadataMetrics.taskName: calibrateImage
+      atools.calibrateImageMetadataMetrics.metrics:
+        initial_psf_positive_footprint_count: ct
+        initial_psf_negative_footprint_count: ct
+        initial_psf_positive_peak_count: ct
+        initial_psf_negative_peak_count: ct
+        simple_psf_positive_footprint_count: ct
+        simple_psf_negative_footprint_count: ct
+        simple_psf_positive_peak_count: ct
+        simple_psf_negative_peak_count: ct
+        bad_mask_fraction: ''
+        cr_mask_fraction: ''
+        detected_mask_fraction: ''
+        detected_negative_mask_fraction: ''
+        edge_mask_fraction: ''
+        intrp_mask_fraction: ''
+        no_data_mask_fraction: ''
+        sat_mask_fraction: ''
+        suspect_mask_fraction: ''
+        unmaskednan_mask_fraction: ''
+        numAvailStars: ct
+        numGoodStars: ct
+        sky_footprint_count: ct
+        post_deblend_source_count: ct
+        star_count: ct
+        saturated_source_count: ct
+        bad_source_count: ct
+        cosmic_ray_count: ct
+        matched_psf_star_count: ct
+        final_psf_sigma: pixel
+        astrometry_matches_count: ct
+        photometry_matches_count: ct
+      atools.calibrateImageMetadataMetrics.subTaskNames:
+        numAvailStars: psf_measure_psf
+        numGoodStars: psf_measure_psf
+        sky_footprint_count: star_sky_sources
+        cosmic_ray_count: psf_repair
+      atools.calibrateImageMetadataMetrics.newNames:
+        numAvailStars: psf_available_star_count
+        numGoodStars: psf_good_star_count
+  makeAnalysisSingleVisitStarAstrometricRefMatchNickel:
+    class: lsst.analysis.tools.tasks.astrometricCatalogMatch.AstrometricCatalogMatchVisitTask
+    config:
+    - connections.targetCatalog: single_visit_star
+      connections.visitSummaryTable: preliminary_visit_summary
+      connections.refCatalog: the_monster_20250219_local
+      connections.matchedCatalog: '{targetCatalog}_ref_match_astrom'
+  analyzeSingleVisitStarAstrometricRefMatchNickel:
+    class: lsst.analysis.tools.tasks.refCatSourceAnalysis.RefCatSourceAnalysisTask
+    config:
+    - file:
+      - $ANALYSIS_TOOLS_DIR/config/refCatSourceAstrometricCore.py
+      connections.targetCatalog: single_visit_star
+      connections.data: '{targetCatalog}_ref_match_astrom'
+      connections.outputName: single_visit_star_ref_match_astrom
+  makeAnalysisSingleVisitStarPhotometricRefMatchNickel:
+    class: lsst.analysis.tools.tasks.photometricCatalogMatch.PhotometricCatalogMatchVisitTask
+    config:
+    - file:
+      - $OBS_NICKEL/configs/analysisToolsPhotometricCatalogMatchVisit.py
+      connections.targetCatalog: single_visit_star
+      connections.visitSummaryTable: preliminary_visit_summary
+      connections.refCat: the_monster_20250219_local
+      connections.matchedCatalog: '{targetCatalog}_ref_match_photom'
+  analyzeSingleVisitStarPhotometricRefMatchNickel:
+    class: lsst.analysis.tools.tasks.refCatSourcePhotometricAnalysis.RefCatSourcePhotometricAnalysisTask
+    config:
+    - file:
+      - $ANALYSIS_TOOLS_DIR/config/refCatSourcePhotometricCore.py
+      connections.targetCatalog: single_visit_star
+      connections.data: '{targetCatalog}_ref_match_photom'
+      connections.outputName: single_visit_star_ref_match_photom
+  isr:
+    class: lsst.ip.isr.IsrTask
+    config:
+    - connections.outputExposure: post_isr_image
+      doOverscan: true
+      doBias: true
+      doFlat: true
+      doDark: false
+      doDefect: true
+      doFringe: false
+      doSuspect: true
+      doWrite: true
+      doVignette: false
+      fluxMag0T1:
+        B: 1.4e12
+        V: 1.6e12
+        R: 2.2e12
+        I: 3.1e12
+  calibrateImage:
+    class: lsst.pipe.tasks.calibrateImage.CalibrateImageTask
+    config:
+    - file:
+      - $OBS_NICKEL/configs/calibrateImage/tuned_configs/best_calib_t071.py
+      connections.exposures: post_isr_image
+      connections.stars_footprints: single_visit_star_footprints
+      connections.psf_stars_footprints: single_visit_psf_star_footprints
+      connections.psf_stars: single_visit_psf_star
+      connections.initial_stars_schema: single_visit_star_schema
+      connections.stars: single_visit_star_unstandardized
+      connections.exposure: preliminary_visit_image
+      connections.background: preliminary_visit_image_background
+      id_generator.release_id: parameters.release_id
+      install_simple_psf.fwhm: 2.0
+      install_simple_psf.width: 35
+      psf_detection.thresholdType: stdev
+      psf_detection.thresholdValue: 6.5
+      psf_detection.minPixels: 7
+      psf_detection.includeThresholdMultiplier: 1.0
+      psf_detection.reEstimateBackground: true
+      psf_detection.doTempLocalBackground: true
+      psf_detection.doTempWideBackground: false
+      psf_detection.excludeMaskPlanes:
+      - EDGE
+      - SAT
+      - CR
+      - BAD
+      - NO_DATA
+      - SUSPECT
+      psf_detection.statsMask:
+      - BAD
+      - SAT
+      - EDGE
+      - NO_DATA
+      - SUSPECT
+      psf_detection.isotropicGrow: true
+      psf_detection.nSigmaToGrow: 2.0
+      psf_detection.combinedGrow: true
+      connections.astrometry_ref_cat: the_monster_20250219_local
+      astrometry_ref_loader.anyFilterMapsToThis: phot_g_mean
+      astrometry.forceKnownWcs: false
+      astrometry.matcher.maxOffsetPix: 300
+      astrometry.matcher.maxRotationDeg: 5.0
+      astrometry.matcher.matcherIterations: 12
+      astrometry.maxMeanDistanceArcsec: 60.0
+      astrometry.matchDistanceSigma: 8.0
+      astrometry.maxIter: 12
+      connections.photometry_ref_cat: the_monster_20250219_local
+      photometry_ref_loader.filterMap:
+        b: monster_ComCam_g
+        v: monster_ComCam_g
+        r: monster_ComCam_r
+        i: monster_ComCam_i
+      photometry.match.matchRadius: 1.5
+      photometry.applyColorTerms: true
+      photometry.photoCatName: the_monster_20250219_local
+  standardizeSingleVisitStar:
+    class: lsst.pipe.tasks.postprocess.TransformSourceTableTask
+    config:
+    - connections.inputCatalog: single_visit_star_unstandardized
+      connections.outputCatalog: single_visit_star_detector
+      functorFile: $PIPE_TASKS_DIR/schemas/PreSource.yaml
+  consolidateSingleVisitStar:
+    class: lsst.pipe.tasks.postprocess.ConsolidateSourceTableTask
+    config:
+    - connections.inputCatalogs: single_visit_star_detector
+      connections.outputCatalog: single_visit_star
+  consolidateVisitSummary:
+    class: lsst.pipe.tasks.postprocess.ConsolidateVisitSummaryTask
+    config:
+    - connections.calexp: preliminary_visit_image
+      connections.visitSummary: preliminary_visit_summary
+      connections.visitSummarySchema: preliminary_visit_summary_schema
+  associateIsolatedStar:
+    class: lsst.pipe.tasks.isolatedStarAssociation.IsolatedStarAssociationTask
+    config:
+    - connections.source_table_visit: single_visit_star
+      connections.isolated_star_sources: isolated_star
+      connections.isolated_star_cat: isolated_star_association
+      band_order:
+      - i
+      - z
+      - r
+      - g
+      - y
+      - u
+      - b
+      - v
+  makeInitialVisitDetectorTable:
+    class: lsst.pipe.tasks.postprocess.MakeCcdVisitTableTask
+    config:
+    - connections.visitSummaryRefs: preliminary_visit_summary
+      connections.outputCatalog: preliminary_visit_detector_table
+      idGenerator.release_id: parameters.release_id
+  makeInitialVisitTable:
+    class: lsst.pipe.tasks.postprocess.MakeVisitTableTask
+    config:
+    - connections.visitSummaries: preliminary_visit_summary
+      connections.outputCatalog: preliminary_visit_table
+  makeDirectWarp:
+    class: lsst.drp.tasks.make_direct_warp.MakeDirectWarpTask
+    config:
+    - connections.calexp_list: preliminary_visit_image
+      connections.visit_summary: preliminary_visit_summary
+      connections.warp: direct_warp
+      connections.masked_fraction_warp: direct_warp_masked_fraction
+      idGenerator.release_id: parameters.release_id
+      useVisitSummaryPsf: false
+      useVisitSummaryWcs: false
+      useVisitSummaryPhotoCalib: false
+      select.maxEllipResidual: 0.015
+      select.maxScaledSizeScatter: 0.022
+      doPreWarpInterpolation: true
+  makePsfMatchedWarp:
+    class: lsst.drp.tasks.make_psf_matched_warp.MakePsfMatchedWarpTask
+    config:
+    - connections.direct_warp: direct_warp
+      connections.psf_matched_warp: psf_matched_warp
+  selectDeepCoaddVisits:
+    class: lsst.pipe.tasks.selectImages.BestSeeingSelectVisitsTask
+    config:
+    - connections.visitSummaries: preliminary_visit_summary
+      connections.goodVisits: deep_coadd_visit_selection
+      maxPsfFwhm: 2.0
+      nVisitsMax: -1
+  selectTemplateCoaddVisits:
+    class: lsst.pipe.tasks.selectImages.BestSeeingQuantileSelectVisitsTask
+    config:
+    - connections.visitSummaries: preliminary_visit_summary
+      connections.goodVisits: template_coadd_visit_selection
+  assembleDeepCoadd:
+    class: lsst.drp.tasks.assemble_coadd.CompareWarpAssembleCoaddTask
+    config:
+    - connections.inputWarps: direct_warp
+      connections.psfMatchedWarps: psf_matched_warp
+      connections.selectedVisits: deep_coadd_visit_selection
+      connections.coaddExposure: deep_coadd_predetection
+      connections.nImage: deep_coadd_n_image
+      connections.inputMap: deep_coadd_input_map
+      connections.templateCoadd: deep_coadd_compare_template
+      doInputMap: true
+      doSelectVisits: true
+      doWriteArtifactMasks: true
+      assembleStaticSkyModel.doSelectVisits: true
+      doOnlineForMean: true
+  assembleTemplateCoadd:
+    class: lsst.drp.tasks.assemble_coadd.CompareWarpAssembleCoaddTask
+    config:
+    - connections.inputWarps: direct_warp
+      connections.psfMatchedWarps: psf_matched_warp
+      connections.selectedVisits: template_coadd_visit_selection
+      connections.coaddExposure: template_coadd
+      connections.nImage: template_coadd_n_image
+      connections.inputMap: template_coadd_input_map
+      connections.templateCoadd: template_coadd_compare_template
+      doSelectVisits: true
+      assembleStaticSkyModel.doSelectVisits: true
+      doNImage: true
+      doOnlineForMean: true
+  reprocessVisitImage:
+    class: lsst.drp.tasks.reprocess_visit_image.ReprocessVisitImageTask
+    config:
+    - connections.exposures: post_isr_image
+      connections.background_1: preliminary_visit_image_background
+      connections.exposure: visit_image
+      connections.visit_summary: preliminary_visit_summary
+      remove_initial_photo_calib: false
+      id_generator.release_id: parameters.release_id
+  rewarpTemplate:
+    class: lsst.ip.diffim.getTemplate.GetTemplateTask
+    config:
+    - connections.bbox: visit_image.bbox
+      connections.wcs: visit_image.wcs
+      connections.coaddExposures: template_coadd
+      connections.template: template_detector
+      warp.warpingKernelName: lanczos4
+  subtractImages:
+    class: lsst.ip.diffim.subtractImages.AlardLuptonSubtractTask
+    config:
+    - allowKernelSourceDetection: true
+      connections.science: visit_image
+      connections.sources: single_visit_star_footprints
+      connections.template: template_detector
+      connections.difference: difference_image_predetection
+      connections.matchedTemplate: template_matched
+      connections.psfMatchingKernel: difference_kernel
+      connections.kernelSources: difference_kernel_sources
+      makeKernel.spatialOrder: 2
+      makeKernel.kernelSize: 21
+      doSubtractBackground: true
+      detection.thresholdValue: 50.0
+      detection.thresholdType: pixel_stdev
+      detection.minPixels: 5
+  detectAndMeasureDiaSource:
+    class: lsst.ip.diffim.detectAndMeasure.DetectAndMeasureTask
+    config:
+    - connections.science: visit_image
+      connections.matchedTemplate: template_matched
+      connections.difference: difference_image_predetection
+      connections.kernelSources: difference_kernel_sources
+      connections.outputSchema: dia_source_schema
+      connections.diaSources: dia_source_unfiltered
+      connections.subtractedMeasuredExposure: difference_image
+      connections.maskedStreaks: difference_streaks
+      doSkySources: true
+      idGenerator.release_id: parameters.release_id
+      detection.thresholdValue: 3.0
+      detection.thresholdType: stdev
+      detection.minPixels: 5
+      doMeasurement: true
+      doWriteSubtractedExp: true
+  fgcmBuildFromIsolatedStar:
+    class: lsst.fgcmcal.fgcmBuildFromIsolatedStars.FgcmBuildFromIsolatedStarsTask
+    config:
+    - connections.isolated_star_cats: isolated_star_association
+      connections.isolated_star_sources: isolated_star
+      connections.visit_summaries: preliminary_visit_summary
+  fgcmFitCycle:
+    class: lsst.fgcmcal.fgcmFitCycle.FgcmFitCycleTask
+    config:
+    - doMultipleCycles: true
+  fgcmOutputProducts:
+    class: lsst.fgcmcal.fgcmOutputProducts.FgcmOutputProductsTask
+  gbdesAstrometricFit:
+    class: lsst.drp.tasks.gbdesAstrometricFit.GbdesAstrometricFitTask
+    config:
+    - connections.inputCatalogRefs: single_visit_star
+      connections.inputVisitSummaries: preliminary_visit_summary
+      fitProperMotion: true
+  gbdesHealpix3AstrometricFit:
+    class: lsst.drp.tasks.gbdesAstrometricFit.GbdesAstrometricFitTask
+    config:
+    - connections.inputCatalogRefs: single_visit_star
+      connections.inputVisitSummaries: preliminary_visit_summary
+      healpix: 3
+      connections.outputName: gbdesHealpix3AstrometricFit
+      fitProperMotion: true
+  gaussianProcessesTurbulenceFit:
+    class: lsst.drp.tasks.fit_turbulence.GaussianProcessesTurbulenceFitTask
+  refitPsfModelDetector:
+    class: lsst.pipe.tasks.finalizeCharacterization.FinalizeCharacterizationDetectorTask
+    config:
+    - connections.src: single_visit_star_footprints
+      connections.src_schema: single_visit_star_schema
+      connections.calexp: preliminary_visit_image
+      connections.isolated_star_cats: isolated_star_association
+      connections.isolated_star_sources: isolated_star
+      connections.finalized_src_detector_table: refit_psf_star_detector
+      connections.finalized_psf_ap_corr_detector_cat: refit_psf_models_detector
+  consolidateRefitPsfModelDetector:
+    class: lsst.pipe.tasks.finalizeCharacterization.ConsolidateFinalizeCharacterizationDetectorTask
+    config:
+    - connections.finalized_src_detector_tables: refit_psf_star_detector
+      connections.finalized_psf_ap_corr_detector_cats: refit_psf_models_detector
+      connections.finalized_src_table: refit_psf_star
+      connections.finalized_psf_ap_corr_cat: refit_psf_models
+  updateVisitSummary:
+    class: lsst.drp.tasks.update_visit_summary.UpdateVisitSummaryTask
+    config:
+    - connections.input_exposures: preliminary_visit_image
+      connections.input_summary_schema: preliminary_visit_summary_schema
+      connections.input_summary_catalog: preliminary_visit_summary
+      connections.psf_star_catalog: refit_psf_star
+      connections.psf_overrides: refit_psf_models
+      connections.ap_corr_overrides: refit_psf_models
+      connections.wcs_overrides_tract: gbdesAstrometricFitSkyWcsCatalog
+      connections.photo_calib_overrides_global: fgcmPhotoCalibCatalog
+      connections.output_summary_schema: visit_summary_schema
+      connections.output_summary_catalog: visit_summary
+      wcs_provider: tract
+      wcs_consistency_threshold: 0.5
+      photo_calib_provider: global
+  recalibrateSingleVisitStar:
+    class: lsst.pipe.tasks.postprocess.WriteRecalibratedSourceTableTask
+    config:
+    - connections.visitSummary: visit_summary
+      connections.catalog: single_visit_star_footprints
+      connections.outputCatalog: recalibrated_star_unstandardized
+  standardizeRecalibratedStar:
+    class: lsst.pipe.tasks.postprocess.TransformSourceTableTask
+    config:
+    - connections.inputCatalog: recalibrated_star_unstandardized
+      connections.outputCatalog: recalibrated_star_detector
+  consolidateRecalibratedStar:
+    class: lsst.pipe.tasks.postprocess.ConsolidateSourceTableTask
+    config:
+    - connections.inputCatalogs: recalibrated_star_detector
+      connections.outputCatalog: recalibrated_star
+  makeVisitDetectorTable:
+    class: lsst.pipe.tasks.postprocess.MakeCcdVisitTableTask
+    config:
+    - connections.visitSummaryRefs: visit_summary
+      connections.outputCatalog: visit_detector_table
+      idGenerator.release_id: parameters.release_id
+  makeVisitTable:
+    class: lsst.pipe.tasks.postprocess.MakeVisitTableTask
+    config:
+    - connections.visitSummaries: visit_summary
+      connections.outputCatalog: visit_table
+  fitStellarMotion:
+    class: lsst.drp.tasks.fit_stellar_motion.FitStellarMotionTask
+subsets:
+  analysis-visit-initial:
+    subset:
+    - makeAnalysisSingleVisitStarAstrometricRefMatch
+    - analyzeSingleVisitStarPhotometricRefMatch
+    - analyzeSingleVisitStarAstrometricRefMatch
+    - makeAnalysisSingleVisitStarPhotometricRefMatch
+    - analyzeInitialSummaryStats
+    - analyzeAmpOffsetMetadata
+    - analyzeAmpInterfaceOffsetMetadata
+    - analyzeSingleVisitStar
+    - analyzeCalibrateImageMetadata
+    description: |
+      Subset containing all visit-level analysis tasks that run on the final
+      sources. This subset contains all of the tasks in this pipeline, and
+      hence allows it to be included in steps in a base pipeline and then
+      excluded (with labeledSubsetModifyMode=EDIT) in downstream pipelines that
+      do not want visit-level analysis.
+  analysis-visit-recalibrated:
+    subset:
+    - makeAnalysisRecalibratedStarAstrometricRefMatch
+    - analyzeRecalibratedStarPhotometricRefMatch
+    - analyzeRecalibratedStar
+    - makeAnalysisRecalibratedStarPhotometricRefMatch
+    - analyzeRecalibratedStarAstrometricRefMatch
+    description: |
+      Subset containing all visit-level analysis tasks that run on the
+      recalibrated stars.  This subset contains all of the tasks in this
+      pipeline, and hence allows it to be included in steps in a base pipeline
+      and then excluded (with labeledSubsetModifyMode=EDIT) in downstream
+      pipelines that do not want visit-level analysis.
+  analysis-visit-source:
+    subset:
+    - analyzeSourceAstrometricRefMatch
+    - makeAnalysisSourceAstrometricRefMatch
+    - makeAnalysisSourcePhotometricRefMatch
+    - analyzeSource
+    - analyzeSourcePhotometricRefMatch
+    description: |
+      Subset containing all visit-level analysis tasks that run on the
+      recalibrated star.  This subset contains all of the tasks in this
+      pipeline, and hence allows it to be included in steps in a base pipeline
+      and then excluded (with labeledSubsetModifyMode=EDIT) in downstream
+      pipelines that do not want visit-level analysis.
+  step1a-single-visit-detectors:
+    subset:
+    - isr
+    - standardizeSingleVisitStar
+    - analyzeCalibrateImageMetadataNickel
+    - analyzeInitialSummaryStats
+    - calibrateImage
+    description: |
+      A step that processes raws to initial processed images and star catalogs.
+      These all run per-detector and may be sharded by detector or visit.
+
+      An instrument constraint is generally redundant but recommended.
+
+      A skymap constraint is unnecessary and not recommended.
+  step1b-single-visit-visits:
+    subset:
+    - consolidateVisitSummary
+    - analyzeSingleVisitStarAstrometricRefMatchNickel
+    - makeAnalysisSingleVisitStarAstrometricRefMatchNickel
+    - consolidateSingleVisitStar
+    - analyzeSingleVisitStarPhotometricRefMatchNickel
+    - makeAnalysisSingleVisitStarPhotometricRefMatchNickel
+    - analyzeSingleVisitStar
+    description: |
+      A step that consolidates per-detector initial star catalogs and metadata
+      to full-focal-plane visit-level versions, and runs analysis on initial
+      stars.
+
+      A visit constraint may be used for sharding and may be useful in speeding
+      up QuantumGraph generation.
+
+      An instrument constraint is generally redundant but recommended.
+
+      A skymap constraint is unnecessary and not recommended.
+  step1c-single-visit-tracts:
+    subset:
+    - analyzeSingleVisitStarAssociation
+    - associateIsolatedStar
+    description: |
+      A step that matches initial star catalogs (running over tracts) and
+      runs analysis on those matches.
+
+      Tract constraints may only be used for sharding; tracts with partial
+      visit coverage must always be included.
+
+      An instrument constraint is generally redundant but recommended.
+
+      A skymap constraint is always necessary, to avoid running all tasks
+      redundantly on all skymaps in the data repository.
+  step1d-single-visit-global:
+    subset:
+    - makeInitialVisitDetectorTable
+    - makeInitialVisitTable
+    - makeAnalysisSingleVisitStarAssociationMetricTable
+    - makeAnalysisSingleVisitStarAssociationWholeSkyPlot
+    description: |
+      A step that consolidates visit[, detector] metadata and analysis into
+      full-survey tables and plots.
+
+      This step's outputs are not consumed by downstream production tasks and
+      may be dropped or deferred by pipelines that don't need a checkpoint
+      before multi-epoch calibration.
+
+      An instrument constraint is generally redundant but recommended.
+
+      A skymap constraint is generally redundant but recommended.
+  stage1-single-visit:
+    subset:
+    - isr
+    - analyzeSingleVisitStarAssociation
+    - associateIsolatedStar
+    - standardizeSingleVisitStar
+    - analyzeCalibrateImageMetadataNickel
+    - makeAnalysisSingleVisitStarAssociationMetricTable
+    - consolidateVisitSummary
+    - analyzeInitialSummaryStats
+    - makeInitialVisitDetectorTable
+    - makeInitialVisitTable
+    - makeAnalysisSingleVisitStarAssociationWholeSkyPlot
+    - analyzeSingleVisitStarAstrometricRefMatchNickel
+    - makeAnalysisSingleVisitStarAstrometricRefMatchNickel
+    - consolidateSingleVisitStar
+    - calibrateImage
+    - analyzeSingleVisitStarPhotometricRefMatchNickel
+    - makeAnalysisSingleVisitStarPhotometricRefMatchNickel
+    - analyzeSingleVisitStar
+  coadds-only:
+    subset:
+    - assembleTemplateCoadd
+    - makePsfMatchedWarp
+    - selectTemplateCoaddVisits
+    - assembleDeepCoadd
+    - selectDeepCoaddVisits
+    - makeDirectWarp
+  difference-imaging:
+    subset:
+    - subtractImages
+    - rewarpTemplate
+    - reprocessVisitImage
+    - detectAndMeasureDiaSource
+    description: |
+      Difference imaging for transient/variable detection.
+      Requires template_coadd in input collections.
+      Run after single-visit processing (step1a/step1b) completes.
+  step2a-recalibrate-global:
+    subset:
+    - fgcmFitCycle
+    - fgcmBuildFromIsolatedStar
+    - fgcmOutputProducts
+    description: 'Survey-wide photometric calibration (FGCM) using isolated stars.
+
+      '
+  step2b-recalibrate-tracts:
+    subset:
+    - gbdesAstrometricFit
+    description: 'Tract-level joint astrometric fit (GBDES).
+
+      '
+  step2c-recalibrate-healpix:
+    subset:
+    - gbdesHealpix3AstrometricFit
+    description: 'Healpix-level joint astrometric fit (GBDES, healpix=3).
+
+      '
+  step2d-recalibrate-visits:
+    subset:
+    - gaussianProcessesTurbulenceFit
+    - refitPsfModelDetector
+    - recalibrateSingleVisitStar
+    - updateVisitSummary
+    - consolidateRecalibratedStar
+    - standardizeRecalibratedStar
+    - consolidateRefitPsfModelDetector
+    description: |
+      Visit-level recalibration: refit PSFs, apply FGCM/GBDES to visit_summary,
+      and rewrite recalibrated star tables.
+  step2f-recalibrate-global:
+    subset:
+    - fitStellarMotion
+    - makeVisitTable
+    - makeVisitDetectorTable
+    description: 'Global visit/detector tables and optional stellar-motion fit.
+
+      '

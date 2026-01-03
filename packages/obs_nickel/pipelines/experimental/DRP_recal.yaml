@@ -1,0 +1,199 @@
+description: |
+  DRP pipeline with stage2 multi-epoch recalibration (FGCM/GBDES) for Nickel.
+  This is a test copy so you can try recalibration without touching the main DRP pipeline.
+
+imports:
+  - location: $OBS_NICKEL/packages/obs_nickel/pipelines/DRP.yaml
+
+# Override to add colorterms config after the base config
+instrument: lsst.obs.nickel.Nickel
+
+tasks:
+  # Recalibration tasks
+  fgcmBuildFromIsolatedStar:
+    class: lsst.fgcmcal.fgcmBuildFromIsolatedStars.FgcmBuildFromIsolatedStarsTask
+    config:
+      connections.isolated_star_cats: isolated_star_association
+      connections.isolated_star_sources: isolated_star
+      connections.visit_summaries: preliminary_visit_summary
+
+  fgcmFitCycle:
+    class: lsst.fgcmcal.fgcmFitCycle.FgcmFitCycleTask
+    config:
+      doMultipleCycles: true
+
+  fgcmOutputProducts:
+    class: lsst.fgcmcal.fgcmOutputProducts.FgcmOutputProductsTask
+
+  gbdesAstrometricFit:
+    class: lsst.drp.tasks.gbdesAstrometricFit.GbdesAstrometricFitTask
+    config:
+      connections.inputCatalogRefs: single_visit_star
+      connections.inputVisitSummaries: preliminary_visit_summary
+      fitProperMotion: true
+
+  gbdesHealpix3AstrometricFit:
+    class: lsst.drp.tasks.gbdesAstrometricFit.GbdesAstrometricFitTask
+    config:
+      connections.inputCatalogRefs: single_visit_star
+      connections.inputVisitSummaries: preliminary_visit_summary
+      healpix: 3
+      connections.outputName: gbdesHealpix3AstrometricFit
+      fitProperMotion: true
+
+  gaussianProcessesTurbulenceFit:
+    class: lsst.drp.tasks.fit_turbulence.GaussianProcessesTurbulenceFitTask
+
+  refitPsfModelDetector:
+    class: lsst.pipe.tasks.finalizeCharacterization.FinalizeCharacterizationDetectorTask
+    config:
+      connections.src: single_visit_star_footprints
+      connections.src_schema: single_visit_star_schema
+      connections.calexp: preliminary_visit_image
+      connections.isolated_star_cats: isolated_star_association
+      connections.isolated_star_sources: isolated_star
+      connections.finalized_src_detector_table: refit_psf_star_detector
+      connections.finalized_psf_ap_corr_detector_cat: refit_psf_models_detector
+
+  consolidateRefitPsfModelDetector:
+    class: lsst.pipe.tasks.finalizeCharacterization.ConsolidateFinalizeCharacterizationDetectorTask
+    config:
+      connections.finalized_src_detector_tables: refit_psf_star_detector
+      connections.finalized_psf_ap_corr_detector_cats: refit_psf_models_detector
+      connections.finalized_src_table: refit_psf_star
+      connections.finalized_psf_ap_corr_cat: refit_psf_models
+
+  updateVisitSummary:
+    class: lsst.drp.tasks.update_visit_summary.UpdateVisitSummaryTask
+    config:
+      connections.input_exposures: preliminary_visit_image
+      connections.input_summary_schema: preliminary_visit_summary_schema
+      connections.input_summary_catalog: preliminary_visit_summary
+      connections.psf_star_catalog: refit_psf_star
+      connections.psf_overrides: refit_psf_models
+      connections.ap_corr_overrides: refit_psf_models
+      connections.wcs_overrides_tract: gbdesAstrometricFitSkyWcsCatalog
+      connections.photo_calib_overrides_global: fgcmPhotoCalibCatalog
+      connections.output_summary_schema: visit_summary_schema
+      connections.output_summary_catalog: visit_summary
+      wcs_provider: tract
+      wcs_consistency_threshold: 0.5
+      photo_calib_provider: global
+
+  recalibrateSingleVisitStar:
+    class: lsst.pipe.tasks.postprocess.WriteRecalibratedSourceTableTask
+    config:
+      connections.visitSummary: visit_summary
+      connections.catalog: single_visit_star_footprints
+      connections.outputCatalog: recalibrated_star_unstandardized
+
+  standardizeRecalibratedStar:
+    class: lsst.pipe.tasks.postprocess.TransformSourceTableTask
+    config:
+      connections.inputCatalog: recalibrated_star_unstandardized
+      connections.outputCatalog: recalibrated_star_detector
+
+  consolidateRecalibratedStar:
+    class: lsst.pipe.tasks.postprocess.ConsolidateSourceTableTask
+    config:
+      connections.inputCatalogs: recalibrated_star_detector
+      connections.outputCatalog: recalibrated_star
+
+  makeVisitDetectorTable:
+    class: lsst.pipe.tasks.postprocess.MakeCcdVisitTableTask
+    config:
+      connections.visitSummaryRefs: visit_summary
+      connections.outputCatalog: visit_detector_table
+      idGenerator.release_id: parameters.release_id
+
+  makeVisitTable:
+    class: lsst.pipe.tasks.postprocess.MakeVisitTableTask
+    config:
+      connections.visitSummaries: visit_summary
+      connections.outputCatalog: visit_table
+
+  fitStellarMotion:
+    class: lsst.drp.tasks.fit_stellar_motion.FitStellarMotionTask
+
+configs:
+  # Override calibrateImage to load tuned config + colorterms
+  calibrateImage:
+    file: $OBS_NICKEL/configs/calibrateImage/tuned_configs/best_calib_t071_with_colorterms.py
+    photometry.applyColorTerms: false
+    photometry_ref_loader.doApplyColorTerms: false
+    referenceCatalogLoader.doApplyColorTerms: false
+  # Use recalibrated visit_summary for downstream coadds/DIA
+  makeDirectWarp:
+    connections.visit_summary: visit_summary
+  selectDeepCoaddVisits:
+    connections.visitSummaries: visit_summary
+  selectTemplateCoaddVisits:
+    connections.visitSummaries: visit_summary
+  reprocessVisitImage:
+    connections.visit_summary: visit_summary
+
+subsets:
+  step2a-recalibrate-global:
+    subset:
+      - fgcmBuildFromIsolatedStar
+      - fgcmFitCycle
+      - fgcmOutputProducts
+    description: |
+      Survey-wide photometric calibration (FGCM) using isolated stars.
+
+  step2b-recalibrate-tracts:
+    subset:
+      - gbdesAstrometricFit
+    description: |
+      Tract-level joint astrometric fit (GBDES).
+
+  step2c-recalibrate-healpix:
+    subset:
+      - gbdesHealpix3AstrometricFit
+    description: |
+      Healpix-level joint astrometric fit (GBDES, healpix=3).
+
+  step2d-recalibrate-visits:
+    subset:
+      - refitPsfModelDetector
+      - consolidateRefitPsfModelDetector
+      - gaussianProcessesTurbulenceFit
+      - updateVisitSummary
+      - recalibrateSingleVisitStar
+      - standardizeRecalibratedStar
+      - consolidateRecalibratedStar
+    description: |
+      Visit-level recalibration: refit PSFs, apply FGCM/GBDES to visit_summary,
+      and rewrite recalibrated star tables.
+
+  step2f-recalibrate-global:
+    subset:
+      - makeVisitDetectorTable
+      - makeVisitTable
+      - fitStellarMotion
+    description: |
+      Global visit/detector tables and optional stellar-motion fit.
+
+steps:
+  - label: step1a-single-visit-detectors
+    dimensions: [visit, detector]
+  - label: step1b-single-visit-visits
+    dimensions: [visit]
+  - label: step1c-single-visit-tracts
+    dimensions: [tract]
+  - label: step1d-single-visit-global
+    dimensions: []
+  - label: step2a-recalibrate-global
+    dimensions: []
+  - label: step2b-recalibrate-tracts
+    dimensions: ["tract"]
+  - label: step2c-recalibrate-healpix
+    dimensions: ["healpix3"]
+  - label: step2d-recalibrate-visits
+    dimensions: ["visit"]
+  - label: step2f-recalibrate-global
+    dimensions: []
+  - label: coadds-only
+    dimensions: [tract]
+  - label: difference-imaging
+    dimensions: [visit, detector]

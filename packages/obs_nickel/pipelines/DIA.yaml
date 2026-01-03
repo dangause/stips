@@ -19,9 +19,6 @@ description: >
   Difference Image Analysis pipeline for Nickel 1-meter telescope.
   Optimized for transient and variable source detection.
 
-# NOTE: No datasetTypes override needed - templates ingested with correct dimensions
-# {skymap, tract, patch, band} to match GetTemplateTask expectations
-
 parameters:
   release_id: 0
 
