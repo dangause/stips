@@ -1,0 +1,9 @@
+description: |
+  FGCM lookup-table generation for the Nickel BVRI filters.
+  Produces fgcmLookUpTable for use by fgcmBuildFromIsolatedStar.
+
+tasks:
+  fgcmMakeLut:
+    class: lsst.fgcmcal.fgcmMakeLut.FgcmMakeLutTask
+    config:
+      file: $OBS_NICKEL/configs/fgcm_make_lut_nickel.py

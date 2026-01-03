@@ -13,14 +13,85 @@ tasks:
   fgcmBuildFromIsolatedStar:
     class: lsst.fgcmcal.fgcmBuildFromIsolatedStars.FgcmBuildFromIsolatedStarsTask
     config:
+      file: $OBS_NICKEL/configs/fgcm_colorterms.py
+      connections.ref_cat: the_monster_20250219_local
       connections.isolated_star_cats: isolated_star_association
       connections.isolated_star_sources: isolated_star
       connections.visit_summaries: preliminary_visit_summary
+      # Solve across all Nickel filters; r anchors the solution
+      primaryBands: ["r", "i", "v", "b"]
+      physicalFilterMap:
+        b: b
+        v: v
+        r: r
+        i: i
 
   fgcmFitCycle:
     class: lsst.fgcmcal.fgcmFitCycle.FgcmFitCycleTask
     config:
-      doMultipleCycles: true
+      connections.cycleNumber: "0"
+      connections.previousCycleNumber: "-1"
+      cycleNumber: 0
+      isFinalCycle: true
+      utBoundary: 0.0
+      latitude: 37.3414
+      defaultCameraOrientation: 0.0
+      bands: ["b", "v", "r", "i"]
+      fitBands: ["b", "v", "r", "i"]
+      colorSplitBands: ["v", "r"]
+      outfileBase: "fgcm_nickel"
+      superStarSubCcdDict:
+        b: false
+        v: false
+        r: false
+        i: false
+      ccdGrayFocalPlaneDict:
+        b: false
+        v: false
+        r: false
+        i: false
+      ccdGraySubCcdDict:
+        b: false
+        v: false
+        r: false
+        i: false
+      expGrayPhotometricCutDict:
+        b: -0.5
+        v: -0.5
+        r: -0.5
+        i: -0.5
+      expGrayHighCutDict:
+        b: 0.2
+        v: 0.2
+        r: 0.2
+        i: 0.2
+      expVarGrayPhotometricCutDict:
+        b: 0.01
+        v: 0.01
+        r: 0.01
+        i: 0.01
+      sigFgcmMaxEGrayDict:
+        b: 0.1
+        v: 0.1
+        r: 0.1
+        i: 0.1
+      approxThroughputDict:
+        b: 1.0
+        v: 1.0
+        r: 1.0
+        i: 1.0
+      useRepeatabilityForExpGrayCutsDict:
+        b: false
+        v: false
+        r: false
+        i: false
+      requiredBands: ["r"]
+      physicalFilterMap:
+        b: b
+        v: v
+        r: r
+        i: i
+      doMultipleCycles: false
 
   fgcmOutputProducts:
     class: lsst.fgcmcal.fgcmOutputProducts.FgcmOutputProductsTask
@@ -119,9 +190,9 @@ configs:
   # Override calibrateImage to load tuned config + colorterms
   calibrateImage:
     file: $OBS_NICKEL/configs/calibrateImage/tuned_configs/best_calib_t071_with_colorterms.py
-    photometry.applyColorTerms: false
-    photometry_ref_loader.doApplyColorTerms: false
-    referenceCatalogLoader.doApplyColorTerms: false
+    photometry.applyColorTerms: true
+    photometry_ref_loader.doApplyColorTerms: true
+    referenceCatalogLoader.doApplyColorTerms: true
   # Use recalibrated visit_summary for downstream coadds/DIA
   makeDirectWarp:
     connections.visit_summary: visit_summary

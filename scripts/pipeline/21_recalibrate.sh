@@ -86,11 +86,20 @@ if ! [[ "$JOBS" =~ ^[0-9]+$ ]] || [[ "$JOBS" -lt 1 ]]; then
   echo "ERROR: Invalid --jobs value: '$JOBS'"; exit 2;
 fi
 
+# Resolve NIGHTS_FILE to absolute path before changing directories
+if [[ "${NIGHTS_FILE:0:1}" != "/" ]]; then
+  NIGHTS_FILE="$(cd "$(dirname "$NIGHTS_FILE")" && pwd)/$(basename "$NIGHTS_FILE")"
+fi
+[[ -f "$NIGHTS_FILE" ]] || { echo "ERROR: Nights file not found after resolving: $NIGHTS_FILE"; exit 2; }
+
 ########## ENVIRONMENT ##########
 INSTRUMENT="lsst.obs.nickel.Nickel"
 PIPE="$OBS_NICKEL/packages/obs_nickel/pipelines/experimental/DRP_recal.yaml"
 SKYMAPS_CHAIN="${SKYMAPS_CHAIN:-skymaps/nickelRings}"
 SKYMAP_NAME="${SKYMAP_NAME:-nickelRings-v1}"
+REFCATS_CHAIN="${REFCATS_CHAIN:-refcats}"
+# FGCM LUT collection (must contain fgcmLookUpTable dataset)
+FGCM_LUT_COLLECTION="${FGCM_LUT_COLLECTION:-Nickel/fgcm/lut}"
 
 RUN_TS="$(date -u +%Y%m%dT%H%M%SZ)"
 
@@ -100,8 +109,8 @@ RECAL_RUN="${RECAL_PARENT}/run"
 
 QG_DIR="$REPO/qgraphs/recal"; mkdir -p "$QG_DIR"
 
-# Setup logging
-setup_logging "recalibrate"
+# Setup logging (use generic bucket to avoid touching standard pipeline logs)
+setup_logging "other" "" "" "" "recalibrate"
 exec > >(tee -a "$LOG_FILE") 2>&1
 
 log_section "Stage 2 Recalibration"
@@ -113,9 +122,11 @@ log_info "Pipeline: $PIPE"
 
 ########## STACK ##########
 cd "$STACK_DIR"
+set +u  # third-party activate/deactivate scripts reference unset vars (e.g., RUBIN_EUPS_PATH)
 source loadLSST.zsh
 setup lsst_distrib
 setup obs_nickel || true
+set -u
 butler register-instrument "$REPO" "$INSTRUMENT" >/dev/null 2>&1 || true
 
 [[ -s "$PIPE" ]] || { echo "ERROR: Pipeline not found: $PIPE"; exit 2; }
@@ -135,18 +146,23 @@ read_nights() {
 
 NIGHTS=($(read_nights "$NIGHTS_FILE"))
 log_info "Processing ${#NIGHTS[@]} nights: ${NIGHTS[*]}"
+if [[ ${#NIGHTS[@]} -eq 0 ]]; then
+  log_error "No nights found in $NIGHTS_FILE"
+  exit 2
+fi
 
 ########## FIND STAGE 1 COLLECTIONS ##########
 # We need to find the Stage 1 output collections for these nights
 # They should be named: Nickel/recal/runs/${NIGHT}/stage1/*
 STAGE1_COLLECTIONS=()
+MISSING_STAGE1=()
 for night in "${NIGHTS[@]}"; do
   LATEST_STAGE1=$(butler query-collections "$REPO" | awk '{print $1}' | \
     grep -E "^Nickel/recal/runs/${night}/stage1/" | tail -n1 || true)
   if [[ -z "$LATEST_STAGE1" ]]; then
-    log_error "No Stage 1 collection found for night $night"
-    log_error "Expected pattern: Nickel/recal/runs/${night}/stage1/*"
-    exit 2
+    log_warn "Skipping night $night: no Stage 1 collection found (expected Nickel/recal/runs/${night}/stage1/*)"
+    MISSING_STAGE1+=("$night")
+    continue
   fi
   STAGE1_COLLECTIONS+=("$LATEST_STAGE1")
   log_info "Stage 1 collection for $night: $LATEST_STAGE1"
@@ -155,6 +171,14 @@ done
 # Build comma-separated input collection list
 INPUT_COLLECTIONS="$(IFS=,; echo "${STAGE1_COLLECTIONS[*]}")"
 log_info "Input collections: $INPUT_COLLECTIONS"
+
+if [[ ${#STAGE1_COLLECTIONS[@]} -eq 0 ]]; then
+  log_error "No Stage 1 collections found; cannot run recalibration."
+  exit 2
+fi
+if [[ ${#MISSING_STAGE1[@]} -gt 0 ]]; then
+  log_warn "Stage 1 missing for nights: ${MISSING_STAGE1[*]} (skipped)"
+fi
 
 ########## OBJECT FILTER ##########
 OBJECT_EXPR=""
@@ -169,10 +193,16 @@ if [[ "$SKIP_STEP2A" == "false" ]]; then
   QG_2A="$QG_DIR/step2a_${RUN_TS}.qg"
 
   log_info "Building quantum graph for step2a-recalibrate-global"
+  # Sanity: confirm LUT exists
+  if ! butler query-datasets "$REPO" fgcmLookUpTable --collections "$FGCM_LUT_COLLECTION" 2>/dev/null | grep -q fgcmLookUpTable; then
+    log_error "fgcmLookUpTable not found in collection: $FGCM_LUT_COLLECTION"
+    log_error "Set FGCM_LUT_COLLECTION to a collection containing fgcmLookUpTable"
+    exit 2
+  fi
   if ! pipetask qgraph \
     -b "$REPO" \
     -p "$PIPE#step2a-recalibrate-global" \
-    -i "$INPUT_COLLECTIONS","$SKYMAPS_CHAIN" \
+    -i "$INPUT_COLLECTIONS","$REFCATS_CHAIN","$SKYMAPS_CHAIN","$FGCM_LUT_COLLECTION" \
     -o "$RECAL_PARENT" \
     --output-run "$RECAL_RUN" \
     --save-qgraph "$QG_2A" \

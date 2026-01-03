@@ -67,6 +67,10 @@ INSTRUMENT="lsst.obs.nickel.Nickel"
 
 # Pipeline & configs - USE RECAL PIPELINE
 PIPE="$OBS_NICKEL/packages/obs_nickel/pipelines/experimental/DRP_recal.yaml"
+# Tuned config that also loads colorterms
+TUNED_CFG_FILE="$OBS_NICKEL/configs/calibrateImage/tuned_configs/best_calib_t071_with_colorterms.py"
+# Explicit colorterm loader (kept separate from standard pipeline files)
+APPLY_CT_CFG="$OBS_NICKEL/configs/apply_colorterms.py"
 
 # Skymap
 SKYMAPS_CHAIN="${SKYMAPS_CHAIN:-skymaps/nickelRings}"
@@ -88,8 +92,8 @@ QG_SCI="$QG_DIR/stage1_${NIGHT}_${RUN_TS}.qg"
 QG_SCI_DOT="$QG_DIR/stage1_${NIGHT}_${RUN_TS}.dot"
 QG_SCI_MMD="$QG_DIR/stage1_${NIGHT}_${RUN_TS}.mmd"
 
-# Setup logging
-setup_logging "science_recal" "$NIGHT"
+# Setup logging (reuse existing science log layout for recal runs)
+setup_logging "science" "$NIGHT"
 exec > >(tee -a "$LOG_FILE") 2>&1
 
 log_section "Science Stage 1 (Recal Pipeline)"
@@ -107,6 +111,8 @@ butler register-instrument "$REPO" "$INSTRUMENT" >/dev/null 2>&1 || true
 
 # Validate pipeline
 [[ -s "$PIPE" ]] || { echo "ERROR: pipeline not found: $PIPE"; exit 2; }
+[[ -s "$TUNED_CFG_FILE" ]] || { echo "ERROR: tuned config not found: $TUNED_CFG_FILE"; exit 2; }
+[[ -s "$APPLY_CT_CFG" ]] || { echo "ERROR: colorterms config not found: $APPLY_CT_CFG"; exit 2; }
 
 ########## INPUT SANITY ##########
 # Find latest raw run for the night
@@ -166,6 +172,8 @@ if ! pipetask qgraph \
   -o "$SCI_PARENT" \
   --output-run "$SCI_RUN" \
   --save-qgraph "$QG_SCI" \
+  --config-file "calibrateImage:${TUNED_CFG_FILE}" \
+  --config-file "calibrateImage:${APPLY_CT_CFG}" \
   --qgraph-dot "$QG_SCI_DOT" \
   --qgraph-mermaid "$QG_SCI_MMD" \
   -d "instrument='Nickel' AND exposure.observation_type='science'${OBJECT_EXPR}${BAD_EXPR}"; then
