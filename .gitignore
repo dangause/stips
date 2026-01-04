@@ -200,3 +200,5 @@ FIXES_NEEDED.md
 # Legacy upstream repositories (kept as backup, not part of monorepo)
 packages/testdata/upstream/
 packages/refcats/upstream/
+
+*.png

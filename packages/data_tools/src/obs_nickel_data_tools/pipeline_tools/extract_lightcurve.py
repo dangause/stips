@@ -29,6 +29,7 @@ from pathlib import Path
 
 import astropy.coordinates as coord
 import astropy.units as u
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from lsst.daf.butler import Butler
@@ -80,6 +81,15 @@ def parse_args():
         help="DIA source dataset type (default: dia_source_unfiltered)",
     )
     parser.add_argument("--verbose", "-v", action="store_true", help="Verbose output")
+    parser.add_argument(
+        "--plot",
+        action="store_true",
+        help="Generate light curve plots (one per band)",
+    )
+    parser.add_argument(
+        "--name",
+        help="Custom name for plot title (if not specified, uses object name or coordinates)",
+    )
 
     args = parser.parse_args()
 
@@ -100,6 +110,67 @@ def resolve_object_name(object_name: str) -> coord.SkyCoord:
     except Exception as e:
         print(f"ERROR: Failed to resolve object name: {e}", file=sys.stderr)
         sys.exit(1)
+
+
+def plot_light_curves(df: pd.DataFrame, output_path: Path, target_name: str):
+    """Generate a single multi-band light curve plot."""
+    bands = sorted(df["band"].unique())
+
+    # Band colors for plotting
+    band_colors = {
+        "b": "blue",
+        "v": "green",
+        "r": "red",
+        "i": "darkred",
+        "g": "cyan",
+    }
+
+    print("\n=== GENERATING PLOT ===")
+
+    # Create multi-band plot with better styling
+    fig, ax = plt.subplots(figsize=(12, 8))
+
+    for band in bands:
+        band_data = df[df["band"] == band].copy()
+        color = band_colors.get(band, "black")
+
+        ax.errorbar(
+            band_data["mjd"],
+            band_data["mag"],
+            yerr=band_data["mag_err"],
+            fmt="o",
+            color=color,
+            label=f"{band.upper()}-band (N={len(band_data)})",
+            markersize=8,
+            capsize=4,
+            elinewidth=1.5,
+            capthick=1.5,
+            alpha=0.8,
+        )
+
+    # Formatting with units and improved labels
+    ax.set_xlabel("Modified Julian Date (MJD)", fontsize=14, fontweight="bold")
+    ax.set_ylabel("Apparent Magnitude (mag)", fontsize=14, fontweight="bold")
+    ax.set_title(f"{target_name}", fontsize=16, fontweight="bold", pad=15)
+    ax.invert_yaxis()  # Brighter objects (lower mag) at top
+    ax.grid(True, alpha=0.3, linestyle="--", linewidth=0.5)
+    ax.legend(fontsize=11, framealpha=0.9, loc="best")
+
+    # Improve tick labels
+    ax.tick_params(axis="both", which="major", labelsize=11)
+
+    # Add minor ticks
+    ax.minorticks_on()
+    ax.grid(True, which="minor", alpha=0.15, linestyle=":")
+
+    # Save plot with tight layout
+    plot_filename = output_path.parent / f"{output_path.stem}.png"
+    plt.tight_layout()
+    plt.savefig(plot_filename, dpi=200, bbox_inches="tight")
+    plt.close()
+
+    print(f"  Saved light curve plot: {plot_filename}")
+    print()
 
 
 def main():
@@ -359,6 +430,12 @@ def main():
     df.to_csv(output_path, index=False, float_format="%.6f")
     print(f"\nLight curve saved to: {output_path}")
     print(f"Columns: {', '.join(df.columns)}\n")
+
+    # Generate plots if requested
+    if args.plot:
+        # Use custom name if provided, otherwise use object name or coordinates
+        plot_title = args.name or args.object or f"RA={ra_deg:.4f}, Dec={dec_deg:.4f}"
+        plot_light_curves(df, output_path, plot_title)
 
 
 if __name__ == "__main__":
