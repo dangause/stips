@@ -33,6 +33,7 @@ source "$(dirname "$0")/../utilities/logging.sh"
 NIGHT="${NIGHT:-}"
 TEMPLATE_COLLECTION=""
 AUTO_TEMPLATE=false
+PREFER_PS1=false
 EXCLUDE_DATES_START=""
 EXCLUDE_DATES_END=""
 BAD_EXPOSURES=""
@@ -44,6 +45,7 @@ JOBS="${JOBS:-8}"
 PIPELINE_MODE="standalone"  # standalone (DIA.yaml) or integrated (DRP.yaml#difference-imaging)
 FORCE_REPROCESS=false
 BAD_SUB_THRESH=""
+CONFIG_OVERRIDES=()
 
 show_usage() {
   cat <<USAGE
@@ -58,6 +60,7 @@ Required:
 Template Options (choose one):
   -t, --template COLLECTION Template coadd collection
   --auto-template           Auto-discover best template (searches templates/* and coadds/*)
+  --prefer-ps1              Prefer PS1 templates over internal templates (with --auto-template)
 
 Template Date Filtering (for transient campaigns):
   --exclude-start YYYYMMDD  Exclude templates overlapping this start date
@@ -74,6 +77,8 @@ Optional:
   --pipeline MODE           Pipeline mode: standalone (DIA.yaml) or integrated (DRP.yaml)
   --force-reprocess         Force reprocessing of visit images (slower)
   --bad-sub-threshold NUM   Override badSubtractionRatioThreshold (default task value is 0.2)
+  --config KEY=VAL          Extra pipetask config override (repeatable, e.g.
+                            --config subtractImages:makeKernel.minKernelSources=1)
 
 Examples:
   # Auto-discover template (recommended)
@@ -104,6 +109,7 @@ while [[ $# -gt 0 ]]; do
     -n|--night)           NIGHT="${2:-}"; shift 2;;
     -t|--template)        TEMPLATE_COLLECTION="${2:-}"; shift 2;;
     --auto-template)      AUTO_TEMPLATE=true; shift 1;;
+    --prefer-ps1)         PREFER_PS1=true; shift 1;;
     --exclude-start)      EXCLUDE_DATES_START="${2:-}"; shift 2;;
     --exclude-end)        EXCLUDE_DATES_END="${2:-}"; shift 2;;
     --tract)              TRACT="${2:-}"; shift 2;;
@@ -115,6 +121,7 @@ while [[ $# -gt 0 ]]; do
     --pipeline)           PIPELINE_MODE="${2:-}"; shift 2;;
     --force-reprocess)    FORCE_REPROCESS=true; shift 1;;
     --bad-sub-threshold)  BAD_SUB_THRESH="${2:-}"; shift 2;;
+    --config)             CONFIG_OVERRIDES+=("${2:-}"); shift 2;;
     -h|--help)            show_usage;;
     *) echo "Unknown arg: $1"; show_usage;;
   esac
@@ -185,8 +192,8 @@ DIA_DETECT_CFG="$OBS_NICKEL/configs/dia/detectAndMeasure.py"
 
 SKYMAP_NAME="${SKYMAP_NAME:-nickelRings-v1}"
 SKYMAPS_CHAIN="${SKYMAPS_CHAIN:-skymaps/nickelRings}"
-CALIB_CHAIN="Nickel/calib/current"
-REFCATS_CHAIN="refcats"
+CALIB_CHAIN="${CALIB_CHAIN:-Nickel/calib/current}"
+REFCATS_CHAIN="${REFCATS_CHAIN:-refcats}"
 
 RUN_TS="$(date -u +%Y%m%dT%H%M%SZ)"
 RAW_RUN="Nickel/raw/${NIGHT}/${RUN_TS}"
@@ -239,15 +246,18 @@ log_info "UT day_obs (FITS header): $DAY_OBS"
 ########## INPUT SANITY ##########
 log_section "Input Collection Discovery"
 
-# Find raw collection for this observing night
+# Find raw collection for this observing night (optional - DIA doesn't actually need it)
 # Collections are named by observing night: Nickel/raw/YYYYMMDD/timestamp
 RAW_RUN="$(butler query-collections "$REPO" 2>/dev/null | \
   awk '{print $1}' | \
   grep -E "^Nickel/raw/${NIGHT}/" | \
   tail -n1 || true)"
-[[ -n "$RAW_RUN" ]] || { log_error "No raw collection found for observing night ${NIGHT}"; exit 2; }
 
-log_info "Raw collection: $RAW_RUN"
+if [[ -n "$RAW_RUN" ]]; then
+  log_info "Raw collection: $RAW_RUN"
+else
+  log_info "Raw collection: (none - using processed data only)"
+fi
 log_info "Calibs: $CALIB_CHAIN"
 log_info "Refcats: $REFCATS_CHAIN"
 log_info "Skymaps: $SKYMAPS_CHAIN"
@@ -299,10 +309,21 @@ if [[ "$AUTO_TEMPLATE" == "true" ]]; then
   else
     # Standard discovery (no date filtering)
     # Search for template collections (both templates/* and coadds/*)
-    # Prioritize templates/* (purpose-built for DIA)
+
+    # Determine search priority based on --prefer-ps1 flag
+    if [[ "$PREFER_PS1" == "true" ]]; then
+      # Prioritize PS1 templates
+      SEARCH_PATTERN="^(templates/ps1|templates/deep|templates|coadds)/"
+      echo "  Searching with PS1 preference..."
+    else
+      # Prioritize internally-built templates (standard behavior)
+      SEARCH_PATTERN="^(templates/deep|templates|coadds)/"
+      echo "  Searching with internal template preference..."
+    fi
+
     TEMPLATE_CANDIDATES="$(butler query-collections "$REPO" 2>/dev/null | \
       awk '{print $1}' | \
-      grep -E '^(templates|coadds)/' | \
+      grep -E "$SEARCH_PATTERN" | \
       sort -r || true)"
 
     if [[ -z "$TEMPLATE_CANDIDATES" ]]; then
@@ -313,8 +334,9 @@ if [[ "$AUTO_TEMPLATE" == "true" ]]; then
       butler query-collections "$REPO" | grep -E '^(templates|coadds)/' || echo "  (none)"
       echo ""
       echo "Build templates using:"
-      echo "  1. scripts/pipeline/30_coadds.sh --nights-file NIGHTS --tract TRACT --band BAND"
-      echo "  2. Or provide external templates via butler collection-chain"
+      echo "  1. Internal: scripts/pipeline/30_coadds.sh --nights-file NIGHTS --tract TRACT --band BAND"
+      echo "  2. PS1: scripts/pipeline/08_ingest_ps1_template.sh --ra RA --dec DEC --band BAND"
+      echo "  3. Or provide external templates via butler collection-chain"
       echo ""
       exit 2
     fi
@@ -328,17 +350,36 @@ if [[ "$AUTO_TEMPLATE" == "true" ]]; then
       fi
     fi
 
+    # Apply PS1 preference logic
+    if [[ "$PREFER_PS1" == "true" ]]; then
+      # Try to find PS1 template first
+      PS1_TEMPLATE="$(echo "$TEMPLATE_CANDIDATES" | grep "templates/ps1/" | head -n1 || true)"
+      if [[ -n "$PS1_TEMPLATE" ]]; then
+        TEMPLATE_COLLECTION="$PS1_TEMPLATE"
+        echo "  → Using PS1 template (--prefer-ps1): $TEMPLATE_COLLECTION"
+      else
+        # Fall back to internal templates
+        TEMPLATE_COLLECTION="$(echo "$TEMPLATE_CANDIDATES" | head -n1)"
+        echo "  → No PS1 templates found, using internal: $TEMPLATE_COLLECTION"
+      fi
+    else
+      # Standard priority: internal templates first
+      INTERNAL_TEMPLATE="$(echo "$TEMPLATE_CANDIDATES" | grep -E "templates/deep/" | head -n1 || true)"
+      if [[ -n "$INTERNAL_TEMPLATE" ]]; then
+        TEMPLATE_COLLECTION="$INTERNAL_TEMPLATE"
+      else
+        TEMPLATE_COLLECTION="$(echo "$TEMPLATE_CANDIDATES" | head -n1)"
+      fi
+    fi
+
     # Show candidates
     echo "  Candidates found:"
     echo "$TEMPLATE_CANDIDATES" | head -5 | sed 's/^/    /'
     if [[ $(echo "$TEMPLATE_CANDIDATES" | wc -l) -gt 5 ]]; then
       echo "    ... ($(echo "$TEMPLATE_CANDIDATES" | wc -l) total)"
     fi
+    echo "  → Selected: $TEMPLATE_COLLECTION"
   fi
-
-  # Select first (most recent or highest priority)
-  TEMPLATE_COLLECTION="$(echo "$TEMPLATE_CANDIDATES" | head -n1)"
-  echo "  → Selected: $TEMPLATE_COLLECTION"
 else
   # Verify user-provided template exists
   if ! butler query-collections "$REPO" | awk '{print $1}' | grep -qx "$TEMPLATE_COLLECTION"; then
@@ -464,6 +505,9 @@ fi
 if [[ -n "$BAD_SUB_THRESH" ]]; then
   CONFIG_OPTS+=("--config" "detectAndMeasureDiaSource:badSubtractionRatioThreshold=${BAD_SUB_THRESH}")
 fi
+for cfg in "${CONFIG_OVERRIDES[@]}"; do
+  CONFIG_OPTS+=("--config" "$cfg")
+done
 
 if ! pipetask qgraph \
   -b "$REPO" \

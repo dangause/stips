@@ -45,6 +45,7 @@ except ImportError:
     sys.exit(1)
 
 try:
+    import lsst.afw.detection as afwDetection
     import lsst.afw.image as afwImage
     import lsst.daf.butler as dafButler
     import lsst.geom as geom
@@ -70,20 +71,72 @@ PS1_TO_NICKEL_BANDS = {
     "y": "i",  # PS1 y → Nickel I (no y in Nickel)
 }
 
-# PS1 approximate zeropoints (AB mag for 1 ADU/sec)
-# From PS1 documentation: https://outerspace.stsci.edu/display/PANSTARRS/PS1+Image+Cutout+Service
+# PS1 zeropoints (AB mag for 1 DN/sec)
+# From PS1 DR2: https://outerspace.stsci.edu/display/PANSTARRS/PS1+Stack+images
+# These are typical values; actual zeropoints are in FITS headers (FPA.ZP or ZPT keywords)
 PS1_ZEROPOINTS = {
-    "g": 25.0,  # Approximate; actual varies per chip/epoch
+    "g": 25.0,
     "r": 25.0,
     "i": 25.0,
-    "z": 25.0,
-    "y": 25.0,
+    "z": 24.5,
+    "y": 23.5,
+}
+
+# PS1 effective wavelengths (Angstroms) for colorterm calculations
+PS1_EFFECTIVE_WAVELENGTHS = {
+    "g": 4866,
+    "r": 6215,
+    "i": 7545,
+    "z": 8679,
+    "y": 9633,
 }
 
 
-def download_ps1_cutout(ra, dec, band, size_deg=0.2, output_dir="."):
+def ps1_file_covers_target(ps1_fits_path, ra, dec):
     """
-    Download PS1 image cutout from STScI MAST archive.
+    Check whether a PS1 FITS file actually covers the requested sky position.
+    """
+    try:
+        with fits.open(ps1_fits_path) as hdul:
+            image_hdu = next(
+                (
+                    hdu
+                    for hdu in hdul
+                    if getattr(hdu, "data", None) is not None
+                    and isinstance(hdu.data, np.ndarray)
+                    and hdu.data.ndim >= 2
+                ),
+                None,
+            )
+            if image_hdu is None:
+                log.warning(
+                    f"  No image HDU found when checking coverage for {ps1_fits_path}"
+                )
+                return False
+
+            wcs = WCS(image_hdu.header)
+            x, y = wcs.all_world2pix(ra, dec, 0)
+            ny, nx = image_hdu.data.shape
+
+            inside = np.all(np.isfinite([x, y])) and (0 <= x < nx) and (0 <= y < ny)
+            log.info(
+                f"  Target pixel in PS1 image: x={x:.1f}, y={y:.1f} (image size {nx}x{ny})"
+            )
+            if not inside:
+                log.warning(
+                    "  Target is outside PS1 image footprint; will try another download method"
+                )
+            return inside
+    except Exception as e:
+        log.warning(f"  Coverage check failed for {ps1_fits_path}: {e}")
+        return False
+
+
+def download_ps1_cutout(
+    ra, dec, band, size_deg=0.2, output_dir=".", force_service=None
+):
+    """
+    Download PS1 image cutout from STScI MAST archive or PS1 image service.
 
     Parameters
     ----------
@@ -97,6 +150,8 @@ def download_ps1_cutout(ra, dec, band, size_deg=0.2, output_dir="."):
         Size of cutout in degrees
     output_dir : str
         Directory to save downloaded FITS file
+    force_service : str, optional
+        Force specific download method: 'mast', 'fitscut', or 'ps1filenames'
 
     Returns
     -------
@@ -104,218 +159,259 @@ def download_ps1_cutout(ra, dec, band, size_deg=0.2, output_dir="."):
         Path to downloaded FITS file, or None if download failed
     """
     log.info(f"Downloading PS1 {band}-band cutout for RA={ra:.4f}, Dec={dec:.4f}")
+    log.info(f"  Cutout size: {size_deg:.3f} degrees ({size_deg*60:.1f} arcmin)")
 
     coord = SkyCoord(ra=ra * u.deg, dec=dec * u.deg, frame="icrs")
-
-    # Try PS1 via MAST
-    try:
-        # Query PS1 stacked images
-        obs_table = Observations.query_criteria(
-            coordinates=coord,
-            radius=size_deg * u.deg,
-            obs_collection="PS1",
-            filters=band,
-            dataproduct_type="image",
-        )
-
-        if len(obs_table) == 0:
-            log.warning(f"No PS1 {band}-band images found at this position")
-            return None
-
-        log.info(f"Found {len(obs_table)} PS1 observations")
-
-        # Get data products for the first observation
-        products = Observations.get_product_list(obs_table[0])
-
-        # Filter for stacked images (not warp or diff). The astroquery table
-        # columns are MaskedColumn objects, so we cannot use the pandas-style
-        # `.str.contains`; do the comparison with numpy instead.
-        desc_col = products["description"]
-        desc_values = desc_col.filled("") if hasattr(desc_col, "filled") else desc_col
-        desc_text = np.asarray(desc_values, dtype=str)
-
-        is_science = products["productType"] == "SCIENCE"
-        has_stack = np.char.find(np.char.lower(desc_text), "stack") >= 0
-
-        stack_products = products[is_science & has_stack]
-
-        if len(stack_products) == 0:
-            log.warning(
-                "No stacked images found, trying alternative download method..."
-            )
-            return download_ps1_via_ps1images(ra, dec, band, size_deg, output_dir)
-
-        # Download the first stacked image
-        output_path = Path(output_dir)
-        output_path.mkdir(parents=True, exist_ok=True)
-
-        manifest = Observations.download_products(
-            stack_products[0:1], download_dir=str(output_path)
-        )
-
-        if len(manifest) > 0:
-            downloaded_file = manifest["Local Path"][0]
-            log.info(f"Downloaded: {downloaded_file}")
-            return downloaded_file
-        else:
-            log.warning("Download failed via MAST, trying alternative...")
-            return download_ps1_via_ps1images(ra, dec, band, size_deg, output_dir)
-
-    except Exception as e:
-        log.warning(f"MAST download failed: {e}")
-        log.info("Trying alternative PS1 image service...")
-        return download_ps1_via_ps1images(ra, dec, band, size_deg, output_dir)
-
-
-def download_ps1_via_ps1images(ra, dec, band, size_deg=0.2, output_dir="."):
-    """
-    Alternative: Download PS1 cutout via direct image service.
-
-    This uses the PS1 Image Cutout Service which provides on-the-fly cutouts.
-    """
-    import requests
-
-    log.info(f"Using PS1 image cutout service for {band}-band")
-
-    # Convert size to pixels (PS1 is 0.25"/pixel)
-    size_arcsec = size_deg * 3600
-    size_pixels = int(size_arcsec / 0.25)
-
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
     output_file = output_path / f"ps1_{band}_ra{ra:.4f}_dec{dec:.4f}.fits"
 
-    # Method 1: Direct fitscut.cgi using getimages service (corrected API)
-    try:
-        log.info("Trying PS1 ps1filenames.py service...")
+    # Check if file already exists
+    if output_file.exists() and output_file.stat().st_size > 10000:
+        if ps1_file_covers_target(output_file, ra, dec):
+            log.info(f"Using existing file: {output_file}")
+            return str(output_file)
+        log.warning(
+            f"Existing PS1 file {output_file} does not cover target; re-downloading"
+        )
+        try:
+            output_file.unlink()
+        except Exception as e:
+            log.warning(f"  Could not remove stale PS1 file: {e}")
 
-        # First get the filename from PS1
-        import requests
-
-        getim_url = "https://ps1images.stsci.edu/cgi-bin/ps1filenames.py"
-        getim_params = {
-            "ra": ra,
-            "dec": dec,
-            "size": int(size_arcsec),  # in arcsec, not pixels
-            "format": "fits",
-            "filters": band,
-        }
-
-        response = requests.get(getim_url, params=getim_params, timeout=60)
-
-        if response.status_code == 200:
-            # Parse response to get FITS URL
-            lines = response.text.split("\n")
-            fits_urls = [
-                line for line in lines if ".fits" in line and "stack" in line.lower()
-            ]
-
-            if fits_urls:
-                # Extract actual FITS URL (it's usually in format: shortname stack.fits URL)
-                fits_url = fits_urls[0].split()[-1]  # Last column is URL
-
-                log.info(f"Found PS1 stack URL: {fits_url}")
-
-                # Download the FITS file
-                fits_response = requests.get(fits_url, timeout=180)
-
-                if (
-                    fits_response.status_code == 200
-                    and len(fits_response.content) > 1000
-                ):
-                    with open(output_file, "wb") as f:
-                        f.write(fits_response.content)
-                    log.info(
-                        f"Downloaded PS1 stack: {output_file} ({len(fits_response.content)} bytes)"
-                    )
-                    return str(output_file)
-                else:
-                    log.warning(
-                        f"FITS download failed: status {fits_response.status_code}"
-                    )
-            else:
-                log.warning("No stack FITS files found in ps1filenames response")
-        else:
-            log.warning(f"ps1filenames.py returned status {response.status_code}")
-    except Exception as e:
-        log.warning(f"ps1filenames.py method failed: {e}")
-
-    # Method 2: Try using urllib instead of requests (handles redirects better)
-    try:
-        import urllib.request
-
-        log.info("Trying PS1 with urllib...")
-        url = f"https://ps1images.stsci.edu/cgi-bin/fitscut.cgi?ra={ra}&dec={dec}&size={size_pixels}&format=fits&filter={band}"
-
-        with urllib.request.urlopen(url, timeout=180) as response:
-            data = response.read()
-
-        if len(data) > 1000:
-            with open(output_file, "wb") as f:
-                f.write(data)
-            log.info(
-                f"Downloaded PS1 cutout via urllib: {output_file} ({len(data)} bytes)"
+    # Method 1: Try PS1 via MAST (most reliable for stacked images)
+    if force_service is None or force_service == "mast":
+        try:
+            log.info("Method 1: Trying MAST archive...")
+            # Query PS1 stacked images with more specific criteria
+            obs_table = Observations.query_criteria(
+                coordinates=coord,
+                radius=size_deg * u.deg,
+                obs_collection="PS1",
+                filters=band,
+                dataproduct_type="image",
             )
-            return str(output_file)
-        else:
-            log.warning(f"urllib download too small: {len(data)} bytes")
-    except Exception as e:
-        log.warning(f"urllib method failed: {e}")
 
-    # Method 3: Try wget as subprocess
-    try:
-        import subprocess
+            if len(obs_table) > 0:
+                log.info(f"  Found {len(obs_table)} PS1 observations")
 
-        log.info("Trying PS1 with wget...")
-        url = f"https://ps1images.stsci.edu/cgi-bin/fitscut.cgi?ra={ra}&dec={dec}&size={size_pixels}&format=fits&filter={band}"
+                # Get data products for the first observation
+                products = Observations.get_product_list(obs_table[0])
 
-        result = subprocess.run(
-            ["wget", "-O", str(output_file), url], capture_output=True, timeout=180
-        )
+                # Filter for stacked images (not warp or diff)
+                desc_col = products["description"]
+                desc_values = (
+                    desc_col.filled("") if hasattr(desc_col, "filled") else desc_col
+                )
+                desc_text = np.asarray(desc_values, dtype=str)
 
-        if (
-            result.returncode == 0
-            and output_file.exists()
-            and output_file.stat().st_size > 1000
-        ):
-            log.info(f"Downloaded PS1 cutout via wget: {output_file}")
-            return str(output_file)
-        else:
-            log.warning(f"wget failed: {result.stderr.decode()}")
-    except Exception as e:
-        log.warning(f"wget method failed: {e}")
+                is_science = products["productType"] == "SCIENCE"
+                has_stack = np.char.find(np.char.lower(desc_text), "stack") >= 0
 
-    # Method 4: Try curl as subprocess
-    try:
-        import subprocess
+                stack_products = products[is_science & has_stack]
 
-        log.info("Trying PS1 with curl...")
-        url = f"https://ps1images.stsci.edu/cgi-bin/fitscut.cgi?ra={ra}&dec={dec}&size={size_pixels}&format=fits&filter={band}"
+                if len(stack_products) > 0:
+                    log.info(f"  Found {len(stack_products)} stack products")
 
-        result = subprocess.run(
-            ["curl", "-o", str(output_file), "-L", url],
-            capture_output=True,
-            timeout=180,
-        )
+                    # Download to temporary location
+                    temp_dir = output_path / "temp_mast"
+                    temp_dir.mkdir(exist_ok=True)
 
-        if (
-            result.returncode == 0
-            and output_file.exists()
-            and output_file.stat().st_size > 1000
-        ):
-            log.info(f"Downloaded PS1 cutout via curl: {output_file}")
-            return str(output_file)
-        else:
-            log.warning(f"curl failed: {result.stderr.decode()}")
-    except Exception as e:
-        log.warning(f"curl method failed: {e}")
+                    manifest = Observations.download_products(
+                        stack_products[0:1], download_dir=str(temp_dir)
+                    )
+
+                    if len(manifest) > 0 and Path(manifest["Local Path"][0]).exists():
+                        downloaded_file = manifest["Local Path"][0]
+                        # Move to final location
+                        import shutil
+
+                        shutil.copy(downloaded_file, output_file)
+                        log.info(f"  Successfully downloaded via MAST: {output_file}")
+                        if ps1_file_covers_target(output_file, ra, dec):
+                            return str(output_file)
+                        log.warning(
+                            "  MAST download does not cover target; trying alternate service"
+                        )
+                        try:
+                            output_file.unlink()
+                        except Exception:
+                            pass
+                else:
+                    log.warning("  No stack products found in MAST results")
+            else:
+                log.warning(f"  No PS1 {band}-band observations found at this position")
+
+        except Exception as e:
+            log.warning(f"  MAST download failed: {e}")
+
+    # Method 2: Try PS1 image service (fitscut) - more reliable for cutouts
+    if force_service is None or force_service == "fitscut":
+        result = download_ps1_via_fitscut(ra, dec, band, size_deg, output_file)
+        if result and ps1_file_covers_target(result, ra, dec):
+            return result
+        if result:
+            try:
+                Path(result).unlink()
+            except Exception:
+                pass
+
+    # Method 3: Try ps1filenames service for full stack URLs
+    if force_service is None or force_service == "ps1filenames":
+        result = download_ps1_via_ps1filenames(ra, dec, band, size_deg, output_file)
+        if result and ps1_file_covers_target(result, ra, dec):
+            return result
+        if result:
+            try:
+                Path(result).unlink()
+            except Exception:
+                pass
 
     log.error("All PS1 download methods failed")
     log.info("You can manually download from:")
+    size_pixels = int(size_deg * 3600 / 0.25)
     log.info(
         f"  https://ps1images.stsci.edu/cgi-bin/fitscut.cgi?ra={ra}&dec={dec}&size={size_pixels}&format=fits&filter={band}"
     )
     log.info(f"Save as: {output_file}")
+    return None
+
+
+def download_ps1_via_fitscut(ra, dec, band, size_deg, output_file):
+    """
+    Download PS1 cutout via fitscut.cgi service (on-the-fly cutouts).
+
+    This is the most reliable method for custom-sized cutouts.
+    """
+    import requests
+
+    log.info("Method 2: Trying PS1 fitscut.cgi service...")
+
+    # Convert size to pixels (PS1 is 0.25"/pixel)
+    requested_pixels = int(size_deg * 3600 / 0.25)
+    max_pixels = 10000  # fitscut returns 400 for very large cutouts; cap to keep requests successful
+
+    sizes_to_try = []
+    capped = min(requested_pixels, max_pixels)
+    if capped < requested_pixels:
+        log.warning(
+            f"  Requested cutout {requested_pixels}px exceeds fitscut limit {max_pixels}px; using {capped}px instead"
+        )
+    sizes_to_try.append(capped)
+    # Add a couple of fallback sizes in case the first request is still too big for the service
+    for fallback in (8000, 6000):
+        if fallback < sizes_to_try[-1]:
+            sizes_to_try.append(fallback)
+
+    url = "https://ps1images.stsci.edu/cgi-bin/fitscut.cgi"
+
+    for idx, size_pixels in enumerate(sizes_to_try):
+        params = {
+            "ra": ra,
+            "dec": dec,
+            "size": size_pixels,
+            "format": "fits",
+            "filter": band,
+        }
+
+        try:
+            log.info(f"  Requesting cutout: {size_pixels}x{size_pixels} pixels")
+            response = requests.get(url, params=params, timeout=180)
+
+            if response.status_code == 200 and len(response.content) > 10000:
+                with open(output_file, "wb") as f:
+                    f.write(response.content)
+                log.info(
+                    f"  Successfully downloaded via fitscut: {output_file} ({len(response.content)} bytes)"
+                )
+                return str(output_file)
+
+            log.warning(
+                f"  fitscut failed: status {response.status_code}, size {len(response.content)} bytes"
+            )
+        except Exception as e:
+            log.warning(f"  fitscut method failed: {e}")
+
+        if idx < len(sizes_to_try) - 1:
+            log.info("  Retrying fitscut with a smaller cutout...")
+
+    return None
+
+
+def download_ps1_via_ps1filenames(ra, dec, band, size_deg, output_file):
+    """
+    Download PS1 full stack image via ps1filenames.py service.
+
+    This gets the full stacked image URL and downloads it (no custom cutout).
+    """
+    import requests
+
+    log.info("Method 3: Trying PS1 ps1filenames.py service...")
+
+    size_arcsec = int(size_deg * 3600)
+
+    getim_url = "https://ps1images.stsci.edu/cgi-bin/ps1filenames.py"
+    getim_params = {
+        "ra": ra,
+        "dec": dec,
+        "size": size_arcsec,
+        "format": "fits",
+        "filters": band,
+    }
+
+    try:
+        response = requests.get(getim_url, params=getim_params, timeout=60)
+
+        if response.status_code == 200:
+            # Parse response to get FITS URL
+            lines = [line.strip() for line in response.text.split("\n") if line.strip()]
+            if len(lines) <= 1:
+                log.warning("  No stack FITS files found in ps1filenames response")
+                return None
+
+            header = lines[0].split()
+            filename_idx = header.index("filename") if "filename" in header else 7
+            type_idx = header.index("type") if "type" in header else None
+            bad_idx = header.index("badflag") if "badflag" in header else None
+
+            fits_path = None
+            for line in lines[1:]:
+                parts = line.split()
+                if len(parts) <= filename_idx:
+                    continue
+                if type_idx is not None and parts[type_idx].lower() != "stack":
+                    continue
+                if bad_idx is not None and parts[bad_idx] != "0":
+                    continue
+                fits_path = parts[filename_idx]
+                break
+
+            if fits_path is None:
+                log.warning("  No suitable stack entries in ps1filenames response")
+                return None
+
+            fits_url = f"https://ps1images.stsci.edu{fits_path}"
+            log.info(f"  Found PS1 stack URL: {fits_url}")
+
+            # Download the FITS file
+            fits_response = requests.get(fits_url, timeout=180)
+
+            if fits_response.status_code == 200 and len(fits_response.content) > 10000:
+                with open(output_file, "wb") as f:
+                    f.write(fits_response.content)
+                log.info(
+                    f"  Successfully downloaded via ps1filenames: {output_file} ({len(fits_response.content)} bytes)"
+                )
+                return str(output_file)
+            else:
+                log.warning(
+                    f"  FITS download failed: status {fits_response.status_code}"
+                )
+        else:
+            log.warning(f"  ps1filenames.py returned status {response.status_code}")
+    except Exception as e:
+        log.warning(f"  ps1filenames.py method failed: {e}")
+
     return None
 
 
@@ -358,6 +454,8 @@ def convert_ps1_to_lsst_exposure(ps1_fits_path, nickel_band):
 
         # Extract WCS from the image HDU
         ps1_wcs = WCS(ps1_header)
+        center = ps1_wcs.all_pix2world(ps1_data.shape[1] / 2, ps1_data.shape[0] / 2, 0)
+        log.info(f"  PS1 image center (WCS): RA={center[0]:.4f}, Dec={center[1]:.4f}")
 
         # Get PS1 filter from header (if available)
         ps1_filter = ps1_header.get("FILTER", ps1_header.get("FILTNAM", "r")).lower()
@@ -365,12 +463,30 @@ def convert_ps1_to_lsst_exposure(ps1_fits_path, nickel_band):
             log.warning(f"Unknown PS1 filter '{ps1_filter}', assuming 'r'")
             ps1_filter = "r"
 
+        # Extract PS1 zeropoint from FITS header (various possible keywords)
+        ps1_zp_keywords = ["ZPT", "FPA.ZP", "MAGZERO", "MAGZPT"]
+        ps1_zp = None
+        for keyword in ps1_zp_keywords:
+            if keyword in ps1_header:
+                ps1_zp = float(ps1_header[keyword])
+                log.info(f"Found PS1 zeropoint in header[{keyword}]: {ps1_zp:.3f}")
+                break
+
+        if ps1_zp is None:
+            ps1_zp = PS1_ZEROPOINTS.get(ps1_filter, 25.0)
+            log.warning(
+                f"No zeropoint in FITS header, using default for {ps1_filter}: {ps1_zp:.3f}"
+            )
+
         log.info(f"PS1 filter: {ps1_filter}, image shape: {ps1_data.shape}")
+        log.info(f"PS1 zeropoint (AB mag): {ps1_zp:.3f}")
 
         # Convert WCS to LSST format
         lsst_wcs = convert_astropy_wcs_to_lsst(ps1_wcs)
 
-        # Handle NaN values (replace with 0 and mask)
+        # Handle NaN and bad values
+        # NOTE: Do NOT mask negative pixels - sky-subtracted images legitimately have negative values
+        bad_mask = ~np.isfinite(ps1_data)
         ps1_data = np.nan_to_num(ps1_data, nan=0.0, posinf=0.0, neginf=0.0)
 
         # Create LSST MaskedImage
@@ -378,41 +494,69 @@ def convert_ps1_to_lsst_exposure(ps1_fits_path, nickel_band):
         masked_image.image.array[:, :] = ps1_data.astype(np.float32)
 
         # Set mask for zero/bad pixels
-        masked_image.mask.array[ps1_data == 0] = masked_image.mask.getPlaneBitMask(
-            "BAD"
-        )
+        masked_image.mask.array[bad_mask] = masked_image.mask.getPlaneBitMask("BAD")
 
-        # Set variance (rough estimate from background)
-        median_val = np.median(ps1_data[ps1_data > 0])
-        variance_estimate = np.abs(median_val) if median_val > 0 else 1.0
-        masked_image.variance.array[:, :] = variance_estimate
+        # Set variance (improved estimate from image statistics)
+        good_pixels = ps1_data[~bad_mask]
+        if len(good_pixels) > 100:
+            # Use median absolute deviation for robust variance estimate
+            median_val = np.median(good_pixels)
+            mad = np.median(np.abs(good_pixels - median_val))
+            variance_estimate = (1.4826 * mad) ** 2  # Convert MAD to std dev
+            # Add Poisson noise estimate
+            variance_estimate = np.maximum(variance_estimate, np.abs(good_pixels))
+            masked_image.variance.array[:, :] = variance_estimate.mean()
+            log.info(f"Variance estimate: {variance_estimate.mean():.2f} (from MAD)")
+        else:
+            variance_estimate = 1.0
+            masked_image.variance.array[:, :] = variance_estimate
+            log.warning("Too few good pixels for variance estimate, using 1.0")
 
         # Create Exposure
         exposure = afwImage.ExposureF(masked_image)
         exposure.setWcs(lsst_wcs)
 
-        # Set PhotoCalib from PS1 zeropoint
-        # PS1 zeropoints are in AB mag for 1 DN/sec
-        # Convert to flux calibration: flux = counts * calibration
-        ps1_zp = PS1_ZEROPOINTS.get(ps1_filter, 25.0)
-
-        # PhotoCalib expects calibration factor, not magnitude zeropoint
-        # flux [nJy] = counts * 10^((23.9 - zeropoint) / 2.5) * 3631e6
-        # For simplicity: calibrationMean = 10^(zp/2.5)
-        calibration_mean = 10.0 ** (ps1_zp / 2.5)
-
-        photo_calib = PhotoCalib(calibration_mean)
-        exposure.setPhotoCalib(photo_calib)
+        # Set PhotoCalib to unity to match Nickel calibrated images.
+        # Record PS1 zeropoint in metadata instead of scaling counts.
+        calibration_mean = 1.0
+        exposure.setPhotoCalib(PhotoCalib(calibration_mean))
 
         # Set filter
-        filter_label = afwImage.FilterLabel(
-            band=nickel_band, physical=nickel_band.upper()
-        )
+        filter_label = afwImage.FilterLabel(band=nickel_band)
         exposure.setFilter(filter_label)
+
+        # Attach a simple Gaussian PSF so downstream warping/subtraction have a PSF
+        fwhm_arcsec = 1.2  # typical PS1 stack seeing
+        sigma_pix = 1.3
+        try:
+            exp_bbox = exposure.getBBox()
+            center = geom.Point2D(exp_bbox.getCenterX(), exp_bbox.getCenterY())
+            pix_scale = exposure.getWcs().getPixelScale(center).asArcseconds()
+            if pix_scale > 0:
+                sigma_pix = (fwhm_arcsec / pix_scale) / 2.3548
+        except Exception as e:
+            log.warning(
+                f"Could not compute pixel scale for PSF; using default sigma {sigma_pix:.2f} ({e})"
+            )
+
+        psf = afwDetection.GaussianPsf(21, 21, sigma_pix)
+        exposure.setPsf(psf)
+        log.info(
+            f'  Set synthetic PSF: FWHM~{fwhm_arcsec:.2f}" -> sigma={sigma_pix:.2f} pix'
+        )
+
+        # Add metadata
+        exposure_info = exposure.getInfo()
+        exposure_info.setMetadata(exposure.getMetadata())
+        metadata = exposure.getMetadata()
+        metadata.set("PS1_FILTER", ps1_filter)
+        metadata.set("PS1_ZEROPOINT", ps1_zp)
+        metadata.set("PS1_SOURCE", ps1_fits_path)
 
         log.info(f"Created LSST Exposure: {exposure.getBBox()}")
         log.info(f"  WCS: {lsst_wcs.getPixelOrigin()}")
-        log.info(f"  PhotoCalib: {calibration_mean:.2e}")
+        log.info(f"  PhotoCalib mean: {calibration_mean:.2e}")
+        log.info(f"  Masked pixels: {np.sum(bad_mask)} / {bad_mask.size}")
 
         return exposure
 
@@ -460,6 +604,97 @@ def convert_astropy_wcs_to_lsst(astropy_wcs):
         raise
 
 
+def reproject_to_patch(exposure, patch_info):
+    """
+    Reproject exposure to match patch WCS and bounding box.
+
+    This ensures the PS1 template has the exact geometry expected by the DIA pipeline.
+
+    Parameters
+    ----------
+    exposure : lsst.afw.image.ExposureF
+        Input exposure (PS1 template)
+    patch_info : lsst.skymap.PatchInfo
+        Target patch from skymap
+
+    Returns
+    -------
+    lsst.afw.image.ExposureF
+        Reprojected exposure matching patch geometry
+    """
+    from lsst.afw.math import WarpingControl, warpExposure
+
+    log.info("Reprojecting PS1 template to match patch geometry...")
+
+    # Get patch WCS and bounding box
+    patch_wcs = patch_info.getWcs()
+    patch_bbox = patch_info.getOuterBBox()
+
+    log.info(f"  Patch bbox: {patch_bbox}")
+    log.info(f"  Input exposure bbox: {exposure.getBBox()}")
+
+    # Create output exposure with patch geometry
+    reprojected = afwImage.ExposureF(patch_bbox)
+    reprojected.setWcs(patch_wcs)
+    reprojected.setFilter(exposure.getFilter())
+    reprojected.setPhotoCalib(exposure.getPhotoCalib())
+    # Preserve PSF if present (we add a synthetic PSF earlier)
+    try:
+        if exposure.getPsf() is not None:
+            reprojected.setPsf(exposure.getPsf())
+            log.info("  Carried PSF onto reprojected exposure")
+    except Exception as e:
+        log.warning(f"  Could not copy PSF to reprojected exposure: {e}")
+
+    # Warp input exposure onto patch geometry
+    warping_control = WarpingControl("lanczos4")
+    # Set growth to allow proper interpolation at edges
+    warping_control.setGrowFullMask(0)  # Don't grow mask during warping
+    warping_control.setMaskWarpingKernelName("bilinear")  # Faster mask warping
+
+    # Perform the warp
+    warpExposure(reprojected, exposure, warping_control)
+
+    log.info(f"  Reprojected exposure bbox: {reprojected.getBBox()}")
+
+    # Check mask statistics
+    mask = reprojected.mask.array
+    valid_mask = mask == 0
+    edge_bit = reprojected.mask.getPlaneBitMask("EDGE")
+    no_data_bit = reprojected.mask.getPlaneBitMask("NO_DATA")
+
+    log.info(f"  Valid pixels (mask==0): {np.sum(valid_mask)} / {mask.size}")
+    log.info(f"  Pixels with EDGE set: {np.sum((mask & edge_bit) != 0)}")
+    log.info(f"  Pixels with NO_DATA set: {np.sum((mask & no_data_bit) != 0)}")
+    log.info(f"  Finite image pixels: {np.sum(np.isfinite(reprojected.image.array))}")
+
+    # CRITICAL FIX: Clear EDGE and NO_DATA for pixels with actual warped data
+    # After warping:
+    #   - EDGE is set on interpolated pixels (we want to use these!)
+    #   - NO_DATA is set on pixels outside the input footprint (correctly!)
+    # Strategy: Any pixel with finite non-zero image data came from the warp and should be usable
+    has_warped_data = np.isfinite(reprojected.image.array) & (
+        reprojected.image.array != 0
+    )
+
+    # Clear both EDGE and NO_DATA for pixels that actually have warped data
+    # These are legitimate pixels from the PS1 image, just interpolated during warping
+    reprojected.mask.array[has_warped_data] &= ~edge_bit  # Clear EDGE
+    reprojected.mask.array[has_warped_data] &= ~no_data_bit  # Clear NO_DATA
+
+    valid_after = reprojected.mask.array == 0
+    log.info(
+        f"  Valid pixels after mask clearing: {np.sum(valid_after)} / {mask.size} ({100*np.sum(valid_after)/mask.size:.1f}%)"
+    )
+
+    # Also log what fraction of the patch has coverage
+    log.info(
+        f"  Patch coverage: {100*np.sum(has_warped_data)/mask.size:.1f}% of pixels have warped data"
+    )
+
+    return reprojected
+
+
 def ingest_exposure_to_butler(butler, exposure, ra, dec, band, collection, tract=None):
     """
     Ingest LSST Exposure into Butler as template_coadd.
@@ -499,9 +734,9 @@ def ingest_exposure_to_butler(butler, exposure, ra, dec, band, collection, tract
         )  # Use .names to get iterable list of dimension names
         log.info(f"Found existing template_coadd with dimensions: {dims}")
     except Exception:
-        # Default to instrument-aware dimensions used by diffim templates
-        # This matches the Nickel-built templates
-        dims = ("instrument", "skymap", "tract", "patch", "band")
+        # Default to dimensions without instrument (matches DIA pipeline expectations)
+        # PS1 templates are external, so they shouldn't have instrument dimension
+        dims = ("skymap", "tract", "patch", "band")
         log.info(
             "Dataset type 'template_coadd' not found; registering it with dims %s", dims
         )
@@ -516,26 +751,37 @@ def ingest_exposure_to_butler(butler, exposure, ra, dec, band, collection, tract
     # Ensure target run/collection exists (registerRun is idempotent).
     try:
         butler.registry.registerRun(collection)
-    except Exception:
+        log.info(f"Registered collection: {collection}")
+    except Exception as e:
         # If it already exists (or is a chain), this will fail harmlessly.
+        log.debug(f"Collection registration note: {e}")
         pass
 
     # Get skymap to determine tract/patch (allow env overrides)
     skymap_name = os.environ.get("SKYMAP_NAME", "nickelRings-v1")
-    skymap_collections = os.environ.get("SKYMAPS_CHAIN", "skymaps/nickelRings,skymaps")
+    skymap_collections = os.environ.get("SKYMAPS_CHAIN", "skymaps")
     skymap_collections = [
         c.strip() for c in skymap_collections.split(",") if c.strip()
     ] or ["skymaps"]
+
+    log.info(f"Looking for skymap '{skymap_name}' in collections: {skymap_collections}")
+
     try:
         skymap = butler.get(
             "skyMap", skymap=skymap_name, collections=skymap_collections
         )
+        log.info(f"Successfully loaded skymap: {skymap_name}")
     except Exception as e:
         log.error(f"Failed to get skymap '{skymap_name}': {e}")
         log.info("Available skymaps:")
-        for ref in butler.registry.queryDatasets("skyMap"):
-            log.info(f"  - {ref.dataId['skymap']}")
-        raise
+        try:
+            for ref in butler.registry.queryDatasets("skyMap"):
+                log.info(f"  - {ref.dataId['skymap']}")
+        except Exception:
+            log.warning("Could not query available skymaps")
+        raise RuntimeError(
+            f"Skymap '{skymap_name}' not found. Set SKYMAP_NAME environment variable or create skymap."
+        )
 
     # Find tract/patch from coordinates
     coord = geom.SpherePoint(ra, dec, geom.degrees)
@@ -546,34 +792,78 @@ def ingest_exposure_to_butler(butler, exposure, ra, dec, band, collection, tract
         log.info(f"Auto-determined tract: {tract}")
     else:
         tract_info = skymap[tract]
+        log.info(f"Using specified tract: {tract}")
 
     patch_info = tract_info.findPatch(coord)
     patch = patch_info.getSequentialIndex()
 
     log.info(f"Target tract={tract}, patch={patch}")
 
+    # Verify the exposure WCS covers the patch
+    exp_bbox = exposure.getBBox()
+    exp_wcs = exposure.getWcs()
+    if exp_wcs is not None:
+        center_pixel = geom.Point2D(exp_bbox.getCenterX(), exp_bbox.getCenterY())
+        center_sky = exp_wcs.pixelToSky(center_pixel)
+        log.info(
+            f"Input exposure center: RA={center_sky.getRa().asDegrees():.4f}, "
+            f"Dec={center_sky.getDec().asDegrees():.4f}"
+        )
+    else:
+        log.warning("Exposure has no WCS!")
+
+    # CRITICAL: Reproject PS1 exposure to match patch geometry
+    # This ensures the template has the exact WCS and bounding box expected by DIA pipeline
+    log.info("Reprojecting PS1 template to patch geometry...")
+    exposure = reproject_to_patch(exposure, patch_info)
+
     # Build data ID matching dataset type dimensions
-    # Note: For PS1 templates, we don't include instrument dimension to match DIA pipeline expectations
     data_id = {
         "skymap": skymap_name,
         "tract": tract,
         "patch": patch,
         "band": band,
     }
+
     # Only add instrument/physical_filter if they're in the dataset type dimensions
-    # (PS1 templates should NOT have these to work with DIA pipeline)
     if dims and "instrument" in dims:
         data_id["instrument"] = "Nickel"
+        log.info("Including 'instrument' dimension in data ID")
     if dims and "physical_filter" in dims:
         data_id["physical_filter"] = band.upper()
+        log.info("Including 'physical_filter' dimension in data ID")
+
+    # Check if template already exists
+    try:
+        existing_refs = list(
+            butler.registry.queryDatasets(
+                "template_coadd", collections=[collection], dataId=data_id
+            )
+        )
+        if existing_refs:
+            log.warning(f"Template already exists for {data_id} in {collection}")
+            log.warning("This will overwrite the existing template")
+    except Exception as e:
+        log.debug(f"Could not check for existing template: {e}")
 
     # Put exposure into Butler
     try:
         butler.put(exposure, "template_coadd", dataId=data_id, run=collection)
         log.info(f"Successfully ingested template_coadd with dataId: {data_id}")
 
+        # Verify ingestion
+        try:
+            retrieved = butler.get(
+                "template_coadd", dataId=data_id, collections=[collection]
+            )
+            log.info(f"Verified: template is retrievable (bbox: {retrieved.getBBox()})")
+        except Exception as e:
+            log.error(f"WARNING: Failed to verify ingestion: {e}")
+
     except Exception as e:
         log.error(f"Failed to ingest exposure: {e}")
+        log.error(f"Data ID: {data_id}")
+        log.error(f"Collection: {collection}")
         raise
 
     return data_id
@@ -685,6 +975,11 @@ Examples:
 
     # Only write if it doesn't already exist (avoid overwriting when using --ps1-fits)
     if not lsst_fits_path.exists() or str(lsst_fits_path) != ps1_fits_path:
+        if lsst_fits_path.exists():
+            try:
+                lsst_fits_path.unlink()
+            except Exception as e:
+                log.warning(f"Could not remove existing LSST Exposure: {e}")
         exposure.writeFits(str(lsst_fits_path))
         log.info(f"Saved LSST Exposure to: {lsst_fits_path}")
     else:
@@ -702,11 +997,36 @@ Examples:
         butler, exposure, args.ra, args.dec, args.band, args.collection, args.tract
     )
 
+    # Record PS1 template metadata
+    try:
+        from obs_nickel_data_tools.pipeline_tools.template_metadata import (
+            TemplateMetadata,
+        )
+
+        metadata_mgr = TemplateMetadata(args.repo)
+        metadata_mgr.record_template(
+            collection=args.collection,
+            start_date="PS1",
+            end_date="PS1",
+            tract=str(data_id["tract"]) if "tract" in data_id else None,
+            band=args.band,
+            description=f"PS1 {args.ps1_band}-band template",
+            source="ps1",
+            ps1_filter=args.ps1_band,
+            ps1_ra=args.ra,
+            ps1_dec=args.dec,
+            ps1_cutout_size=args.size,
+        )
+        log.info("Recorded PS1 template metadata")
+    except Exception as e:
+        log.warning(f"Failed to record metadata (non-fatal): {e}")
+
     log.info("=" * 60)
     log.info("SUCCESS: PS1 template ingested!")
     log.info(f"  Collection: {args.collection}")
     log.info(f"  Data ID: {data_id}")
     log.info(f"  FITS file: {lsst_fits_path}")
+    log.info(f"  PS1 filter: {args.ps1_band} → Nickel {args.band}")
     log.info("")
     log.info("Next steps:")
     log.info(

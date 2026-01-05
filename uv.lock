@@ -20,6 +20,7 @@ members = [
 
 [manifest.dependency-groups]
 analysis = [
+    { name = "astropy" },
     { name = "fastparquet", specifier = ">=2024.11.0" },
     { name = "pandas", specifier = ">=2.3.2" },
     { name = "pyarrow", specifier = ">=21.0.0" },

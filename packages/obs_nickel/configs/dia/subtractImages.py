@@ -22,6 +22,36 @@ This config optimizes image subtraction for Nickel telescope characteristics:
 # For Nickel: seeing ~1.5-2.5" / 0.37"/pix = 4-7 pixels FWHM
 # Kernel should be ~3x FWHM for good sampling
 config.makeKernel.kernelSize = 21
+# Collapse to a single, non-spatial kernel to tolerate sparse stars and small overlap
+config.makeKernel.spatialKernelOrder = 0
+config.makeKernel.spatialBgOrder = 0
+config.makeKernel.iterateSingleKernel = True
+# Keep kernel size fixed (do not scale by FWHM) so the small number of stars does not drive
+# an oversized basis that becomes ill-conditioned.
+config.makeKernel.scaleByFwhm = False
+# Prefer the delta-function (DF) kernel basis for robustness with very few kernel stars.
+config.makeKernel.kernelBasisSet = "delta-function"
+# Use a single huge cell (whole image) and accept at least one star
+# Ensure a single cell across the warped template so we don't require per-cell stars
+config.makeKernel.sizeCellX = 2048
+config.makeKernel.sizeCellY = 2048
+config.makeKernel.nStarPerCell = 1
+# Match kernel-specific settings to the global single-cell, zero-order model so we do not fall back to the
+# default AL/DF grids that expect many stars per cell.
+config.makeKernel.kernel["AL"].spatialKernelOrder = 0
+config.makeKernel.kernel["AL"].spatialBgOrder = 0
+config.makeKernel.kernel["AL"].sizeCellX = 2048
+config.makeKernel.kernel["AL"].sizeCellY = 2048
+config.makeKernel.kernel["AL"].nStarPerCell = 1
+config.makeKernel.kernel["DF"].spatialKernelOrder = 0
+config.makeKernel.kernel["DF"].spatialBgOrder = 0
+config.makeKernel.kernel["DF"].sizeCellX = 2048
+config.makeKernel.kernel["DF"].sizeCellY = 2048
+config.makeKernel.kernel["DF"].nStarPerCell = 1
+# Loosen kernel-source detection to admit more candidates
+config.makeKernel.selectDetection.thresholdValue = 1.5
+config.makeKernel.selectDetection.nSigmaForKernel = 1.5
+config.makeKernel.selectDetection.minPixels = 3
 
 # Spatial kernel type
 # NOTE: kernelSizeType parameter removed in recent LSST stack versions

@@ -36,8 +36,8 @@ if [[ -z "${OBS_NICKEL:-}" ]]; then
     export OBS_NICKEL
 fi
 
-# Source environment
-if [[ -f "$OBS_NICKEL/.env" ]]; then
+# Source environment (only if REPO not already set)
+if [[ -z "${REPO:-}" ]] && [[ -f "$OBS_NICKEL/.env" ]]; then
     set -a
     source "$OBS_NICKEL/.env"
     set +a
