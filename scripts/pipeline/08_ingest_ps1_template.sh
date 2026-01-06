@@ -26,6 +26,9 @@
 #   --ps1-fits FILE       : Use existing PS1 FITS file
 #   --skip-download       : Skip download (use with --ps1-fits)
 #   --skip-ingest         : Download only, don't ingest
+#   --degrade-seeing NUM  : Pre-convolve to this seeing FWHM (arcsec, e.g. 2.0)
+#   --unity-photocalib    : Force PhotoCalib=1.0 instead of PS1 zeropoint scaling
+#   --overwrite           : Replace existing template if already present
 #   -v, --verbose         : Verbose output
 #
 
@@ -55,6 +58,9 @@ OUTPUT_DIR="./ps1_templates"
 PS1_FITS=""
 SKIP_DOWNLOAD=false
 SKIP_INGEST=false
+DEGRADE_SEEING=""
+UNITY_PHOTOCALIB=false
+OVERWRITE=false
 VERBOSE=false
 
 # ==========================================
@@ -137,6 +143,18 @@ while [[ $# -gt 0 ]]; do
             SKIP_INGEST=true
             shift
             ;;
+        --overwrite)
+            OVERWRITE=true
+            shift
+            ;;
+        --degrade-seeing)
+            DEGRADE_SEEING="${2:-}"
+            shift 2
+            ;;
+        --unity-photocalib)
+            UNITY_PHOTOCALIB=true
+            shift
+            ;;
         -v|--verbose)
             VERBOSE=true
             shift
@@ -192,18 +210,20 @@ fi
 # Build Python Command
 # ==========================================
 
-PYTHON_SCRIPT="$OBS_NICKEL/scripts/python/pipeline_tools/ingest_ps1_template.py"
+# Add data_tools package to PYTHONPATH so it can be imported
+DATA_TOOLS_SRC="$OBS_NICKEL/packages/data_tools/src"
+export PYTHONPATH="${DATA_TOOLS_SRC}:${PYTHONPATH:-}"
 
-if [[ ! -f "$PYTHON_SCRIPT" ]]; then
-    error "PS1 ingestion script not found: $PYTHON_SCRIPT"
-fi
+# Use the package module directly via Python -m
+# This ensures we use the installed package version in data_tools
+PYTHON_MODULE="obs_nickel_data_tools.pipeline_tools.ingest_ps1_template"
 
 # Use LSST Python
 CONDA_ENV="${LSST_CONDA_ENV_NAME:-lsst-scipipe-12.0.0}"
 PYTHON_CMD="/opt/anaconda3/envs/${CONDA_ENV}/bin/python"
 
 PYTHON_ARGS=(
-    "$PYTHON_SCRIPT"
+    -m "$PYTHON_MODULE"
     --repo "$REPO"
     --ra "$RA"
     --dec "$DEC"
@@ -216,8 +236,11 @@ PYTHON_ARGS=(
 [[ -n "$TRACT" ]] && PYTHON_ARGS+=(--tract "$TRACT")
 [[ -n "$PS1_BAND" ]] && PYTHON_ARGS+=(--ps1-band "$PS1_BAND")
 [[ -n "$PS1_FITS" ]] && PYTHON_ARGS+=(--ps1-fits "$PS1_FITS")
+[[ -n "$DEGRADE_SEEING" ]] && PYTHON_ARGS+=(--degrade-seeing "$DEGRADE_SEEING")
+[[ "$UNITY_PHOTOCALIB" == "true" ]] && PYTHON_ARGS+=(--unity-photocalib)
 [[ "$SKIP_DOWNLOAD" == "true" ]] && PYTHON_ARGS+=(--skip-download)
 [[ "$SKIP_INGEST" == "true" ]] && PYTHON_ARGS+=(--skip-ingest)
+[[ "$OVERWRITE" == "true" ]] && PYTHON_ARGS+=(--overwrite)
 [[ "$VERBOSE" == "true" ]] && PYTHON_ARGS+=(--verbose)
 
 # ==========================================

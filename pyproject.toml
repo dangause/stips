@@ -20,7 +20,6 @@ analysis = [
     "fastparquet>=2024.11.0",
     "pyvo>=1.7",
     "astropy",
-
 ]
 rsp = [
     # Rubin Science Platform integration

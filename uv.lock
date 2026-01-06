@@ -24,7 +24,9 @@ analysis = [
     { name = "fastparquet", specifier = ">=2024.11.0" },
     { name = "pandas", specifier = ">=2.3.2" },
     { name = "pyarrow", specifier = ">=21.0.0" },
+    { name = "pydantic" },
     { name = "pyvo", specifier = ">=1.7" },
+    { name = "sqlalchemy" },
 ]
 dev = [
     { name = "pre-commit", specifier = ">=4.3.0" },

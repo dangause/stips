@@ -27,6 +27,7 @@ Requirements:
 
 import argparse
 import logging
+import math
 import os
 import sys
 from pathlib import Path
@@ -47,7 +48,25 @@ except ImportError:
 try:
     import lsst.afw.detection as afwDetection
     import lsst.afw.image as afwImage
+    import lsst.afw.math as afwMath
     import lsst.daf.butler as dafButler
+
+    try:
+        # Preferred public path
+        from lsst.daf.butler.registry import ConflictingDefinitionError
+    except Exception:
+        try:
+            # Older releases expose it from _exceptions
+            from lsst.daf.butler.registry._exceptions import (
+                ConflictingDefinitionError,
+            )
+        except Exception:
+
+            class ConflictingDefinitionError(Exception):
+                """Fallback when LSST ConflictingDefinitionError is unavailable."""
+
+                pass
+
     import lsst.geom as geom
     from lsst.afw.image import PhotoCalib
 except ImportError:
@@ -90,6 +109,14 @@ PS1_EFFECTIVE_WAVELENGTHS = {
     "z": 8679,
     "y": 9633,
 }
+
+
+def zeropoint_to_calibration_mean(ps1_zp):
+    """
+    Convert a PS1 AB zeropoint to a PhotoCalib calibration mean (nJy/ADU).
+    """
+    ab_zero_flux_njy = 3631e9  # 3631 Jy in nJy
+    return ab_zero_flux_njy * 10 ** (-0.4 * ps1_zp)
 
 
 def ps1_file_covers_target(ps1_fits_path, ra, dec):
@@ -415,7 +442,67 @@ def download_ps1_via_ps1filenames(ra, dec, band, size_deg, output_file):
     return None
 
 
-def convert_ps1_to_lsst_exposure(ps1_fits_path, nickel_band):
+def degrade_exposure_psf(exposure, target_fwhm_arcsec, current_fwhm_arcsec):
+    """
+    Convolve exposure to a target seeing FWHM (arcsec) using a Gaussian kernel.
+    """
+    if target_fwhm_arcsec <= current_fwhm_arcsec:
+        log.info(
+            f'Requested degrade seeing to {target_fwhm_arcsec:.2f}", '
+            f'but current FWHM is {current_fwhm_arcsec:.2f}"; skipping.'
+        )
+        return exposure
+
+    try:
+        bbox = exposure.getBBox()
+        center = geom.Point2D(bbox.getCenterX(), bbox.getCenterY())
+        pix_scale = exposure.getWcs().getPixelScale(center).asArcseconds()
+    except Exception as e:
+        log.warning(f"Could not measure pixel scale for PSF degradation: {e}")
+        return exposure
+
+    if pix_scale <= 0:
+        log.warning("Pixel scale is non-positive; skipping PSF degradation")
+        return exposure
+
+    target_sigma_pix = (target_fwhm_arcsec / pix_scale) / 2.3548
+    current_sigma_pix = (current_fwhm_arcsec / pix_scale) / 2.3548
+    blur_sigma_pix = math.sqrt(max(target_sigma_pix**2 - current_sigma_pix**2, 0.0))
+
+    if blur_sigma_pix <= 0:
+        log.info(
+            f"Target sigma {target_sigma_pix:.3f} <= current sigma "
+            f"{current_sigma_pix:.3f}; no convolution applied"
+        )
+        return exposure
+
+    kernel_size = max(7, int(blur_sigma_pix * 6) | 1)  # 3-sigma kernel on each side
+    log.info(
+        f'Convolving template to ~{target_fwhm_arcsec:.2f}" '
+        f"(add sigma={blur_sigma_pix:.2f} pix, kernel={kernel_size}x{kernel_size})"
+    )
+
+    gauss1d = afwMath.GaussianFunction1D(blur_sigma_pix)
+    kernel = afwMath.SeparableKernel(kernel_size, kernel_size, gauss1d, gauss1d)
+    conv_ctrl = afwMath.ConvolutionControl()
+    conv_ctrl.setDoCopyEdge(True)
+
+    masked_image = exposure.getMaskedImage()
+    convolved = masked_image.clone()
+    afwMath.convolve(convolved, masked_image, kernel, conv_ctrl)
+    exposure.setMaskedImage(convolved)
+
+    # Update PSF to reflect degraded seeing
+    new_sigma_pix = target_sigma_pix
+    psf_size = max(21, kernel_size)
+    exposure.setPsf(afwDetection.GaussianPsf(psf_size, psf_size, new_sigma_pix))
+
+    return exposure
+
+
+def convert_ps1_to_lsst_exposure(
+    ps1_fits_path, nickel_band, degrade_to_fwhm=None, force_unity_photoCalib=False
+):
     """
     Convert PS1 FITS image to LSST Exposure format.
 
@@ -516,9 +603,16 @@ def convert_ps1_to_lsst_exposure(ps1_fits_path, nickel_band):
         exposure = afwImage.ExposureF(masked_image)
         exposure.setWcs(lsst_wcs)
 
-        # Set PhotoCalib to unity to match Nickel calibrated images.
-        # Record PS1 zeropoint in metadata instead of scaling counts.
-        calibration_mean = 1.0
+        # Calibrate using PS1 zeropoint (convert DN to nJy). Allow a unity override for debugging.
+        if force_unity_photoCalib:
+            calibration_mean = 1.0
+            log.info("PhotoCalib forced to unity")
+        else:
+            calibration_mean = zeropoint_to_calibration_mean(ps1_zp)
+            log.info(
+                f"PhotoCalib from PS1 zeropoint: {calibration_mean:.3e} nJy/ADU "
+                f"(zp={ps1_zp:.3f})"
+            )
         exposure.setPhotoCalib(PhotoCalib(calibration_mean))
 
         # Set filter
@@ -544,6 +638,15 @@ def convert_ps1_to_lsst_exposure(ps1_fits_path, nickel_band):
         log.info(
             f'  Set synthetic PSF: FWHM~{fwhm_arcsec:.2f}" -> sigma={sigma_pix:.2f} pix'
         )
+
+        # Optionally degrade PS1 seeing to be closer to Nickel for more stable kernels
+        if degrade_to_fwhm is not None:
+            exposure = degrade_exposure_psf(
+                exposure,
+                target_fwhm_arcsec=degrade_to_fwhm,
+                current_fwhm_arcsec=fwhm_arcsec,
+            )
+            fwhm_arcsec = max(fwhm_arcsec, degrade_to_fwhm)
 
         # Add metadata
         exposure_info = exposure.getInfo()
@@ -695,7 +798,9 @@ def reproject_to_patch(exposure, patch_info):
     return reprojected
 
 
-def ingest_exposure_to_butler(butler, exposure, ra, dec, band, collection, tract=None):
+def ingest_exposure_to_butler(
+    butler, exposure, ra, dec, band, collection, tract=None, overwrite=False
+):
     """
     Ingest LSST Exposure into Butler as template_coadd.
 
@@ -715,6 +820,8 @@ def ingest_exposure_to_butler(butler, exposure, ra, dec, band, collection, tract
         Output collection name
     tract : int, optional
         Tract number (will auto-determine if None)
+    overwrite : bool, optional
+        If True, allow replacing an existing template in the collection. Default False.
 
     Returns
     -------
@@ -840,9 +947,15 @@ def ingest_exposure_to_butler(butler, exposure, ra, dec, band, collection, tract
                 "template_coadd", collections=[collection], dataId=data_id
             )
         )
-        if existing_refs:
-            log.warning(f"Template already exists for {data_id} in {collection}")
-            log.warning("This will overwrite the existing template")
+        if existing_refs and not overwrite:
+            log.info(
+                f"Template already exists for {data_id} in {collection}; skipping ingest"
+            )
+            return data_id
+        if existing_refs and overwrite:
+            log.info(
+                f"Template already exists for {data_id} in {collection}; overwriting"
+            )
     except Exception as e:
         log.debug(f"Could not check for existing template: {e}")
 
@@ -861,6 +974,12 @@ def ingest_exposure_to_butler(butler, exposure, ra, dec, band, collection, tract
             log.error(f"WARNING: Failed to verify ingestion: {e}")
 
     except Exception as e:
+        if isinstance(e, ConflictingDefinitionError):
+            log.info(
+                "Template already exists in collection; treating as success "
+                "(pass --overwrite to replace)"
+            )
+            return data_id
         log.error(f"Failed to ingest exposure: {e}")
         log.error(f"Data ID: {data_id}")
         log.error(f"Collection: {collection}")
@@ -926,6 +1045,11 @@ Examples:
         "--ps1-fits", help="Use existing PS1 FITS file instead of downloading"
     )
     parser.add_argument(
+        "--degrade-seeing",
+        type=float,
+        help="Gaussian-convolve PS1 template to this FWHM (arcsec) before ingest",
+    )
+    parser.add_argument(
         "--skip-download",
         action="store_true",
         help="Skip download (use with --ps1-fits)",
@@ -934,6 +1058,16 @@ Examples:
         "--skip-ingest",
         action="store_true",
         help="Download only, do not ingest to Butler",
+    )
+    parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Overwrite existing template in collection if it already exists",
+    )
+    parser.add_argument(
+        "--unity-photocalib",
+        action="store_true",
+        help="Force PhotoCalib=1.0 instead of using PS1 zeropoint",
     )
     parser.add_argument("-v", "--verbose", action="store_true", help="Verbose logging")
 
@@ -968,7 +1102,12 @@ Examples:
         sys.exit(1)
 
     # Step 2: Convert to LSST Exposure
-    exposure = convert_ps1_to_lsst_exposure(ps1_fits_path, args.band)
+    exposure = convert_ps1_to_lsst_exposure(
+        ps1_fits_path,
+        args.band,
+        degrade_to_fwhm=args.degrade_seeing,
+        force_unity_photoCalib=args.unity_photocalib,
+    )
 
     # Optional: Save as LSST FITS for inspection
     lsst_fits_path = Path(args.output_dir) / f"lsst_template_{args.band}.fits"
@@ -994,7 +1133,14 @@ Examples:
     butler = dafButler.Butler(args.repo, writeable=True)
 
     data_id = ingest_exposure_to_butler(
-        butler, exposure, args.ra, args.dec, args.band, args.collection, args.tract
+        butler,
+        exposure,
+        args.ra,
+        args.dec,
+        args.band,
+        args.collection,
+        args.tract,
+        overwrite=args.overwrite,
     )
 
     # Record PS1 template metadata

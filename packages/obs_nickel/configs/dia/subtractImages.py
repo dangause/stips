@@ -53,6 +53,13 @@ config.makeKernel.selectDetection.thresholdValue = 1.5
 config.makeKernel.selectDetection.nSigmaForKernel = 1.5
 config.makeKernel.selectDetection.minPixels = 3
 
+# Allow more aggressive PSF matching for large mismatches (PS1 vs Nickel seeing)
+config.makeKernel.maxConditionNumber = 1e7  # Increased from default 5e6
+config.makeKernel.conditionNumberType = "SVD"
+
+# Note: minKernelSources not available in this LSST stack version
+# Sparse field handling is done via nStarPerCell = 1 settings above
+
 # Spatial kernel type
 # NOTE: kernelSizeType parameter removed in recent LSST stack versions
 # config.makeKernel.kernelSizeType = "square"

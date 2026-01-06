@@ -52,6 +52,8 @@ SKIP_DOWNLOAD=false
 DOWNLOAD_OVERWRITE=false
 SKIP_TEMPLATE_BUILD=false
 AUTO_TEMPLATE=false
+USE_PS1_TEMPLATES=false
+PS1_DEGRADE_SEEING=""
 DRY_RUN=false
 CONTINUE_ON_ERROR=false
 SKIP_BOOTSTRAP=false
@@ -103,6 +105,8 @@ Optional:
 Template Options:
   --skip-template-build    Skip 30_coadds (use existing templates)
   --auto-template          Let 40_diff_imaging auto-discover templates (skips 30)
+  --use-ps1-templates      Use PS1 templates (auto-download/ingest if missing)
+  --ps1-degrade-seeing N   Convolve PS1 templates to N arcsec FWHM (e.g., 2.0)
   --overwrite-templates    Force rebuild templates even if collections/runs already exist
 
 Pipeline Control:
@@ -145,6 +149,8 @@ while [[ $# -gt 0 ]]; do
     --download-overwrite) DOWNLOAD_OVERWRITE=true; shift;;
     --skip-template-build) SKIP_TEMPLATE_BUILD=true; shift;;
     --auto-template)   AUTO_TEMPLATE=true; shift;;
+    --use-ps1-templates) USE_PS1_TEMPLATES=true; shift;;
+    --ps1-degrade-seeing) PS1_DEGRADE_SEEING="${2:-}"; shift; shift;;
     --overwrite-templates) OVERWRITE_TEMPLATES=true; shift;;
     --dry-run)         DRY_RUN=true; shift;;
     --continue-on-error) CONTINUE_ON_ERROR=true; shift;;
@@ -408,9 +414,9 @@ parse_reference_yaml() {
   fi
 
   if [[ ! -s "$tmp_file" ]]; then
-    echo "ERROR: No valid observing nights found in reference file: $yaml_file" >&2
-    [[ -n "$band_filter" ]] && echo "       (filter: $band_filter)" >&2
-    return 1
+    # Empty nights file is OK when using PS1 templates (no template observations needed)
+    # Return empty list rather than erroring
+    return 0
   fi
 
   cat "$tmp_file"
@@ -462,6 +468,88 @@ purge_template_band() {
   fi
 
   rm -rf "$template_dir"
+}
+
+########################################
+# Validate PS1 template options
+########################################
+if [[ "$USE_PS1_TEMPLATES" == "true" ]]; then
+  # PS1 templates require RA/Dec for downloading
+  if [[ -z "$RA" || -z "$DEC" ]]; then
+    echo "ERROR: --use-ps1-templates requires --ra and --dec for downloading templates"
+    exit 2
+  fi
+  # PS1 templates are incompatible with internal template building
+  if [[ "$SKIP_TEMPLATE_BUILD" == "false" && "$AUTO_TEMPLATE" == "false" ]]; then
+    echo "NOTE: --use-ps1-templates will skip internal template building"
+    SKIP_TEMPLATE_BUILD=true
+  fi
+fi
+
+# Function to check if PS1 template exists for a band
+ps1_template_exists() {
+  local band="$1"
+  local ps1_collection="templates/ps1/${band}"
+
+  if ! ensure_butler_available; then
+    return 1
+  fi
+
+  # Check if collection exists and has template_coadd datasets
+  if butler query-collections "$REPO" 2>/dev/null | grep -qx "$ps1_collection"; then
+    local count=$(butler query-datasets "$REPO" template_coadd \
+      --collections "$ps1_collection" 2>/dev/null | tail -n +3 | wc -l || echo "0")
+    if [[ "$count" -gt 0 ]]; then
+      return 0
+    fi
+  fi
+  return 1
+}
+
+# Function to ingest PS1 template for a band
+ingest_ps1_template() {
+  local band="$1"
+  local ra="$2"
+  local dec="$3"
+
+  log_info "Checking PS1 template for band $band..."
+
+  if ps1_template_exists "$band"; then
+    log_info "  PS1 template already exists for band $band"
+    return 0
+  fi
+
+  log_info "  PS1 template not found, downloading and ingesting..."
+
+  local ps1_script="$OBS_NICKEL/scripts/pipeline/08_ingest_ps1_template.sh"
+  if [[ ! -f "$ps1_script" ]]; then
+    log_error "PS1 ingestion script not found: $ps1_script"
+    return 1
+  fi
+
+  local ps1_args=(
+    --ra "$ra"
+    --dec "$dec"
+    --band "$band"
+    --collection "templates/ps1/${band}"
+  )
+
+  [[ -n "$TRACT" ]] && ps1_args+=(--tract "$TRACT")
+  [[ -n "$PS1_DEGRADE_SEEING" ]] && ps1_args+=(--degrade-seeing "$PS1_DEGRADE_SEEING")
+  [[ "$OVERWRITE_TEMPLATES" == "true" ]] && ps1_args+=(--overwrite)
+
+  if [[ "$DRY_RUN" == "true" ]]; then
+    echo "[DRY-RUN] $ps1_script ${ps1_args[*]}"
+    return 0
+  fi
+
+  if "$ps1_script" "${ps1_args[@]}"; then
+    log_info "  Successfully ingested PS1 template for band $band"
+    return 0
+  else
+    log_error "  Failed to ingest PS1 template for band $band"
+    return 1
+  fi
 }
 
 ########################################
@@ -640,7 +728,24 @@ for BAND in "${BAND_ARRAY[@]}"; do
   TEMPLATE_PARENT="templates/deep/tract${TRACT}/${BAND}"
   TEMPLATE_DIR="$REPO/$TEMPLATE_PARENT"
 
-  if [[ "$AUTO_TEMPLATE" == "false" && "$SKIP_TEMPLATE_BUILD" == "false" ]]; then
+  # Stage 2.5: PS1 template ingestion (if requested)
+  if [[ "$USE_PS1_TEMPLATES" == "true" ]]; then
+    log_section "PS1 Template for band $BAND"
+    if ! ingest_ps1_template "$BAND" "$RA" "$DEC"; then
+      log "[WARN] PS1 template ingestion failed for band $BAND"
+      FAILED_TEMPLATE+=("ps1/$BAND")
+      EXIT_CODE=1
+      if [[ "$CONTINUE_ON_ERROR" == "false" ]]; then
+        echo "ERROR: PS1 template ingestion failed. Use --continue-on-error to proceed anyway."
+        exit 2
+      fi
+      # Continue with next band if error handling allows
+      continue
+    fi
+    # Set template collection to PS1
+    TEMPLATE_COLLECTION="templates/ps1/${BAND}"
+    log_info "Using PS1 template: $TEMPLATE_COLLECTION"
+  elif [[ "$AUTO_TEMPLATE" == "false" && "$SKIP_TEMPLATE_BUILD" == "false" ]]; then
     if [[ "$OVERWRITE_TEMPLATES" == "true" ]]; then
       purge_template_band "$TRACT" "$BAND"
     fi
@@ -700,6 +805,8 @@ for BAND in "${BAND_ARRAY[@]}"; do
     else
       # Use auto-template if no specific template collection was built
       DIA_ARGS+=(--auto-template)
+      # Prefer PS1 templates if that's what we're using
+      [[ "$USE_PS1_TEMPLATES" == "true" ]] && DIA_ARGS+=(--prefer-ps1)
     fi
     if [[ -n "$BAD_SUB_THRESH" ]]; then
       DIA_ARGS+=(--bad-sub-threshold "$BAD_SUB_THRESH")

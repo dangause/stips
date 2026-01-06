@@ -505,9 +505,12 @@ fi
 if [[ -n "$BAD_SUB_THRESH" ]]; then
   CONFIG_OPTS+=("--config" "detectAndMeasureDiaSource:badSubtractionRatioThreshold=${BAD_SUB_THRESH}")
 fi
-for cfg in "${CONFIG_OVERRIDES[@]}"; do
-  CONFIG_OPTS+=("--config" "$cfg")
-done
+# Guard for bash 3.2 + set -u (empty arrays trigger unbound errors)
+if [[ ${CONFIG_OVERRIDES+x} && ${#CONFIG_OVERRIDES[@]} -gt 0 ]]; then
+  for cfg in "${CONFIG_OVERRIDES[@]}"; do
+    CONFIG_OPTS+=("--config" "$cfg")
+  done
+fi
 
 if ! pipetask qgraph \
   -b "$REPO" \

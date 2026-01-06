@@ -1,0 +1,138 @@
+# PS1 Integration - Full science nights for SN 2023ixf campaign
+# Schema: observing_night → filter → visit IDs (visit IDs can be filled as available)
+# Observing night = local date when observations begin; pipeline derives UT day_obs.
+
+object: "2023ixf"
+
+nights:
+  20230519:
+    b: []
+    v: []
+    r: []
+    i: []
+
+  20230521:
+    b: []
+    v: []
+    r: []
+    i: []
+
+  20230523:
+    b: []
+    v: []
+    r: []
+    i: []
+
+  20230527:
+    b: []
+    v: []
+    r: []
+    i: []
+
+  20230531:
+    b: []
+    v: []
+    r: []
+    i: []
+
+  20230602:
+    b: []
+    v: []
+    r: []
+    i: []
+
+  20230608:
+    b: []
+    v: []
+    r: []
+    i: []
+
+  20230611:
+    b: []
+    v: []
+    r: []
+    i: []
+
+  20230616:
+    b: []
+    v: []
+    r: []
+    i: []
+
+  20230618:
+    b: []
+    v: []
+    r: []
+    i: []
+
+  20230625:
+    b: []
+    v: []
+    r: []
+    i: []
+
+  20230629:
+    b: []
+    v: []
+    r: []
+    i: []
+
+  20230703:
+    b: []
+    v: []
+    r: []
+    i: []
+
+  20230706:
+    b: []
+    v: []
+    r: []
+    i: []
+
+  20230709:
+    b: []
+    v: []
+    r: []
+    i: []
+
+  20230714:
+    b: []
+    v: []
+    r: []
+    i: []
+
+  20230728:
+    b: []
+    v: []
+    r: []
+    i: []
+
+  20230801:
+    b: []
+    v: []
+    r: []
+    i: []
+
+  20230817:
+    b: []
+    v: []
+    r: []
+    i: []
+
+  20230905:
+    b: []
+    v: []
+    r: []
+    i: []
+
+  20230910:
+    b: []
+    v: []
+    r: []
+    i: []
+
+  20231211:
+    b: []
+    v: []
+    r: []
+    i: []

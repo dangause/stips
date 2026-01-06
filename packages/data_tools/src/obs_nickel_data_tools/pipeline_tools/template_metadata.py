@@ -184,8 +184,13 @@ class TemplateMetadata:
 
             # Check date overlap
             if excl_start and excl_end:
-                tmpl_start = datetime.strptime(meta["start_date"], "%Y%m%d")
-                tmpl_end = datetime.strptime(meta["end_date"], "%Y%m%d")
+                try:
+                    tmpl_start = datetime.strptime(meta["start_date"], "%Y%m%d")
+                    tmpl_end = datetime.strptime(meta["end_date"], "%Y%m%d")
+                except ValueError:
+                    # Non-date entries (e.g., PS1) are treated as always-valid for exclusion logic
+                    matching.append(collection)
+                    continue
 
                 # Check if template overlaps with exclusion range
                 # No overlap if: template ends before exclusion starts OR template starts after exclusion ends
