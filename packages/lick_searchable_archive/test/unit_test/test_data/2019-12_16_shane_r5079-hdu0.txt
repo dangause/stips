@@ -1,0 +1,34 @@
+SIMPLE  =                    T / NORMAL FITS IMAGE
+BITPIX  =                   16 / DATA PRECISION
+NAXIS   =                    2 / NUMBER OF IMAGE DIMENSIONS
+NAXIS1  =                 1124 / NUMBER OF COLUMNS
+NAXIS2  =                 4096 / NUMBER OF ROWS
+CRVAL1U =                    0 / COLUMN ORIGIN
+CRVAL2U =                 4096 / ROW ORIGIN
+CDELT1U =                    1 / COLUMN CHANGE PER PIXEL
+CDELT2U =                   -1 / ROW CHANGE PER PIXEL
+OBSNUM  =                 5079 / OBSERVATION NUMBER
+IDNUM   =                    0 / IMAGE ID
+UGEOM   =                    1 / UCAM READOUT GEOMETRY
+DGEOM   =                    1 / DESCRAMBLE GEOMETRY
+AMPSROW =                    1 / AMPLIFIERS PER ROW
+AMPSCOL =                    1 / AMPLIFIERS PER COLUMN
+OBSTYPE = 'DARK'               / IMAGE TYPE
+EXPTIME =                  0.2 / Exp time (not counting shutter error)
+BSCALE  =                    1 / DATA SCALE FACTOR
+BZERO   =                32768 / DATA ZERO POINT
+COMMENT    Real Value = FITS*BSCALE+BZERO
+PROGRAM = 'NEWCAM'             / New Lick Camera
+VERSION = 'kastr'              / Data acquisition version
+TSEC    =           1576544459 / CLOCK TICK - SECONDS
+TUSEC   =               933126 / CLOCK TICK - MICROSECONDS
+DATE    = '2019-12-17T01:00:59.93' / UT of CCD readout & descramble
+DATASEC = '[1:1024,1:4096]'        / IRAF/NOAO-style data section
+OUTFILE = 'r' / root name of FITS file
+FITSFILE= '/data/r5079.fits' / path name of FITS file
+COMMENT End of cards hard-coded in fits_cards
+COMMENT Begin of cards from other times
+CKSUMOK =                    T / cd: CHECKSUMS MATCH
+CAMCKSUM=                49049 / cd: CAMERA-COMPUTED CHECKSUM
+SFTCKSUM=                49049 / cd: SOFTWARE-COMPUTED CHECKSUM
+COMMENT End of cards from other times

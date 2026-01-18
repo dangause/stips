@@ -1,0 +1,14 @@
+# PS1 Integration Test - Template nights for 2023ixf
+# Schema: observing_night → filter → visit IDs
+# Generated: 2026-01-05
+#
+# IMPORTANT: When using --use-ps1-templates, template nights are NOT needed!
+# PS1 templates are downloaded from Pan-STARRS1 archive instead of being
+# built from Nickel observations.
+#
+# This file is kept empty (no nights) to demonstrate that PS1 templates
+# work without requiring any template observations.
+
+object: "2023ixf"
+
+nights: {}

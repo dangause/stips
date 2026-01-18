@@ -1,0 +1,559 @@
+/* Base CSS styling for the Lick Archive web pages. It expects to be included after a theme CSS defining the color scheme.*/
+
+
+/* Page wide styling for various HTML elements */
+select, input {
+  border-color: var(--body-background-contrast);
+  background-color:var(--body-background);
+  color: var(--body-text);
+}
+
+select:disabled, input:disabled {
+  color: var(--disabled-text);
+  background-color: var(--disabled-background);
+}
+
+fieldset:disabled > label, fieldset:disabled >  .search_terms_help{
+  color: var(--disabled-text);
+}
+option {
+  color: var(--body-text);
+  background-color:var(--body-background);
+}
+optgroup {
+  color: var(--body-text);
+  background-color: var(--body-background);
+}
+select[multiple] option:checked {
+  color: var(--selected-text);
+  background-color:var(--selected-background);
+}
+select[multiple]:disabled {
+  color: var(--disabled-text);
+  background-color: var(--disabled-background);
+}
+select[multiple]:disabled optgroup, select[multiple]:disabled option{
+  color: var(--disabled-text);
+  background-color: var(--disabled-background);
+}
+
+select[multiple]:disabled option:checked {
+  color: var(--disabled-selected-text);
+  background-color: var(--disabled-selected-background);
+}
+
+button {
+  color: var(--body-text);
+  border-color: var(--button-border);
+  background-color: var(--button-background);
+  font-weight: bold;
+}
+
+button:disabled {
+  color: var(--disabled-text)
+}
+
+::selection {
+  color: var(--selected-text);
+  background-color:var(--selected-background)
+}
+
+a {
+  color: var(--body-link);
+  text-decoration: underline;
+}
+
+a:hover {
+  color: var(--body-link-hover);
+}
+
+
+fieldset {
+  border: none;
+  background-color: var(--body-background);
+  padding: 0;
+}
+
+h1 {
+  background-color: var(--subheader-background);
+  color: var(--subheader-text);
+  font-size: 1.25rem;
+  font-weight:bold;
+}
+
+h2 {
+  color: var(--subheader-text);
+  font-size: 1.25rem;
+}
+
+h1 > a {
+  text-decoration: none;
+  opacity: 0%;
+}
+
+h1 > a:hover {
+  opacity: 100%;
+}
+h2 > a {
+  text-decoration: none;
+  opacity: 0%;
+}
+
+h2 > a:hover {
+  opacity: 100%;
+}
+/* The body is divided into a header section, sidebar section, and the main content section */
+
+body{
+    background-color: var(--body-background);
+    font-family: sans-serif;
+    color: var(--body-text);
+    margin: 0;
+    display: grid;
+    grid-template-areas: "header  header"
+                         "sidebar main";
+    grid-template-columns: minmax(auto,var(--sidebar-width)) 3fr;
+    grid-column-gap: 2%;
+    grid-row-gap: 0;
+  }
+
+/* Header formatting. The header contains the page title, User login information/controls, and theme switching controls */
+header {
+    grid-area: header;
+    min-height: var(--header-image-height);/*100px;*/
+    background-color: var(--header-background);
+    color: var(--header-text);
+    position: sticky;
+    top: 0;
+    z-index: 3;
+
+    display: flex;
+    flex-flow: row wrap;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .header_image {
+    border: none;
+    /* Keep approxiate aspect ratio for header image*/
+    width: var(--header-image-height) * 1.11;
+    height: var(--header-image-height);
+    object-fit: scale-down;
+    vertical-align: middle;
+    margin-right: 1rem;
+  }
+  header > h1 {
+    font-size: 2lh;
+    font-weight: bold;
+    margin:0;
+    color: var(--header-title-text);
+    background-color: var(--header-background);
+  }
+
+  .header_button {
+    border-color: var(--header-button-border);
+    background-color: var(--header-button-background);
+    padding-inline: .5rem;
+  }
+
+  .header_controls {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .header_controls > button {
+    color: var(--header_text)
+  }
+  .user_section{
+    padding-right: 1rem;
+    color: var(--header-text);
+    font-size: 1.25rem;
+  }
+
+  .user_section > button {
+    color: var(--header-link);
+    margin-left: 1rem;
+    font-size: 1.33rem;
+  }
+
+  .user_section > em {
+    font-weight: bold;
+    font-style: normal;
+  }
+
+
+
+  .login_header {
+    background-color: var(--header-background);
+    color: var(--header-title-text);
+    margin-block: 0;
+  }
+
+  .login_message {
+    font-weight: bold;
+  }
+
+  .login_message > em {
+    font-style: normal;
+    font-family: monospace;
+  }
+
+  .login_error {
+    font-weight: bold;
+    color: var(--error-text);
+  }
+
+  .login_form {
+    background-color: var(--body-background-contrast);
+    display: grid;
+    grid-template-columns: max-content 15em;
+    column-gap: 1em;
+    row-gap: 0.25lh;
+    text-align: left;
+    padding-inline: 2rem;
+    padding-block: 1rem;
+    width: fit-content;
+  }
+
+
+
+  /* Navigation side bar formatting */
+
+  .nav_sidebar {
+    grid-area: sidebar;
+    z-index: 2;
+    background-color: var(--body-background);
+  }
+  .nav_section {
+    background-color: var(--body-background-contrast);
+    line-height: 2rem;
+    margin-bottom: 2.5rem;
+    padding-bottom: .5lh;
+  }
+  .nav_section > h1 {
+    margin-top: 0;
+    margin-bottom: 0.5ex;
+    padding-left: 0.5rem;
+    background-color: var(--subheader-background);
+    color: var(--subheader-text);
+    font-size: 1.25rem;
+    font-weight:bold;
+  }
+  .nav_links_list {
+    list-style-type: none;
+    margin-top: 0;
+    /*margin-left: 2em;*/
+    margin-left: 10%;
+    padding-left: 0;
+  }
+  .current_page_link {
+    font-weight: bold;
+  }
+  .current_page_link::before {
+    /*content: "\2BC8"*/
+    content: ">"
+  }
+  .current_page_link::after {
+    /*content: "\2BC7"*/
+    content: "<"
+  }
+
+  /* Main page formatting */
+  main {
+    grid-area: main;
+
+  }
+
+  /* Formatting for legends/subheaders within the main body */
+  .header2 {
+    font-size: 1.25rem;
+    font-weight: bold;
+    padding:0;
+    width:100%;
+    background-color: var(--subheader-background);
+    color: var(--subheader-text);
+    text-indent: 0.5rem;
+    line-height: 2rem;
+    max-width: var(--search-form-width);
+  }
+
+  /* Formatting for the search form. This includes the search terms, instrument filter, and result options */
+  .search_form {
+    max-width: var(--search-form-width);
+    margin-block-end: 4ex;
+  }
+
+  .search_form_list {
+    list-style-type: none;
+    padding-left: 0;
+  }
+
+  /* Each search term is in its own grid with a control to select the comparison operator and the value(s) to search for, in addition to
+     some help text */
+  .search_terms_option {
+    display: flex;
+    padding-block: 0.5em;
+    margin-bottom: 2lh;
+    background-color: var(--body-background-contrast);
+  }
+  .search_terms_grid {
+    border: none;
+    display: grid;
+    background-color: inherit;
+    grid-template-columns: 9em 7em 8em 8em;
+    column-gap: 1em;
+    text-align: center;
+    padding-left: 1em;
+    grid-template-areas: "l c d e"
+                         "x g f f";
+  }
+
+  .search_terms_radio {
+    width: 2em;
+    padding: 0;
+    margin: 0;
+    border-width: 0;
+    background-color: inherit;
+  }
+
+  .search_terms_label {
+    grid-area: l;
+    text-align: left;
+    width: 12rem;
+    background-color: inherit;
+  }
+
+  .search_terms_label_disabled {
+    color: var(--disabled-text);
+  }
+
+  /* The label surrounding the "operator" column of the search term" */
+  .search_terms_operator_label {
+    grid-area: c;
+  }
+  /* The labels surrounding the values of the search term, which may have
+     one or two labels
+  */
+  .search_terms_value1_label {
+    grid-area: d;
+  }
+
+  .search_terms_value2_label {
+    grid-area: e;
+  }
+
+  /* Data entry widgets should fill their grid cell,
+  and not let borders/padding/margins exceed that cell */
+  .search_terms_operator,
+  .search_terms_value1,
+  .search_terms_value2  {
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  /* For search terms input, we want selection boxes to be centered,
+     but text input to be left aligned */
+  .search_terms_grid > label > select {
+    text-align: center;
+  }
+  .search_terms_grid > label > input {
+    text-align: left;
+  }
+
+  .search_terms_modifier_label {
+    grid-area: g;
+    font-size: smaller;
+  }
+
+  .search_terms_help {
+    grid-area: f;
+    font-size: smaller;
+    text-align: left;
+  }
+
+  .search_terms_help > ul {
+    list-style-type: none;
+  }
+  .search_terms_help > p {
+    margin-bottom: 0;
+  }
+  .search_terms_help > table > thead > tr > th {
+    padding-right: .25em;
+    font-weight: normal;
+  }
+
+  .search_terms_help > table > tbody{
+    font-family: "Courier New", "Coureir", "monospace";
+  }
+
+  /* Formatting for the the instrument filter section */
+  .search_form_instr {
+    margin-bottom: 2lh;
+  }
+  .search_instr_list {
+    list-style-type: none;
+    padding-bottom: 1em;
+  }
+  .search_instr_check {
+    /* line-height:2lh;*/
+    list-style-type: none;
+    padding-left: 1em;
+    padding-top: .5em;
+    background-color: var(--body-background-contrast);
+    padding-bottom: 1em;
+  }
+
+  /* Formatting for the search result options, such as sorting, result attributes, page size, coordinate format etc */
+  .search_option_list {
+    list-style-type: none;
+    padding-left: 0;
+  }
+
+  .search_option_item {
+    background-color: var(--body-background-contrast);
+    padding-block: .5lh;
+    padding-bottom: 1lh;
+  }
+
+  .search_options_radio {
+    margin-right: 1em;
+  }
+  .search_options_radio + label {
+    color: var(--disabled-text)
+  }
+  .search_options_radio:checked + label {
+    color: var(--body-text)
+  }
+  .search_option_fields {
+    border: none;
+    background-color:inherit;
+    margin-top: 1lh;
+    margin-bottom: .5lh;
+    margin-left: 4em;
+    display: grid;
+    grid-auto-flow: row;
+    grid-template-columns: 9em max-content;
+    column-gap: 0.5em;
+    row-gap: 1ex;
+    justify-items: left;
+  }
+
+  .search_options_input_small {
+    width: 4em;
+  }
+  .search_options_result_fields {
+    width: 14em;
+    max-height: 10lh;
+    overflow-y: auto;
+    overflow-x: clip;
+    display: grid;
+    grid-template-columns: 0em 13em;
+    background-color: var(--body-background);
+    list-style-type: none;
+    padding-left: 0.2em;
+    padding-right: 0.2em;
+    border-style: inset;
+    border-color: var(--body-background);
+  }
+
+  .search_option_result_category {
+    font-weight: bold;
+  }
+
+  .search_option_result {
+    opacity: 0;
+    height: 0;
+    width: 0;
+    margin:0;
+    display: block;
+  }
+  .search_option_result + label{
+    width: 13em;
+    display: block;
+    padding-left: 1em;
+  }
+  .search_option_result:focus + label {
+    border-color: var(--focus);
+    border-style: solid;
+    border-width: 1px;
+  }
+  .search_option_result:checked + label{
+    background-color: var(--selected-background);
+    color: var(--selected-text);
+  }
+  .search_option_result:disabled + label, .search_option_result:disabled + div {
+    color: var(--disabled-text);
+    background-color: var(--disabled-background);
+  }
+  .search_option_result:checked:disabled + label {
+    color: var(--disabled-selected);
+    background-color: var(--disabled-selected-background);
+  }
+
+  .search_option_fields > label {
+    text-align: left;
+    width: 8em
+  }
+
+  /* Search results formatting. This consists of the search results table, the page navigation and download controls, and count information */
+
+  .search_results {
+    max-width: var(--search-form-width);
+  }
+  .search_results_table {
+    border-collapse: collapse;
+    grid-area: results;
+    margin-block: 1ex;
+  }
+
+  .search_results_table  > tbody tr:nth-child(odd){
+    background-color: var(--body-background);
+  }
+  .search_results_table  > tbody tr:nth-child(even){
+    background-color: var(--body-background-contrast);
+  }
+
+  .search_results_header {
+    background-color: var(--subheader-background);
+    color: var(--header-text);
+    font-family: sans-serif;
+    font-weight: bold;
+    text-align: left;
+    vertical-align: bottom;
+    position: sticky;
+    z-index: 1;
+    top: 0;
+    border: 2pt solid var(--body-background);
+    padding-inline: 0.5em;
+  }
+
+  .search_results_select {
+    text-align: center;
+  }
+
+  .search_results_data {
+    padding-right: .5em;
+    padding-left: .5em;
+    vertical-align: bottom;
+    white-space: nowrap;
+    border: 2pt solid var(--body-background);
+  }
+
+  .search_results_controls {
+    display: flex;
+    justify-content: space-between;
+  }
+  .search_results_head_download_controls {
+    margin-top: 0.5lh;
+    align-self: end;
+  }
+
+  .search_results_foot_download_controls {
+    margin-top: 0.5lh;
+  }
+
+  /* Error message formatting */
+  .search_error {
+    color: var(--error-text);
+  }

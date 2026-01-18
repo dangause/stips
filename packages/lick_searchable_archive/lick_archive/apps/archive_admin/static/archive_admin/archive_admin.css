@@ -1,0 +1,10 @@
+/* Disable timezone warnings on date fields, as they are just representing path names
+   in the archive file system anyway */
+.timezonewarning {
+    display: none;
+}
+
+/* Override width on inline labels so that radio box lists look right */
+.inline-group .aligned label {
+    width: auto;
+}

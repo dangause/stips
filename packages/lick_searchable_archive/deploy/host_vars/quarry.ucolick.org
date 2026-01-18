@@ -1,0 +1,16 @@
+db_data_device: /dev/sdh
+postgres_version: 16
+archive_nfs_source: legion:/data/mthamilton
+archive_nfs_uid: 1009
+archive_nfs_gid: 1039
+archive_data_root: /data/data
+archive_data_mount: /data
+archive_nfs_name: mhadmin
+archive_nfs_group: mhdata
+archive_service_group: mhdata
+archive_service_uid: 1010
+archive_service_gid: 1039
+webserver_user: www-data
+webserver_group: mhdata
+ssl_cert: /etc/ssl/certs/quarry_ucolick_org_reversed.cer
+ssl_private_key: /etc/ssl/private/quarry_ucolick_org.key

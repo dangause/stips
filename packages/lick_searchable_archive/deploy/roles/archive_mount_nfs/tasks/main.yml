@@ -1,0 +1,42 @@
+- name: Setup group for archive data nfs mount
+  ansible.builtin.group:
+    name: "{{archive_nfs_group}}"
+    gid: "{{archive_nfs_gid}}"
+  become: yes
+- name: Setup user for archive data nfs mount
+  ansible.builtin.user:
+    name: "{{archive_nfs_name}}"
+    create_home: no
+    group: "{{archive_nfs_group}}"
+    home: /data
+    password: '*'
+    shell: /usr/sbin/nologin
+    uid: "{{archive_nfs_uid}}"
+  become: yes
+- name: Add local user to nfs group
+  ansible.builtin.user:
+    name:   "{{ ansible_user_id }}"
+    groups: "{{archive_nfs_group}}"
+    append: yes
+  become: yes
+- name: Add archive user to the archive data group
+  ansible.builtin.user:
+    name:   "{{ archive_service_user }}"
+    groups: "{{archive_nfs_group}}"
+    append: yes
+  become: yes
+- name: Install Ubuntu packages needed for nfs
+  ansible.builtin.apt:
+    name: nfs-common
+    state: present
+  become: yes
+- name: NFS mount the archive data directory
+  ansible.posix.mount:
+    src: "{{archive_nfs_source}}"
+    path: "{{archive_data_mount}}"
+    fstype: nfs
+    backup: yes
+    boot: yes
+    state: mounted
+    opts: defaults,bg,ro,x-systemd.mount-timeout=300s
+  become: yes

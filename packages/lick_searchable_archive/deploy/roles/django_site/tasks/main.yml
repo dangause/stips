@@ -1,0 +1,79 @@
+- name: Install Python Packages
+  ansible.builtin.pip:
+    name: gunicorn, Django, psycopg2-binary
+    virtualenv: "{{ venv_root }}"
+    virtualenv_command: python{{ python_version }} -m venv
+  become: yes
+  become_user: "{{ archive_service_user }}"
+  notify: "restart web services"
+- name: Copy Django admin scripts
+  ansible.builtin.copy:
+    src: "{{ archive_source_dir }}/scripts/gen_secret_key.py"
+    dest: "{{ venv_root }}/bin"
+    owner: "{{ archive_service_user }}"
+    group: "{{ archive_service_group }}"
+    mode: 0770
+  become: yes
+- name: Copy the Django site directory
+  ansible.builtin.copy:
+    src: "{{ archive_source_dir }}/lick_archive/lick_archive_site"
+    dest: "{{ package_install_dir }}/lick_archive/"
+    owner: "{{ archive_service_user }}"
+    group: "{{ archive_service_group }}"
+    mode: 0770
+  become: yes
+  notify: "restart web services"
+- name: Copy the Django manage script
+  ansible.builtin.copy:
+    src: "{{ archive_source_dir }}/lick_archive/lick_archive_site/manage.py"
+    dest: "{{ venv_root }}/bin"
+    owner: "{{ archive_service_user }}"
+    group: "{{ archive_service_group }}"
+    mode: 0770
+  become: yes
+  # Note gen_secret_key.py creates the key with 400 access, so we run as the archive user so that
+  # Django apps can read it.
+- name: Create Django secret key file
+  ansible.builtin.command:
+    cmd: "{{ venv_root }}/bin/python {{ venv_root }}/bin/gen_secret_key.py {{ django_secret_keyfile }}"
+    creates: "{{ django_secret_keyfile }}"
+  become: yes
+  become_user: "{{ archive_service_user }}"
+  notify: "restart web services"
+- name: Copy Django settings
+  ansible.builtin.template:
+    mode: 0660
+    owner: "{{ archive_service_user }}"
+    group: "{{ archive_service_group }}"
+    src: templates/settings.py.j2
+    dest: "{{ archive_config_dir }}/{{ django_settings }}"
+  become: yes
+  notify: "restart web services"
+- name: Link Django settings
+  ansible.builtin.file:
+    owner: "{{ archive_service_user }}"
+    group: "{{ archive_service_group }}"
+    state: link
+    src: "{{ archive_config_dir }}/{{ django_settings }}"
+    dest: "{{ package_install_dir }}/lick_archive/lick_archive_site/{{ django_settings }}"
+  become: yes
+  become_user: "{{ archive_service_user }}"
+  notify: "restart web services"
+- name: Copy gunicorn config settings
+  ansible.builtin.template:
+    mode: 0660
+    owner: "{{ archive_service_user }}"
+    group: "{{ archive_service_group }}"
+    src: templates/gunicorn.conf.py.j2
+    dest: "{{ archive_config_dir }}/gunicorn.conf.py"
+  become: yes
+  notify: "restart web services"
+- name: Create gunicorn systemd service
+  ansible.builtin.template:
+    mode: 0660
+    owner: "{{ archive_service_user }}"
+    group: "{{ archive_service_group }}"
+    src: templates/gunicorn.service.j2
+    dest: /etc/systemd/system/gunicorn.service
+  become: yes
+  notify: "restart web services"

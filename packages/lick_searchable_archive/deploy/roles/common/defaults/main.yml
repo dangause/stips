@@ -1,0 +1,26 @@
+venv_root: /opt/lick_archive
+archive_service_user: archive
+archive_service_group: archive
+django_db_name: archive_django
+db_name: archive
+db_user: archive
+db_query_user: archive_query
+db_ingest_user: archive_ingest
+python_version: "3.12"
+package_install_dir: "{{ venv_root }}/lib/python{{ python_version }}/site-packages"
+kroot: /opt/kroot/rel/default/
+lroot: /usr/local/lick/
+archive_log_dir: "/var/log/lick_archive"
+archive_config_dir: "{{ venv_root }}/etc"
+log_rotate_frequency: weekly
+log_count: 8
+archive_url_path_prefix: archive
+watchdog_config: ingest_watchdog.conf
+django_settings: settings.py
+django_secret_keyfile: "{{ archive_config_dir }}/secret_key"
+django_log: "{{ archive_log_dir }}/apps.log"
+redis_url: redis://localhost:6379/0
+supported_instrument_dirs: ['AO', 'shane']
+frontend_url: "{{ frontend_scheme }}://{{ frontend_host }}/{{ archive_url_path_prefix }}"
+default_search_radius: "1 arcmin"
+sync_users_cron_minute: "1-59/2"

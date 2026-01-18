@@ -1,0 +1,45 @@
+[all:vars]
+archive_config=ops
+remote_watchdog=False
+# Front end user facing connection info
+frontend_scheme="https"
+frontend_host= "archive.ucolick.org"
+
+# API access from frontend/backend
+api_scheme=http
+api_server=localhost
+api_port=8000
+# Where ansible should copy from
+archive_source_dir=/home/dusty/work/lick_searchable_archive
+# Connection info Lick Observatory schedule database
+schedule_db_host=schedpsql.ucolick.org
+schedule_db_name=info
+# Set this to "restarted" to restart everything after deploy
+# "stopped" to keep the archive down after deploy
+archive_service_state=restarted
+
+[frontend]
+# Frontend host. In theory this can be separate from the backend but this has not
+# been tested
+quarry.ucolick.org
+
+[backend]
+# Backend host
+quarry.ucolick.org
+
+[backend:vars]
+# Which django apps to install on the backend
+archive_apps=['ingest', 'query', 'archive_admin', 'archive_auth','download']
+# Which systemd services to install on the backend.
+# 'job_queue' : Installs celery and is used for ingesting metadata
+# 'ingest_watchdog': Installs ingest_watchdog.py which watches the archive NFS mount for new files.
+services=['job_queue', 'ingest_watchdog']
+# The type of host.
+# `single_host`: Indicates the archive is installed on a single host
+# 'frontend':    Indicates this is the frontend host in a dual host configuration (not tested)
+# 'backend':     Indicates this is the backend host ina dualhost configuration (not tested)
+host_type=single_host
+gshow_path=/opt/kroot/rel/default/bin/gshow
+# Gunicorn settings for frontend
+frontend_proxy_server="localhost"
+frontend_proxy_port=8000

@@ -1,0 +1,49 @@
+- name: Install redis
+  ansible.builtin.apt:
+    name: redis
+    state: present
+  become: yes
+  notify: "restart web services"
+- name: Install Python Packages
+  ansible.builtin.pip:
+    name: Celery[redis]
+    virtualenv: "{{ venv_root }}"
+    virtualenv_command: python{{ python_version }} -m venv
+  become: yes
+  become_user: "{{ archive_service_user }}"
+  notify: "restart web services"
+- name: Create var directory for pid
+  ansible.builtin.file:
+    path: "{{ venv_root }}/var/run/celery"
+    mode: 0770
+    state: directory
+    owner: "{{ archive_service_user }}"
+    group: "{{ archive_service_group }}"
+  become: yes
+- name: Install celery into django site
+  ansible.builtin.copy:
+    src: "{{ archive_source_dir }}/lick_archive/job_queue/"
+    dest: "{{ package_install_dir }}/lick_archive/lick_archive_site/"
+    owner: "{{ archive_service_user }}"
+    group: "{{ archive_service_group }}"
+    mode: 0660
+  become: yes
+  notify: "restart web services"
+- name: Copy Celery environment settings
+  ansible.builtin.template:
+    mode: 0660
+    owner: "{{ archive_service_user }}"
+    group: "{{ archive_service_group }}"
+    src: templates/celery.env.j2
+    dest: "{{ archive_config_dir }}/celery.env"
+  become: yes
+  notify: "restart web services"
+- name: Create celery systemd service
+  ansible.builtin.template:
+    mode: 0660
+    owner: "{{ archive_service_user }}"
+    group: "{{ archive_service_group }}"
+    src: templates/celery.service.j2
+    dest: /etc/systemd/system/celery.service
+  become: yes
+  notify: "restart web services"

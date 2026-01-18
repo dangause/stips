@@ -1,0 +1,54 @@
+- name: Install Python Packages
+  ansible.builtin.pip:
+    name: watchdog
+    virtualenv: "{{ venv_root }}"
+    virtualenv_command: python{{ python_version }} -m venv
+  become: yes
+  become_user: "{{ archive_service_user }}"
+  notify: "restart watchdog"
+- name: Copy ingest_watchdog
+  ansible.builtin.copy:
+    src: "{{ archive_source_dir }}/scripts/ingest_watchdog.py"
+    dest: "{{ venv_root }}/bin"
+    owner: "{{ archive_service_user }}"
+    group: "{{ archive_service_group }}"
+    mode: 0770
+  become: yes
+  notify: "restart watchdog"
+- name: Create config directory
+  ansible.builtin.file:
+    mode: 0770
+    owner: "{{ archive_service_user }}"
+    group: "{{ archive_service_group }}"
+    state: directory
+    dest: "{{ venv_root }}/etc"
+  become: yes
+- name: Create ingest_watchdog.conf
+  ansible.builtin.template:
+    mode: 0660
+    owner: "{{ archive_service_user }}"
+    group: "{{ archive_service_group }}"
+    src: templates/ingest_watchdog.conf.j2
+    dest: "{{ archive_config_dir }}/{{ watchdog_config }}"
+  become: yes
+  notify: "restart watchdog"
+- name: Create logging directory
+  ansible.builtin.file:
+    mode: 0770
+    owner: "{{ archive_service_user }}"
+    group: "{{ archive_service_group }}"
+    state: directory
+    dest: "{{ archive_log_dir }}"
+  become: yes
+- name: Add archive user to the archive data group
+  ansible.builtin.user:
+    name:   "{{ archive_service_user }}"
+    groups: "{{archive_nfs_group}}"
+    append: yes
+  become: yes
+- name: Add systemd service
+  ansible.builtin.template:
+    src: templates/ingest_watchdog.service.j2
+    dest: /etc/systemd/system/ingest_watchdog.service
+  become: yes
+  notify: "restart watchdog"

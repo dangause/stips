@@ -1,0 +1,284 @@
+{% extends "archive_base_template.jinja" %}
+{% block body %}
+<!-- Form for submitting a query to the archive -->
+<form id="archive_query" class="search_form">
+    <!-- The form controls for each supported search term -->
+    <fieldset id="search_form_terms" class="search_form_terms">
+        <legend class="header2">Search By (Select at least one)</legend>
+
+        <ul role="list" class="search_form_list">
+            <!-- The "Object search term -->
+            <li class="search_terms_option">
+                <label id="query_by_object_label" class="search_terms_label" for="query_by_object">
+                    <input class="search_terms_radio" type="checkbox" id="query_by_object"  />
+                    Object Name
+                </label>
+                <fieldset class="search_terms_grid" id="id_object_fields">
+                    <label for="search_operator_object" class="search_terms_operator_label">
+                        <select class="search_terms_operator" id="search_operator_object">
+                            <option value="eq" selected="">=</option>
+                            <option value="sw">starts with</option>
+                            <option value="cn">contains</option>
+                        </select>
+                    </label>
+                    <label for="search_case_object" class="search_terms_modifier_label">
+                        <input type="checkbox" name="object_name_modifier" class="search_terms_modifier" id="search_case_object" />
+                        Match Case
+                    </label>
+                    <label for="search_value_object_1" class="search_terms_value1_label">
+                        <input type="text" name="object_name_value1" maxlength="80" class="search_terms_value1" id="search_value_object_1" />
+                    </label>
+                    <span class="search_terms_help">Example: "K6021275"</span>
+                </fieldset>
+            </li>
+            <!-- The observation date search term -->
+            <li class="search_terms_option">
+                <label id="query_by_obs_date_label" class="search_terms_label" for="query_by_obs_date">
+                    <input class="search_terms_radio" type="checkbox" id="query_by_obs_date"  />
+                    Observation Date
+                </label>
+                <fieldset class="search_terms_grid" id="id_date_fields">
+                    <label for="search_operator_obs_date" class="search_terms_operator_label">
+                        <select class="search_terms_operator" id="search_operator_obs_date">
+                            <option value="eq" selected="">=</option>
+                            <option value="in">between</option>
+                        </select>
+                    </label>
+                    <label for="search_value_obs_date_1" class="search_terms_value1_label">
+                        <input type="text" class="search_terms_value1" id="search_value_obs_date_1" />
+                    </label>
+                    <label for="search_value_obs_date_2" class="search_terms_value2_label">
+                        <input type="text" class="search_terms_value2" id="search_value_obs_date_2" />
+                    </label>
+                    <span class="search_terms_help">Example: "2006-08-17".<p>All dates are noon to noon PST (UTC-8). Date ranges are inclusive.</p></span>
+                </fieldset>
+            </li>
+            <!-- Path and filename search term -->
+            <li class="search_terms_option">
+                <label id="query_by_filename_label" class="search_terms_label" for="query_by_filename">
+                    <input class="search_terms_radio" type="checkbox" id="query_by_filename" />
+                    Path and Filename
+                </label>
+                <fieldset class="search_terms_grid" id="id_filename_fields">
+                    <label for="search_operator_filename" class="search_terms_operator_label">
+                        <select class="search_terms_operator" id="search_operator_filename">
+                            <option value="eq" selected>=</option>
+                            <option value="sw">starts with</option>
+                        </select>
+                    </label>
+                    <label for="search_value_filename_1" class="search_terms_value1_label">
+                        <input type="text" maxlength="256" class="search_terms_value1" id="search_value_filename_1" />
+                    </label>
+                    <span class="search_terms_help">Example:<p>"2015-01/06/AO/s0582.fits"</p></span>
+                </fieldset>
+            </li>
+            <!-- Location / Sky Coordinate search term -->
+            <li class="search_terms_option">
+                <label id="query_by_coord_label" class="search_terms_label" for="query_by_coord">
+                    <input class="search_terms_radio" type="checkbox" id="query_by_coord" />
+                    Location
+                </label>
+                <fieldset class="search_terms_grid" id="id_coords_fields">
+                    <!-- The numbers in the ids for these controls must match the order expected by the backend.
+                         i.e. ra=1, dec=2, radius=3 -->
+                    <label for="search_value_coord_3" class="search_terms_operator_label">
+                        <input type="text" class="search_terms_operator" id="search_value_coord_3" />
+                        Radius
+                    </label>
+                    <label for="search_value_coord_1" class="search_terms_value1_label">
+                        <input type="text" class="search_terms_value1" id="search_value_coord_1" />
+                        RA
+                    </label>
+                    <label for="search_value_coord_2" class="search_terms_value2_label">
+                        <input type="text"  class="search_terms_value2" id="search_value_coord_2" />
+                        DEC
+                    </label>
+                    <span class="search_terms_help">
+                        Accepts hms/dms or decimal degrees. Radius assumed to be arcseconds if not specified.
+                        <p>
+                            Examples (all of these are the same value):
+                            <table>
+                            <thead><tr><th>Radius</th><th>RA</th><th>DEC</th></tr></thead>
+                            <tbody>
+                                <tr><td>60</td> <td>23h 19m 58.4s</td><td>-5d 9m 56.27s</td></tr>
+                                <tr><td>1m</td> <td>23:19:58.4</td>   <td>-05:09:56.27</td></tr>
+                                <tr><td>60s</td><td>349.9933</td>     <td>-5.1656</td></tr>
+                            </tbody>
+                            </table>
+                        </p>
+                    </span>
+                </fieldset>
+            </li>
+        </ul>
+    </fieldset>
+    <!-- Form controls for filtering the search result by instrument -->
+    <fieldset id="instrument" class="search_form_instr">
+        <legend class="header2">Instruments</legend>
+        <ul id="instrument_list" class="search_instr_check">
+            <li>
+                <label for="instrument_0" ><input type="checkbox" name="instruments" value="KAST" class="search_instr_check" id="instrument_0" checked />Kast</label>
+                <ul id= "instrument_0_list" class="search_instr_list">
+                    <li><label for="instrument_1" ><input type="checkbox" name="instruments" value="KAST_BLUE" class="search_instr_check" id="instrument_1" checked />Kast Blue</label></li>
+                    <li><label for="instrument_2" ><input type="checkbox" name="instruments" value="KAST_RED" class="search_instr_check" id="instrument_2" checked />Kast Red</label></li>
+                </ul>
+            </li>
+            <li>
+                <label for="instrument_3" ><input type="checkbox" name="instruments" value="SHARCS" class="search_instr_check" id="instrument_3" checked>ShaneAO/ShARCS</label>
+            </li>
+        </ul>
+        <button id="instrument_all" type="button">Select All</button>
+        <button id="instrument_none" type="button">Deselect All</button>
+    </fieldset>
+    <!-- Form controls for the options configuring the output format of the results -->
+    <fieldset id="search_options">
+        <legend class="header2">Result Format</legend>
+        <ul role="list" class="search_option_list">
+            <li class="search_option_item">
+                <!--Radio box for determining if results are to be retunred, as opposed to just a count -->
+                <input type="radio" name="count" value="no" class="search_options_radio" id="id_count_1" required checked><label for="id_count_1">Return information about matching files.</label>
+                <!--The controls if results are controlled -->
+                <fieldset id="search_option_fields" class="search_option_fields">
+                    <label for="id_page_size">Results / page</label>
+                    <input type="number" name="page_size" value="500" class="search_options_input_small" min="1" max="1000" id="id_page_size" />
+                    <label for="id_coord_format">RA/DEC format</label>
+                    <select name="coord_format" id="id_coord_format">
+                        <option value="hmsdms" selected="">sexigesimal</option>
+                        <option value="degrees">decimal degrees</option>
+                        <option value="asis">as in header</option>
+                    </select>
+                    <label for="id_sort_fields">Sorting</label>
+                    <span>
+                        <select name="sort_fields" id="id_sort_fields">
+                            <optgroup label="Common Fields">
+                                <option value="telescope">Telescope</option>
+                                <option value="instrument">Instrument</option>
+                                <option value="obs_date" selected>Observation Date</option>
+                                <option value="exptime">Exposure Time</option>
+                                <option value="ra">Right Ascension</option>
+                                <option value="dec">Declination</option>
+                                <option value="object">Object</option>
+                                <option value="airmass">Airmass</option>
+                                <option value="frame_type">Frame Type</option>
+                                <option value="filename">File Name</option>
+                                <option value="program">Program</option>
+                                <option value="coversheet">Coversheet Id</option>
+                                <option value="observer">Observers</option>
+                                <option value="file_size">File size</option>
+                                <option value="mtime">File Modification Time</option>
+                                <option value="public_date">Date File Becomes Public</option>
+                            </optgroup>
+                            <optgroup label="Shane AO/ShARCS Specific">
+                                <option value="apername">Aperture Position</option>
+                                <option value="filter1">Filter 1</option>
+                                <option value="filter2">Filter 2</option>
+                                <option value="sci_filter">Science Filter</option>
+                                <option value="coadds_done">Number of Coadds</option>
+                                <option value="true_int_time">True Integration Time</option>
+                            </optgroup>
+                            <optgroup label="Shane Kast Specific">
+                                <option value="slit_name">Slit Name</option>
+                                <option value="beam_splitter_pos">Beam Splitter Position</option>
+                                <option value="grism">Grism (Blue only)</option>
+                                <option value="grating_name">Grating Name (Red only)</option>
+                                <option value="grating_tilt">Grating Tilt (Red only)</option>
+                            </optgroup>
+                        </select>
+                        <select name="sort_dir" id="id_sort_dir">
+                            <option value="+" selected="">Low to high (Ascending)</option>
+                            <option value="-">High to low (Descending)</option>
+                        </select>
+                    </span>
+                    <label for="id_result_fields">Result fields</label>
+                    <input id="dummy_checkbox0" class="search_option_result" tabindex="-1"></input>
+                    <div name="result_fields" class="search_options_result_fields" id="id_result_fields">
+                        <input id="dummy_checkbox1" class="search_option_result" tabindex="-1"></input>
+                        <label class="search_option_result_category">
+                            Common Fields
+                        </label>
+                        <input id="id_telescope_result"   class="search_option_result" type="checkbox" value="telescope"         ><label for="id_telescope_result"  >Telescope</label>
+                        <input id="id_instrument_result"  class="search_option_result" type="checkbox" value="instrument" checked><label for="id_instrument_result" >Instrument</label>
+                        <input id="id_obs_date_result"    class="search_option_result" type="checkbox" value="obs_date"   checked><label for="id_obs_date_result"   >Observation Date</label>
+                        <input id="id_exptime_result"     class="search_option_result" type="checkbox" value="exptime"    checked><label for="id_exptime_result"    >Exposure Time</label>
+                        <input id="id_ra_result"          class="search_option_result" type="checkbox" value="ra"         checked><label for="id_ra_result"         >Right Ascension</label>
+                        <input id="id_dec_result"         class="search_option_result" type="checkbox" value="dec"        checked><label for="id_dec_result"        >Declination</label>
+                        <input id="id_object_result"      class="search_option_result" type="checkbox" value="object"     checked><label for="id_object_result"     >Object</label>
+                        <input id="id_airmass_result"     class="search_option_result" type="checkbox" value="airmass"           ><label for="id_airmass_result"    >Airmass</label>
+                        <input id="id_frame_type_result"  class="search_option_result" type="checkbox" value="frame_type" checked><label for="id_frame_type_result" >Frame Type</label>
+                        <input id="id_filename_result"    class="search_option_result" type="checkbox" value="filename"   checked><label for="id_filename_result"   >File Name</label>
+                        <input id="id_program_result"     class="search_option_result" type="checkbox" value="program"           ><label for="id_program_result"    >Program</label>
+                        <input id="id_coversheet_result"  class="search_option_result" type="checkbox" value="coversheet"        ><label for="id_coversheet_result" >Coversheet Id</label>
+                        <input id="id_observer_result"    class="search_option_result" type="checkbox" value="observer"          ><label for="id_observer_result"   >Observers</label>
+                        <input id="id_file_size_result"   class="search_option_result" type="checkbox" value="file_size"         ><label for="id_file_size_result"  >File size</label>
+                        <input id="id_mtime_result"       class="search_option_result" type="checkbox" value="mtime"             ><label for="id_mtime_result"      >File Modification Time</label>
+                        <input id="id_public_date_result" class="search_option_result" type="checkbox" value="public_date"       ><label for="id_public_date_result">Date File Becomes Public</label>
+                        <input id="id_header_result"      class="search_option_result" type="checkbox" value="header"     checked><label for="id_header_result"     >Header</label>
+                        <input id="dummy_checkbox2" class="search_option_result" tabindex="-1"></input>
+                        <label class="search_option_result_category">
+                            Shane AO/ShARCS Specific
+                        </label>
+                        <input id="id_apername_result"      class="search_option_result" type="checkbox" value="apername"     ><label for="id_apername_result"     >Aperture Position</label>
+                        <input id="id_filter1_result"       class="search_option_result" type="checkbox" value="filter1"      ><label for="id_filter1_result"      >Filter 1</label>
+                        <input id="id_filter2_result"       class="search_option_result" type="checkbox" value="filter2"      ><label for="id_filter2_result"      >Filter 2</label>
+                        <input id="id_sci_filter_result"    class="search_option_result" type="checkbox" value="sci_filter"   ><label for="id_sci_filter_result"   >Science Filter</label>
+                        <input id="id_coadds_done_result"   class="search_option_result" type="checkbox" value="coadds_done"  ><label for="id_coadds_done_result"  >Number of Coadds</label>
+                        <input id="id_true_int_time_result" class="search_option_result" type="checkbox" value="true_int_time"><label for="id_true_int_time_result">True Integration Time</label>
+                        <input id="dummy_checkbox3" class="search_option_result" tabindex="-1"></input>
+                        <label class="search_option_result_category">
+                            Shane Kast Specific
+                        </label>
+                        <input id="id_slit_name_result"         class="search_option_result" type="checkbox" value="slit_name"        ><label for="id_slit_name_result"        >Slit Name</label>
+                        <input id="id_beam_splitter_pos_result" class="search_option_result" type="checkbox" value="beam_splitter_pos"><label for="id_beam_splitter_pos_result">Beam Splitter Position</label>
+                        <input id="id_grism_result"             class="search_option_result" type="checkbox" value="grism"            ><label for="id_grism_result"            >Grism (Blue only)</label>
+                        <input id="id_grating_name_result"      class="search_option_result" type="checkbox" value="grating_name"     ><label for="id_grating_name_result"     >Grating Name (Red only)</label>
+                        <input id="id_grating_tilt_result"      class="search_option_result" type="checkbox" value="grating_tilt"     ><label for="id_grating_tilt_result"     >Grating Tilt (Red only)</label>
+                    </div>
+                </fieldset>
+            </li>
+            <!--Radio box to only return a count of matching results -->
+            <li class="search_option_item">
+                <input type="radio" name="count" value="yes" class="search_options_radio" id="id_count_0" required=""><label for="id_count_0">Return only a count of matching files.</label>
+            </li>
+        </ul>
+    </fieldset>
+
+    <button type="button" id = "submit_query" name="page" value="1">Submit Query</button>
+</form>
+<!-- The results from a search, largely filled in with javascript -->
+<section id="search_results" class="search_results">
+<h2 class="header2">Search Results</h2>
+<span id="search_results_count_header">Number of results: 0</span>
+<!--The results are treated as a form whose submissions allows for downloading the selected files -->
+<form id = "search_results_form" method="POST" action="archive/api/download">
+    <!--Hidden form controls filled out by javascript to download tarballs from the archive-->
+    <input name="download_files" type="hidden"/>
+    <input name="csrfmiddlewaretoken" type="hidden"/>
+    <button id="submit_download" type="submit" hidden></button>
+    <!-- Page/Download controls before the results table-->
+    <div id ="search_results_header_controls" class="search_results_controls">
+        <span class="search_results_head_download_controls">
+            <button id="download_selected_head" type="button" value="selected" class="results_download" hidden>Download Selected</button>
+            <button id="download_all_head" type="button" value="all" class="results_download" hidden>Download All</button>
+        </span>
+        <span id="search_results_page_controls_head" class="search_results_head_page_controls" hidden></span>
+    </div>
+    <!--Results table filled out by javascript-->
+    <table id="search_results_table" class="search_results_table" hidden>
+    </table>
+    <span id="search_results_count_footer" hidden>Number of results: 0</span>
+    <!-- Page/Download controls after the results table-->
+    <div id ="search_results_footer_controls" class="search_results_controls">
+        <span class="search_results_foot_download_controls">
+            <button id="download_selected_foot" type="button" value="selected" class="results_download" hidden>Download Selected</button>
+            <button id="download_all_foot" type="button" value="all" class="results_download" hidden>Download All</button>
+        </span>
+        <span id="search_results_page_controls_foot" class="search_results_foot_page_controls" hidden></span>
+    </div>
+</form>
+<!--Section for error messages -->
+</section>
+<section id = "error_section" class="search_error">
+</section>
+{% endblock %}
+{% block scripts %}
+<script type="module" src="scripts/frontend.js"></script>
+{% endblock %}

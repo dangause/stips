@@ -1,0 +1,34 @@
+:root {
+    --header-image-height: 90px;
+    --header-height: calc(var(--header-image-height) + 1lh);
+    --header-with-spacing: calc(var(--header-height) + 2ex);
+    --search-form-width: 1000px;
+    --sidebar-width: 19em;
+    --sidebar-spacing: 2em;
+    --body-background: #121212;
+    --body-background-contrast: #2b2a2a;
+    --selected-background:#264b5d;
+    --header-background: #417690;
+    --header-title-text: #f5dd5d;
+    --header-text: #f7f7f7;
+    --header-link: yellow;
+    --header-link-hover: #473c02;
+    --subheader-background: #264b5d;
+    --subheader-text: #e0e0e0;
+    --button-border: #264b5d;
+    --header-button-border: #2f8dbb;
+    --header-button-background: #294e60;
+    --button-background: #294e60;
+    /* --body-text:  #81d4fa;  */
+    --body-text: #f3f3f3;
+    --selected-text:#95deff;
+    --body-link: #81d4fa;
+    --body-link-hover: #365665;
+    --focus: white;
+    --results-border:var(--body-background);
+    --disabled-text: #aeaeae;
+    --disabled-selected-text:#aeaeae;
+    --disabled-selected-background: #515151;
+    --disabled-background: #333;
+    --error-text: #ff6565;
+  }

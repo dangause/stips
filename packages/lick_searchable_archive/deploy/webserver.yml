@@ -1,0 +1,11 @@
+- name: Local init
+  hosts: 127.0.0.1
+  connection: local
+  roles:
+    - local_init
+
+- name: Install Webserver
+  hosts: frontend
+  roles:
+    - common
+    - webserver

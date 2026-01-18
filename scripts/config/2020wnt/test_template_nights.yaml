@@ -1,0 +1,14 @@
+# Test template nights reference - minimal for testing
+# Schema: observing_night → filter → visit IDs
+# Generated: 2025-12-31
+#
+# Observing night = local date when observations BEGIN (used for collection paths like Nickel/raw/YYYYMMDD)
+# The pipeline automatically computes UT day_obs from observing night for Butler queries
+
+object: "2020wnt"
+
+nights:
+  20220105:
+    v: [80514099, 80514100]
+    r: [80514098, 80514101, 80514102]
+    i: [80514104, 80514103]

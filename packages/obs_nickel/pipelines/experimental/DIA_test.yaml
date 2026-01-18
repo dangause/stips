@@ -1,0 +1,55 @@
+# Test DIA pipeline for obs_nickel
+# Based on drp_pipe base-v2.yaml but simplified for testing
+
+description: Test difference imaging pipeline for Nickel telescope
+
+parameters:
+  release_id: 0
+
+tasks:
+  # Get template from coadd
+  rewarpTemplate:
+    class: lsst.ip.diffim.getTemplate.GetTemplateTask
+    config:
+      connections.bbox: preliminary_visit_image.bbox
+      connections.wcs: preliminary_visit_image.wcs
+      connections.coaddExposures: template_coadd
+      connections.template: template_detector
+
+  # Subtract template from science image
+  subtractImages:
+    class: lsst.ip.diffim.subtractImages.AlardLuptonSubtractTask
+    config:
+      allowKernelSourceDetection: true
+      connections.science: preliminary_visit_image
+      connections.sources: single_visit_star_footprints
+      connections.template: template_detector
+      connections.difference: difference_image_predetection
+      connections.matchedTemplate: template_matched
+      connections.psfMatchingKernel: difference_kernel
+      connections.kernelSources: difference_kernel_sources
+
+  # Detect and measure DIA sources
+  detectAndMeasureDiaSource:
+    class: lsst.ip.diffim.detectAndMeasure.DetectAndMeasureTask
+    config:
+      connections.science: preliminary_visit_image
+      connections.matchedTemplate: template_matched
+      connections.difference: difference_image_predetection
+      connections.kernelSources: difference_kernel_sources
+      connections.outputSchema: dia_source_schema
+      connections.diaSources: dia_source_unfiltered
+      connections.subtractedMeasuredExposure: difference_image
+      connections.maskedStreaks: difference_streaks
+      doSkySources: true
+      idGenerator.release_id: parameters.release_id
+
+subsets:
+  test-dia-simple:
+    - rewarpTemplate
+    - subtractImages
+    - detectAndMeasureDiaSource
+
+steps:
+  - label: test-dia-simple
+    dimensions: [visit]

@@ -1,0 +1,70 @@
+- name: Create Archive WWW directory
+  ansible.builtin.file:
+    owner: "{{ webserver_user }}"
+    group: "{{ webserver_group }}"
+    mode: 0755
+    path: "/var/www/archive"
+    state: "directory"
+  become: yes
+  notify: "restart web server"
+- name: Create frontend subdirectories
+  ansible.builtin.file:
+    owner: "{{ archive_service_user }}"
+    group: "{{ archive_service_group }}"
+    mode: 0775
+    path: "/var/www/archive/{{ item }}"
+    state: "directory"
+  become: yes
+  loop:
+    - images
+    - scripts
+    - style
+  notify: "restart web server"
+- name: "Copy frontend image files"
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "/var/www/archive/images/"
+    owner: "{{ archive_service_user }}"
+    group: "{{ archive_service_group }}"
+    directory_mode: 0775
+    mode: 0664
+  become: yes
+  with_fileglob:
+    - "{{ archive_source_dir }}/frontend/images/*"
+  notify: "restart web server"
+- name: "Copy frontend CSS files"
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "/var/www/archive/style/"
+    owner: "{{ archive_service_user }}"
+    group: "{{ archive_service_group }}"
+    directory_mode: 0775
+    mode: 0664
+  become: yes
+  with_fileglob:
+    - "{{ archive_source_dir }}/frontend/build/style/*"
+  notify: "restart web server"
+- name: "Copy frontend JS files"
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "/var/www/archive/scripts/"
+    owner: "{{ archive_service_user }}"
+    group: "{{ archive_service_group }}"
+    directory_mode: 0775
+    mode: 0664
+  become: yes
+  with_fileglob:
+    - "{{ archive_source_dir }}/frontend/build/scripts/*"
+  notify: "restart web server"
+- name: "Create frontend HTML from build"
+  ansible.builtin.copy:
+    src:  "{{ item }}"
+    dest: "/var/www/archive/{{ item|basename }}"
+    owner: "{{ archive_service_user }}"
+    group: "{{ archive_service_group }}"
+    directory_mode: 0775
+    mode: 0664
+  become: yes
+  with_fileglob:
+    - "{{ archive_source_dir }}/frontend/build/html/*.html"
+  notify: "restart web server"

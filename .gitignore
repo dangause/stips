@@ -122,6 +122,11 @@ celerybeat.pid
 
 # Environments
 .env
+*.env
+.env.*
+!.env.example
+envs/
+!envs/.gitkeep
 .venv
 env/
 venv/
@@ -172,9 +177,32 @@ pyrightconfig.json
 
 
 data
+# Allow tracked pipeline helpers under scripts/python/pipeline_tools
+!scripts/python/pipeline_tools/
+!scripts/python/pipeline_tools/**
 notebooks
 .virtual_documents
 .vscode
 logs
 .DS_Store
-*/defects/defects/*
+/defects/defects
+# defect visualization outputs from make_defects_from_flats.py
+scripts/python/defects_tools/defects/defects/
+packages/defects/defects_tools/defects/defects_*/
+**/defects/defects/
+
+# DIA pipeline outputs
+*.csv
+lc_*.csv
+test_*.csv
+FIXES_NEEDED.md
+
+# Quantum graphs (stored in Butler repo)
+*.qg
+*.dot
+
+# Legacy upstream repositories (kept as backup, not part of monorepo)
+packages/testdata/upstream/
+packages/refcats/upstream/
+
+*.png

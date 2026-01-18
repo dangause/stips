@@ -1,0 +1,50 @@
+
+h2 {
+    font-size: 1.25rem;
+    font-weight: bold;
+    padding:0;
+    width:100%;
+    background-color: var(--subheader-background);
+    color: var(--subheader-text);
+    text-indent: 0.5rem;
+    line-height: 2rem;
+}
+
+table {
+    border-collapse: collapse;
+}
+
+tbody tr:nth-child(odd){
+    background-color: var(--body-background);
+}
+
+tbody tr:nth-child(odd){
+    background-color: var(--body-background-contrast);
+}
+
+th {
+    background-color: var(--subheader-background);
+    color: var(--header-text);
+    border: 2pt solid var(--body-background);
+    padding-inline: 0.5em;
+}
+
+td {
+    padding-right: .5em;
+    padding-left: .5em;
+    border: 2pt solid var(--body-background);
+}
+/* Doc utils class */
+.literal {
+    font-family:'Courier New', Courier, monospace;
+    font-weight: bold;
+}
+
+main {
+    font-family: serif;
+    max-width: 1100px;
+}
+/* Doc utils class for links */
+.reference {
+    font-family: sans-serif;
+}

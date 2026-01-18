@@ -1,0 +1,407 @@
+description: |
+  Base pipeline for data release production for the Nickel telescope.
+
+imports:
+  - location: $DRP_PIPE_DIR/pipelines/_ingredients/analysis-visit-single-visit.yaml
+  - location: $DRP_PIPE_DIR/pipelines/_ingredients/analysis-association-single-visit.yaml
+  - location: $DRP_PIPE_DIR/pipelines/_ingredients/analysis-visit-recalibrated.yaml
+  - location: $DRP_PIPE_DIR/pipelines/_ingredients/analysis-association-recalibrated.yaml
+  - location: $DRP_PIPE_DIR/pipelines/_ingredients/analysis-coadds.yaml
+  - location: $DRP_PIPE_DIR/pipelines/_ingredients/analysis-visit-source.yaml
+  - location: $DRP_PIPE_DIR/pipelines/_ingredients/analysis-association-source.yaml
+  - location: $DRP_PIPE_DIR/pipelines/_ingredients/analysis-dia.yaml
+  - location: $OBS_NICKEL/pipelines/nickel-visit-quality-detector.yaml
+  - location: $OBS_NICKEL/pipelines/nickel-analysis-visit-single-visit.yaml
+
+parameters:
+  release_id: 0
+
+tasks:
+  # stage1-single-visit production tasks
+  isr:
+    class: lsst.ip.isr.IsrTask
+    config:
+      # Naming conventions for inputs/outputs
+      connections.outputExposure: post_isr_image
+      # Parameter configurations
+      doOverscan: true
+      doBias: true
+      doFlat: true
+      doDark: false
+      doDefect: true
+      doFringe: false
+      doSuspect: true
+      doWrite: true
+      doVignette: false
+      # Rough fluxMag0T1 seeds
+      fluxMag0T1:
+        B: 1.4e12
+        V: 1.6e12
+        R: 2.2e12
+        I: 3.1e12
+  calibrateImage:
+    class: lsst.pipe.tasks.calibrateImage.CalibrateImageTask
+    config:
+      connections.exposures: post_isr_image
+      connections.stars_footprints: single_visit_star_footprints
+      connections.psf_stars_footprints: single_visit_psf_star_footprints
+      connections.psf_stars: single_visit_psf_star
+      connections.initial_stars_schema: single_visit_star_schema
+      connections.stars: single_visit_star_unstandardized
+      connections.exposure: preliminary_visit_image
+      connections.background: preliminary_visit_image_background
+      id_generator.release_id: parameters.release_id
+      # Calibration file
+      file: $OBS_NICKEL/configs/calibrateImage/tuned_configs/best_calib_t071.py
+      # --- bootstrap PSF for first-pass detection ---
+      install_simple_psf.fwhm: 2.0
+      install_simple_psf.width: 35
+      # Parameter configurations
+      # ---- Source Detection ----
+      psf_detection.thresholdType: "stdev"
+      psf_detection.thresholdValue: 6.5
+      psf_detection.minPixels: 7
+      psf_detection.includeThresholdMultiplier: 1.0
+      psf_detection.reEstimateBackground: true
+      psf_detection.doTempLocalBackground: true
+      psf_detection.doTempWideBackground: false
+      psf_detection.excludeMaskPlanes: ["EDGE", "SAT", "CR", "BAD", "NO_DATA", "SUSPECT"]
+      psf_detection.statsMask: ["BAD", "SAT", "EDGE", "NO_DATA", "SUSPECT"]
+      psf_detection.isotropicGrow: true
+      psf_detection.nSigmaToGrow: 2.0
+      psf_detection.combinedGrow: true
+      # ---- Astrometry ----
+      # Use gaia_dr3 registered in bootstrap
+      connections.astrometry_ref_cat: the_monster_20250219_local  # gaia_dr3
+      astrometry_ref_loader.anyFilterMapsToThis: phot_g_mean
+      astrometry.forceKnownWcs: false
+      astrometry.matcher.maxOffsetPix: 300
+      astrometry.matcher.maxRotationDeg: 5.0
+      astrometry.matcher.matcherIterations: 12
+      astrometry.maxMeanDistanceArcsec: 60.0
+      astrometry.matchDistanceSigma: 8.0
+      astrometry.maxIter: 12
+      # ---- Photometry ----
+      connections.photometry_ref_cat: the_monster_20250219_local  # panstarrs1_dr2
+      photometry_ref_loader.filterMap:
+        # B: phot_bp_mean
+        # V: phot_g_mean
+        # R: phot_rp_mean
+        # I: phot_rp_mean
+        b: monster_ComCam_g
+        v: monster_ComCam_g
+        r: monster_ComCam_r
+        i: monster_ComCam_i
+      photometry.match.matchRadius: 1.5
+      photometry.applyColorTerms: true
+      photometry.photoCatName: the_monster_20250219_local  # panstarrs1_dr2
+
+
+  standardizeSingleVisitStar:
+    class: lsst.pipe.tasks.postprocess.TransformSourceTableTask
+    config:
+      connections.inputCatalog: single_visit_star_unstandardized
+      connections.outputCatalog: single_visit_star_detector
+      functorFile: $PIPE_TASKS_DIR/schemas/PreSource.yaml
+  consolidateSingleVisitStar:
+    class: lsst.pipe.tasks.postprocess.ConsolidateSourceTableTask
+    config:
+      connections.inputCatalogs: single_visit_star_detector
+      connections.outputCatalog: single_visit_star
+  consolidateVisitSummary:
+    class: lsst.pipe.tasks.postprocess.ConsolidateVisitSummaryTask
+    config:
+      connections.calexp: preliminary_visit_image
+      connections.visitSummary: preliminary_visit_summary
+      connections.visitSummarySchema: preliminary_visit_summary_schema
+  associateIsolatedStar:
+    class: lsst.pipe.tasks.isolatedStarAssociation.IsolatedStarAssociationTask
+    config:
+      connections.source_table_visit: single_visit_star
+      connections.isolated_star_sources: isolated_star
+      connections.isolated_star_cat: isolated_star_association
+      band_order: ['i', 'z', 'r', 'g', 'y', 'u', 'b', 'v']  # Nickel-specific
+  makeInitialVisitDetectorTable:
+    class: lsst.pipe.tasks.postprocess.MakeCcdVisitTableTask
+    config:
+      connections.visitSummaryRefs: preliminary_visit_summary
+      connections.outputCatalog: preliminary_visit_detector_table
+      idGenerator.release_id: parameters.release_id
+  makeInitialVisitTable:
+    class: lsst.pipe.tasks.postprocess.MakeVisitTableTask
+    config:
+      connections.visitSummaries: preliminary_visit_summary
+      connections.outputCatalog: preliminary_visit_table
+
+  # ======================
+  # COADDS (from stage-1)
+  # ======================
+  makeDirectWarp:
+    class: lsst.drp.tasks.make_direct_warp.MakeDirectWarpTask
+    config:
+      connections.calexp_list: preliminary_visit_image
+      connections.visit_summary: preliminary_visit_summary
+      connections.warp: direct_warp
+      connections.masked_fraction_warp: direct_warp_masked_fraction
+      idGenerator.release_id: parameters.release_id
+      useVisitSummaryPsf: false
+      useVisitSummaryWcs: false
+      useVisitSummaryPhotoCalib: false
+      select.maxEllipResidual: 0.015
+      select.maxScaledSizeScatter: 0.022
+      doPreWarpInterpolation: true
+
+  makePsfMatchedWarp:
+    class: lsst.drp.tasks.make_psf_matched_warp.MakePsfMatchedWarpTask
+    config:
+      connections.direct_warp: direct_warp
+      connections.psf_matched_warp: psf_matched_warp
+
+  selectDeepCoaddVisits:
+    class: lsst.pipe.tasks.selectImages.BestSeeingSelectVisitsTask
+    config:
+      connections.visitSummaries: preliminary_visit_summary
+      connections.goodVisits: deep_coadd_visit_selection
+      maxPsfFwhm: 2.0         # adjust if Nickel seeing differs
+      nVisitsMax: -1
+
+  selectTemplateCoaddVisits:
+    class: lsst.pipe.tasks.selectImages.BestSeeingQuantileSelectVisitsTask
+    config:
+      connections.visitSummaries: preliminary_visit_summary
+      connections.goodVisits: template_coadd_visit_selection
+
+  assembleDeepCoadd:
+    class: lsst.drp.tasks.assemble_coadd.CompareWarpAssembleCoaddTask
+    config:
+      connections.inputWarps: direct_warp
+      connections.psfMatchedWarps: psf_matched_warp
+      connections.selectedVisits: deep_coadd_visit_selection
+      connections.coaddExposure: deep_coadd_predetection
+      connections.nImage: deep_coadd_n_image
+      connections.inputMap: deep_coadd_input_map
+      connections.templateCoadd: deep_coadd_compare_template
+      doInputMap: true
+      doSelectVisits: true
+      doWriteArtifactMasks: true
+      assembleStaticSkyModel.doSelectVisits: true
+      doOnlineForMean: true
+
+  assembleTemplateCoadd:
+    class: lsst.drp.tasks.assemble_coadd.CompareWarpAssembleCoaddTask
+    config:
+      connections.inputWarps: direct_warp
+      connections.psfMatchedWarps: psf_matched_warp
+      connections.selectedVisits: template_coadd_visit_selection
+      connections.coaddExposure: template_coadd
+      connections.nImage: template_coadd_n_image
+      connections.inputMap: template_coadd_input_map
+      connections.templateCoadd: template_coadd_compare_template
+      doSelectVisits: true
+      assembleStaticSkyModel.doSelectVisits: true
+      doNImage: true
+      doOnlineForMean: true
+
+  # ==========================
+  # DIFFERENCE IMAGING (DIA)
+  # ==========================
+  reprocessVisitImage:
+    class: lsst.drp.tasks.reprocess_visit_image.ReprocessVisitImageTask
+    config:
+      # Drive from stage-1 outputs
+      connections.exposures: post_isr_image
+      connections.background_1: preliminary_visit_image_background
+      connections.exposure: visit_image
+      connections.visit_summary: preliminary_visit_summary
+      remove_initial_photo_calib: false
+      id_generator.release_id: parameters.release_id
+
+  rewarpTemplate:
+    class: lsst.ip.diffim.getTemplate.GetTemplateTask
+    config:
+      connections.bbox: visit_image.bbox
+      connections.wcs: visit_image.wcs
+      connections.coaddExposures: template_coadd
+      connections.template: template_detector
+      # Use Lanczos warping for best quality
+      warp.warpingKernelName: "lanczos4"
+
+  subtractImages:
+    class: lsst.ip.diffim.subtractImages.AlardLuptonSubtractTask
+    config:
+      connections.science: visit_image
+      connections.sources: single_visit_star_footprints
+      connections.template: template_detector
+      connections.difference: difference_image_predetection
+      connections.matchedTemplate: template_matched
+      connections.psfMatchingKernel: difference_kernel
+      connections.kernelSources: difference_kernel_sources
+      # Task tuning lives in configs/dia/subtractImages.py
+
+  detectAndMeasureDiaSource:
+    class: lsst.ip.diffim.detectAndMeasure.DetectAndMeasureTask
+    config:
+      connections.science: visit_image
+      connections.matchedTemplate: template_matched
+      connections.difference: difference_image_predetection
+      connections.kernelSources: difference_kernel_sources
+      connections.outputSchema: dia_source_schema
+      connections.diaSources: dia_source_unfiltered
+      connections.subtractedMeasuredExposure: difference_image
+      connections.maskedStreaks: difference_streaks
+      idGenerator.release_id: parameters.release_id
+      # Task tuning lives in configs/dia/detectAndMeasure.py
+
+
+
+
+
+
+
+
+
+
+subsets:
+  step1a-single-visit-detectors:
+    subset:
+      - isr
+      - calibrateImage
+      - standardizeSingleVisitStar
+      # - analyzeAmpOffsetMetadata
+      # - analyzeAmpInterfaceOffsetMetadata
+      - analyzeCalibrateImageMetadataNickel
+      - analyzeInitialSummaryStats
+    description: |
+      A step that processes raws to initial processed images and star catalogs.
+      These all run per-detector and may be sharded by detector or visit.
+
+      An instrument constraint is generally redundant but recommended.
+
+      A skymap constraint is unnecessary and not recommended.
+
+  step1b-single-visit-visits:
+    subset:
+      - consolidateSingleVisitStar
+      - consolidateVisitSummary
+      - analyzeSingleVisitStar
+      - makeAnalysisSingleVisitStarAstrometricRefMatchNickel
+      - analyzeSingleVisitStarAstrometricRefMatchNickel
+      - makeAnalysisSingleVisitStarPhotometricRefMatchNickel
+      - analyzeSingleVisitStarPhotometricRefMatchNickel
+    description: |
+      A step that consolidates per-detector initial star catalogs and metadata
+      to full-focal-plane visit-level versions, and runs analysis on initial
+      stars.
+
+      A visit constraint may be used for sharding and may be useful in speeding
+      up QuantumGraph generation.
+
+      An instrument constraint is generally redundant but recommended.
+
+      A skymap constraint is unnecessary and not recommended.
+
+  step1c-single-visit-tracts:
+    subset:
+      - associateIsolatedStar
+      - analyzeSingleVisitStarAssociation
+    description: |
+      A step that matches initial star catalogs (running over tracts) and
+      runs analysis on those matches.
+
+      Tract constraints may only be used for sharding; tracts with partial
+      visit coverage must always be included.
+
+      An instrument constraint is generally redundant but recommended.
+
+      A skymap constraint is always necessary, to avoid running all tasks
+      redundantly on all skymaps in the data repository.
+
+  step1d-single-visit-global:
+    subset:
+      - makeInitialVisitDetectorTable
+      - makeInitialVisitTable
+      - makeAnalysisSingleVisitStarAssociationMetricTable
+      - makeAnalysisSingleVisitStarAssociationWholeSkyPlot
+    description: |
+      A step that consolidates visit[, detector] metadata and analysis into
+      full-survey tables and plots.
+
+      This step's outputs are not consumed by downstream production tasks and
+      may be dropped or deferred by pipelines that don't need a checkpoint
+      before multi-epoch calibration.
+
+      An instrument constraint is generally redundant but recommended.
+
+      A skymap constraint is generally redundant but recommended.
+
+  stage1-single-visit:
+    # 1a
+    - isr
+    - calibrateImage
+    - standardizeSingleVisitStar
+    # - analyzeAmpOffsetMetadata
+    # - analyzeAmpInterfaceOffsetMetadata
+    - analyzeCalibrateImageMetadataNickel
+    - analyzeInitialSummaryStats
+    # 1b
+    - consolidateSingleVisitStar
+    - consolidateVisitSummary
+    - analyzeSingleVisitStar
+    - makeAnalysisSingleVisitStarAstrometricRefMatchNickel
+    - analyzeSingleVisitStarAstrometricRefMatchNickel
+    - makeAnalysisSingleVisitStarPhotometricRefMatchNickel
+    - analyzeSingleVisitStarPhotometricRefMatchNickel
+    # 1c
+    - associateIsolatedStar
+    - analyzeSingleVisitStarAssociation
+    # 1d
+    - makeInitialVisitDetectorTable
+    - makeInitialVisitTable
+    - makeAnalysisSingleVisitStarAssociationMetricTable
+    - makeAnalysisSingleVisitStarAssociationWholeSkyPlot
+
+  coadds-only:
+    - makeDirectWarp
+    - makePsfMatchedWarp
+    - selectDeepCoaddVisits
+    - selectTemplateCoaddVisits
+    - assembleDeepCoadd
+    - assembleTemplateCoadd
+
+  difference-imaging:
+    subset:
+      - reprocessVisitImage
+      - rewarpTemplate
+      - subtractImages
+      - detectAndMeasureDiaSource
+    description: |
+      Difference imaging for transient/variable detection.
+      Requires template_coadd in input collections.
+      Run after single-visit processing (step1a/step1b) completes.
+
+
+
+steps:
+  - label: step1a-single-visit-detectors
+    dimensions: [visit, detector]
+  - label: step1b-single-visit-visits
+    dimensions: [visit]
+  - label: step1c-single-visit-tracts
+    dimensions: [tract]
+  - label: step1d-single-visit-global
+    dimensions: []
+  - label: coadds-only
+    dimensions: [tract]
+  - label: difference-imaging
+    dimensions: [visit, detector]
+
+
+
+# subsets:
+#   processCcd:
+#     - isr
+#     - calibrateImage
+
+# steps:
+#   - label: processCcd
+#     dimensions: [instrument, exposure, detector]

@@ -1,0 +1,16 @@
+# Perform tasks on the local host to prepare for deployiung
+# So far this involves getting rid of local temp files we don't want to copy
+# to the remote
+- name: Find pycache directories
+  ansible.builtin.find:
+    paths: "{{ archive_source_dir }}"
+    recurse: true
+    file_type: directory
+    patterns: __pycache__
+  register: find_result
+
+- name: Remove pycache directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ find_result['files'] }}"

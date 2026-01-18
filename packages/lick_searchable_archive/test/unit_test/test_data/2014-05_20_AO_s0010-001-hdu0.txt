@@ -1,0 +1,8 @@
+SIMPLE  =                    T / C# FITS: 5/20/2014 4:10:19 PM
+BITPIX  =                   16
+NAXIS   =                    2 / Dimensionality
+NAXIS1  =                   90
+NAXIS2  =                  100
+LONGSTRN= 'OGIP 1.0'           / The OGIP Long String Convention may be used.
+EXTEND  =                    T / Extensions are permitted
+BZERO   =                32768 / Data is unsigned 16-bit integer

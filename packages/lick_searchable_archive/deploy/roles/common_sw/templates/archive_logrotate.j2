@@ -1,0 +1,42 @@
+compress
+su archive archive
+
+{% if "job_queue" in services %}
+# Celery log rotation
+{{ archive_log_dir }}/celery/*.log {
+
+    {{ log_rotate_frequency }}
+    rotate {{ log_count }}
+    missingok
+}
+{% endif %}
+
+{% if archive_apps|length > 0 %}
+# Django app logs
+{{ django_log }} {
+    {{ log_rotate_frequency }}
+    rotate {{ log_count }}
+    missingok
+}
+
+# gunicorn logs
+{{ archive_log_dir }}/gunicorn*.log {
+    {{ log_rotate_frequency }}
+    rotate {{ log_count }}
+    missingok
+    # Make sure gunicorn switches to new logs
+    sharedscripts
+    postrotate
+        kill -USR1 $(cat /var/run/gunicorn/gunicorn.pid)
+    endscript
+}
+{% endif %}
+
+{% if "ingest_watchdog" in services %}
+# Ingest watchdog logs
+{{ archive_log_dir }}/ingest_watchdog.log {
+    {{ log_rotate_frequency }}
+    rotate {{ log_count }}
+    missingok
+}
+{% endif %}

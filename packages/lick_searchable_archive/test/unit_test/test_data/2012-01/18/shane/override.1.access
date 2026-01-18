@@ -1,0 +1,4 @@
+# Test comments in an override.access file
+
+r1234.fits obstype arc
+r[12]* access ownerhint3 ownerhint4
