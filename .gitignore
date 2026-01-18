@@ -123,6 +123,7 @@ celerybeat.pid
 # Environments
 .env
 *.env
+.env.*
 !.env.example
 envs/
 !envs/.gitkeep
