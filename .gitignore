@@ -187,6 +187,7 @@ logs
 /defects/defects
 # defect visualization outputs from make_defects_from_flats.py
 scripts/python/defects_tools/defects/defects/
+packages/defects/defects_tools/defects/defects_*/
 **/defects/defects/
 
 # DIA pipeline outputs
