@@ -11,7 +11,7 @@
 # - You need network access and `lsstinstall` available. If missing, download
 #   it from https://raw.githubusercontent.com/lsst/lsst/main/scripts/lsstinstall/lsstinstall
 
-set -euo pipefail
+# set -euo pipefail
 
 RELEASE=""
 # Default install root: LSST_STACKS_ROOT > STACK_DIR > ~/lsst_stacks

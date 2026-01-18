@@ -36,6 +36,7 @@ import astropy.units as u
 import numpy as np
 from astropy.coordinates import SkyCoord
 from astropy.io import fits
+from astropy.nddata import Cutout2D
 from astropy.wcs import WCS
 
 # Try importing required packages with helpful error messages
@@ -159,6 +160,67 @@ def ps1_file_covers_target(ps1_fits_path, ra, dec):
         return False
 
 
+def find_first_image_hdu(hdul):
+    """
+    Return the first HDU with 2D image data.
+    """
+    for hdu in hdul:
+        data = getattr(hdu, "data", None)
+        if isinstance(data, np.ndarray) and data.ndim >= 2:
+            return hdu
+    raise RuntimeError("No image HDU with data found")
+
+
+def open_ps1_fits(source):
+    source = str(source)
+    if source.startswith("s3://"):
+        return fits.open(source, fsspec_kwargs={"anon": True})
+    return fits.open(source)
+
+
+def collect_ps1_metadata(hdul, band=None):
+    keys = [
+        "FILTER",
+        "FILTNAM",
+        "FPA.ZP",
+        "ZPT",
+        "MAGZERO",
+        "MAGZPT",
+        "EXPTIME",
+        "TEXPTIME",
+    ]
+    metadata = {}
+    for hdu in hdul:
+        hdr = hdu.header
+        for key in keys:
+            if key not in metadata and key in hdr:
+                metadata[key] = hdr[key]
+    if band and "FILTER" not in metadata and "FILTNAM" not in metadata:
+        metadata["FILTER"] = band
+    return metadata
+
+
+def write_ps1_cutout(source, coord, size_deg, output_file, band=None):
+    size = (size_deg * u.deg, size_deg * u.deg)
+    with open_ps1_fits(source) as hdul:
+        image_hdu = find_first_image_hdu(hdul)
+        metadata = collect_ps1_metadata(hdul, band=band)
+        wcs = WCS(image_hdu.header)
+        cutout = Cutout2D(image_hdu.data, coord, size, wcs=wcs, mode="trim")
+        header = image_hdu.header.copy()
+        for key in ("NAXIS1", "NAXIS2"):
+            if key in header:
+                del header[key]
+        header.update(cutout.wcs.to_header())
+        for key, value in metadata.items():
+            if key not in header:
+                header[key] = value
+        fits.PrimaryHDU(data=cutout.data, header=header).writeto(
+            output_file, overwrite=True
+        )
+    return str(output_file)
+
+
 def download_ps1_cutout(
     ra, dec, band, size_deg=0.2, output_dir=".", force_service=None
 ):
@@ -174,7 +236,7 @@ def download_ps1_cutout(
     band : str
         PS1 band (g, r, i, z, y)
     size_deg : float
-        Size of cutout in degrees
+        Cutout width in degrees
     output_dir : str
         Directory to save downloaded FITS file
     force_service : str, optional
@@ -186,7 +248,7 @@ def download_ps1_cutout(
         Path to downloaded FITS file, or None if download failed
     """
     log.info(f"Downloading PS1 {band}-band cutout for RA={ra:.4f}, Dec={dec:.4f}")
-    log.info(f"  Cutout size: {size_deg:.3f} degrees ({size_deg*60:.1f} arcmin)")
+    log.info(f"  Cutout width: {size_deg:.3f} degrees ({size_deg*60:.1f} arcmin)")
 
     coord = SkyCoord(ra=ra * u.deg, dec=dec * u.deg, frame="icrs")
     output_path = Path(output_dir)
@@ -206,14 +268,18 @@ def download_ps1_cutout(
         except Exception as e:
             log.warning(f"  Could not remove stale PS1 file: {e}")
 
-    # Method 1: Try PS1 via MAST (most reliable for stacked images)
+    # Method 1: Try PS1 via MAST (cloud-first stack + cutout)
     if force_service is None or force_service == "mast":
         try:
-            log.info("Method 1: Trying MAST archive...")
+            log.info("Method 1: Trying MAST archive (cloud-first stack + cutout)...")
+            try:
+                Observations.enable_cloud_dataset(provider="AWS")
+            except Exception as e:
+                log.warning(f"  Could not enable cloud dataset: {e}")
             # Query PS1 stacked images with more specific criteria
             obs_table = Observations.query_criteria(
                 coordinates=coord,
-                radius=size_deg * u.deg,
+                radius=(size_deg / 2.0) * u.deg,
                 obs_collection="PS1",
                 filters=band,
                 dataproduct_type="image",
@@ -222,8 +288,31 @@ def download_ps1_cutout(
             if len(obs_table) > 0:
                 log.info(f"  Found {len(obs_table)} PS1 observations")
 
-                # Get data products for the first observation
-                products = Observations.get_product_list(obs_table[0])
+                obs_coords = SkyCoord(obs_table["s_ra"], obs_table["s_dec"], unit="deg")
+                seps = coord.separation(obs_coords)
+                best_idx = int(np.argmin(seps))
+                inside_idxs = None
+                if "s_fov" in obs_table.colnames:
+                    fov = np.asarray(obs_table["s_fov"], dtype=float)
+                    inside = np.isfinite(fov) & (seps <= (fov * u.deg / 2))
+                    inside_idxs = np.where(inside)[0]
+                    if inside_idxs.size > 0:
+                        best_idx = int(inside_idxs[np.argmin(seps[inside_idxs])])
+
+                best_obs = obs_table[best_idx]
+                log.info(
+                    "  Closest obs index %d at separation %.3f arcmin",
+                    best_idx,
+                    seps[best_idx].to(u.arcmin).value,
+                )
+                if inside_idxs is not None:
+                    log.info(
+                        "  Observations containing target (by s_fov): %d",
+                        inside_idxs.size,
+                    )
+
+                # Get data products for the closest observation
+                products = Observations.get_product_list(best_obs)
 
                 # Filter for stacked images (not warp or diff)
                 desc_col = products["description"]
@@ -240,26 +329,90 @@ def download_ps1_cutout(
                 if len(stack_products) > 0:
                     log.info(f"  Found {len(stack_products)} stack products")
 
-                    # Download to temporary location
+                    stack_desc = desc_text[is_science & has_stack]
+                    prefer_unconv = (
+                        np.char.find(np.char.lower(stack_desc), "unconv") >= 0
+                    )
+                    if np.any(prefer_unconv):
+                        stack_products = stack_products[prefer_unconv]
+
+                    cloud_uri = None
+                    try:
+                        cloud_uris = Observations.get_cloud_uris(stack_products[0:1])
+                        if isinstance(cloud_uris, (list, tuple)):
+                            cloud_uri = cloud_uris[0] if cloud_uris else None
+                        elif isinstance(cloud_uris, str):
+                            cloud_uri = cloud_uris
+                        elif hasattr(cloud_uris, "colnames"):
+                            for col in ("cloud_uri", "s3_uri", "uri"):
+                                if (
+                                    col in cloud_uris.colnames
+                                    and len(cloud_uris[col]) > 0
+                                ):
+                                    cloud_uri = cloud_uris[col][0]
+                                    break
+                        if cloud_uri:
+                            log.info(f"  Cloud URI: {cloud_uri}")
+                    except Exception as e:
+                        log.warning(f"  Failed to resolve cloud URI: {e}")
+
+                    # Download to temporary location (cloud-first)
                     temp_dir = output_path / "temp_mast"
                     temp_dir.mkdir(exist_ok=True)
+                    source = cloud_uri
 
-                    manifest = Observations.download_products(
-                        stack_products[0:1], download_dir=str(temp_dir)
-                    )
-
-                    if len(manifest) > 0 and Path(manifest["Local Path"][0]).exists():
-                        downloaded_file = manifest["Local Path"][0]
-                        # Move to final location
-                        import shutil
-
-                        shutil.copy(downloaded_file, output_file)
-                        log.info(f"  Successfully downloaded via MAST: {output_file}")
-                        if ps1_file_covers_target(output_file, ra, dec):
-                            return str(output_file)
-                        log.warning(
-                            "  MAST download does not cover target; trying alternate service"
+                    manifest = None
+                    try:
+                        manifest = Observations.download_products(
+                            stack_products[0:1],
+                            download_dir=str(temp_dir),
+                            cloud_only=True,
                         )
+                    except Exception as e:
+                        log.warning(f"  Cloud download failed: {e}")
+
+                    if (
+                        manifest is not None
+                        and len(manifest) > 0
+                        and "Local Path" in manifest.colnames
+                    ):
+                        local_path = Path(manifest["Local Path"][0])
+                        if local_path.exists():
+                            source = local_path
+                            log.info(f"  Downloaded to {local_path}")
+
+                    if source is None or source == cloud_uri:
+                        try:
+                            fallback_manifest = Observations.download_products(
+                                stack_products[0:1], download_dir=str(temp_dir)
+                            )
+                            if (
+                                len(fallback_manifest) > 0
+                                and "Local Path" in fallback_manifest.colnames
+                            ):
+                                local_path = Path(fallback_manifest["Local Path"][0])
+                                if local_path.exists():
+                                    source = local_path
+                                    log.info(f"  Downloaded via MAST to {local_path}")
+                        except Exception as e:
+                            log.warning(f"  MAST download failed: {e}")
+
+                    if source:
+                        try:
+                            write_ps1_cutout(
+                                source, coord, size_deg, output_file, band=band
+                            )
+                        except Exception as e:
+                            log.warning(f"  Cutout failed: {e}")
+                            source = None
+
+                    if source and ps1_file_covers_target(output_file, ra, dec):
+                        return str(output_file)
+
+                    log.warning(
+                        "  MAST stack cutout does not cover target; trying alternate service"
+                    )
+                    if output_file.exists():
                         try:
                             output_file.unlink()
                         except Exception:
@@ -544,8 +697,11 @@ def convert_ps1_to_lsst_exposure(
         center = ps1_wcs.all_pix2world(ps1_data.shape[1] / 2, ps1_data.shape[0] / 2, 0)
         log.info(f"  PS1 image center (WCS): RA={center[0]:.4f}, Dec={center[1]:.4f}")
 
+        metadata = collect_ps1_metadata(hdul)
+
         # Get PS1 filter from header (if available)
-        ps1_filter = ps1_header.get("FILTER", ps1_header.get("FILTNAM", "r")).lower()
+        ps1_filter = metadata.get("FILTER", metadata.get("FILTNAM", "r"))
+        ps1_filter = str(ps1_filter).strip().lower()
         if ps1_filter not in PS1_ZEROPOINTS:
             log.warning(f"Unknown PS1 filter '{ps1_filter}', assuming 'r'")
             ps1_filter = "r"
@@ -554,8 +710,8 @@ def convert_ps1_to_lsst_exposure(
         ps1_zp_keywords = ["ZPT", "FPA.ZP", "MAGZERO", "MAGZPT"]
         ps1_zp = None
         for keyword in ps1_zp_keywords:
-            if keyword in ps1_header:
-                ps1_zp = float(ps1_header[keyword])
+            if keyword in metadata:
+                ps1_zp = float(metadata[keyword])
                 log.info(f"Found PS1 zeropoint in header[{keyword}]: {ps1_zp:.3f}")
                 break
 
@@ -771,28 +927,23 @@ def reproject_to_patch(exposure, patch_info):
     log.info(f"  Pixels with NO_DATA set: {np.sum((mask & no_data_bit) != 0)}")
     log.info(f"  Finite image pixels: {np.sum(np.isfinite(reprojected.image.array))}")
 
-    # CRITICAL FIX: Clear EDGE and NO_DATA for pixels with actual warped data
-    # After warping:
-    #   - EDGE is set on interpolated pixels (we want to use these!)
-    #   - NO_DATA is set on pixels outside the input footprint (correctly!)
-    # Strategy: Any pixel with finite non-zero image data came from the warp and should be usable
-    has_warped_data = np.isfinite(reprojected.image.array) & (
-        reprojected.image.array != 0
-    )
+    # CRITICAL FIX: Clear EDGE for pixels with finite warped data.
+    # After warping, EDGE is set on interpolated pixels (these are valid for templates).
+    # Keep NO_DATA to avoid unmasking pixels outside the input footprint.
+    has_finite_data = np.isfinite(reprojected.image.array)
 
-    # Clear both EDGE and NO_DATA for pixels that actually have warped data
-    # These are legitimate pixels from the PS1 image, just interpolated during warping
-    reprojected.mask.array[has_warped_data] &= ~edge_bit  # Clear EDGE
-    reprojected.mask.array[has_warped_data] &= ~no_data_bit  # Clear NO_DATA
+    # Clear EDGE for any finite pixel (interpolated pixels are still valid for templates).
+    reprojected.mask.array[has_finite_data] &= ~edge_bit
 
     valid_after = reprojected.mask.array == 0
     log.info(
-        f"  Valid pixels after mask clearing: {np.sum(valid_after)} / {mask.size} ({100*np.sum(valid_after)/mask.size:.1f}%)"
+        f"  Valid pixels after EDGE clearing: {np.sum(valid_after)} / {mask.size} ({100*np.sum(valid_after)/mask.size:.1f}%)"
     )
 
-    # Also log what fraction of the patch has coverage
+    # Estimate coverage as finite pixels not marked NO_DATA.
+    has_coverage = has_finite_data & ((mask & no_data_bit) == 0)
     log.info(
-        f"  Patch coverage: {100*np.sum(has_warped_data)/mask.size:.1f}% of pixels have warped data"
+        f"  Patch coverage: {100*np.sum(has_coverage)/mask.size:.1f}% of pixels have warped data"
     )
 
     return reprojected
@@ -956,6 +1107,16 @@ def ingest_exposure_to_butler(
             log.info(
                 f"Template already exists for {data_id} in {collection}; overwriting"
             )
+            try:
+                butler.pruneDatasets(existing_refs, purge=True, unstore=True)
+                log.info(
+                    "Pruned %d existing template_coadd dataset(s)", len(existing_refs)
+                )
+            except Exception as e:
+                log.warning(
+                    "Failed to prune existing template_coadd; will attempt to overwrite anyway: %s",
+                    e,
+                )
     except Exception as e:
         log.debug(f"Could not check for existing template: {e}")
 
@@ -1020,15 +1181,21 @@ Examples:
         "--dec", type=float, required=True, help="Declination (degrees)"
     )
     parser.add_argument(
-        "--band", required=True, choices=["b", "v", "r", "i"], help="Nickel filter band"
+        "--band",
+        required=True,
+        choices=["r", "i"],
+        help="Nickel filter band (restricted to r/i for PS1 templates)",
     )
     parser.add_argument(
         "--ps1-band",
-        choices=["g", "r", "i", "z", "y"],
+        choices=["r", "i"],
         help="PS1 band to download (default: auto-map from --band)",
     )
     parser.add_argument(
-        "--size", type=float, default=0.2, help="Cutout size in degrees (default: 0.2)"
+        "--size",
+        type=float,
+        default=0.2,
+        help="Cutout width in degrees (default: 0.2)",
     )
     parser.add_argument(
         "--collection", required=True, help="Output collection (e.g., templates/ps1/r)"
@@ -1078,9 +1245,7 @@ Examples:
 
     # Map Nickel band to PS1 band if not specified
     if args.ps1_band is None:
-        # Default mapping: r→r, i→i, v→g, b→g
-        ps1_band_map = {"r": "r", "i": "i", "v": "g", "b": "g"}
-        args.ps1_band = ps1_band_map.get(args.band, "r")
+        args.ps1_band = args.band
         log.info(f"Auto-mapped Nickel {args.band} → PS1 {args.ps1_band}")
 
     # Step 1: Download or use existing PS1 FITS

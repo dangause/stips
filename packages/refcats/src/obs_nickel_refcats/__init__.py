@@ -1,8 +1,5 @@
 """
-Manifests and helpers for Nickel reference catalogs.
-
-Heavy refcat data should live outside git; use the data-manifests to fetch and
-validate bundles.
+Helpers and utilities for Nickel reference catalogs.
 """
 
 __all__: list[str] = []

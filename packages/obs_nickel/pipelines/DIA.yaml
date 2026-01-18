@@ -74,10 +74,6 @@ tasks:
   subtractImages:
     class: lsst.ip.diffim.subtractImages.AlardLuptonSubtractTask
     config:
-      # Allow kernel source detection for PSF matching
-      # This finds bright, isolated stars for kernel fitting
-      allowKernelSourceDetection: true
-
       # Input connections - use preliminary_visit_image instead of visit_image
       connections.science: preliminary_visit_image
       connections.sources: single_visit_star_footprints  # From calibrateImage (in processCcd)
@@ -88,24 +84,7 @@ tasks:
       connections.matchedTemplate: template_matched
       connections.psfMatchingKernel: difference_kernel
       connections.kernelSources: difference_kernel_sources
-
-      # Kernel configuration
-      # Spatial variation: polynomial order for kernel spatial variation
-      # NOTE: spatialOrder parameter removed in recent LSST stack versions
-      # makeKernel.spatialOrder: 2
-
-      # Kernel size: larger for poor seeing
-      makeKernel.kernelSize: 21
-
-      # Background subtraction
-      doSubtractBackground: true
-
-      # Detection for kernel sources
-      # NOTE: detection config moved/removed in recent LSST stack - use allowKernelSourceDetection instead
-      # Use moderately bright, isolated stars
-      # detection.thresholdValue: 50.0
-      # detection.thresholdType: "pixel_stdev"
-      # detection.minPixels: 5
+      # Task tuning lives in configs/dia/subtractImages.py
 
   # ==========================
   # Stage 4: DIA Source Detection
@@ -125,6 +104,7 @@ tasks:
       connections.diaSources: dia_source_unfiltered
       connections.subtractedMeasuredExposure: difference_image
       connections.maskedStreaks: difference_streaks
+      # Task tuning lives in configs/dia/detectAndMeasure.py
 
       # Detection configuration
       # Lower threshold for transients (3-sigma)

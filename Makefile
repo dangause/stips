@@ -95,6 +95,13 @@ endif
 dia-multiband: ## Run multi-band DIA helper (wraps run_dia_multi_band.sh)
 	$(SHELL) -lc '$(setup_stack) ./scripts/pipeline/run_dia_multi_band.sh $(ARGS)'
 
+.PHONY: forced-phot
+forced-phot: ## Run forced photometry for a night. NIGHT=YYYYMMDD [BAND=r]
+ifndef NIGHT
+	$(error NIGHT is required, e.g. NIGHT=20201207)
+endif
+	$(SHELL) -lc '$(setup_stack) ./scripts/pipeline/45_forced_photometry.sh --night $(NIGHT) $(if $(BAND),--band $(BAND),) $(FORCED_PHOT_ARGS)'
+
 .PHONY: refcat-cones
 refcat-cones: ## Generate cones.csv + htm7_list.txt via nickel-refcats (pass ARGS="--ras ... --decs ...")
 	$(SHELL) -lc 'cd $(PWD) && $(setup_stack) \

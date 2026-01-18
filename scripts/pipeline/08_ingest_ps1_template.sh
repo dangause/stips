@@ -15,13 +15,13 @@
 # Required flags:
 #   --ra DEGREES          : Right ascension in degrees
 #   --dec DEGREES         : Declination in degrees
-#   --band BAND           : Nickel band (b, v, r, i)
+#   --band BAND           : Nickel band (r, i)
 #
 # Optional flags:
 #   --collection NAME     : Output collection (default: templates/ps1/{band})
 #   --tract NUM           : Sky tract (auto-determined if not provided)
-#   --ps1-band BAND       : PS1 band to download (default: auto-mapped)
-#   --size DEGREES        : Cutout size in degrees (default: 0.2)
+#   --ps1-band BAND       : PS1 band to download (default: auto-mapped; r/i only)
+#   --size DEGREES        : Cutout width in degrees (default: 0.2)
 #   --output-dir DIR      : Directory for FITS files (default: ./ps1_templates)
 #   --ps1-fits FILE       : Use existing PS1 FITS file
 #   --skip-download       : Skip download (use with --ps1-fits)
@@ -177,8 +177,12 @@ done
 [[ -z "$BAND" ]] && error "Missing required argument: --band"
 
 # Validate band
-if [[ ! "$BAND" =~ ^[bvri]$ ]]; then
-    error "Invalid band: $BAND (must be b, v, r, or i)"
+if [[ ! "$BAND" =~ ^[ri]$ ]]; then
+    error "Invalid band: $BAND (must be r or i)"
+fi
+
+if [[ -n "$PS1_BAND" ]] && [[ ! "$PS1_BAND" =~ ^[ri]$ ]]; then
+    error "Invalid PS1 band: $PS1_BAND (must be r or i)"
 fi
 
 # Set default collection if not provided
@@ -192,8 +196,20 @@ fi
 
 log_info "Setting up LSST Stack..."
 
+if [[ -z "${STACK_DIR:-}" ]]; then
+    error "STACK_DIR not set. Please set STACK_DIR in .env or environment"
+fi
+
 cd "$STACK_DIR"
-source loadLSST.zsh
+if [[ -f "$STACK_DIR/loadLSST.bash" ]]; then
+    source "$STACK_DIR/loadLSST.bash"
+elif [[ -f "$STACK_DIR/loadLSST.sh" ]]; then
+    source "$STACK_DIR/loadLSST.sh"
+elif [[ -f "$STACK_DIR/loadLSST.zsh" ]]; then
+    source "$STACK_DIR/loadLSST.zsh"
+else
+    error "Could not find loadLSST.bash/.sh/.zsh in $STACK_DIR"
+fi
 setup lsst_distrib
 setup obs_nickel || true
 
@@ -221,6 +237,13 @@ PYTHON_MODULE="obs_nickel_data_tools.pipeline_tools.ingest_ps1_template"
 # Use LSST Python
 CONDA_ENV="${LSST_CONDA_ENV_NAME:-lsst-scipipe-12.0.0}"
 PYTHON_CMD="/opt/anaconda3/envs/${CONDA_ENV}/bin/python"
+if [[ ! -x "$PYTHON_CMD" ]]; then
+    PYTHON_CMD="$(command -v python || true)"
+    if [[ -z "$PYTHON_CMD" ]]; then
+        error "Python not found; set LSST_CONDA_ENV_NAME or ensure python is on PATH"
+    fi
+    log_warn "Using python from PATH: $PYTHON_CMD"
+fi
 
 PYTHON_ARGS=(
     -m "$PYTHON_MODULE"
@@ -253,7 +276,7 @@ log_info "Target coordinates:    RA=$RA, Dec=$DEC"
 log_info "Nickel band:           $BAND"
 log_info "Collection:            $COLLECTION"
 [[ -n "$TRACT" ]] && log_info "Tract:                 $TRACT" || log_info "Tract:                 auto-determine"
-log_info "Cutout size:           ${CUTOUT_SIZE}°"
+log_info "Cutout width:          ${CUTOUT_SIZE}°"
 log_info "Output directory:      $OUTPUT_DIR"
 log_info ""
 

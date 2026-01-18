@@ -131,7 +131,12 @@ fi
 log_section "SkyMap Registration"
 SKYMAP_CFG="$OBS_NICKEL/configs/makeSkyMap.py"
 log_info "Registering SkyMap (config: ${SKYMAP_CFG})"
-butler register-skymap "$REPO" -C "$SKYMAP_CFG" || true
+SKYMAP_LOG="${LOG_DIR}/register_skymap_${TS}.log"
+if ! butler register-skymap "$REPO" -C "$SKYMAP_CFG" > "$SKYMAP_LOG" 2>&1; then
+  log_warn "register-skymap reported non-zero status; see ${SKYMAP_LOG}"
+else
+  log_info "register-skymap output captured in ${SKYMAP_LOG}"
+fi
 
 # In 11.0.0 weekly the default RUN is literally 'skymaps'.
 log_info "Creating SkyMap chain: skymaps/nickelRings -> skymaps"

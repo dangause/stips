@@ -282,10 +282,24 @@ def main():
 
         # Get coordinates from catalog
         try:
-            cat_coords = coord.SkyCoord(
-                ra=catalog["coord_ra"] * u.rad,
-                dec=catalog["coord_dec"] * u.rad,
-            )
+            # Try coord_ra/coord_dec first (DIA sources use radians)
+            ra_vals = catalog["coord_ra"]
+            dec_vals = catalog["coord_dec"]
+
+            # Check if values are in reasonable radian range (-pi to pi for dec)
+            # If dec values are > 90, they're likely degrees being stored in radian columns
+            if np.max(np.abs(dec_vals)) > 1.6:  # ~90 degrees in radians
+                # Values are in degrees, not radians
+                cat_coords = coord.SkyCoord(
+                    ra=ra_vals * u.deg,
+                    dec=dec_vals * u.deg,
+                )
+            else:
+                # Values are in radians (DIA sources)
+                cat_coords = coord.SkyCoord(
+                    ra=ra_vals * u.rad,
+                    dec=dec_vals * u.rad,
+                )
         except KeyError:
             # Try alternative column names
             try:
@@ -369,16 +383,11 @@ def main():
             except KeyError:
                 visit = -1
 
-            try:
-                src_ra = source["coord_ra"] * 180 / np.pi
-                src_dec = source["coord_dec"] * 180 / np.pi
-            except KeyError:
-                try:
-                    src_ra = source["ra"]
-                    src_dec = source["dec"]
-                except KeyError:
-                    src_ra = np.nan
-                    src_dec = np.nan
+            # Get source coordinates - use the already-parsed cat_coords to get degrees
+            # This avoids the radians vs degrees confusion
+            src_idx = np.where(matches)[0][j]
+            src_ra = cat_coords[src_idx].ra.deg
+            src_dec = cat_coords[src_idx].dec.deg
 
             all_detections.append(
                 {

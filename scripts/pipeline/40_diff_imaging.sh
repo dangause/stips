@@ -46,6 +46,8 @@ PIPELINE_MODE="standalone"  # standalone (DIA.yaml) or integrated (DRP.yaml#diff
 FORCE_REPROCESS=false
 BAD_SUB_THRESH=""
 CONFIG_OVERRIDES=()
+USE_SUBTRACT_TEST=false
+DIA_SUBTRACT_CFG_OVERRIDE=""
 
 show_usage() {
   cat <<USAGE
@@ -77,6 +79,8 @@ Optional:
   --pipeline MODE           Pipeline mode: standalone (DIA.yaml) or integrated (DRP.yaml)
   --force-reprocess         Force reprocessing of visit images (slower)
   --bad-sub-threshold NUM   Override badSubtractionRatioThreshold (default task value is 0.2)
+  --subtract-config FILE    Extra subtractImages config override (applied after base config)
+  --subtract-test           Use configs/dia/subtractImages_test.py override
   --config KEY=VAL          Extra pipetask config override (repeatable, e.g.
                             --config subtractImages:makeKernel.minKernelSources=1)
 
@@ -100,6 +104,9 @@ Examples:
   # Relax bad subtraction threshold when residuals are high (e.g., 0.5)
   $0 --night 20240625 --auto-template --bad-sub-threshold 0.5
 
+  # Apply conservative subtractImages overrides for ringing tests
+  $0 --night 20240625 --auto-template --subtract-test
+
 USAGE
   exit 0
 }
@@ -121,11 +128,19 @@ while [[ $# -gt 0 ]]; do
     --pipeline)           PIPELINE_MODE="${2:-}"; shift 2;;
     --force-reprocess)    FORCE_REPROCESS=true; shift 1;;
     --bad-sub-threshold)  BAD_SUB_THRESH="${2:-}"; shift 2;;
+    --subtract-config)    DIA_SUBTRACT_CFG_OVERRIDE="${2:-}"; shift 2;;
+    --subtract-test)      USE_SUBTRACT_TEST=true; shift 1;;
     --config)             CONFIG_OVERRIDES+=("${2:-}"); shift 2;;
     -h|--help)            show_usage;;
     *) echo "Unknown arg: $1"; show_usage;;
   esac
 done
+
+# Validate config flag combinations
+if [[ "$USE_SUBTRACT_TEST" == "true" && -n "$DIA_SUBTRACT_CFG_OVERRIDE" ]]; then
+  echo "ERROR: Use only one of --subtract-test or --subtract-config"
+  exit 2
+fi
 
 # Validate required args
 [[ -n "$NIGHT" ]] || { echo "ERROR: --night required"; exit 2; }
@@ -188,7 +203,12 @@ fi
 
 TUNED_CFG_FILE="$OBS_NICKEL/configs/calibrateImage/tuned_configs/best_calib_t071.py"
 DIA_SUBTRACT_CFG="$OBS_NICKEL/configs/dia/subtractImages.py"
+DIA_SUBTRACT_TEST_CFG="$OBS_NICKEL/configs/dia/subtractImages_test.py"
 DIA_DETECT_CFG="$OBS_NICKEL/configs/dia/detectAndMeasure.py"
+
+if [[ "$USE_SUBTRACT_TEST" == "true" ]]; then
+  DIA_SUBTRACT_CFG_OVERRIDE="$DIA_SUBTRACT_TEST_CFG"
+fi
 
 SKYMAP_NAME="${SKYMAP_NAME:-nickelRings-v1}"
 SKYMAPS_CHAIN="${SKYMAPS_CHAIN:-skymaps/nickelRings}"
@@ -216,6 +236,11 @@ log_info "Night: $NIGHT"
 log_info "Band: ${BAND:-all}"
 log_info "Pipeline mode: $PIPELINE_MODE ($PIPE$SUBSET)"
 log_info "RUN_TS: $RUN_TS"
+log_info "subtractImages config: $DIA_SUBTRACT_CFG"
+if [[ -n "$DIA_SUBTRACT_CFG_OVERRIDE" ]]; then
+  log_info "subtractImages override: $DIA_SUBTRACT_CFG_OVERRIDE"
+fi
+log_info "detectAndMeasureDiaSource config: $DIA_DETECT_CFG"
 
 ########## LSST STACK ##########
 cd "$STACK_DIR"
@@ -498,6 +523,13 @@ CONFIG_OPTS=()
 # Note: calibrateImage config is not needed for DIA pipeline (only for processCcd)
 if [[ -f "$DIA_SUBTRACT_CFG" ]]; then
   CONFIG_OPTS+=("--config-file" "subtractImages:${DIA_SUBTRACT_CFG}")
+fi
+if [[ -n "$DIA_SUBTRACT_CFG_OVERRIDE" ]]; then
+  if [[ ! -f "$DIA_SUBTRACT_CFG_OVERRIDE" ]]; then
+    echo "ERROR: subtractImages override config not found: $DIA_SUBTRACT_CFG_OVERRIDE"
+    exit 2
+  fi
+  CONFIG_OPTS+=("--config-file" "subtractImages:${DIA_SUBTRACT_CFG_OVERRIDE}")
 fi
 if [[ -f "$DIA_DETECT_CFG" ]]; then
   CONFIG_OPTS+=("--config-file" "detectAndMeasureDiaSource:${DIA_DETECT_CFG}")

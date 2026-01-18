@@ -21,6 +21,7 @@ BAD_EXPOSURES=""; BAD_EXPOSURES_FILE=""
 BAD_OBSIDS="";   BAD_OBSIDS_FILE=""
 JOBS="${JOBS:-8}"   # default parallelism
 OBJECT_FILTER=""    # optional object name filter
+SCIENCE_CONFIG=""   # optional calibrateImage config override
 SKIP_COADDS=false   # run coadds by default
 
 while [[ $# -gt 0 ]]; do
@@ -32,6 +33,7 @@ while [[ $# -gt 0 ]]; do
     --bad-obs-file)    BAD_OBSIDS_FILE="${2:-}"; shift 2;;
     -j|--jobs)         JOBS="${2:-}"; shift 2;;
     --object)          OBJECT_FILTER="${2:-}"; shift 2;;
+    --science-config)  SCIENCE_CONFIG="${2:-}"; shift 2;;
     --skip-coadds)     SKIP_COADDS=true; shift 1;;
     -h|--help)
       cat <<USAGE
@@ -44,6 +46,7 @@ Options:
   --bad-obs-file FILE       File containing OBSNUMs to exclude (comments allowed)
   -j, --jobs N              Number of parallel jobs for pipetask run (default: ${JOBS})
   --object NAME             Filter exposures by OBJECT header value (e.g., '2020wnt')
+  --science-config FILE     Override calibrateImage config (absolute or OBS_NICKEL-relative)
   --skip-coadds             Skip coadd generation (only run Stage 1 single-visit processing)
 USAGE
       exit 0;;
@@ -66,6 +69,18 @@ PIPE="$OBS_NICKEL/pipelines/DRP.yaml"
 # TUNED_CFG_FILE="$OBS_NICKEL/configs/calibrateImage/tuned_configs/best_calib_t071.py"
 # Using relaxed config for 2023ixf with poor initial WCS
 TUNED_CFG_FILE="$OBS_NICKEL/configs/calibrateImage/tuned_configs/2023ixf_relaxed.py"
+if [[ -n "$SCIENCE_CONFIG" ]]; then
+  if [[ "$SCIENCE_CONFIG" = /* ]]; then
+    CFG_CANDIDATE="$SCIENCE_CONFIG"
+  else
+    CFG_CANDIDATE="$OBS_NICKEL/$SCIENCE_CONFIG"
+  fi
+  if [[ -f "$CFG_CANDIDATE" ]]; then
+    TUNED_CFG_FILE="$CFG_CANDIDATE"
+  else
+    echo "ERROR: Science config not found: $CFG_CANDIDATE"; exit 2;
+  fi
+fi
 APPLY_CT_CFG="$OBS_NICKEL/configs/apply_colorterms.py"
 
 # Skymap (bootstrap chains this: skymaps/nickelRings -> skymaps)

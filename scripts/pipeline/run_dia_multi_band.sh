@@ -48,6 +48,7 @@ SKYMAP="${SKYMAP:-nickelRings-v1}"
 OBJECT_FILTER=""
 JOBS="${JOBS:-4}"
 BAD_SUB_THRESH=""
+SCIENCE_CONFIG=""
 SKIP_DOWNLOAD=false
 DOWNLOAD_OVERWRITE=false
 SKIP_TEMPLATE_BUILD=false
@@ -97,6 +98,7 @@ Tract Selection (choose one):
 Optional:
   --night-timezone TZ      Timezone for observing-night conversion (default: America/Los_Angeles)
   --object NAME            OBJECT filter for science/DIA
+  --science-config FILE    Override calibrateImage config for 20_science.sh
   --jobs N                 Parallel jobs for pipeline tasks (default: ${JOBS})
   --bad-sub-threshold X    Override badSubtractionRatioThreshold for DIA
   --skip-download          Skip archive downloads (assumes raw data already present)
@@ -143,6 +145,7 @@ while [[ $# -gt 0 ]]; do
     --dec)             DEC="${2:-}"; shift; shift;;
     --skymap)          SKYMAP="${2:-}"; shift; shift;;
     --object)          OBJECT_FILTER="${2:-}"; shift; shift;;
+    --science-config)  SCIENCE_CONFIG="${2:-}"; shift; shift;;
     --jobs|-j)         JOBS="${2:-4}"; shift; shift;;
     --bad-sub-threshold) BAD_SUB_THRESH="${2:-}"; shift; shift;;
     --skip-download)   SKIP_DOWNLOAD=true; shift;;
@@ -515,8 +518,12 @@ ingest_ps1_template() {
   log_info "Checking PS1 template for band $band..."
 
   if ps1_template_exists "$band"; then
-    log_info "  PS1 template already exists for band $band"
-    return 0
+    if [[ "$OVERWRITE_TEMPLATES" == "true" ]]; then
+      log_info "  PS1 template exists for band $band; --overwrite-templates set, re-ingesting"
+    else
+      log_info "  PS1 template already exists for band $band"
+      return 0
+    fi
   fi
 
   log_info "  PS1 template not found, downloading and ingesting..."
@@ -555,8 +562,12 @@ ingest_ps1_template() {
 ########################################
 # Stage 0: Bootstrap if needed
 ########################################
-if [[ "$OVERWRITE_TEMPLATES" == "true" && ( "$SKIP_TEMPLATE_BUILD" == "true" || "$AUTO_TEMPLATE" == "true" ) ]]; then
-  log "[WARN] --overwrite-templates specified but template build is disabled (skip-template-build/auto-template); flag will be ignored"
+if [[ "$OVERWRITE_TEMPLATES" == "true" ]]; then
+  if [[ "$USE_PS1_TEMPLATES" == "true" ]]; then
+    log "[INFO] --overwrite-templates will force PS1 template re-ingest"
+  elif [[ "$SKIP_TEMPLATE_BUILD" == "true" || "$AUTO_TEMPLATE" == "true" ]]; then
+    log "[WARN] --overwrite-templates specified but template build is disabled (skip-template-build/auto-template); flag will be ignored"
+  fi
 fi
 
 if [[ ! -f "$REPO/butler.yaml" ]]; then
@@ -705,6 +716,7 @@ else
   for night in "${ALL_NIGHTS[@]}"; do
     SCI_ARGS=(--night "$night" -j "$JOBS" --skip-coadds)
     [[ -n "$OBJECT_FILTER" ]] && SCI_ARGS+=(--object "$OBJECT_FILTER")
+    [[ -n "$SCIENCE_CONFIG" ]] && SCI_ARGS+=(--science-config "$SCIENCE_CONFIG")
     if ! run_or_dry ./scripts/pipeline/20_science.sh "${SCI_ARGS[@]}"; then
       log "[WARN] Science failed for night $night"
       FAILED_SCIENCE+=("$night")

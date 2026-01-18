@@ -77,7 +77,6 @@ obs_nickel/
 │   ├── pipeline/             # Numbered workflow scripts (00-50)
 │   ├── python/               # Helper scripts (deprecated, moved to packages)
 │   └── utilities/            # Convenience wrappers
-├── data-manifests/           # Versioned pointers to external data bundles
 ├── camera/                   # Symlink → packages/obs_nickel/camera
 ├── configs/                  # Symlink → packages/obs_nickel/configs
 ├── Makefile                  # Convenient automation targets
@@ -299,11 +298,14 @@ ENV_FILE=2020wnt_repo.env REPO=/path/to/2020wnt_test make science NIGHT=20210219
 
 The repository includes example configs:
 - [.env.example](.env.example) - Template for creating your own configs
-- [monorepo_repo.env](monorepo_repo.env) - Main testing repository
-- [2020wnt_repo.env](2020wnt_repo.env) - SN 2020wnt transient campaign
-- [2023ixf_repo.env](2023ixf_repo.env) - SN 2023ixf mini repository
+- [envs/](envs/) - Campaign-specific environment configurations
 
-**Note:** All `*.env` files (except `.env.example`) are gitignored for security.
+Example campaign configs in `envs/`:
+- `.env.2020wnt` - SN 2020wnt transient campaign
+- `.env.2023ixf` - SN 2023ixf transient campaign
+- `.env.*.ps1` - PS1 template variants
+
+**Note:** The `envs/` directory is gitignored for security. Only the directory structure is tracked.
 
 ---
 

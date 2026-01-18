@@ -229,7 +229,6 @@ tasks:
   subtractImages:
     class: lsst.ip.diffim.subtractImages.AlardLuptonSubtractTask
     config:
-      allowKernelSourceDetection: true
       connections.science: visit_image
       connections.sources: single_visit_star_footprints
       connections.template: template_detector
@@ -237,14 +236,7 @@ tasks:
       connections.matchedTemplate: template_matched
       connections.psfMatchingKernel: difference_kernel
       connections.kernelSources: difference_kernel_sources
-      # Kernel configuration for Nickel
-      makeKernel.spatialOrder: 2
-      makeKernel.kernelSize: 21
-      doSubtractBackground: true
-      # Detection for kernel sources
-      detection.thresholdValue: 50.0
-      detection.thresholdType: "pixel_stdev"
-      detection.minPixels: 5
+      # Task tuning lives in configs/dia/subtractImages.py
 
   detectAndMeasureDiaSource:
     class: lsst.ip.diffim.detectAndMeasure.DetectAndMeasureTask
@@ -257,14 +249,8 @@ tasks:
       connections.diaSources: dia_source_unfiltered
       connections.subtractedMeasuredExposure: difference_image
       connections.maskedStreaks: difference_streaks
-      doSkySources: true
       idGenerator.release_id: parameters.release_id
-      # Detection threshold: 3-sigma for transients
-      detection.thresholdValue: 3.0
-      detection.thresholdType: "stdev"
-      detection.minPixels: 5
-      doMeasurement: true
-      doWriteSubtractedExp: true
+      # Task tuning lives in configs/dia/detectAndMeasure.py
 
 
 
