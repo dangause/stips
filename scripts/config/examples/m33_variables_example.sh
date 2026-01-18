@@ -58,7 +58,7 @@ EOF
 # - M33_field1_i_dia_collections.txt
 #
 # Then extract individual variable light curves:
-# python scripts/python/pipeline_tools/extract_lightcurve.py \
+# obsn-dia-lightcurve \
 #   --repo $REPO \
 #   --collection $(cat variable_dia_results/M33_field1_*/M33_field1_r_dia_collections.txt) \
 #   --ra <VAR_RA> --dec <VAR_DEC> \

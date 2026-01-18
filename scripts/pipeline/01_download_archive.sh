@@ -121,12 +121,10 @@ echo "=== [00_download_archive] night=${NIGHT} ==="
 echo ""
 
 # Build command
-CMD=("${OBS_NICKEL}/scripts/python/pipeline_tools/fetch_archive_night.py")
-CMD+=(--night "$NIGHT")
-CMD+=(--raw-root "$RAW_PARENT_DIR")
+FETCH_ARGS=(--night "$NIGHT" --raw-root "$RAW_PARENT_DIR")
 
 if [[ "$OVERWRITE" == true ]]; then
-  CMD+=(--overwrite)
+  FETCH_ARGS+=(--overwrite)
 fi
 
 # Export environment for Python script
@@ -143,6 +141,16 @@ else
   echo "Using installed lick_archive package"
 fi
 
+# Resolve CLI entrypoint
+FETCH_CMD=(obsn-archive-fetch-night)
+PYTHON_BIN="$(dirname "$PYTHON")"
+if [[ -x "${PYTHON_BIN}/obsn-archive-fetch-night" ]]; then
+  FETCH_CMD=("${PYTHON_BIN}/obsn-archive-fetch-night")
+elif ! command -v obsn-archive-fetch-night >/dev/null 2>&1; then
+  echo "ERROR: obsn-archive-fetch-night not found. Install obs-nickel-data-tools or activate its env." >&2
+  exit 2
+fi
+
 # Run download script
 echo "Downloading data from Lick Archive..."
 echo "Archive: $LICK_ARCHIVE_URL"
@@ -150,7 +158,7 @@ echo "Instrument: ${LICK_ARCHIVE_INSTR:-NICKEL}"
 echo "Destination: $RAW_PARENT_DIR/$NIGHT/raw/"
 echo ""
 
-if $PYTHON "${CMD[@]}"; then
+if "${FETCH_CMD[@]}" "${FETCH_ARGS[@]}"; then
   echo ""
   echo "=== [00_download_archive] SUCCESS ==="
   echo "Night:  $NIGHT"

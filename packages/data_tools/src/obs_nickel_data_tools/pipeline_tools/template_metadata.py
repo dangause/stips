@@ -7,20 +7,20 @@ in template construction. Critical for avoiding contamination from transients.
 
 Usage:
     # Record template metadata when building
-    python template_metadata.py record \
+    obsn-archive-template-meta record \
         --repo $REPO \
         --collection templates/deep/r \
         --start 20210101 \
         --end 20210131
 
     # Query templates excluding certain date ranges
-    python template_metadata.py query \
+    obsn-archive-template-meta query \
         --repo $REPO \
         --exclude-start 20210219 \
         --exclude-end 20210228
 
     # List all template metadata
-    python template_metadata.py list --repo $REPO
+    obsn-archive-template-meta list --repo $REPO
 """
 
 from __future__ import annotations

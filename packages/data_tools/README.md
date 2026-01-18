@@ -205,6 +205,6 @@ packages/data_tools/
 
 All CLI entry points are defined in `pyproject.toml` under `[project.scripts]`.
 
-## Legacy Compatibility
+## Legacy Notes
 
-Original scripts under `scripts/python/pipeline_tools/` and `scripts/python/skymap/` remain as thin wrappers that import from this package, ensuring existing shell scripts continue to work without modification.
+The original scripts under `scripts/python/pipeline_tools/` and `scripts/python/skymap/` have been removed. Use the `obsn-*` CLI entrypoints (or `python -m obs_nickel_data_tools...`) instead; the pipeline scripts in this repo now call the entrypoints directly.

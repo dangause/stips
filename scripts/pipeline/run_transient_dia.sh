@@ -307,9 +307,13 @@ if [[ "$SKIP_LIGHTCURVE" == "false" && "$DRY_RUN" == "false" ]]; then
     log "DIA collections: $DIA_COLLECTIONS"
     log "Extracting light curve to: $LC_OUTPUT"
 
-    if [[ -f "scripts/python/pipeline_tools/extract_lightcurve.py" ]]; then
-      /opt/anaconda3/envs/${CONDA_ENV}/bin/python \
-        scripts/python/pipeline_tools/extract_lightcurve.py \
+    LC_CMD="/opt/anaconda3/envs/${CONDA_ENV}/bin/obsn-dia-lightcurve"
+    if [[ ! -x "$LC_CMD" ]]; then
+      LC_CMD="$(command -v obsn-dia-lightcurve || true)"
+    fi
+
+    if [[ -n "$LC_CMD" ]]; then
+      "$LC_CMD" \
         --repo "$REPO" \
         --collection "$DIA_COLLECTIONS" \
         --ra "$TRANSIENT_RA" \
@@ -328,7 +332,7 @@ if [[ "$SKIP_LIGHTCURVE" == "false" && "$DRY_RUN" == "false" ]]; then
         head -20 "$LC_OUTPUT"
       fi
     else
-      log "WARNING: extract_lightcurve.py not found, skipping"
+      log "WARNING: obsn-dia-lightcurve not found, skipping"
     fi
   fi
 fi

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Extract light curve from DIA or calibrated sources
-# Wrapper around extract_lightcurve.py with common presets
+# Wrapper around obsn-dia-lightcurve with common presets
 
 set -euo pipefail
 
@@ -64,8 +64,13 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Call the Python implementation
+# Call the CLI entrypoint
+if ! command -v obsn-dia-lightcurve >/dev/null 2>&1; then
+    log_error "obsn-dia-lightcurve not found; activate your env or install obs-nickel-data-tools"
+    exit 1
+fi
+
 log_info "Extracting lightcurve using dataset type: ${DATASET_TYPE}"
-python -m obs_nickel_data_tools.pipeline_tools.extract_lightcurve \
+obsn-dia-lightcurve \
     --dataset-type "${DATASET_TYPE}" \
     "${ARGS[@]}"

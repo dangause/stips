@@ -410,7 +410,7 @@ for i in "${!NIGHTS_ARRAY[@]}"; do
 
   # Stage 0: Download from archive
   if [[ "$SKIP_DOWNLOAD" == "false" ]]; then
-    echo "[$night] Downloading from Lick archive (fetch_archive_night.py)..."
+    echo "[$night] Downloading from Lick archive (obsn-archive-fetch-night)..."
     log_status "$night" "download" "STARTED"
 
     DOWNLOAD_ARGS=(--night "$night")
@@ -418,13 +418,29 @@ for i in "${!NIGHTS_ARRAY[@]}"; do
     [[ -n "${LICK_ARCHIVE_DIR:-}" ]] && DOWNLOAD_ARGS+=(--client-path "$LICK_ARCHIVE_DIR")
     [[ -n "${RAW_PARENT_DIR:-}" ]] && DOWNLOAD_ARGS+=(--raw-root "$RAW_PARENT_DIR")
 
-    # Use venv Python if available, otherwise system Python
-    PYTHON_CMD="$OBS_NICKEL/scripts/python/pipeline_tools/fetch_archive_night.py"
-    if [[ -n "${LICK_ARCHIVE_DIR:-}" && -f "${LICK_ARCHIVE_DIR}/.venv/bin/python" ]]; then
-      PYTHON_CMD="${LICK_ARCHIVE_DIR}/.venv/bin/python $OBS_NICKEL/scripts/python/pipeline_tools/fetch_archive_night.py"
+    # Resolve CLI entrypoint (prefer local venv, then LSST env, then PATH)
+    DOWNLOAD_CMD=("${OBS_NICKEL}/.venv/bin/obsn-archive-fetch-night")
+    if [[ ! -x "${DOWNLOAD_CMD[0]}" ]]; then
+      if [[ -n "${LSST_CONDA_ENV_NAME:-}" && -x "/opt/anaconda3/envs/${LSST_CONDA_ENV_NAME}/bin/obsn-archive-fetch-night" ]]; then
+        DOWNLOAD_CMD=("/opt/anaconda3/envs/${LSST_CONDA_ENV_NAME}/bin/obsn-archive-fetch-night")
+      else
+        DOWNLOAD_CMD=(obsn-archive-fetch-night)
+      fi
+    fi
+    if [[ "${DOWNLOAD_CMD[0]}" == "obsn-archive-fetch-night" ]] && ! command -v obsn-archive-fetch-night >/dev/null 2>&1; then
+      echo "ERROR: obsn-archive-fetch-night not found. Activate your env or install obs-nickel-data-tools." >&2
+      log_status "$night" "download" "FAILED"
+      NIGHT_SUCCESS=false
+      if [[ "$CONTINUE_ON_ERROR" == "false" ]]; then
+        FAILED_NIGHTS+=("$night")
+        break
+      else
+        FAILED_NIGHTS+=("$night")
+        continue
+      fi
     fi
 
-    if run_or_dry $PYTHON_CMD "${DOWNLOAD_ARGS[@]}" 2>&1 | tee -a "$BATCH_LOG"; then
+    if run_or_dry "${DOWNLOAD_CMD[@]}" "${DOWNLOAD_ARGS[@]}" 2>&1 | tee -a "$BATCH_LOG"; then
       log_status "$night" "download" "SUCCESS"
     else
       log_status "$night" "download" "FAILED"

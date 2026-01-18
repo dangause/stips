@@ -339,11 +339,18 @@ if [[ "$SKIP_DOWNLOAD" == "false" ]]; then
     log "=========================================="
     log ""
 
-    # Check if download script exists
-    DOWNLOAD_SCRIPT="$OBS_NICKEL/scripts/python/pipeline_tools/fetch_archive_night.py"
-    if [[ ! -f "$DOWNLOAD_SCRIPT" ]]; then
-        log "WARNING: Download script not found: $DOWNLOAD_SCRIPT"
-        log "Assuming raw data already downloaded to RAW_PARENT_DIR"
+    # Resolve CLI entrypoint
+    DOWNLOAD_CMD=("${OBS_NICKEL}/.venv/bin/obsn-archive-fetch-night")
+    if [[ ! -x "${DOWNLOAD_CMD[0]}" ]]; then
+        if [[ -n "${LSST_CONDA_ENV_NAME:-}" && -x "/opt/anaconda3/envs/${LSST_CONDA_ENV_NAME}/bin/obsn-archive-fetch-night" ]]; then
+            DOWNLOAD_CMD=("/opt/anaconda3/envs/${LSST_CONDA_ENV_NAME}/bin/obsn-archive-fetch-night")
+        else
+            DOWNLOAD_CMD=(obsn-archive-fetch-night)
+        fi
+    fi
+
+    if [[ "${DOWNLOAD_CMD[0]}" == "obsn-archive-fetch-night" ]] && ! command -v obsn-archive-fetch-night >/dev/null 2>&1; then
+        log "WARNING: obsn-archive-fetch-night not found; assuming raw data already downloaded to RAW_PARENT_DIR"
     else
         DOWNLOAD_SUCCESS_COUNT=0
         DOWNLOAD_FAILED_NIGHTS=()
@@ -355,14 +362,7 @@ if [[ "$SKIP_DOWNLOAD" == "false" ]]; then
             [[ -n "${LICK_ARCHIVE_DIR:-}" ]] && DOWNLOAD_ARGS+=(--client-path "$LICK_ARCHIVE_DIR")
             [[ -n "${RAW_PARENT_DIR:-}" ]] && DOWNLOAD_ARGS+=(--raw-root "$RAW_PARENT_DIR")
 
-            # Use venv Python if available, otherwise LSST Python
-            CONDA_ENV="${LSST_CONDA_ENV_NAME:-lsst-scipipe-12.0.0}"
-            PYTHON_CMD="/opt/anaconda3/envs/${CONDA_ENV}/bin/python"
-            if [[ -n "${LICK_ARCHIVE_DIR:-}" && -f "${LICK_ARCHIVE_DIR}/.venv/bin/python" ]]; then
-                PYTHON_CMD="${LICK_ARCHIVE_DIR}/.venv/bin/python"
-            fi
-
-            if run_or_dry "$PYTHON_CMD" "$DOWNLOAD_SCRIPT" "${DOWNLOAD_ARGS[@]}"; then
+            if run_or_dry "${DOWNLOAD_CMD[@]}" "${DOWNLOAD_ARGS[@]}"; then
                 ((DOWNLOAD_SUCCESS_COUNT++))
                 log "  ✓ Download completed for $night"
             else
