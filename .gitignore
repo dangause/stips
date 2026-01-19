@@ -180,6 +180,9 @@ data
 # Allow tracked pipeline helpers under scripts/python/pipeline_tools
 !scripts/python/pipeline_tools/
 !scripts/python/pipeline_tools/**
+# Allow testdata FITS files (tracked with Git LFS)
+!packages/testdata/data/
+!packages/testdata/data/**
 notebooks
 .virtual_documents
 .vscode
