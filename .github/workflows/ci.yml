@@ -30,6 +30,20 @@ jobs:
       TESTDATA_NICKEL_DIR: ${{ github.workspace }}/packages/testdata
 
     steps:
+      - name: Install git and git-lfs (AlmaLinux container)
+        run: |
+          if command -v microdnf >/dev/null 2>&1; then
+            microdnf install -y git git-lfs
+          elif command -v dnf >/dev/null 2>&1; then
+            dnf -y makecache && dnf -y install git git-lfs
+          else
+            echo "No known package manager found to install git." >&2
+            exit 1
+          fi
+          # Verify installation
+          git --version
+          git lfs version
+
       - name: Checkout obs_nickel
         uses: actions/checkout@v4
         with:
@@ -44,19 +58,6 @@ jobs:
       #     path: extern/testdata_nickel
       #     # If private, uncomment and provide a token in repo secrets:
       #     # token: ${{ secrets.GH_PAT }}
-
-      - name: Install git (AlmaLinux container)
-        run: |
-          if command -v git >/dev/null 2>&1; then
-            git --version
-          elif command -v microdnf >/dev/null 2>&1; then
-            microdnf install -y git
-          elif command -v dnf >/dev/null 2>&1; then
-            dnf -y makecache && dnf -y install git
-          else
-            echo "No known package manager found to install git." >&2
-            exit 1
-          fi
 
       - name: Mark workspace as safe for git (running as root)
         run: |
