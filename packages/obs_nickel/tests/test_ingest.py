@@ -28,7 +28,7 @@ class TestNickelIngest(IngestTestBase, lsst.utils.tests.TestCase):
 
     @property
     def file(self):
-        return os.path.join(testDataDirectory, "nickel", "raw", "d1032.fits")
+        return os.path.join(testDataDirectory, "data", "nickel", "raw", "d1032.fits")
 
     @property
     def visits(self):

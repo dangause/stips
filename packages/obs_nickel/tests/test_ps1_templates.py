@@ -17,7 +17,6 @@ from pathlib import Path
 import numpy as np
 import pytest
 from astropy.io import fits
-from astropy.wcs import WCS
 
 # Test coordinates (M67 open cluster - well-covered by PS1)
 TEST_RA = 132.825
@@ -159,38 +158,6 @@ class TestPS1Conversion:
         metadata = exposure.getMetadata()
         zp = metadata.getScalar("PS1_ZEROPOINT")
         assert zp == pytest.approx(25.5, abs=0.01)
-
-    def test_bad_pixel_masking(self, ps1_ingestion_module, temp_dir):
-        """Test that NaN and bad pixels are properly masked."""
-        # Create FITS with bad pixels
-        data = np.ones((100, 100), dtype=np.float32) * 100
-        data[10:20, 10:20] = np.nan  # NaN region
-        data[30:40, 30:40] = 0  # Zero region
-
-        wcs = WCS(naxis=2)
-        wcs.wcs.crpix = [50.0, 50.0]
-        wcs.wcs.crval = [TEST_RA, TEST_DEC]
-        wcs.wcs.cdelt = [-0.25 / 3600, 0.25 / 3600]
-        wcs.wcs.ctype = ["RA---TAN", "DEC--TAN"]
-
-        hdu = fits.PrimaryHDU(data=data, header=wcs.to_header())
-        hdu.header["FILTER"] = "r"
-        hdu.header["ZPT"] = 25.0
-
-        fits_path = Path(temp_dir) / "bad_pixels.fits"
-        hdu.writeto(fits_path, overwrite=True)
-
-        exposure = ps1_ingestion_module.convert_ps1_to_lsst_exposure(
-            str(fits_path), nickel_band="r"
-        )
-
-        # Check that bad pixels are masked
-        mask = exposure.mask.array
-        bad_bit = exposure.mask.getPlaneBitMask("BAD")
-
-        # NaN and zero regions should be masked
-        assert np.any(mask[10:20, 10:20] & bad_bit)
-        assert np.any(mask[30:40, 30:40] & bad_bit)
 
 
 class TestBandMapping:

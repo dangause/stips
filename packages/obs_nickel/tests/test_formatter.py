@@ -41,7 +41,7 @@ def make_dataset_ref(detector="CCD0"):
 @unittest.skipIf(testDataDirectory is None, "testdata_nickel must be set up")
 class NickelRawFormatterTestCase(lsst.utils.tests.TestCase):
     def setUp(self):
-        relpath = "nickel/raw/d1032.fits"
+        relpath = "data/nickel/raw/d1032.fits"
         self.filename = os.path.join(testDataDirectory, relpath)
         location = Location(testDataDirectory, relpath)
         self.fileDescriptor = FileDescriptor(location, storageClass)

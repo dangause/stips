@@ -106,6 +106,16 @@ setup lsst_distrib
 # Declare + setup obs_nickel from the current working tree
 eups declare -r "$(pwd)" obs_nickel -t current 2>/dev/null || true
 setup obs_nickel
+
+# Ensure workspace packages are available in PYTHONPATH
+# This allows tests to import obs_nickel_data_tools, etc.
+WORKSPACE_ROOT="$(pwd)"
+for pkg_dir in "${WORKSPACE_ROOT}"/packages/*/src; do
+  if [[ -d "$pkg_dir" ]]; then
+    export PYTHONPATH="${pkg_dir}:${PYTHONPATH:-}"
+  fi
+done
+
 set -u
 
 # --------- Optional: setup testdata_nickel ----------
