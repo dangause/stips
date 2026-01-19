@@ -26,21 +26,24 @@ jobs:
 
     env:
       STACK_DIR: /opt/lsst/software/stack
-      TESTDATA_NICKEL_DIR: ${{ github.workspace }}/extern/testdata_nickel
+      # Use internal testdata from packages/testdata
+      TESTDATA_NICKEL_DIR: ${{ github.workspace }}/packages/testdata
 
     steps:
       - name: Checkout obs_nickel
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          lfs: true
 
-      - name: Checkout testdata_nickel
-        uses: actions/checkout@v4
-        with:
-          repository: dangause/testdata_nickel
-          path: extern/testdata_nickel
-          # If private, uncomment and provide a token in repo secrets:
-          # token: ${{ secrets.GH_PAT }}
+      # Note: Using internal testdata from packages/testdata instead of external repo
+      # - name: Checkout testdata_nickel
+      #   uses: actions/checkout@v4
+      #   with:
+      #     repository: dangause/testdata_nickel
+      #     path: extern/testdata_nickel
+      #     # If private, uncomment and provide a token in repo secrets:
+      #     # token: ${{ secrets.GH_PAT }}
 
       - name: Install git (AlmaLinux container)
         run: |
