@@ -63,7 +63,7 @@ See detailed workflows below.
 ## Monorepo Structure
 
 ```
-obs_nickel/
+nickel_processing_suite/
 ├── packages/
 │   ├── obs_nickel/           # LSST instrument package (camera, configs, pipelines)
 │   ├── data_tools/           # Data access, EDA, archive download, PS1 templates, skymap, DIA tools
@@ -74,9 +74,14 @@ obs_nickel/
 │   ├── colorterms/           # Color term fitting utilities
 │   └── lick_searchable_archive/  # Local mirror of Lick archive client
 ├── scripts/
+│   ├── config/               # Config helpers and generators
 │   ├── pipeline/             # Numbered workflow scripts (00-50)
 │   ├── python/               # Helper scripts (deprecated, moved to packages)
-│   └── utilities/            # Convenience wrappers
+│   ├── test/                 # Ad hoc test runners
+│   ├── utilities/            # Convenience wrappers
+│   └── with-stack.sh         # LSST stack wrapper
+├── pyproject.toml            # Workspace configuration
+├── uv.lock                   # Locked dependencies
 ├── Makefile                  # Convenient automation targets
 └── README.md                 # This file
 ```
@@ -216,8 +221,8 @@ REPO=/path/to/butler/repo
 # LSST stack installation
 STACK_DIR=/path/to/lsst_stack
 
-# obs_nickel location (for EUPS)
-OBS_NICKEL=/path/to/obs_nickel
+# Nickel Processing Suite repo (or packages/obs_nickel for EUPS)
+OBS_NICKEL=/path/to/nickel_processing_suite
 
 # Raw data parent directory
 RAW_PARENT_DIR=/path/to/raw/data
@@ -294,16 +299,12 @@ ENV_FILE=2020wnt_repo.env REPO=/path/to/2020wnt_test make science NIGHT=20210219
 
 ### Example Multi-Repo Configs
 
-The repository includes example configs:
+The repository includes example configs at the repo root:
 - [.env.example](.env.example) - Template for creating your own configs
-- [envs/](envs/) - Campaign-specific environment configurations
-
-Example campaign configs in `envs/`:
-- `.env.2020wnt` - SN 2020wnt transient campaign
-- `.env.2023ixf` - SN 2023ixf transient campaign
+- `.env.2020wnt`, `.env.2023ixf`, `.env.recalib` - Campaign-specific examples
 - `.env.*.ps1` - PS1 template variants
 
-**Note:** The `envs/` directory is gitignored for security. Only the directory structure is tracked.
+**Note:** `.env` and `.env.*` are gitignored by default (see `.gitignore`). The shipped examples are already tracked; keep your own overrides local or point `ENV_FILE` at a file outside the repo.
 
 ---
 

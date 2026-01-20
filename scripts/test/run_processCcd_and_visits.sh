@@ -1,6 +1,6 @@
 STACK_DIR="/Users/dangause/Developer/lick/lsst/lsst_stack"
 REPO="/Users/dangause/Developer/lick/lsst/data/nickel/062424"
-OBS="${HOME}/Developer/lick/lsst/lsst_stack/stack/obs_nickel"
+OBS="${HOME}/Developer/lick/lsst/lsst_stack/stack/nickel_processing_suite/packages/obs_nickel"
 CALIB="Nickel/calib/current"
 REFCATS="refcats"
 RAW_IN="Nickel/raw/all"

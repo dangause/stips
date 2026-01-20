@@ -54,7 +54,7 @@ fi
 ########## USER PATHS ##########
 RAWDIR="/Users/dangause/Developer/lick/data/${NIGHT}/raw"                                         # raw data directory
 REPO="/Users/dangause/Developer/lick/lsst/data/nickel/repo"                                      # persistent Butler repo
-OBS_NICKEL="/Users/dangause/Developer/lick/lsst/lsst_stack/stack/obs_nickel/packages/obs_nickel"   # obs_nickel package directory
+OBS_NICKEL="/Users/dangause/Developer/lick/lsst/lsst_stack/stack/nickel_processing_suite/packages/obs_nickel"   # obs_nickel package directory
 REFCAT_REPO="/Users/dangause/Developer/lick/lsst/lsst_stack/stack/refcats"                       # refcat working repo
 STACK_DIR="/Users/dangause/Developer/lick/lsst/lsst_stack"                                        # lsst_stack (has loadLSST.zsh)
 

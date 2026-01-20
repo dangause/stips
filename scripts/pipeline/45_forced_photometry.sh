@@ -10,7 +10,7 @@
 #     cd /Users/dangause/Developer/lick/lsst/lsst_stack
 #     source loadLSST.bash
 #     setup lsst_distrib
-#     cd /Users/dangause/Developer/lick/lsst/lsst_stack/stack/obs_nickel
+#     cd /path/to/nickel_processing_suite
 #
 # Usage:
 #   ENV_FILE=.env.2020wnt ./45_forced_photometry.sh --night YYYYMMDD [--band BAND]
@@ -45,7 +45,7 @@ if ! command -v pipetask &>/dev/null; then
     echo "  cd /Users/dangause/Developer/lick/lsst/lsst_stack"
     echo "  source loadLSST.bash"
     echo "  setup lsst_distrib"
-    echo "  cd /Users/dangause/Developer/lick/lsst/lsst_stack/stack/obs_nickel"
+    echo "  cd $REPO_ROOT"
     echo ""
     echo "Then run this script again."
     exit 1
@@ -58,7 +58,7 @@ if ! command -v butler &>/dev/null; then
     echo "  cd /Users/dangause/Developer/lick/lsst/lsst_stack"
     echo "  source loadLSST.bash"
     echo "  setup lsst_distrib"
-    echo "  cd /Users/dangause/Developer/lick/lsst/lsst_stack/stack/obs_nickel"
+    echo "  cd $REPO_ROOT"
     echo ""
     echo "Then run this script again."
     exit 1
@@ -82,8 +82,8 @@ if ! python -c "import lsst.obs.nickel" &>/dev/null; then
     echo "  cd /Users/dangause/Developer/lick/lsst/lsst_stack"
     echo "  source loadLSST.bash"
     echo "  setup lsst_distrib"
-    echo "  setup -r /Users/dangause/Developer/lick/lsst/lsst_stack/stack/obs_nickel"
-    echo "  cd /Users/dangause/Developer/lick/lsst/lsst_stack/stack/obs_nickel"
+    echo "  setup -r $OBS_NICKEL"
+    echo "  cd $REPO_ROOT"
     echo ""
     echo "Then run this script again."
     exit 1
