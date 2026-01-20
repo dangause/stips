@@ -313,8 +313,8 @@ class ForcedPhotRaDecTask(PipelineTask):
         """
         wcs = exposure.getWcs()
         if wcs is None:
-            _LOG.warning("Exposure has no WCS; returning empty forced photometry table")
-            return pipeBase.Struct(outputCatalog=self._createEmptyOutputTable())
+            _LOG.warning("Exposure has no WCS; skipping quantum")
+            raise pipeBase.NoWorkFound("Exposure has no WCS")
 
         photoCalib = exposure.getPhotoCalib()
         bbox = exposure.getBBox()
@@ -801,10 +801,8 @@ class ForcedPhotDiffimRaDecTask(PipelineTask):
         # Use WCS from science exposure (difference image WCS should match)
         wcs = scienceExposure.getWcs()
         if wcs is None:
-            _LOG.warning(
-                "Science exposure has no WCS; returning empty forced photometry table"
-            )
-            return pipeBase.Struct(outputCatalog=self._createEmptyOutputTable())
+            _LOG.warning("Science exposure has no WCS; skipping quantum")
+            raise pipeBase.NoWorkFound("Science exposure has no WCS")
 
         # Use photo calibration from science exposure for magnitude conversion
         photoCalib = scienceExposure.getPhotoCalib()
