@@ -112,6 +112,29 @@ ifndef NIGHT
 endif
 	$(SHELL) -lc '$(setup_stack) ./scripts/pipeline/45_forced_photometry.sh --night $(NIGHT) $(if $(BAND),--band $(BAND),) $(FORCED_PHOT_ARGS)'
 
+.PHONY: forced-phot-radec
+forced-phot-radec: ## Forced photometry at RA/Dec. NIGHT=YYYYMMDD RA=deg DEC=deg [IMAGE_TYPE=both|visit|diffim]
+ifndef NIGHT
+	$(error NIGHT is required, e.g. NIGHT=20201207)
+endif
+ifndef RA
+	$(error RA is required in degrees, e.g. RA=185.7285)
+endif
+ifndef DEC
+	$(error DEC is required in degrees, e.g. DEC=15.8225)
+endif
+	$(SHELL) -lc '$(setup_stack) ./scripts/pipeline/46_forced_photometry_radec.sh --night $(NIGHT) --ra $(RA) --dec $(DEC) $(if $(IMAGE_TYPE),--image-type $(IMAGE_TYPE),) $(if $(BAND),--band $(BAND),) $(FORCED_PHOT_RADEC_ARGS)'
+
+.PHONY: forced-phot-radec-file
+forced-phot-radec-file: ## Forced photometry from coordinate file. NIGHT=YYYYMMDD COORDS_FILE=targets.csv
+ifndef NIGHT
+	$(error NIGHT is required, e.g. NIGHT=20201207)
+endif
+ifndef COORDS_FILE
+	$(error COORDS_FILE is required, e.g. COORDS_FILE=targets.csv)
+endif
+	$(SHELL) -lc '$(setup_stack) ./scripts/pipeline/46_forced_photometry_radec.sh --night $(NIGHT) --coords-file $(COORDS_FILE) $(if $(IMAGE_TYPE),--image-type $(IMAGE_TYPE),) $(if $(BAND),--band $(BAND),) $(FORCED_PHOT_RADEC_ARGS)'
+
 .PHONY: refcat-cones
 refcat-cones: ## Generate cones.csv + htm7_list.txt via nickel-refcats (pass ARGS="--ras ... --decs ...")
 	$(SHELL) -lc 'cd $(PWD) && $(setup_stack) \

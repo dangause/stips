@@ -146,7 +146,8 @@ RUN_ID="forced_phot_${NIGHT}_$(date +%Y%m%d_%H%M%S)_$$"
 LOG_DIR="$REPO_ROOT/logs/$RUN_ID/forcedPhot"
 mkdir -p "$LOG_DIR"
 
-OUTPUT_COLLECTION="Nickel/runs/${NIGHT}/forcedPhot/${RUN_ID}/run"
+OUTPUT_COLLECTION="Nickel/runs/${NIGHT}/forcedPhot/${RUN_ID}"
+OUTPUT_RUN="${OUTPUT_COLLECTION}/run"
 # Use processCcd collection (from 20_science.sh output)
 INPUT_COLLECTION="Nickel/runs/${NIGHT}/processCcd/*"
 
@@ -154,6 +155,7 @@ log_section "Forced Photometry - Night $NIGHT"
 log_info "Repository: $REPO"
 log_info "Input collection: $INPUT_COLLECTION"
 log_info "Output collection: $OUTPUT_COLLECTION"
+log_info "Output run: $OUTPUT_RUN"
 log_info "Run ID: $RUN_ID"
 
 if [[ -n "$BAND" ]]; then
@@ -195,7 +197,7 @@ PIPETASK_ARGS=(
     --register-dataset-types
     --pipeline "$OBS_NICKEL/pipelines/ForcedPhot.yaml"
     --data-query "$DATA_QUERY"
-    --output-run "$OUTPUT_COLLECTION"
+    --output-run "$OUTPUT_RUN"
 )
 
 # Add reference catalog if specified
@@ -219,6 +221,7 @@ EXIT_CODE=${PIPESTATUS[0]}
 if [[ $EXIT_CODE -eq 0 ]]; then
     log_info "Forced photometry completed successfully"
     log_info "Output collection: $OUTPUT_COLLECTION"
+    log_info "Output run: $OUTPUT_RUN"
 else
     log_error "Forced photometry failed with exit code $EXIT_CODE"
     log_error "See log: $log_file"

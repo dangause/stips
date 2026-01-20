@@ -1,0 +1,133 @@
+# ForcedPhotRaDec.yaml - Forced photometry at user-specified RA/Dec coordinates
+#
+# This pipeline performs forced photometry at arbitrary sky positions on:
+#   1. Calibrated visit images (preliminary_visit_image)
+#   2. Difference images (difference_image)
+#
+# Coordinates can be provided via:
+#   - Input catalog: A table with 'ra', 'dec' columns (degrees)
+#   - Config parameters: For ad-hoc measurements at specific positions
+#
+# Usage examples:
+#
+#   # Using an input coordinate catalog:
+#   pipetask run -b $REPO \
+#     -p $OBS_NICKEL/pipelines/ForcedPhotRaDec.yaml#visit-image \
+#     -i Nickel/runs/20201207/processCcd/...,my_targets \
+#     -o Nickel/runs/20201207/forcedPhot/run \
+#     -d "instrument='Nickel' AND visit=12345"
+#
+#   # Using config coordinates (single target):
+#   pipetask run -b $REPO \
+#     -p $OBS_NICKEL/pipelines/ForcedPhotRaDec.yaml#visit-image \
+#     -i Nickel/runs/20201207/processCcd/... \
+#     -o Nickel/runs/20201207/forcedPhot/run \
+#     -d "instrument='Nickel' AND visit=12345" \
+#     -c "forcedPhotRaDec:useConfigCoords=True" \
+#     -c "forcedPhotRaDec:ra=[185.7285]" \
+#     -c "forcedPhotRaDec:dec=[15.8225]"
+#
+#   # Forced photometry on difference images:
+#   pipetask run -b $REPO \
+#     -p $OBS_NICKEL/pipelines/ForcedPhotRaDec.yaml#diffim \
+#     -i Nickel/runs/20201207/diff/...,my_targets \
+#     -o Nickel/runs/20201207/forcedPhotDiffim/run \
+#     -d "instrument='Nickel' AND visit=12345"
+
+description: |
+  Forced photometry at user-specified RA/Dec coordinates.
+  Supports both calibrated visit images and difference images.
+
+instrument: lsst.obs.nickel.Nickel
+
+tasks:
+  # ============================================
+  # Forced photometry on calibrated visit images
+  # ============================================
+  forcedPhotRaDec:
+    class: lsst.obs.nickel.tasks.ForcedPhotRaDecTask
+    config:
+      # Input: calibrated science exposure
+      connections.exposure: preliminary_visit_image
+
+      # Input: coordinate catalog (optional if using config coords)
+      # To use: register a catalog as 'forced_phot_input_coords' in Butler
+      connections.inputCoordCatalog: forced_phot_input_coords
+
+      # Output: forced photometry measurements
+      connections.outputCatalog: forced_phot_radec
+
+      # Default: use catalog input (set useConfigCoords=True for ad-hoc coords)
+      useConfigCoords: false
+
+      # Footprint radius for aperture (pixels)
+      footprintRadius: 10.0
+
+      # Measurement configuration
+      # Note: Only use plugins available in ForcedMeasurementTask
+      # Coordinates are provided via refCat coord fields
+      measurement.plugins.names:
+        - base_TransformedCentroidFromCoord
+        - base_PsfFlux
+        - base_LocalBackground
+        - base_PixelFlags
+
+  # ============================================
+  # Forced photometry on difference images
+  # ============================================
+  forcedPhotDiffimRaDec:
+    class: lsst.obs.nickel.tasks.ForcedPhotDiffimRaDecTask
+    config:
+      # Input: difference image
+      connections.differenceExposure: difference_image
+
+      # Input: science exposure (for WCS and photo calibration)
+      connections.scienceExposure: preliminary_visit_image
+
+      # Input: coordinate catalog
+      connections.inputCoordCatalog: forced_phot_input_coords
+
+      # Output: forced photometry on difference image
+      connections.outputCatalog: forced_phot_diffim_radec
+
+      # Default: use catalog input
+      useConfigCoords: false
+
+      # Footprint radius
+      footprintRadius: 10.0
+
+      # Measurement configuration
+      # Note: Only use plugins available in ForcedMeasurementTask
+      # Coordinates are provided via refCat coord fields
+      measurement.plugins.names:
+        - base_TransformedCentroidFromCoord
+        - base_PsfFlux
+        - base_LocalBackground
+        - base_PixelFlags
+
+# ============================================
+# Pipeline subsets
+# ============================================
+subsets:
+  visit-image:
+    subset:
+      - forcedPhotRaDec
+    description: |
+      Forced photometry on calibrated visit images (preliminary_visit_image).
+      Use this for measuring flux at known positions in science images.
+
+  diffim:
+    subset:
+      - forcedPhotDiffimRaDec
+    description: |
+      Forced photometry on difference images.
+      Use this for transient light curves at known positions.
+      Note: difference fluxes can be negative - do not convert directly to magnitudes!
+
+  all:
+    subset:
+      - forcedPhotRaDec
+      - forcedPhotDiffimRaDec
+    description: |
+      Run forced photometry on both visit images and difference images.
+      Produces two output catalogs per visit.
