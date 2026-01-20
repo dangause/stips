@@ -43,13 +43,11 @@
 #
 
 # Default log root (can be overridden by setting LOG_ROOT before sourcing)
-# Detect OBS_NICKEL from script location if not set
-if [[ -z "${OBS_NICKEL:-}" ]]; then
-  # Assume logging.sh is in $OBS_NICKEL/scripts/utilities/
-  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-  OBS_NICKEL="$(cd "$SCRIPT_DIR/../.." && pwd)"
-fi
-: "${LOG_ROOT:=$OBS_NICKEL/logs}"
+# Resolve repo root and OBS_NICKEL package path.
+# shellcheck source=/dev/null
+source "$(dirname "${BASH_SOURCE[0]}")/repo_paths.sh"
+# Logs go in repo root, not in the package.
+: "${LOG_ROOT:=${REPO_ROOT}/logs}"
 
 # Current run ID (shared across all scripts in a single pipeline execution)
 # This can be set externally (e.g., by run_dia_multi_band.sh) or auto-generated

@@ -21,6 +21,9 @@ for f in $ENV_FILE $EXTRA_ENV; do
   [ -n "$f" ] && [ -f "$f" ] && source "$f"
 done
 set +a
+# Resolve repo root + package path for monorepo layout.
+# shellcheck source=/dev/null
+source "$(dirname "$0")/../utilities/repo_paths.sh"
 
 ########## CLI ##########
 NIGHTS_FILE=""
@@ -43,7 +46,7 @@ OBJECT_FILTER=""
 BAD_EXPOSURES_FILE=""
 DRY_RUN=false
 CONTINUE_ON_ERROR=false
-LOG_DIR="$OBS_NICKEL/logs/batch"
+LOG_DIR="$REPO_ROOT/logs/batch"
 DOWNLOAD_OVERWRITE=false
 
 while [[ $# -gt 0 ]]; do
@@ -419,7 +422,7 @@ for i in "${!NIGHTS_ARRAY[@]}"; do
     [[ -n "${RAW_PARENT_DIR:-}" ]] && DOWNLOAD_ARGS+=(--raw-root "$RAW_PARENT_DIR")
 
     # Resolve CLI entrypoint (prefer local venv, then LSST env, then PATH)
-    DOWNLOAD_CMD=("${OBS_NICKEL}/.venv/bin/obsn-archive-fetch-night")
+    DOWNLOAD_CMD=("${REPO_ROOT}/.venv/bin/obsn-archive-fetch-night")
     if [[ ! -x "${DOWNLOAD_CMD[0]}" ]]; then
       if [[ -n "${LSST_CONDA_ENV_NAME:-}" && -x "/opt/anaconda3/envs/${LSST_CONDA_ENV_NAME}/bin/obsn-archive-fetch-night" ]]; then
         DOWNLOAD_CMD=("/opt/anaconda3/envs/${LSST_CONDA_ENV_NAME}/bin/obsn-archive-fetch-night")
@@ -464,7 +467,7 @@ for i in "${!NIGHTS_ARRAY[@]}"; do
     echo "[$night] Running calibrations (10_calibs.sh)..."
     log_status "$night" "calibs" "STARTED"
 
-    if run_or_dry "$OBS_NICKEL/scripts/pipeline/10_calibs.sh" --night "$night" 2>&1 | tee -a "$BATCH_LOG"; then
+    if run_or_dry "$REPO_ROOT/scripts/pipeline/10_calibs.sh" --night "$night" 2>&1 | tee -a "$BATCH_LOG"; then
       log_status "$night" "calibs" "SUCCESS"
     else
       log_status "$night" "calibs" "FAILED"
@@ -493,7 +496,7 @@ for i in "${!NIGHTS_ARRAY[@]}"; do
     [[ -n "$OBJECT_FILTER" ]] && SCIENCE_ARGS+=(--object "$OBJECT_FILTER")
     [[ -n "$BAD_EXPOSURES_FILE" ]] && SCIENCE_ARGS+=(--bad-file "$BAD_EXPOSURES_FILE")
 
-    if run_or_dry "$OBS_NICKEL/scripts/pipeline/20_science.sh" "${SCIENCE_ARGS[@]}" 2>&1 | tee -a "$BATCH_LOG"; then
+    if run_or_dry "$REPO_ROOT/scripts/pipeline/20_science.sh" "${SCIENCE_ARGS[@]}" 2>&1 | tee -a "$BATCH_LOG"; then
       log_status "$night" "science" "SUCCESS"
     else
       log_status "$night" "science" "FAILED"
@@ -535,7 +538,7 @@ for i in "${!NIGHTS_ARRAY[@]}"; do
     [[ -n "$OBJECT_FILTER" ]] && DIA_ARGS+=(--object "$OBJECT_FILTER")
     [[ -n "$BAD_EXPOSURES_FILE" ]] && DIA_ARGS+=(--bad-file "$BAD_EXPOSURES_FILE")
 
-    if run_or_dry "$OBS_NICKEL/scripts/pipeline/40_diff_imaging.sh" "${DIA_ARGS[@]}" 2>&1 | tee -a "$BATCH_LOG"; then
+    if run_or_dry "$REPO_ROOT/scripts/pipeline/40_diff_imaging.sh" "${DIA_ARGS[@]}" 2>&1 | tee -a "$BATCH_LOG"; then
       log_status "$night" "DIA" "SUCCESS"
     else
       log_status "$night" "DIA" "FAILED"
@@ -592,7 +595,7 @@ if [[ "$BUILD_TEMPLATE" == "true" && ${#SUCCESSFUL_NIGHTS[@]} -gt 0 ]]; then
   )
   [[ -n "$TEMPLATE_PATCH" ]] && TEMPLATE_ARGS+=(--patch "$TEMPLATE_PATCH")
 
-  if run_or_dry "$OBS_NICKEL/scripts/pipeline/30_coadds.sh" "${TEMPLATE_ARGS[@]}" 2>&1 | tee -a "$BATCH_LOG"; then
+  if run_or_dry "$REPO_ROOT/scripts/pipeline/30_coadds.sh" "${TEMPLATE_ARGS[@]}" 2>&1 | tee -a "$BATCH_LOG"; then
     log_status "multi-night" "template" "SUCCESS"
   else
     log_status "multi-night" "template" "FAILED"

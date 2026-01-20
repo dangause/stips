@@ -8,6 +8,8 @@ Usage:
     pytest tests/test_ps1_templates.py
     # Or run individual tests:
     pytest tests/test_ps1_templates.py::test_download_ps1_cutout
+    # Enable PS1 download flow tests:
+    RUN_PS1_DOWNLOADS=1 pytest tests/test_ps1_templates.py
 """
 
 import os
@@ -22,6 +24,7 @@ from astropy.io import fits
 TEST_RA = 132.825
 TEST_DEC = 11.8
 TEST_SIZE = 0.1  # degrees (smaller for faster tests)
+RUN_PS1_DOWNLOADS = os.getenv("RUN_PS1_DOWNLOADS") == "1"
 
 
 @pytest.fixture
@@ -51,8 +54,11 @@ def ps1_ingestion_module():
 class TestPS1Download:
     """Test PS1 download functionality."""
 
+    @pytest.mark.integration
     def test_download_ps1_fitscut(self, ps1_ingestion_module, temp_dir):
         """Test PS1 download via fitscut service."""
+        if not RUN_PS1_DOWNLOADS:
+            pytest.skip("Set RUN_PS1_DOWNLOADS=1 to enable PS1 download tests.")
         output_file = Path(temp_dir) / "test_ps1_r.fits"
 
         result = ps1_ingestion_module.download_ps1_via_fitscut(
@@ -70,8 +76,11 @@ class TestPS1Download:
                     len(hdul) > 1 and hdul[1].data is not None
                 )
 
+    @pytest.mark.integration
     def test_download_ps1_ps1filenames(self, ps1_ingestion_module, temp_dir):
         """Test PS1 download via ps1filenames service."""
+        if not RUN_PS1_DOWNLOADS:
+            pytest.skip("Set RUN_PS1_DOWNLOADS=1 to enable PS1 download tests.")
         output_file = Path(temp_dir) / "test_ps1_i.fits"
 
         result = ps1_ingestion_module.download_ps1_via_ps1filenames(
@@ -83,8 +92,11 @@ class TestPS1Download:
             assert output_file.stat().st_size > 10000
 
     @pytest.mark.slow
+    @pytest.mark.integration
     def test_download_full_workflow(self, ps1_ingestion_module, temp_dir):
         """Test complete download workflow with all fallbacks."""
+        if not RUN_PS1_DOWNLOADS:
+            pytest.skip("Set RUN_PS1_DOWNLOADS=1 to enable PS1 download tests.")
         result = ps1_ingestion_module.download_ps1_cutout(
             TEST_RA, TEST_DEC, "r", TEST_SIZE, temp_dir
         )

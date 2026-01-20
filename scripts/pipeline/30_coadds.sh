@@ -322,7 +322,7 @@ if pipetask run \
     END_DATE="${SORTED_NIGHTS[$LAST_IDX]}"
 
     # Record metadata
-    TEMPLATE_META_SCRIPT="$OBS_NICKEL/scripts/python/pipeline_tools/template_metadata.py"
+    TEMPLATE_META_SCRIPT="$REPO_ROOT/scripts/python/pipeline_tools/template_metadata.py"
     if [[ -f "$TEMPLATE_META_SCRIPT" ]]; then
       CONDA_ENV="${LSST_CONDA_ENV_NAME:-lsst-scipipe-12.0.0}"
       /opt/anaconda3/envs/${CONDA_ENV}/bin/python "$TEMPLATE_META_SCRIPT" record \

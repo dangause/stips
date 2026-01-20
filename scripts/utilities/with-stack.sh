@@ -64,6 +64,13 @@ if [[ ! -d "${STACK_DIR}" ]]; then
   exit 2
 fi
 
+# Resolve repo root + package path for monorepo layout.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_SCRIPTS_DIR="${SCRIPT_DIR%/utilities}"
+# shellcheck source=/dev/null
+source "$REPO_SCRIPTS_DIR/utilities/repo_paths.sh"
+TESTDATA_NICKEL_DIR="${TESTDATA_NICKEL_DIR:-$REPO_ROOT/packages/testdata}"
+
 # --------- Activate LSST stack (prefer bash variant) ----------
 if [[ -f "${STACK_DIR}/loadLSST.bash" ]]; then
   # Temporarily relax nounset for activation scripts
@@ -104,12 +111,12 @@ set +u
 setup lsst_distrib
 
 # Declare + setup obs_nickel from the current working tree
-eups declare -r "$(pwd)" obs_nickel -t current 2>/dev/null || true
+eups declare -r "$OBS_NICKEL" obs_nickel -t current 2>/dev/null || true
 setup obs_nickel
 
 # Ensure workspace packages are available in PYTHONPATH
 # This allows tests to import obs_nickel_data_tools, etc.
-WORKSPACE_ROOT="$(pwd)"
+WORKSPACE_ROOT="$REPO_ROOT"
 for pkg_dir in "${WORKSPACE_ROOT}"/packages/*/src; do
   if [[ -d "$pkg_dir" ]]; then
     export PYTHONPATH="${pkg_dir}:${PYTHONPATH:-}"

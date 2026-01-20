@@ -77,13 +77,11 @@ obs_nickel/
 │   ├── pipeline/             # Numbered workflow scripts (00-50)
 │   ├── python/               # Helper scripts (deprecated, moved to packages)
 │   └── utilities/            # Convenience wrappers
-├── camera/                   # Symlink → packages/obs_nickel/camera
-├── configs/                  # Symlink → packages/obs_nickel/configs
 ├── Makefile                  # Convenient automation targets
 └── README.md                 # This file
 ```
 
-**Backward compatibility**: Symlinks at repo root (`camera/`, `configs/`) point to `packages/obs_nickel/` for legacy compatibility.
+All configuration and code lives in the `packages/` directory. Scripts reference package paths directly (e.g., `packages/obs_nickel/configs/`).
 
 ---
 

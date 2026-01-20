@@ -16,6 +16,12 @@ for f in $(ENV_FILE) $(EXTRA_ENV); do \
 		echo "Warning: env file $$f not found" >&2; \
 	fi; \
 done; \
+if [[ -f "$${PWD}/scripts/utilities/repo_paths.sh" ]]; then \
+	source "$${PWD}/scripts/utilities/repo_paths.sh"; \
+fi; \
+export REPO_ROOT="$${REPO_ROOT:-$${PWD}}"; \
+export OBS_NICKEL="$${OBS_NICKEL:-$${REPO_ROOT}/packages/obs_nickel}"; \
+export TESTDATA_NICKEL_DIR="$${TESTDATA_NICKEL_DIR:-$${REPO_ROOT}/packages/testdata}"; \
 export REPO="$${REPO:-}"; \
 export LSST_CONDA_ENV_NAME="$${LSST_CONDA_ENV_NAME:-}"
 endef
@@ -29,12 +35,16 @@ $(load_envs); \
 if [ -f "$${STACK_DIR}/loadLSST.zsh" ]; then \
 	source "$${STACK_DIR}/loadLSST.zsh"; \
 	setup lsst_distrib; \
+	if [[ -d "$${OBS_NICKEL}/ups" ]]; then eups declare -r "$${OBS_NICKEL}" obs_nickel -t current 2>/dev/null || true; fi; \
 	setup obs_nickel; \
+	if [[ -d "$${TESTDATA_NICKEL_DIR}/ups" ]]; then eups declare -r "$${TESTDATA_NICKEL_DIR}" testdata_nickel -t current 2>/dev/null || true; fi; \
 	setup testdata_nickel; \
 elif [ -f "$${STACK_DIR}/loadLSST.bash" ]; then \
 	source "$${STACK_DIR}/loadLSST.bash"; \
 	setup lsst_distrib; \
+	if [[ -d "$${OBS_NICKEL}/ups" ]]; then eups declare -r "$${OBS_NICKEL}" obs_nickel -t current 2>/dev/null || true; fi; \
 	setup obs_nickel; \
+	if [[ -d "$${TESTDATA_NICKEL_DIR}/ups" ]]; then eups declare -r "$${TESTDATA_NICKEL_DIR}" testdata_nickel -t current 2>/dev/null || true; fi; \
 	setup testdata_nickel; \
 else \
 	echo "Warning: LSST stack not found at $${STACK_DIR}"; \
@@ -113,8 +123,8 @@ declare-eups: ## Declare obs_nickel and testdata_nickel in the current stack (us
 	  if [ -f "$${STACK_DIR}/loadLSST.zsh" ]; then source "$${STACK_DIR}/loadLSST.zsh"; \
 	  elif [ -f "$${STACK_DIR}/loadLSST.bash" ]; then source "$${STACK_DIR}/loadLSST.bash"; \
 	  else echo "STACK_DIR loader not found (loadLSST)"; exit 1; fi; \
-	  eups declare obs_nickel git -r "$(PWD)/packages/obs_nickel" -m ups -t current || true; \
-	  eups declare testdata_nickel git -r "$(PWD)/packages/testdata" -m ups -t current || true'
+	  cd "$(PWD)/packages/obs_nickel" && eups declare obs_nickel git -r . -t current || true; \
+	  cd "$(PWD)/packages/testdata" && eups declare testdata_nickel git -r . -t current 2>/dev/null || true'
 
 .PHONY: batch
 batch: ## Batch process nights file. NIGHTS_FILE=path/to/nights.txt
@@ -148,7 +158,7 @@ format: ## Ruff format across the workspace
 
 .PHONY: test
 test: ## Run pytest suite (requires stack env)
-	$(SHELL) -lc '$(setup_stack) export OBS_NICKEL_DIR=$${PWD}/packages/obs_nickel && export TESTDATA_NICKEL_DIR=$${PWD}/packages/testdata/data && PYTHONPATH=$${PYTHONPATH}:packages/obs_nickel/python python -m pytest -q'
+	$(SHELL) -lc '$(setup_stack) PYTHONPATH=$${PYTHONPATH}:$${OBS_NICKEL}/python python -m pytest -q'
 
 .PHONY: notebook
 notebook: ## Start Jupyter Lab with LSST stack + UV venv active
@@ -161,8 +171,8 @@ env-info: ## Show which env file(s) will be loaded and key paths
 	$(SHELL) -lc '$(load_envs); \
 		echo "ENV_FILE=$(ENV_FILE)"; \
 		echo "EXTRA_ENV=$(EXTRA_ENV)"; \
-		printf "STACK_DIR=%s\nREPO=%s\nOBS_NICKEL=%s\nCP_PIPE_DIR=%s\nLSST_CONDA_ENV_NAME=%s\n" \
-			"$${STACK_DIR:-<unset>}" "$${REPO:-<unset>}" "$${OBS_NICKEL:-<unset>}" "$${CP_PIPE_DIR:-<unset>}" "$${LSST_CONDA_ENV_NAME:-<unset>}"; \
+		printf "REPO_ROOT=%s\nSTACK_DIR=%s\nREPO=%s\nOBS_NICKEL=%s\nCP_PIPE_DIR=%s\nLSST_CONDA_ENV_NAME=%s\n" \
+			"$${REPO_ROOT:-<unset>}" "$${STACK_DIR:-<unset>}" "$${REPO:-<unset>}" "$${OBS_NICKEL:-<unset>}" "$${CP_PIPE_DIR:-<unset>}" "$${LSST_CONDA_ENV_NAME:-<unset>}"; \
 	'
 
 .PHONY: help

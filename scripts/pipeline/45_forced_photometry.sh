@@ -25,7 +25,8 @@
 # set -eo pipefail  # Don't use -u because of LSST stack env issues
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-OBS_NICKEL="$(cd "$SCRIPT_DIR/../.." && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+OBS_NICKEL="$REPO_ROOT/packages/obs_nickel"
 
 ENV_FILE="${ENV_FILE:-.env}"
 EXTRA_ENV="${EXTRA_ENV:-}"
@@ -142,7 +143,7 @@ if [[ -z "${REPO:-}" ]]; then
 fi
 
 RUN_ID="forced_phot_${NIGHT}_$(date +%Y%m%d_%H%M%S)_$$"
-LOG_DIR="$OBS_NICKEL/logs/$RUN_ID/forcedPhot"
+LOG_DIR="$REPO_ROOT/logs/$RUN_ID/forcedPhot"
 mkdir -p "$LOG_DIR"
 
 OUTPUT_COLLECTION="Nickel/runs/${NIGHT}/forcedPhot/${RUN_ID}/run"
@@ -192,7 +193,7 @@ PIPETASK_ARGS=(
     --input "$INPUT_COLLECTION"
     --output "$OUTPUT_COLLECTION"
     --register-dataset-types
-    --pipeline "$OBS_NICKEL/packages/obs_nickel/pipelines/ForcedPhot.yaml"
+    --pipeline "$OBS_NICKEL/pipelines/ForcedPhot.yaml"
     --data-query "$DATA_QUERY"
     --output-run "$OUTPUT_COLLECTION"
 )
