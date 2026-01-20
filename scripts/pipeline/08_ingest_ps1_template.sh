@@ -33,18 +33,20 @@
 #
 
 
-# Get obs_nickel directory
-if [[ -z "${OBS_NICKEL:-}" ]]; then
-    OBS_NICKEL="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-    export OBS_NICKEL
-fi
+# Resolve repo root early for env loading.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="${REPO_ROOT:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
 
-# Source environment (only if REPO not already set)
-if [[ -z "${REPO:-}" ]] && [[ -f "$OBS_NICKEL/.env" ]]; then
+# Source environment (only if REPO not already set).
+if [[ -z "${REPO:-}" ]] && [[ -f "$REPO_ROOT/.env" ]]; then
     set -a
-    source "$OBS_NICKEL/.env"
+    source "$REPO_ROOT/.env"
     set +a
 fi
+
+# Resolve repo root + package path for monorepo layout.
+# shellcheck source=/dev/null
+source "$SCRIPT_DIR/../utilities/repo_paths.sh"
 
 # Default values
 RA=""
@@ -227,7 +229,7 @@ fi
 # ==========================================
 
 # Add data_tools package to PYTHONPATH so it can be imported
-DATA_TOOLS_SRC="$OBS_NICKEL/packages/data_tools/src"
+DATA_TOOLS_SRC="$REPO_ROOT/packages/data_tools/src"
 export PYTHONPATH="${DATA_TOOLS_SRC}:${PYTHONPATH:-}"
 
 # Use the package module directly via Python -m

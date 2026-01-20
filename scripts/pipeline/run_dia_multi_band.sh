@@ -317,7 +317,7 @@ convert_observing_nights() {
   tmp_file="$(mktemp)"
   TEMP_FILES+=("$tmp_file")
 
-  local converter_script="${OBS_NICKEL:-}/scripts/utilities/observing_night_to_ut.sh"
+  local converter_script="${REPO_ROOT:-}/scripts/utilities/observing_night_to_ut.sh"
   if [[ ! -x "$converter_script" ]]; then
     converter_script="./scripts/utilities/observing_night_to_ut.sh"
   fi
@@ -528,7 +528,7 @@ ingest_ps1_template() {
 
   log_info "  PS1 template not found, downloading and ingesting..."
 
-  local ps1_script="$OBS_NICKEL/scripts/pipeline/08_ingest_ps1_template.sh"
+  local ps1_script="$REPO_ROOT/scripts/pipeline/08_ingest_ps1_template.sh"
   if [[ ! -f "$ps1_script" ]]; then
     log_error "PS1 ingestion script not found: $ps1_script"
     return 1

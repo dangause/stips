@@ -72,16 +72,18 @@
 # Configuration
 # ==========================================
 
-# Get obs_nickel directory
-if [[ -z "${OBS_NICKEL:-}" ]]; then
-    OBS_NICKEL="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-    export OBS_NICKEL
+# Resolve repo root for env loading.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="${REPO_ROOT:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
+
+# Source common environment.
+if [[ -f "$REPO_ROOT/.env" ]]; then
+    source "$REPO_ROOT/.env"
 fi
 
-# Source common environment
-if [[ -f "$OBS_NICKEL/.env" ]]; then
-    source "$OBS_NICKEL/.env"
-fi
+# Resolve repo root + package path for monorepo layout.
+# shellcheck source=/dev/null
+source "$SCRIPT_DIR/../utilities/repo_paths.sh"
 
 # Default values
 TEMPLATE_NIGHTS_FILE=""
@@ -315,11 +317,11 @@ if [[ "$SKIP_BOOTSTRAP" == "false" ]]; then
     log "=========================================="
     log ""
 
-    if [[ ! -f "$OBS_NICKEL/scripts/pipeline/00_bootstrap_repo.sh" ]]; then
-        error "Bootstrap script not found: $OBS_NICKEL/scripts/pipeline/00_bootstrap_repo.sh"
+    if [[ ! -f "$REPO_ROOT/scripts/pipeline/00_bootstrap_repo.sh" ]]; then
+        error "Bootstrap script not found: $REPO_ROOT/scripts/pipeline/00_bootstrap_repo.sh"
     fi
 
-    run_or_dry "$OBS_NICKEL/scripts/pipeline/00_bootstrap_repo.sh"
+    run_or_dry "$REPO_ROOT/scripts/pipeline/00_bootstrap_repo.sh"
 
     log ""
     log "Repository bootstrap completed"
@@ -340,7 +342,7 @@ if [[ "$SKIP_DOWNLOAD" == "false" ]]; then
     log ""
 
     # Resolve CLI entrypoint
-    DOWNLOAD_CMD=("${OBS_NICKEL}/.venv/bin/obsn-archive-fetch-night")
+    DOWNLOAD_CMD=("${REPO_ROOT}/.venv/bin/obsn-archive-fetch-night")
     if [[ ! -x "${DOWNLOAD_CMD[0]}" ]]; then
         if [[ -n "${LSST_CONDA_ENV_NAME:-}" && -x "/opt/anaconda3/envs/${LSST_CONDA_ENV_NAME}/bin/obsn-archive-fetch-night" ]]; then
             DOWNLOAD_CMD=("/opt/anaconda3/envs/${LSST_CONDA_ENV_NAME}/bin/obsn-archive-fetch-night")
@@ -394,8 +396,8 @@ if [[ "$SKIP_CALIBS" == "false" ]]; then
     log "=========================================="
     log ""
 
-    if [[ ! -f "$OBS_NICKEL/scripts/pipeline/10_calibs.sh" ]]; then
-        error "Calibration script not found: $OBS_NICKEL/scripts/pipeline/10_calibs.sh"
+    if [[ ! -f "$REPO_ROOT/scripts/pipeline/10_calibs.sh" ]]; then
+        error "Calibration script not found: $REPO_ROOT/scripts/pipeline/10_calibs.sh"
     fi
 
     CALIBS_SUCCESS_COUNT=0
@@ -404,7 +406,7 @@ if [[ "$SKIP_CALIBS" == "false" ]]; then
     for night in "${ALL_NIGHTS[@]}"; do
         log "Building calibrations & ingesting raws for night: $night"
 
-        if run_or_dry "$OBS_NICKEL/scripts/pipeline/10_calibs.sh" --night "$night"; then
+        if run_or_dry "$REPO_ROOT/scripts/pipeline/10_calibs.sh" --night "$night"; then
             ((CALIBS_SUCCESS_COUNT++))
             log "  ✓ Calibrations completed for $night"
         else
@@ -435,8 +437,8 @@ if [[ "$SKIP_PROCESSCCD" == "false" ]]; then
     log "=========================================="
     log ""
 
-    if [[ ! -f "$OBS_NICKEL/scripts/pipeline/20_science.sh" ]]; then
-        error "Science processing script not found: $OBS_NICKEL/scripts/pipeline/20_science.sh"
+    if [[ ! -f "$REPO_ROOT/scripts/pipeline/20_science.sh" ]]; then
+        error "Science processing script not found: $REPO_ROOT/scripts/pipeline/20_science.sh"
     fi
 
     PROCESSCCD_SUCCESS_COUNT=0
@@ -445,7 +447,7 @@ if [[ "$SKIP_PROCESSCCD" == "false" ]]; then
     for night in "${ALL_NIGHTS[@]}"; do
         log "Processing night: $night"
 
-        if run_or_dry "$OBS_NICKEL/scripts/pipeline/20_science.sh" --night "$night" --object "$TRANSIENT_NAME" -j "$JOBS" --skip-coadds; then
+        if run_or_dry "$REPO_ROOT/scripts/pipeline/20_science.sh" --night "$night" --object "$TRANSIENT_NAME" -j "$JOBS" --skip-coadds; then
             ((PROCESSCCD_SUCCESS_COUNT++))
             log "  ✓ ProcessCcd completed for $night"
         else
@@ -476,7 +478,7 @@ log "=========================================="
 log ""
 
 # Check if 50_transient_dia.sh exists
-DIA_SCRIPT="$OBS_NICKEL/scripts/pipeline/50_transient_dia.sh"
+DIA_SCRIPT="$REPO_ROOT/scripts/pipeline/50_transient_dia.sh"
 if [[ ! -f "$DIA_SCRIPT" ]]; then
     error "DIA workflow script not found: $DIA_SCRIPT"
 fi

@@ -297,7 +297,7 @@ if [[ "$AUTO_TEMPLATE" == "true" ]]; then
   if [[ -n "$EXCLUDE_DATES_START" && -n "$EXCLUDE_DATES_END" ]]; then
     echo "  Date filtering: excluding $EXCLUDE_DATES_START to $EXCLUDE_DATES_END"
 
-    TEMPLATE_META_SCRIPT="$OBS_NICKEL/scripts/python/pipeline_tools/template_metadata.py"
+    TEMPLATE_META_SCRIPT="$REPO_ROOT/scripts/python/pipeline_tools/template_metadata.py"
     if [[ ! -f "$TEMPLATE_META_SCRIPT" ]]; then
       echo "ERROR: Template metadata script not found: $TEMPLATE_META_SCRIPT"
       echo "Cannot perform date-based template filtering."

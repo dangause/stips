@@ -25,6 +25,12 @@ if [[ -z "${STACK_DIR}" ]]; then
   echo "ERROR: pass -S / --stack-dir"; return 2
 fi
 
+# Resolve repo root + package path for monorepo layout.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=/dev/null
+source "$SCRIPT_DIR/repo_paths.sh"
+TESTDATA_NICKEL_DIR="${TESTDATA_NICKEL_DIR:-$REPO_ROOT/packages/testdata}"
+
 if [[ -f "${STACK_DIR}/loadLSST.zsh" ]]; then
   nounset_was_on=0; if set -o | grep -q 'nounset *on'; then nounset_was_on=1; set +u; fi
   # shellcheck disable=SC1091
@@ -43,7 +49,7 @@ fi
 setup lsst_distrib
 
 # Declare + setup obs_nickel from this working copy
-eups declare -r "$(pwd)" obs_nickel -t current 2>/dev/null || true
+eups declare -r "$OBS_NICKEL" obs_nickel -t current 2>/dev/null || true
 setup obs_nickel
 
 # ---------- testdata_nickel ----------

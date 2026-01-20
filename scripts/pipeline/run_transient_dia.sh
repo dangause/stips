@@ -158,6 +158,9 @@ for f in $ENV_FILE $EXTRA_ENV; do
   [ -n "$f" ] && [ -f "$f" ] && source "$f"
 done
 set +a
+# Resolve repo root + package path for monorepo layout.
+# shellcheck source=/dev/null
+source "$(dirname "$0")/../utilities/repo_paths.sh"
 
 # Default output directory
 if [[ -z "$OUTPUT_DIR" ]]; then
@@ -195,7 +198,7 @@ setup lsst_distrib
 setup obs_nickel
 set -u
 
-cd "$OBS_NICKEL"
+cd "$REPO_ROOT"
 
 CONDA_ENV="${LSST_CONDA_ENV_NAME:-lsst-scipipe-12.0.0}"
 TRACT=$(/opt/anaconda3/envs/${CONDA_ENV}/bin/python3 << PYEOF

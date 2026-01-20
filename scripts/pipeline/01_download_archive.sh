@@ -12,6 +12,9 @@ for f in $ENV_FILE $EXTRA_ENV; do
   [ -n "$f" ] && [ -f "$f" ] && source "$f"
 done
 set +a
+# Resolve repo root + package path for monorepo layout.
+# shellcheck source=/dev/null
+source "$(dirname "$0")/../utilities/repo_paths.sh"
 
 ########## CLI ##########
 NIGHT=""
@@ -83,8 +86,8 @@ if [[ -z "$RAW_PARENT_DIR" ]]; then
 fi
 
 # Default to workspace copy if not explicitly set
-if [[ -z "${LICK_ARCHIVE_DIR:-}" && -d "${OBS_NICKEL}/packages/lick_searchable_archive" ]]; then
-  LICK_ARCHIVE_DIR="${OBS_NICKEL}/packages/lick_searchable_archive"
+if [[ -z "${LICK_ARCHIVE_DIR:-}" && -d "${REPO_ROOT}/packages/lick_searchable_archive" ]]; then
+  LICK_ARCHIVE_DIR="${REPO_ROOT}/packages/lick_searchable_archive"
 fi
 
 # Use LSST Python environment (prefer current active Python)
