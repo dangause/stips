@@ -77,6 +77,7 @@ cd "$STACK_DIR"
 source loadLSST.zsh
 setup lsst_distrib
 setup obs_nickel || true
+setup obs_nickel_data || true
 
 ########## Build Coadd ##########
 TRACT_CLAUSE=""

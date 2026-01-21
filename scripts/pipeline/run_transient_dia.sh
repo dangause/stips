@@ -196,6 +196,7 @@ set +u
 source loadLSST.zsh
 setup lsst_distrib
 setup obs_nickel
+setup obs_nickel_data || true
 set -u
 
 cd "$REPO_ROOT"

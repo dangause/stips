@@ -37,6 +37,8 @@ if [ -f "$${STACK_DIR}/loadLSST.zsh" ]; then \
 	setup lsst_distrib; \
 	if [[ -d "$${OBS_NICKEL}/ups" ]]; then eups declare -r "$${OBS_NICKEL}" obs_nickel -t current 2>/dev/null || true; fi; \
 	setup obs_nickel; \
+	if [[ -d "$${REPO_ROOT}/packages/obs_nickel_data/ups" ]]; then eups declare -r "$${REPO_ROOT}/packages/obs_nickel_data" obs_nickel_data -t current 2>/dev/null || true; fi; \
+	setup obs_nickel_data; \
 	if [[ -d "$${TESTDATA_NICKEL_DIR}/ups" ]]; then eups declare -r "$${TESTDATA_NICKEL_DIR}" testdata_nickel -t current 2>/dev/null || true; fi; \
 	setup testdata_nickel; \
 elif [ -f "$${STACK_DIR}/loadLSST.bash" ]; then \
@@ -44,6 +46,8 @@ elif [ -f "$${STACK_DIR}/loadLSST.bash" ]; then \
 	setup lsst_distrib; \
 	if [[ -d "$${OBS_NICKEL}/ups" ]]; then eups declare -r "$${OBS_NICKEL}" obs_nickel -t current 2>/dev/null || true; fi; \
 	setup obs_nickel; \
+	if [[ -d "$${REPO_ROOT}/packages/obs_nickel_data/ups" ]]; then eups declare -r "$${REPO_ROOT}/packages/obs_nickel_data" obs_nickel_data -t current 2>/dev/null || true; fi; \
+	setup obs_nickel_data; \
 	if [[ -d "$${TESTDATA_NICKEL_DIR}/ups" ]]; then eups declare -r "$${TESTDATA_NICKEL_DIR}" testdata_nickel -t current 2>/dev/null || true; fi; \
 	setup testdata_nickel; \
 else \
@@ -141,12 +145,13 @@ refcat-cones: ## Generate cones.csv + htm7_list.txt via nickel-refcats (pass ARG
 		PYTHONPATH=$${PYTHONPATH}:$${PWD}/packages/refcats/src python -u -m nickel_refcats cones $(ARGS)'
 
 .PHONY: declare-eups
-declare-eups: ## Declare obs_nickel and testdata_nickel in the current stack (uses STACK_DIR and env files)
-	$(SHELL) -lc '$(envsource) \
+declare-eups: ## Declare obs_nickel, obs_nickel_data, and testdata_nickel in the current stack (uses STACK_DIR and env files)
+	$(SHELL) -lc '$(envsource); \
 	  if [ -f "$${STACK_DIR}/loadLSST.zsh" ]; then source "$${STACK_DIR}/loadLSST.zsh"; \
 	  elif [ -f "$${STACK_DIR}/loadLSST.bash" ]; then source "$${STACK_DIR}/loadLSST.bash"; \
 	  else echo "STACK_DIR loader not found (loadLSST)"; exit 1; fi; \
 	  cd "$(PWD)/packages/obs_nickel" && eups declare obs_nickel git -r . -t current || true; \
+	  cd "$(PWD)/packages/obs_nickel_data" && eups declare obs_nickel_data git -r . -t current || true; \
 	  cd "$(PWD)/packages/testdata" && eups declare testdata_nickel git -r . -t current 2>/dev/null || true'
 
 .PHONY: batch

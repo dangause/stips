@@ -19,6 +19,10 @@ description: >
   Difference Image Analysis pipeline for Nickel 1-meter telescope.
   Optimized for transient and variable source detection.
 
+imports:
+  - location: $OBS_NICKEL/pipelines/nickel-analysis-dia-detector.yaml
+  - location: $OBS_NICKEL/pipelines/nickel-analysis-dia-lightcurve.yaml
+
 parameters:
   release_id: 0
 
@@ -190,6 +194,38 @@ subsets:
     description: >
       Image subtraction only, no source detection.
       Useful for visual inspection of difference images.
+
+  dia-analysis:
+    subset:
+      - makeDiaSpatialMetrics
+      - analyzeImageDifferenceMetrics
+      - analyzeDiaSourceDetectionMetrics
+      - analyzeDiaSpatialPlots
+      - analyzeDiaKernelVisitPlot
+      - analyzeDiaSources
+    description: >
+      DIA diagnostics and plots using analysis_tools on existing DIA outputs.
+
+  dia-full-with-analysis:
+    subset:
+      - rewarpTemplate
+      - subtractImages
+      - detectAndMeasureDiaSource
+      - makeDiaSpatialMetrics
+      - analyzeImageDifferenceMetrics
+      - analyzeDiaSourceDetectionMetrics
+      - analyzeDiaSpatialPlots
+      - analyzeDiaKernelVisitPlot
+      - analyzeDiaSources
+    description: >
+      DIA processing plus diagnostic analysis plots and metrics.
+
+  dia-lightcurve:
+    subset:
+      - makeDiaVisitTable
+      - plotDiaLightcurve
+    description: >
+      Generate a DIA lightcurve table and plot for a configured target.
 
 # ==========================
 # Processing Steps

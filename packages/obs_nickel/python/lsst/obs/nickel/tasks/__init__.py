@@ -1,5 +1,6 @@
 """Tasks for the Nickel telescope obs package."""
 
+from .diaLightcurvePlot import DiaLightcurvePlotConfig, DiaLightcurvePlotTask
 from .forcedPhotRaDec import (
     ForcedPhotDiffimRaDecConfig,
     ForcedPhotDiffimRaDecTask,
@@ -12,4 +13,6 @@ __all__ = [
     "ForcedPhotRaDecConfig",
     "ForcedPhotDiffimRaDecTask",
     "ForcedPhotDiffimRaDecConfig",
+    "DiaLightcurvePlotTask",
+    "DiaLightcurvePlotConfig",
 ]

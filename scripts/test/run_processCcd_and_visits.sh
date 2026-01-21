@@ -16,7 +16,7 @@ echo "=== Nickel pipeline starting @ $TS ==="
 
 cd "$STACK_DIR"
 source loadLSST.zsh
-setup lsst_distrib; setup obs_nickel; setup testdata_nickel
+setup lsst_distrib; setup obs_nickel; setup obs_nickel_data; setup testdata_nickel
 
 cd "$OBS"
 

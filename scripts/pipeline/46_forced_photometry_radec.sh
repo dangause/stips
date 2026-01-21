@@ -243,10 +243,10 @@ DIFF_COLLECTION="Nickel/runs/${NIGHT}/diff/*"
 # Resolve processCcd collection - look for the /run subcollection
 log_info "Looking for processCcd collections..."
 PROCESSCCD_RUN_COLLECTION="Nickel/runs/${NIGHT}/processCcd/*/run"
-RESOLVED_PROCESSCCD=$(butler query-collections "$REPO" "$PROCESSCCD_RUN_COLLECTION" 2>&1 | tail -n +3 | awk '{print $1}' | head -1)
+RESOLVED_PROCESSCCD=$(butler query-collections "$REPO" "$PROCESSCCD_RUN_COLLECTION" 2>&1 | tail -n +3 | awk '{print $1}' | sort | tail -1)
 if [[ -z "$RESOLVED_PROCESSCCD" ]]; then
     # Try without /run suffix as fallback
-    RESOLVED_PROCESSCCD=$(butler query-collections "$REPO" "$PROCESSCCD_COLLECTION" 2>&1 | tail -n +3 | awk '{print $1}' | head -1)
+    RESOLVED_PROCESSCCD=$(butler query-collections "$REPO" "$PROCESSCCD_COLLECTION" 2>&1 | tail -n +3 | awk '{print $1}' | sort | tail -1)
 fi
 if [[ -z "$RESOLVED_PROCESSCCD" ]]; then
     log_error "No processCcd collections found for night $NIGHT"
@@ -316,7 +316,7 @@ fi
 if [[ "$IMAGE_TYPE" == "diffim" ]] || [[ "$IMAGE_TYPE" == "both" ]]; then
     # Check for difference image collection
     log_info "Looking for diff collections..."
-    RESOLVED_DIFF=$(butler query-collections "$REPO" "$DIFF_COLLECTION" 2>&1 | tail -n +3 | awk '{print $1}' | head -1)
+    RESOLVED_DIFF=$(butler query-collections "$REPO" "$DIFF_COLLECTION" 2>&1 | tail -n +3 | awk '{print $1}' | sort | tail -1)
 
     if [[ -z "$RESOLVED_DIFF" ]]; then
         log_warning "No diff collections found for night $NIGHT"

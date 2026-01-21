@@ -214,6 +214,7 @@ else
 fi
 setup lsst_distrib
 setup obs_nickel || true
+setup obs_nickel_data || true
 
 # Validate repository
 if [[ -z "${REPO:-}" ]]; then

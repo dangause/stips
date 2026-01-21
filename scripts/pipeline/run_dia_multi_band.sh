@@ -49,6 +49,8 @@ OBJECT_FILTER=""
 JOBS="${JOBS:-4}"
 BAD_SUB_THRESH=""
 SCIENCE_CONFIG=""
+DIA_ANALYSIS=false
+DIA_LIGHTCURVE_TASK=false
 SKIP_DOWNLOAD=false
 DOWNLOAD_OVERWRITE=false
 SKIP_TEMPLATE_BUILD=false
@@ -61,6 +63,18 @@ SKIP_BOOTSTRAP=false
 SKIP_CALIBS=false
 SKIP_SCIENCE=false
 OVERWRITE_TEMPLATES=false
+FORCED_PHOT=false
+FORCED_PHOT_IMAGE_TYPE="diffim"
+FORCED_PHOT_COORDS_FILE=""
+FORCED_PHOT_RA=""
+FORCED_PHOT_DEC=""
+LIGHTCURVE=false
+LIGHTCURVE_RADIUS="1.0"
+LIGHTCURVE_MIN_SNR="3.0"
+LIGHTCURVE_DATASET_TYPE="dia_source_unfiltered"
+LIGHTCURVE_BAND=""
+LIGHTCURVE_NAME=""
+LIGHTCURVE_OUTPUT_DIR=""
 
 # Exit codes: 0=success, 1=failures with --continue-on-error, 2=fatal error
 EXIT_CODE=0
@@ -69,6 +83,7 @@ FAILED_CALIBS=()
 FAILED_SCIENCE=()
 FAILED_TEMPLATE=()
 FAILED_DIA=()
+FAILED_FORCED_PHOT=()
 
 usage() {
   cat <<USAGE
@@ -101,6 +116,7 @@ Optional:
   --science-config FILE    Override calibrateImage config for 20_science.sh
   --jobs N                 Parallel jobs for pipeline tasks (default: ${JOBS})
   --bad-sub-threshold X    Override badSubtractionRatioThreshold for DIA
+  --dia-analysis           Run DIA diagnostic analysis tasks during diff imaging
   --skip-download          Skip archive downloads (assumes raw data already present)
   --download-overwrite     Re-download even if files exist (passes --overwrite)
 
@@ -110,6 +126,23 @@ Template Options:
   --use-ps1-templates      Use PS1 templates (auto-download/ingest if missing)
   --ps1-degrade-seeing N   Convolve PS1 templates to N arcsec FWHM (e.g., 2.0)
   --overwrite-templates    Force rebuild templates even if collections/runs already exist
+
+Forced Photometry:
+  --forced-phot            Run forced photometry at RA/Dec after DIA (per band/night)
+  --forced-phot-image-type TYPE  visit|diffim|both (default: diffim)
+  --forced-phot-coords-file FILE CSV with ra,dec columns (optional)
+  --forced-phot-ra RA      RA in degrees for forced photometry (defaults to --ra)
+  --forced-phot-dec DEC    Dec in degrees for forced photometry (defaults to --dec)
+
+Lightcurve Analysis:
+  --dia-lightcurve-task    Run DIA lightcurve PipelineTask (writes to Butler)
+  --lightcurve             Extract DIA lightcurve and generate plot after pipeline
+  --lightcurve-radius ARCSEC  Match radius in arcsec (default: 1.0)
+  --lightcurve-min-snr N      Minimum S/N filter (default: 3.0)
+  --lightcurve-dataset-type TYPE  Dataset type (default: dia_source_unfiltered)
+  --lightcurve-band BAND     Restrict lightcurve to a single band
+  --lightcurve-name NAME     Name for plot title/filename (defaults to --object or RA/Dec)
+  --lightcurve-output-dir DIR Output directory (default: run log dir)
 
 Pipeline Control:
   --skip-bootstrap         Skip repository bootstrap (fail if repo doesn't exist)
@@ -148,6 +181,8 @@ while [[ $# -gt 0 ]]; do
     --science-config)  SCIENCE_CONFIG="${2:-}"; shift; shift;;
     --jobs|-j)         JOBS="${2:-4}"; shift; shift;;
     --bad-sub-threshold) BAD_SUB_THRESH="${2:-}"; shift; shift;;
+    --dia-analysis)   DIA_ANALYSIS=true; shift;;
+    --dia-lightcurve-task) DIA_LIGHTCURVE_TASK=true; shift;;
     --skip-download)   SKIP_DOWNLOAD=true; shift;;
     --download-overwrite) DOWNLOAD_OVERWRITE=true; shift;;
     --skip-template-build) SKIP_TEMPLATE_BUILD=true; shift;;
@@ -160,6 +195,18 @@ while [[ $# -gt 0 ]]; do
     --skip-bootstrap)  SKIP_BOOTSTRAP=true; shift;;
     --skip-calibs)     SKIP_CALIBS=true; shift;;
     --skip-science)    SKIP_SCIENCE=true; shift;;
+    --forced-phot)     FORCED_PHOT=true; shift;;
+    --forced-phot-image-type) FORCED_PHOT_IMAGE_TYPE="${2:-}"; shift; shift;;
+    --forced-phot-coords-file) FORCED_PHOT_COORDS_FILE="${2:-}"; shift; shift;;
+    --forced-phot-ra)  FORCED_PHOT_RA="${2:-}"; shift; shift;;
+    --forced-phot-dec) FORCED_PHOT_DEC="${2:-}"; shift; shift;;
+    --lightcurve)      LIGHTCURVE=true; shift;;
+    --lightcurve-radius) LIGHTCURVE_RADIUS="${2:-}"; shift; shift;;
+    --lightcurve-min-snr) LIGHTCURVE_MIN_SNR="${2:-}"; shift; shift;;
+    --lightcurve-dataset-type) LIGHTCURVE_DATASET_TYPE="${2:-}"; shift; shift;;
+    --lightcurve-band) LIGHTCURVE_BAND="${2:-}"; shift; shift;;
+    --lightcurve-name) LIGHTCURVE_NAME="${2:-}"; shift; shift;;
+    --lightcurve-output-dir) LIGHTCURVE_OUTPUT_DIR="${2:-}"; shift; shift;;
   -h|--help)         usage;;
   *)
     if [[ -n "$1" ]]; then
@@ -231,6 +278,33 @@ if [[ -z "${REPO:-}" ]]; then
   echo "ERROR: REPO is not set (check your .env)"; exit 2;
 fi
 
+# Forced photometry validation
+if [[ "$FORCED_PHOT" == "true" ]]; then
+  case "$FORCED_PHOT_IMAGE_TYPE" in
+    visit|diffim|both) ;;
+    *)
+      echo "ERROR: --forced-phot-image-type must be visit, diffim, or both"; exit 2;
+      ;;
+  esac
+  if [[ -n "$FORCED_PHOT_COORDS_FILE" && ! -f "$FORCED_PHOT_COORDS_FILE" ]]; then
+    echo "ERROR: Forced phot coords file not found: $FORCED_PHOT_COORDS_FILE"; exit 2;
+  fi
+  if [[ -z "$FORCED_PHOT_COORDS_FILE" ]]; then
+    [[ -z "$FORCED_PHOT_RA" ]] && FORCED_PHOT_RA="$RA"
+    [[ -z "$FORCED_PHOT_DEC" ]] && FORCED_PHOT_DEC="$DEC"
+    if [[ -z "$FORCED_PHOT_RA" || -z "$FORCED_PHOT_DEC" ]]; then
+      echo "ERROR: --forced-phot requires RA/Dec (use --forced-phot-ra/--forced-phot-dec or --ra/--dec)"; exit 2;
+    fi
+  fi
+fi
+
+# Lightcurve validation (requires target coordinates)
+if [[ "$LIGHTCURVE" == "true" || "$DIA_LIGHTCURVE_TASK" == "true" ]]; then
+  if [[ -z "$RA" || -z "$DEC" ]]; then
+    echo "ERROR: Lightcurve options require --ra and --dec for target coordinates"; exit 2;
+  fi
+fi
+
 ########################################
 # Setup logging and RUN_ID
 ########################################
@@ -282,6 +356,7 @@ ensure_butler_available() {
       if command -v setup >/dev/null 2>&1; then
         setup lsst_distrib >/dev/null 2>&1 || true
         setup obs_nickel >/dev/null 2>&1 || true
+        setup obs_nickel_data >/dev/null 2>&1 || true
       fi
       if command -v butler >/dev/null 2>&1; then
         return 0
@@ -594,6 +669,7 @@ if [[ -n "$RA" && -n "$DEC" ]] && [[ -z "$TRACT" ]]; then
   if [[ -n "${STACK_DIR:-}" && -f "${STACK_DIR}/loadLSST.bash" ]]; then
     source "${STACK_DIR}/loadLSST.bash" >/dev/null 2>&1
     setup lsst_distrib >/dev/null 2>&1
+    setup obs_nickel_data >/dev/null 2>&1 || true
   fi
 
   # Use LSST_CONDA_ENV_NAME if set, otherwise fall back to common version
@@ -823,14 +899,185 @@ for BAND in "${BAND_ARRAY[@]}"; do
     if [[ -n "$BAD_SUB_THRESH" ]]; then
       DIA_ARGS+=(--bad-sub-threshold "$BAD_SUB_THRESH")
     fi
+    if [[ "$DIA_ANALYSIS" == "true" ]]; then
+      DIA_ARGS+=(--analysis)
+    fi
     if ! run_or_dry ./scripts/pipeline/40_diff_imaging.sh "${DIA_ARGS[@]}"; then
       log "[WARN] DIA failed for night $night band $BAND"
       FAILED_DIA+=("${night}/${BAND}")
       EXIT_CODE=1
       [[ "$CONTINUE_ON_ERROR" == "true" ]] || exit 2
     fi
+
+    if [[ "$FORCED_PHOT" == "true" ]]; then
+      FP_ARGS=(--night "$night" --image-type "$FORCED_PHOT_IMAGE_TYPE" --band "$BAND")
+      if [[ -n "$FORCED_PHOT_COORDS_FILE" ]]; then
+        FP_ARGS+=(--coords-file "$FORCED_PHOT_COORDS_FILE")
+      else
+        FP_ARGS+=(--ra "$FORCED_PHOT_RA" --dec "$FORCED_PHOT_DEC")
+      fi
+
+      if ! run_or_dry ./scripts/pipeline/46_forced_photometry_radec.sh "${FP_ARGS[@]}"; then
+        log "[WARN] Forced photometry failed for night $night band $BAND"
+        FAILED_FORCED_PHOT+=("${night}/${BAND}")
+        EXIT_CODE=1
+        [[ "$CONTINUE_ON_ERROR" == "true" ]] || exit 2
+      fi
+    fi
   done
 done
+
+########################################
+# Stage 5: DIA lightcurve task (PipelineTask)
+########################################
+DIA_LIGHTCURVE_OUTPUT_COLLECTION=""
+
+if [[ "$DIA_LIGHTCURVE_TASK" == "true" ]]; then
+  log_section "DIA Lightcurve Task"
+
+  if ! ensure_butler_available; then
+    log_warn "butler command not available; skipping DIA lightcurve task"
+  elif ! command -v pipetask >/dev/null 2>&1; then
+    log_warn "pipetask command not available; skipping DIA lightcurve task"
+  else
+    PROCESSCCD_COLLECTIONS=()
+    DIFF_COLLECTIONS=()
+
+    for night in "${SCIENCE_NIGHTS[@]}"; do
+      PROCESSCCD_COLL="$(butler query-collections "$REPO" "Nickel/runs/${night}/processCcd/*/run" 2>/dev/null | \
+        tail -n +3 | awk '{print $1}' | sort | tail -n 1)"
+      if [[ -n "$PROCESSCCD_COLL" ]]; then
+        PROCESSCCD_COLLECTIONS+=("$PROCESSCCD_COLL")
+      else
+        log_warn "No processCcd collections found for night $night"
+      fi
+
+      while read -r diff_coll; do
+        [[ -n "$diff_coll" ]] && DIFF_COLLECTIONS+=("$diff_coll")
+      done < <(butler query-collections "$REPO" "Nickel/runs/${night}/diff/*/run" 2>/dev/null | \
+        tail -n +3 | awk '{print $1}')
+    done
+
+    PROCESSCCD_COLLECTIONS_CSV="$(printf "%s\n" "${PROCESSCCD_COLLECTIONS[@]}" | sort -u | paste -sd, -)"
+    DIFF_COLLECTIONS_CSV="$(printf "%s\n" "${DIFF_COLLECTIONS[@]}" | sort -r | uniq | paste -sd, -)"
+
+    if [[ -z "$PROCESSCCD_COLLECTIONS_CSV" || -z "$DIFF_COLLECTIONS_CSV" ]]; then
+      log_warn "Missing input collections for DIA lightcurve task; skipping"
+    else
+      INPUT_COLLECTIONS="${PROCESSCCD_COLLECTIONS_CSV},${DIFF_COLLECTIONS_CSV}"
+      DIA_LIGHTCURVE_OUTPUT_COLLECTION="Nickel/runs/diaLightcurve/${RUN_ID}"
+      DIA_LIGHTCURVE_OUTPUT_RUN="${DIA_LIGHTCURVE_OUTPUT_COLLECTION}/run"
+
+      LC_LABEL="$LIGHTCURVE_NAME"
+      if [[ -z "$LC_LABEL" ]]; then
+        if [[ -n "$OBJECT_FILTER" ]]; then
+          LC_LABEL="$OBJECT_FILTER"
+        else
+          LC_LABEL="RA=${RA}, Dec=${DEC}"
+        fi
+      fi
+
+      DATA_QUERY="instrument='Nickel'"
+      if [[ -n "$LIGHTCURVE_BAND" ]]; then
+        DATA_QUERY="${DATA_QUERY} AND band='${LIGHTCURVE_BAND}'"
+      fi
+
+      PIPETASK_ARGS=(
+        pipetask run
+        --butler-config "$REPO"
+        --input "$INPUT_COLLECTIONS"
+        --output "$DIA_LIGHTCURVE_OUTPUT_COLLECTION"
+        --output-run "$DIA_LIGHTCURVE_OUTPUT_RUN"
+        --register-dataset-types
+        --pipeline "$OBS_NICKEL/pipelines/DIA.yaml#dia-lightcurve"
+        --data-query "$DATA_QUERY"
+        -c "plotDiaLightcurve:ra=$RA"
+        -c "plotDiaLightcurve:dec=$DEC"
+        -c "plotDiaLightcurve:radiusArcsec=$LIGHTCURVE_RADIUS"
+        -c "plotDiaLightcurve:minSnr=$LIGHTCURVE_MIN_SNR"
+      )
+      [[ -n "$LC_LABEL" ]] && PIPETASK_ARGS+=(-c "plotDiaLightcurve:targetName=${LC_LABEL}")
+
+      if ! run_or_dry "${PIPETASK_ARGS[@]}"; then
+        log_warn "DIA lightcurve task failed"
+        DIA_LIGHTCURVE_OUTPUT_COLLECTION=""
+      else
+        log_info "DIA lightcurve outputs: $DIA_LIGHTCURVE_OUTPUT_COLLECTION"
+      fi
+    fi
+  fi
+fi
+
+########################################
+# Stage 6: Lightcurve analysis (CLI)
+########################################
+LIGHTCURVE_OUTPUT=""
+LIGHTCURVE_PLOT=""
+
+if [[ "$LIGHTCURVE" == "true" ]]; then
+  log_section "Lightcurve Extraction"
+
+  if ! ensure_butler_available; then
+    log_warn "butler command not available; skipping lightcurve extraction"
+  else
+    LC_DIR="${LIGHTCURVE_OUTPUT_DIR:-$RUN_LOG_DIR/lightcurve}"
+    mkdir -p "$LC_DIR"
+
+    LC_LABEL="$LIGHTCURVE_NAME"
+    if [[ -z "$LC_LABEL" ]]; then
+      if [[ -n "$OBJECT_FILTER" ]]; then
+        LC_LABEL="$OBJECT_FILTER"
+      else
+        LC_LABEL="ra${RA}_dec${DEC}"
+      fi
+    fi
+    LC_LABEL_SAFE="$(echo "$LC_LABEL" | tr ' /' '_' | tr -cd '[:alnum:]_.-')"
+    LIGHTCURVE_OUTPUT="$LC_DIR/${LC_LABEL_SAFE}_lightcurve.csv"
+
+    DIA_COLLECTIONS=()
+    for night in "${SCIENCE_NIGHTS[@]}"; do
+      while read -r coll; do
+        [[ -n "$coll" ]] && DIA_COLLECTIONS+=("$coll")
+      done < <(butler query-collections "$REPO" "Nickel/runs/${night}/diff/*/run" 2>/dev/null | \
+        tail -n +3 | awk '{print $1}')
+    done
+
+    if [[ ${#DIA_COLLECTIONS[@]} -eq 0 ]]; then
+      log_warn "No DIA collections found; skipping lightcurve extraction"
+    else
+      DIA_COLLECTIONS_CSV="$(printf "%s\n" "${DIA_COLLECTIONS[@]}" | sort -u | paste -sd, -)"
+
+      LC_CMD="$(command -v obsn-dia-lightcurve || true)"
+      if [[ -z "$LC_CMD" ]]; then
+        log_warn "obsn-dia-lightcurve not found; skipping lightcurve extraction"
+      else
+        LC_ARGS=(
+          --repo "$REPO"
+          --collection "$DIA_COLLECTIONS_CSV"
+          --ra "$RA"
+          --dec "$DEC"
+          --radius "$LIGHTCURVE_RADIUS"
+          --min-snr "$LIGHTCURVE_MIN_SNR"
+          --dataset-type "$LIGHTCURVE_DATASET_TYPE"
+          --output "$LIGHTCURVE_OUTPUT"
+          --plot
+          --name "$LC_LABEL"
+        )
+        [[ -n "$LIGHTCURVE_BAND" ]] && LC_ARGS+=(--band "$LIGHTCURVE_BAND")
+
+        if ! run_or_dry "$LC_CMD" "${LC_ARGS[@]}"; then
+          log_warn "Lightcurve extraction failed (may be no detections)"
+        fi
+
+        if [[ -f "$LIGHTCURVE_OUTPUT" ]]; then
+          LIGHTCURVE_PLOT="${LIGHTCURVE_OUTPUT%.csv}.png"
+          log_info "Lightcurve saved: $LIGHTCURVE_OUTPUT"
+          [[ -f "$LIGHTCURVE_PLOT" ]] && log_info "Lightcurve plot: $LIGHTCURVE_PLOT"
+        fi
+      fi
+    fi
+  fi
+fi
 
 log_section "Pipeline Complete"
 log_info "All bands complete"
@@ -850,6 +1097,10 @@ $(if [[ ${#FAILED_CALIBS[@]} -gt 0 ]]; then echo "  Failed calibs: ${FAILED_CALI
 $(if [[ ${#FAILED_SCIENCE[@]} -gt 0 ]]; then echo "  Failed science: ${FAILED_SCIENCE[*]}"; else echo "  All science succeeded"; fi)
 $(if [[ ${#FAILED_TEMPLATE[@]} -gt 0 ]]; then echo "  Failed templates: ${FAILED_TEMPLATE[*]}"; else echo "  All templates succeeded"; fi)
 $(if [[ ${#FAILED_DIA[@]} -gt 0 ]]; then echo "  Failed DIA: ${FAILED_DIA[*]}"; else echo "  All DIA succeeded"; fi)
+$(if [[ "$DIA_ANALYSIS" == "true" ]]; then echo "  DIA analysis: enabled"; else echo "  DIA analysis: disabled"; fi)
+$(if [[ "$DIA_LIGHTCURVE_TASK" == "true" ]]; then if [[ -n "$DIA_LIGHTCURVE_OUTPUT_COLLECTION" ]]; then echo "  DIA lightcurve task: $DIA_LIGHTCURVE_OUTPUT_COLLECTION"; else echo "  DIA lightcurve task: not generated"; fi; else echo "  DIA lightcurve task: skipped"; fi)
+$(if [[ ${#FAILED_FORCED_PHOT[@]} -gt 0 ]]; then echo "  Failed forced phot: ${FAILED_FORCED_PHOT[*]}"; elif [[ "$FORCED_PHOT" == "true" ]]; then echo "  Forced phot completed"; else echo "  Forced phot skipped"; fi)
+$(if [[ "$LIGHTCURVE" == "true" ]]; then if [[ -n "$LIGHTCURVE_OUTPUT" && -f "$LIGHTCURVE_OUTPUT" ]]; then echo "  Lightcurve: $LIGHTCURVE_OUTPUT"; else echo "  Lightcurve: not generated"; fi; else echo "  Lightcurve: skipped"; fi)
 
 Exit code: $EXIT_CODE
 EOF
@@ -863,6 +1114,7 @@ if [[ "$CONTINUE_ON_ERROR" == "true" ]]; then
   [[ ${#FAILED_SCIENCE[@]} -gt 0 ]] && log_warn "Failed science: ${FAILED_SCIENCE[*]}"
   [[ ${#FAILED_TEMPLATE[@]} -gt 0 ]] && log_warn "Failed template builds: ${FAILED_TEMPLATE[*]}"
   [[ ${#FAILED_DIA[@]} -gt 0 ]] && log_warn "Failed DIA: ${FAILED_DIA[*]}"
+  [[ ${#FAILED_FORCED_PHOT[@]} -gt 0 ]] && log_warn "Failed forced phot: ${FAILED_FORCED_PHOT[*]}"
 fi
 
 # Print final log summary

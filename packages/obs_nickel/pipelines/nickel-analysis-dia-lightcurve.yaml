@@ -1,0 +1,19 @@
+# DIA lightcurve extraction and plotting for Nickel.
+
+description: |
+  Build a visit table and generate DIA lightcurve tables/plots for a target.
+  Configure plotDiaLightcurve.ra/dec at runtime.
+
+tasks:
+  makeDiaVisitTable:
+    class: lsst.pipe.tasks.postprocess.MakeVisitTableTask
+    config:
+      connections.visitSummaries: preliminary_visit_summary
+      connections.outputCatalog: preliminary_visit_table
+
+  plotDiaLightcurve:
+    class: lsst.obs.nickel.tasks.DiaLightcurvePlotTask
+    config:
+      connections.diaSources: dia_source_unfiltered
+      connections.visitTable: preliminary_visit_table
+      connections.outputName: dia_lightcurve

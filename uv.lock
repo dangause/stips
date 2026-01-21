@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = ">=3.12"
 resolution-markers = [
     "python_full_version >= '3.14'",
@@ -11,6 +11,7 @@ members = [
     "lick-searchable-archive",
     "obs-nickel",
     "obs-nickel-colorterms",
+    "obs-nickel-data",
     "obs-nickel-data-tools",
     "obs-nickel-defects",
     "obs-nickel-refcats",
@@ -1947,6 +1948,11 @@ requires-dist = [
 name = "obs-nickel-colorterms"
 version = "0.1.0"
 source = { editable = "packages/colorterms" }
+
+[[package]]
+name = "obs-nickel-data"
+version = "0.1.0"
+source = { editable = "packages/obs_nickel_data" }
 
 [[package]]
 name = "obs-nickel-data-tools"

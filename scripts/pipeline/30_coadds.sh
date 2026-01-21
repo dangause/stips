@@ -134,6 +134,7 @@ cd "$STACK_DIR"
 source loadLSST.zsh
 setup lsst_distrib
 setup obs_nickel || true
+setup obs_nickel_data || true
 butler register-instrument "$REPO" "$INSTRUMENT" >/dev/null 2>&1 || true
 
 # Restore variables

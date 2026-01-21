@@ -12,6 +12,8 @@ imports:
   - location: $DRP_PIPE_DIR/pipelines/_ingredients/analysis-dia.yaml
   - location: $OBS_NICKEL/pipelines/nickel-visit-quality-detector.yaml
   - location: $OBS_NICKEL/pipelines/nickel-analysis-visit-single-visit.yaml
+  - location: $OBS_NICKEL/pipelines/nickel-analysis-dia-detector.yaml
+  - location: $OBS_NICKEL/pipelines/nickel-analysis-dia-lightcurve.yaml
 
 parameters:
   release_id: 0
@@ -374,10 +376,23 @@ subsets:
       - rewarpTemplate
       - subtractImages
       - detectAndMeasureDiaSource
+      - makeDiaSpatialMetrics
+      - analyzeImageDifferenceMetrics
+      - analyzeDiaSourceDetectionMetrics
+      - analyzeDiaSpatialPlots
+      - analyzeDiaKernelVisitPlot
+      - analyzeDiaSources
     description: |
       Difference imaging for transient/variable detection.
       Requires template_coadd in input collections.
       Run after single-visit processing (step1a/step1b) completes.
+
+  difference-imaging-lightcurve:
+    subset:
+      - makeDiaVisitTable
+      - plotDiaLightcurve
+    description: |
+      Generate DIA lightcurve tables/plots for a configured target.
 
 
 

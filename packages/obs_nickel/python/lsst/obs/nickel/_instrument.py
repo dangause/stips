@@ -18,6 +18,8 @@ class Nickel(Instrument):
     """Instrument class for the Nickel telescope at Lick Observatory."""
 
     name = "Nickel"
+    policyName = "Nickel"
+    obsDataPackage = "obs_nickel_data"
     filterDefinitions = NICKEL_FILTER_DEFINITIONS
     translatorClass = NickelTranslator
 

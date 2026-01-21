@@ -65,7 +65,6 @@ RAW_RUN="Nickel/raw/${NIGHT}/${TS}"
 CP_RUN_BIAS="Nickel/cp/${NIGHT}/bias/${TS}"
 CP_RUN_FLAT="Nickel/cp/${NIGHT}/flat/${TS}"
 CURATED_RUN="Nickel/calib/curated/${TS}"
-DEFECTS_RUN="Nickel/calib/defects/${TS}"
 CALIB_OUT="Nickel/calib/${NIGHT}"              # nightly CALIBRATION collection
 CALIB_CHAIN="Nickel/calib/current"             # unified chain used by science
 
@@ -74,7 +73,7 @@ echo "=== Nickel pipeline starting @ $TS (night=$NIGHT) ==="
 ########## LSST ENV ##########
 cd "$STACK_DIR"
 source loadLSST.zsh
-setup lsst_distrib; setup obs_nickel; setup testdata_nickel
+setup lsst_distrib; setup obs_nickel; setup obs_nickel_data; setup testdata_nickel
 
 ########## REPO SETUP ##########
 if [ ! -f "$REPO/butler.yaml" ]; then
@@ -115,27 +114,6 @@ pipetask run \
   -c cpFlatIsr:doOverscan=True \
   -d "instrument='Nickel' AND exposure.observation_type='flat'" \
   --register-dataset-types
-
-########## DEFECTS (from flats) ##########
-echo "[defects] Building from $CP_RUN_FLAT -> $DEFECTS_RUN"
-python "$OBS_NICKEL"/scripts/defects/make_defects_from_flats.py \
-  --repo "$REPO" \
-  --collection "$CP_RUN_FLAT" \
-  --invert-manual-y \
-  --manual-box 255 0 2 1024 \
-  --manual-box 783 0 2 977 \
-  --manual-box 1000 0 25 1024 \
-  --manual-box 45 120 6 9 \
-  --manual-box 980 200 12 8 \
-  --register \
-  --ingest \
-  --defects-run "$DEFECTS_RUN" \
-  --plot
-echo "DEFECTS_RUN = $DEFECTS_RUN"
-
-# Point the defects/current chain at the latest defects run
-butler collection-chain "$REPO" Nickel/calib/defects/current "$DEFECTS_RUN" --mode redefine
-butler query-collections "$REPO" | grep -E 'Nickel/calib/defects/current|Nickel/calib/curated' || true
 
 ########## REF CATS (concise & idempotent) ##########
 cd "$REFCAT_REPO"
@@ -245,9 +223,10 @@ else
 fi
 
 ########## BUILD UNIFIED CALIB CHAIN ##########
-echo "[calib-chain] ${CALIB_CHAIN} = [$CALIB_OUT, Nickel/calib/defects/current, Nickel/calib/curated]"
+# Defects are now included in curated calibrations via obs_nickel_data
+echo "[calib-chain] ${CALIB_CHAIN} = [$CALIB_OUT, Nickel/calib/curated]"
 butler collection-chain "$REPO" "$CALIB_CHAIN" \
-  "$CALIB_OUT" Nickel/calib/defects/current Nickel/calib/curated \
+  "$CALIB_OUT" Nickel/calib/curated \
   --mode redefine
 
 ########## SCIENCE PROCESSING ##########
@@ -309,7 +288,7 @@ fi
 # -------------------------------------------------
 
 # sanity
-butler query-collections "$REPO" | grep -E 'Nickel/calib/(current|defects/current)|^refcats$' || true
+butler query-collections "$REPO" | grep -E 'Nickel/calib/current|^refcats$' || true
 
 echo "[science] ProcessCcd -> $PROCESS_CCD_RUN"
 pipetask run \
@@ -361,7 +340,6 @@ echo "Raw run:     $RAW_RUN"
 echo "Curated run: $CURATED_RUN"
 echo "CP Bias:     $CP_RUN_BIAS"
 echo "CP Flat:     $CP_RUN_FLAT"
-echo "Defects run: $DEFECTS_RUN"
 echo "Night calib: $CALIB_OUT"
 echo "Calib chain: $CALIB_CHAIN"
 echo "Science run: $PROCESS_CCD_RUN"
