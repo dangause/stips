@@ -23,7 +23,7 @@ export REPO_ROOT="$${REPO_ROOT:-$${PWD}}"; \
 export OBS_NICKEL="$${OBS_NICKEL:-$${REPO_ROOT}/packages/obs_nickel}"; \
 export TESTDATA_NICKEL_DIR="$${TESTDATA_NICKEL_DIR:-$${REPO_ROOT}/packages/testdata}"; \
 export REPO="$${REPO:-}"; \
-export LSST_CONDA_ENV_NAME="$${LSST_CONDA_ENV_NAME:-}"
+export LSST_CONDA_ENV_NAME="$${LSST_CONDA_ENV_NAME:-}";
 endef
 
 define envsource
@@ -146,7 +146,7 @@ refcat-cones: ## Generate cones.csv + htm7_list.txt via nickel-refcats (pass ARG
 
 .PHONY: declare-eups
 declare-eups: ## Declare obs_nickel, obs_nickel_data, and testdata_nickel in the current stack (uses STACK_DIR and env files)
-	$(SHELL) -lc '$(envsource); \
+	$(SHELL) -lc '$(envsource) \
 	  if [ -f "$${STACK_DIR}/loadLSST.zsh" ]; then source "$${STACK_DIR}/loadLSST.zsh"; \
 	  elif [ -f "$${STACK_DIR}/loadLSST.bash" ]; then source "$${STACK_DIR}/loadLSST.bash"; \
 	  else echo "STACK_DIR loader not found (loadLSST)"; exit 1; fi; \
