@@ -23,7 +23,7 @@ export REPO_ROOT="$${REPO_ROOT:-$${PWD}}"; \
 export OBS_NICKEL="$${OBS_NICKEL:-$${REPO_ROOT}/packages/obs_nickel}"; \
 export TESTDATA_NICKEL_DIR="$${TESTDATA_NICKEL_DIR:-$${REPO_ROOT}/packages/testdata}"; \
 export REPO="$${REPO:-}"; \
-export LSST_CONDA_ENV_NAME="$${LSST_CONDA_ENV_NAME:-}";
+export LSST_CONDA_ENV_NAME="$${LSST_CONDA_ENV_NAME:-}"
 endef
 
 define envsource
@@ -34,25 +34,19 @@ define setup_stack
 $(load_envs); \
 if [ -f "$${STACK_DIR}/loadLSST.zsh" ]; then \
 	source "$${STACK_DIR}/loadLSST.zsh"; \
-	setup lsst_distrib; \
-	if [[ -d "$${OBS_NICKEL}/ups" ]]; then eups declare -r "$${OBS_NICKEL}" obs_nickel -t current 2>/dev/null || true; fi; \
-	setup obs_nickel; \
-	if [[ -d "$${REPO_ROOT}/packages/obs_nickel_data/ups" ]]; then eups declare -r "$${REPO_ROOT}/packages/obs_nickel_data" obs_nickel_data -t current 2>/dev/null || true; fi; \
-	setup obs_nickel_data; \
-	if [[ -d "$${TESTDATA_NICKEL_DIR}/ups" ]]; then eups declare -r "$${TESTDATA_NICKEL_DIR}" testdata_nickel -t current 2>/dev/null || true; fi; \
-	setup testdata_nickel; \
 elif [ -f "$${STACK_DIR}/loadLSST.bash" ]; then \
 	source "$${STACK_DIR}/loadLSST.bash"; \
-	setup lsst_distrib; \
-	if [[ -d "$${OBS_NICKEL}/ups" ]]; then eups declare -r "$${OBS_NICKEL}" obs_nickel -t current 2>/dev/null || true; fi; \
-	setup obs_nickel; \
-	if [[ -d "$${REPO_ROOT}/packages/obs_nickel_data/ups" ]]; then eups declare -r "$${REPO_ROOT}/packages/obs_nickel_data" obs_nickel_data -t current 2>/dev/null || true; fi; \
-	setup obs_nickel_data; \
-	if [[ -d "$${TESTDATA_NICKEL_DIR}/ups" ]]; then eups declare -r "$${TESTDATA_NICKEL_DIR}" testdata_nickel -t current 2>/dev/null || true; fi; \
-	setup testdata_nickel; \
 else \
-	echo "Warning: LSST stack not found at $${STACK_DIR}"; \
-fi;
+	echo "Error: LSST stack not found at $${STACK_DIR}" >&2; exit 1; \
+fi; \
+setup lsst_distrib; \
+_setup_local() { [[ -d "$$1/ups" ]] && { eups declare -r "$$1" "$$2" -t current 2>/dev/null || true; setup "$$2" 2>/dev/null || setup -r "$$1" "$$2"; }; }; \
+OBS_NICKEL_LOCAL="$${REPO_ROOT}/packages/obs_nickel"; \
+OBS_NICKEL_DATA_LOCAL="$${REPO_ROOT}/packages/obs_nickel_data"; \
+_setup_local "$$OBS_NICKEL_LOCAL" obs_nickel; \
+_setup_local "$$OBS_NICKEL_DATA_LOCAL" obs_nickel_data; \
+_setup_local "$${TESTDATA_NICKEL_DIR}" testdata_nickel; \
+export PYTHONPATH="$${OBS_NICKEL_LOCAL}/python:$${OBS_NICKEL_DATA_LOCAL}/python:$${PYTHONPATH:-}";
 endef
 
 .PHONY: setup-dev

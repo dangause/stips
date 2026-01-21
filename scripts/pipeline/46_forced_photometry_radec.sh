@@ -23,6 +23,7 @@
 #   --coords-file FILE    CSV/FITS file with ra,dec columns (alternative to --ra/--dec)
 #   --band BAND           Filter band to process (optional, default: all)
 #   --image-type TYPE     Image type: 'visit', 'diffim', or 'both' (default: both)
+#   --run-id ID           Override output run identifier (optional)
 #   --dry-run             Show what would be run without executing
 #
 # Examples:
@@ -91,6 +92,7 @@ BAND=""
 IMAGE_TYPE="both"
 DRY_RUN=false
 COORDS_FILE=""
+RUN_ID_OVERRIDE=""
 declare -a RA_LIST
 declare -a DEC_LIST
 
@@ -118,6 +120,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --image-type)
             IMAGE_TYPE="$2"
+            shift 2
+            ;;
+        --run-id)
+            RUN_ID_OVERRIDE="$2"
             shift 2
             ;;
         --dry-run)
@@ -172,7 +178,7 @@ if [[ -z "${REPO:-}" ]]; then
     exit 1
 fi
 
-RUN_ID="forced_phot_radec_${NIGHT}_$(date +%Y%m%d_%H%M%S)_$$"
+RUN_ID="${RUN_ID_OVERRIDE:-forced_phot_radec_${NIGHT}_$(date +%Y%m%d_%H%M%S)_$$}"
 LOG_DIR="$REPO_ROOT/logs/$RUN_ID"
 mkdir -p "$LOG_DIR"
 

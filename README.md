@@ -42,11 +42,16 @@ See detailed workflows below.
 - Optimized pipeline configurations for Nickel data
 
 ### Complete Processing Pipelines
-- **Calibration pipeline**: bias, flats, defect masks
+- **Calibration pipeline**: bias, flats, curated defect masks
 - **Single-frame DRP**: ISR, source detection, WCS, photometry
 - **Coadd generation**: deep template building
 - **Difference imaging (DIA)**: transient/variable detection
 - **Batch processing**: multi-night orchestration
+
+### Curated Calibrations (`obs_nickel_data`)
+- Pre-built defect masks in LSST `obs_*_data` format
+- Automatically loaded via `butler write-curated-calibrations`
+- Follows the same pattern as `obs_lsst_data` for consistency
 
 ### Data Access & Analysis Tools
 - **Archive exploration & download** (`data_tools`)
@@ -66,8 +71,9 @@ See detailed workflows below.
 nickel_processing_suite/
 ├── packages/
 │   ├── obs_nickel/           # LSST instrument package (camera, configs, pipelines)
+│   ├── obs_nickel_data/      # Curated calibrations (defects, etc.) for obs_nickel
 │   ├── data_tools/           # Data access, EDA, archive download, PS1 templates, skymap, DIA tools
-│   ├── defects/              # Defect mask tooling and generated masks
+│   ├── defects/              # Defect mask tooling and ECSV export utilities
 │   ├── refcats/              # Reference catalog scripts and helpers
 │   ├── testdata/             # Test fixtures (small FITS files)
 │   ├── tuning/               # Pipeline parameter optimization
@@ -197,6 +203,7 @@ make test
 # Test CLI tools (no LSST stack required)
 uv run obsn-archive-fetch-night --help
 uv run obsn-defects-from-flats --help
+uv run obsn-defects-to-ecsv --help
 ```
 
 ---
@@ -421,10 +428,9 @@ make calibs NIGHT=20210219
 
 This script:
 - Ingests raw data for the night
-- Writes curated calibrations (camera geometry)
+- Writes curated calibrations (camera geometry + defects from `obs_nickel_data`)
 - Constructs combined bias frames
 - Constructs combined flat fields per filter
-- Generates defect masks from flats
 - Updates the `Nickel/calib/current` chain
 
 **Run this for each new night** before science processing.
@@ -525,6 +531,95 @@ Defined in [packages/obs_nickel/python/lsst/obs/nickel/nickelFilters.py](package
 | R              | r    | Cousins        | ~640 nm   |
 | I              | i    | Cousins        | ~790 nm   |
 | clear          | -    | -              | -         |
+
+---
+
+## Curated Calibrations
+
+### Overview
+
+The `obs_nickel_data` package provides pre-built curated calibrations (currently defect masks) that are automatically loaded during pipeline processing. This follows the same pattern as `obs_lsst_data` for the Rubin Observatory.
+
+### How It Works
+
+1. **Automatic discovery**: The `Nickel` instrument class has `obsDataPackage = "obs_nickel_data"` configured
+2. **Butler integration**: When you run `butler write-curated-calibrations`, it automatically finds and ingests calibrations from `obs_nickel_data`
+3. **No on-the-fly generation**: Defects are pre-computed and stored, reducing pipeline runtime
+
+### Directory Structure
+
+```
+obs_nickel_data/
+├── Nickel/
+│   └── defects/
+│       └── ccd0/
+│           └── 19700101T000000.ecsv  # Defects valid from epoch (all-time)
+├── python/
+│   └── lsst/obs/nickel_data/
+│       └── __init__.py
+├── ups/
+│   └── obs_nickel_data.table
+└── pyproject.toml
+```
+
+### ECSV Format
+
+Defect files use ECSV 0.9 format with FITS-compatible metadata:
+
+```
+# %ECSV 0.9
+# ---
+# datatype:
+# - name: x0
+#   unit: pix
+#   datatype: int32
+# - name: y0
+#   ...
+# meta: !!omap
+# - OBSTYPE: defects
+# - INSTRUME: Nickel
+# - DETECTOR: 0
+# - CALIBDATE: '1970-01-01T00:00:00'
+# - DEFECTS_SCHEMA: Simple
+# - DEFECTS_SCHEMA_VERSION: 1
+# schema: astropy-2.0
+x0 y0 width height
+255 1 2 1024
+...
+```
+
+### Generating New Defects
+
+Use the defects package tools to generate and export defects:
+
+```bash
+# Step 1: Detect defects from flat fields
+obsn-defects-from-flats \
+  --repo $REPO \
+  --collection "Nickel/cp/flat/..." \
+  --csv-out defects.csv \
+  --plot
+
+# Step 2: Export to ECSV for obs_nickel_data
+obsn-defects-to-ecsv \
+  --csv defects.csv \
+  --output packages/obs_nickel_data/Nickel/defects/ccd0/
+
+# Or directly from Butler flats:
+obsn-defects-to-ecsv \
+  --repo $REPO \
+  --collection "Nickel/cp/flat/..." \
+  --output packages/obs_nickel_data/Nickel/defects/ccd0/
+```
+
+### Updating Curated Calibrations
+
+After adding new ECSV files to `obs_nickel_data`:
+
+```bash
+# Re-run curated calibration ingest for your Butler repo
+butler write-curated-calibrations $REPO Nickel $RAW_RUN --collection $CURATED_RUN
+```
 
 ---
 

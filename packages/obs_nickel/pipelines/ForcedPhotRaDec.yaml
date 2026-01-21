@@ -105,10 +105,38 @@ tasks:
         - base_LocalBackground
         - base_PixelFlags
 
+  # ============================================
+  # Lightcurve consolidation tasks
+  # ============================================
+
+  # Build visit table for MJD lookup
+  makeVisitTable:
+    class: lsst.pipe.tasks.postprocess.MakeVisitTableTask
+    config:
+      connections.visitSummaries: preliminary_visit_summary
+      connections.outputCatalog: preliminary_visit_table
+
+  # Lightcurve from visit image forced photometry
+  forcedPhotLightcurve:
+    class: lsst.obs.nickel.tasks.ForcedPhotLightcurveTask
+    config:
+      connections.forcedPhotCatalogs: forced_phot_radec
+      connections.visitTable: preliminary_visit_table
+      connections.outputName: forced_phot_lightcurve
+
+  # Lightcurve from difference image forced photometry
+  forcedPhotDiffimLightcurve:
+    class: lsst.obs.nickel.tasks.ForcedPhotDiffimLightcurveTask
+    config:
+      connections.forcedPhotCatalogs: forced_phot_diffim_radec
+      connections.visitTable: preliminary_visit_table
+      connections.outputName: forced_phot_diffim_lightcurve
+
 # ============================================
 # Pipeline subsets
 # ============================================
 subsets:
+  # Measurement subsets
   visit-image:
     subset:
       - forcedPhotRaDec
@@ -131,3 +159,29 @@ subsets:
     description: |
       Run forced photometry on both visit images and difference images.
       Produces two output catalogs per visit.
+
+  # Lightcurve generation subsets
+  visit-lightcurve:
+    subset:
+      - makeVisitTable
+      - forcedPhotLightcurve
+    description: |
+      Generate lightcurve from existing visit image forced photometry outputs.
+      Requires forced_phot_radec datasets to exist.
+
+  diffim-lightcurve:
+    subset:
+      - makeVisitTable
+      - forcedPhotDiffimLightcurve
+    description: |
+      Generate lightcurve from existing difference image forced photometry outputs.
+      Requires forced_phot_diffim_radec datasets to exist.
+
+  all-lightcurves:
+    subset:
+      - makeVisitTable
+      - forcedPhotLightcurve
+      - forcedPhotDiffimLightcurve
+    description: |
+      Generate lightcurves from both visit and difference image forced photometry.
+      Requires both forced_phot_radec and forced_phot_diffim_radec datasets.

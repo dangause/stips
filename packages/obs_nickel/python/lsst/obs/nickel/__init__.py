@@ -8,26 +8,16 @@ __all__ = [
     "__version__",
 ]
 
+# Import tasks submodule to make it available as lsst.obs.nickel.tasks
+# This is required for LSST's doImport to find task classes like:
+#   lsst.obs.nickel.tasks.DiaLightcurvePlotTask
+# The try/except allows the package to be imported without the full LSST stack
+# for basic operations like metadata translation.
+try:
+    from . import tasks  # noqa: F401
 
-# Lazy imports for tasks that depend on full LSST stack
-def __getattr__(name):
-    if name in (
-        "ForcedPhotRaDecTask",
-        "ForcedPhotRaDecConfig",
-        "ForcedPhotDiffimRaDecTask",
-        "ForcedPhotDiffimRaDecConfig",
-    ):
-        from .tasks import (
-            ForcedPhotDiffimRaDecConfig,
-            ForcedPhotDiffimRaDecTask,
-            ForcedPhotRaDecConfig,
-            ForcedPhotRaDecTask,
-        )
-
-        return {
-            "ForcedPhotRaDecTask": ForcedPhotRaDecTask,
-            "ForcedPhotRaDecConfig": ForcedPhotRaDecConfig,
-            "ForcedPhotDiffimRaDecTask": ForcedPhotDiffimRaDecTask,
-            "ForcedPhotDiffimRaDecConfig": ForcedPhotDiffimRaDecConfig,
-        }[name]
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    __all__.append("tasks")
+except ImportError:
+    # Tasks require full LSST stack (pipe_base, etc.)
+    # Package can still be used for basic instrument/translator functionality
+    pass
