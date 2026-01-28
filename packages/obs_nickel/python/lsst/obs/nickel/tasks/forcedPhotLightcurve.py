@@ -32,14 +32,19 @@ _LOG = logging.getLogger(__name__)
 
 class ForcedPhotLightcurveConnections(
     pipeBase.PipelineTaskConnections,
-    dimensions=("instrument", "band"),
+    dimensions=("instrument",),
     defaultTemplates={
         "inputName": "forced_phot_radec",
         "outputName": "forced_phot_lightcurve",
         "visitTableName": "preliminary_visit_table",
     },
 ):
-    """Connections for ForcedPhotLightcurveTask."""
+    """Connections for ForcedPhotLightcurveTask.
+
+    Note: This task operates at the instrument level, collecting all forced
+    photometry catalogs across visits/bands and consolidating them into a
+    single lightcurve. The band information is extracted from visit metadata.
+    """
 
     forcedPhotCatalogs = ct.Input(
         doc="Forced photometry catalogs from ForcedPhotRaDecTask.",
@@ -59,13 +64,13 @@ class ForcedPhotLightcurveConnections(
         doc="Consolidated lightcurve table from forced photometry.",
         name="{outputName}_table",
         storageClass="ArrowAstropy",
-        dimensions=("instrument", "band"),
+        dimensions=("instrument",),
     )
     lightcurvePlot = ct.Output(
         doc="Lightcurve plot from forced photometry.",
         name="{outputName}_plot",
         storageClass="Plot",
-        dimensions=("instrument", "band"),
+        dimensions=("instrument",),
     )
 
 
@@ -135,14 +140,15 @@ class ForcedPhotLightcurveTask(pipeBase.PipelineTask):
     def runQuantum(self, butlerQC, inputRefs, outputRefs):
         """Execute the task."""
         visit_table = butlerQC.get(inputRefs.visitTable)
-        band = (
-            inputRefs.forcedPhotCatalogs[0].dataId.get("band", "unknown")
-            if inputRefs.forcedPhotCatalogs
-            else "unknown"
-        )
+
+        # Build visit -> band lookup from visit table
+        visit_band = {}
+        if "band" in visit_table.colnames:
+            for row in visit_table:
+                visit_band[row["visit"]] = row.get("band", "unknown")
 
         rows = self._collect_measurements(
-            visit_table, inputRefs.forcedPhotCatalogs, butlerQC, band
+            visit_table, inputRefs.forcedPhotCatalogs, butlerQC, visit_band
         )
 
         if not rows:
@@ -154,7 +160,11 @@ class ForcedPhotLightcurveTask(pipeBase.PipelineTask):
         if "mjd" in table.colnames:
             table.sort("mjd")
 
-        fig = self._make_plot(table, band)
+        # Determine band for plot title (use most common or "multi")
+        bands = list(set(row.get("band", "unknown") for row in rows))
+        band_label = bands[0] if len(bands) == 1 else "multi-band"
+
+        fig = self._make_plot(table, band_label)
         butlerQC.put(
             pipeBase.Struct(lightcurveTable=table, lightcurvePlot=fig),
             outputRefs,
@@ -165,9 +175,26 @@ class ForcedPhotLightcurveTask(pipeBase.PipelineTask):
         visit_table: Table,
         catalog_refs: list,
         butlerQC,
-        band: str,
+        visit_band: dict,
     ) -> list[dict]:
-        """Collect measurements from all forced phot catalogs."""
+        """Collect measurements from all forced phot catalogs.
+
+        Parameters
+        ----------
+        visit_table : `astropy.table.Table`
+            Visit table with MJD information.
+        catalog_refs : `list`
+            List of deferred dataset references for forced phot catalogs.
+        butlerQC : `ButlerQuantumContext`
+            Butler quantum context for loading data.
+        visit_band : `dict`
+            Mapping from visit ID to band name.
+
+        Returns
+        -------
+        rows : `list` of `dict`
+            Collected measurements as list of row dictionaries.
+        """
         # Build visit -> MJD lookup
         visit_mjd = {row["visit"]: row["expMidptMJD"] for row in visit_table}
 
@@ -175,6 +202,7 @@ class ForcedPhotLightcurveTask(pipeBase.PipelineTask):
         for ref in catalog_refs:
             visit_id = ref.dataId.get("visit")
             mjd = visit_mjd.get(visit_id, np.nan)
+            band = visit_band.get(visit_id, "unknown")
 
             # Load catalog
             if hasattr(ref, "get"):
@@ -321,14 +349,19 @@ class ForcedPhotLightcurveTask(pipeBase.PipelineTask):
 
 class ForcedPhotDiffimLightcurveConnections(
     pipeBase.PipelineTaskConnections,
-    dimensions=("instrument", "band"),
+    dimensions=("instrument",),
     defaultTemplates={
         "inputName": "forced_phot_diffim_radec",
         "outputName": "forced_phot_diffim_lightcurve",
         "visitTableName": "preliminary_visit_table",
     },
 ):
-    """Connections for ForcedPhotDiffimLightcurveTask."""
+    """Connections for ForcedPhotDiffimLightcurveTask.
+
+    Note: This task operates at the instrument level, collecting all forced
+    photometry catalogs across visits/bands and consolidating them into a
+    single lightcurve. The band information is extracted from visit metadata.
+    """
 
     forcedPhotCatalogs = ct.Input(
         doc="Forced photometry catalogs from ForcedPhotDiffimRaDecTask.",
@@ -348,13 +381,13 @@ class ForcedPhotDiffimLightcurveConnections(
         doc="Consolidated lightcurve table from difference image forced photometry.",
         name="{outputName}_table",
         storageClass="ArrowAstropy",
-        dimensions=("instrument", "band"),
+        dimensions=("instrument",),
     )
     lightcurvePlot = ct.Output(
         doc="Lightcurve plot from difference image forced photometry.",
         name="{outputName}_plot",
         storageClass="Plot",
-        dimensions=("instrument", "band"),
+        dimensions=("instrument",),
     )
 
 
@@ -408,14 +441,15 @@ class ForcedPhotDiffimLightcurveTask(pipeBase.PipelineTask):
     def runQuantum(self, butlerQC, inputRefs, outputRefs):
         """Execute the task."""
         visit_table = butlerQC.get(inputRefs.visitTable)
-        band = (
-            inputRefs.forcedPhotCatalogs[0].dataId.get("band", "unknown")
-            if inputRefs.forcedPhotCatalogs
-            else "unknown"
-        )
+
+        # Build visit -> band lookup from visit table
+        visit_band = {}
+        if "band" in visit_table.colnames:
+            for row in visit_table:
+                visit_band[row["visit"]] = row.get("band", "unknown")
 
         rows = self._collect_measurements(
-            visit_table, inputRefs.forcedPhotCatalogs, butlerQC, band
+            visit_table, inputRefs.forcedPhotCatalogs, butlerQC, visit_band
         )
 
         if not rows:
@@ -427,7 +461,11 @@ class ForcedPhotDiffimLightcurveTask(pipeBase.PipelineTask):
         if "mjd" in table.colnames:
             table.sort("mjd")
 
-        fig = self._make_plot(table, band)
+        # Determine band for plot title (use most common or "multi")
+        bands = list(set(row.get("band", "unknown") for row in rows))
+        band_label = bands[0] if len(bands) == 1 else "multi-band"
+
+        fig = self._make_plot(table, band_label)
         butlerQC.put(
             pipeBase.Struct(lightcurveTable=table, lightcurvePlot=fig),
             outputRefs,
@@ -438,15 +476,33 @@ class ForcedPhotDiffimLightcurveTask(pipeBase.PipelineTask):
         visit_table: Table,
         catalog_refs: list,
         butlerQC,
-        band: str,
+        visit_band: dict,
     ) -> list[dict]:
-        """Collect measurements from all forced phot diffim catalogs."""
+        """Collect measurements from all forced phot diffim catalogs.
+
+        Parameters
+        ----------
+        visit_table : `astropy.table.Table`
+            Visit table with MJD information.
+        catalog_refs : `list`
+            List of deferred dataset references for forced phot catalogs.
+        butlerQC : `ButlerQuantumContext`
+            Butler quantum context for loading data.
+        visit_band : `dict`
+            Mapping from visit ID to band name.
+
+        Returns
+        -------
+        rows : `list` of `dict`
+            Collected measurements as list of row dictionaries.
+        """
         visit_mjd = {row["visit"]: row["expMidptMJD"] for row in visit_table}
 
         rows = []
         for ref in catalog_refs:
             visit_id = ref.dataId.get("visit")
             mjd = visit_mjd.get(visit_id, np.nan)
+            band = visit_band.get(visit_id, "unknown")
 
             if hasattr(ref, "get"):
                 catalog = ref.get()

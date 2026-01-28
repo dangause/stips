@@ -45,6 +45,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 OBS_NICKEL="$REPO_ROOT/packages/obs_nickel"
 
+# Ensure obs_nickel is in PYTHONPATH for pipetask subprocess
+export PYTHONPATH="${OBS_NICKEL}/python:${REPO_ROOT}/packages/obs_nickel_data/python:${PYTHONPATH:-}"
+
+# Preserve REPO if already set (e.g., from parent script)
+_INHERITED_REPO="${REPO:-}"
+
 ENV_FILE="${ENV_FILE:-.env}"
 EXTRA_ENV="${EXTRA_ENV:-}"
 
@@ -53,6 +59,11 @@ for f in $ENV_FILE $EXTRA_ENV; do
   [ -n "$f" ] && [ -f "$f" ] && source "$f"
 done
 set +a
+
+# Restore inherited REPO if it was set (parent script takes precedence)
+if [[ -n "$_INHERITED_REPO" ]]; then
+    REPO="$_INHERITED_REPO"
+fi
 
 # Check that LSST stack is loaded
 if ! command -v pipetask &>/dev/null; then
@@ -80,8 +91,7 @@ if [[ "$OSTYPE" == "darwin"* ]] && [[ -n "${LD_LIBRARY_PATH:-}" ]]; then
     fi
 fi
 
-# Note: obs_nickel setup is handled by the Makefile's setup_stack
-# If running this script directly (not via make), ensure obs_nickel is set up
+# Note: obs_nickel PYTHONPATH is set above to ensure pipetask can import lsst.obs.nickel
 
 # Source utilities
 source "$SCRIPT_DIR/../utilities/logging.sh"
@@ -268,7 +278,12 @@ run_forced_phot() {
     local input_collections="$3"
     local task_name="$4"
 
-    local OUTPUT_COLLECTION="Nickel/runs/${NIGHT}/forcedPhotRaDec/${RUN_ID}/${output_suffix}"
+    # Include band in output collection path to avoid conflicts when running multiple bands
+    local band_suffix=""
+    if [[ -n "$BAND" ]]; then
+        band_suffix="_${BAND}"
+    fi
+    local OUTPUT_COLLECTION="Nickel/runs/${NIGHT}/forcedPhotRaDec/${RUN_ID}/${output_suffix}${band_suffix}"
     local OUTPUT_RUN="${OUTPUT_COLLECTION}/run"
 
     log_info "Running $pipeline_subset..."

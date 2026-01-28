@@ -120,16 +120,18 @@ tasks:
   forcedPhotLightcurve:
     class: lsst.obs.nickel.tasks.ForcedPhotLightcurveTask
     config:
-      connections.forcedPhotCatalogs: forced_phot_radec
-      connections.visitTable: preliminary_visit_table
+      # Template variables for connection names
+      connections.inputName: forced_phot_radec
+      connections.visitTableName: preliminary_visit_table
       connections.outputName: forced_phot_lightcurve
 
   # Lightcurve from difference image forced photometry
   forcedPhotDiffimLightcurve:
     class: lsst.obs.nickel.tasks.ForcedPhotDiffimLightcurveTask
     config:
-      connections.forcedPhotCatalogs: forced_phot_diffim_radec
-      connections.visitTable: preliminary_visit_table
+      # Template variables for connection names
+      connections.inputName: forced_phot_diffim_radec
+      connections.visitTableName: preliminary_visit_table
       connections.outputName: forced_phot_diffim_lightcurve
 
 # ============================================

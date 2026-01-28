@@ -22,6 +22,9 @@
 # Source logging utilities
 source "$(dirname "$0")/../utilities/logging.sh"
 
+# Preserve REPO if already set from command line (takes precedence over .env)
+_INHERITED_REPO="${REPO:-}"
+
 ENV_FILE="${ENV_FILE:-.env}"
 EXTRA_ENV="${EXTRA_ENV:-}"
 
@@ -34,6 +37,13 @@ if [[ -f "${PWD}/scripts/utilities/repo_paths.sh" ]]; then
   # shellcheck disable=SC1091
   source "${PWD}/scripts/utilities/repo_paths.sh"
 fi
+
+# Restore inherited REPO if it was set (command-line takes precedence over .env)
+if [[ -n "$_INHERITED_REPO" ]]; then
+    REPO="$_INHERITED_REPO"
+fi
+export REPO
+
 export REPO_ROOT="${REPO_ROOT:-${PWD}}"
 export OBS_NICKEL="${OBS_NICKEL:-${REPO_ROOT}/packages/obs_nickel}"
 # Force local packages ahead of stack installs for PipelineTask imports.
@@ -329,8 +339,8 @@ fi
 ########################################
 # Setup logging and RUN_ID
 ########################################
-# Create RUN_ID for entire pipeline execution
-export RUN_ID="dia_multiband_$(date -u +%Y%m%d_%H%M%S)_$$"
+# Create custom RUN_ID for entire pipeline execution (uses helper from logging.sh)
+set_run_id "dia_multiband_$(date -u +%Y%m%d_%H%M%S)_$$"
 
 # Setup logging for orchestrator
 setup_logging "other" "" "" "" "run_dia_multi_band"
