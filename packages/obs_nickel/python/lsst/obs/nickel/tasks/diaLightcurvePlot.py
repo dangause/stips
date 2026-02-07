@@ -264,31 +264,56 @@ class DiaLightcurvePlotTask(pipeBase.PipelineTask):
         return np.nan, np.nan
 
     def _make_plot(self, table, band):
-        fig, ax = plt.subplots(figsize=(10, 6), dpi=300)
-        x = table["mjd"] if "mjd" in table.colnames else np.arange(len(table))
-        if self.config.useMagnitude:
-            y = table["mag"]
-            yerr = table["mag_err"]
-            ax.invert_yaxis()
-            ax.set_ylabel("Apparent Magnitude (mag)")
-        else:
-            y = table["flux"]
-            yerr = table["flux_err"]
-            ax.set_ylabel("Flux")
+        from lsst.obs.nickel.plotting import (
+            FIGURE_SIZE,
+            format_lightcurve_axes,
+            plot_lightcurve_band,
+            publication_style,
+            set_title,
+        )
 
-        ax.errorbar(x, y, yerr=yerr, fmt="o", capsize=3, alpha=0.8)
-        ax.set_xlabel("MJD")
-        ax.grid(True, alpha=0.3, linestyle="--")
+        with publication_style():
+            fig, ax = plt.subplots(figsize=FIGURE_SIZE)
+            x = table["mjd"] if "mjd" in table.colnames else np.arange(len(table))
 
-        if self.config.plotTitle:
-            title = self.config.plotTitle
-        else:
+            if self.config.useMagnitude:
+                plot_lightcurve_band(
+                    ax,
+                    x,
+                    table["mag"],
+                    table["mag_err"],
+                    band,
+                    count=len(table),
+                )
+                format_lightcurve_axes(
+                    ax,
+                    ylabel="Apparent Magnitude (mag)",
+                    invert_y=True,
+                )
+            else:
+                plot_lightcurve_band(
+                    ax,
+                    x,
+                    table["flux"],
+                    table["flux_err"],
+                    band,
+                    count=len(table),
+                )
+                format_lightcurve_axes(
+                    ax,
+                    ylabel="Flux (counts)",
+                    invert_y=False,
+                )
+
             target_label = (
                 self.config.targetName
                 or f"RA={self.config.ra:.6f}, Dec={self.config.dec:.6f}"
             )
-            title = f"{target_label} ({band})"
-        ax.set_title(title)
+            if self.config.plotTitle:
+                ax.set_title(self.config.plotTitle)
+            else:
+                set_title(ax, target_label, subtitle="DIA Photometry", band=band)
 
-        fig.tight_layout()
+            ax.legend(loc="best")
+            fig.tight_layout()
         return fig

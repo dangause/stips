@@ -325,10 +325,6 @@ if [[ "$FORCED_PHOT" == "true" ]]; then
   fi
 fi
 
-if [[ "$FORCED_PHOT_LIGHTCURVE" == "true" && "$FORCED_PHOT" != "true" ]]; then
-  echo "ERROR: --forced-phot-lightcurve requires --forced-phot in this run"; exit 2;
-fi
-
 # Lightcurve validation (requires target coordinates)
 if [[ "$LIGHTCURVE" == "true" || "$DIA_LIGHTCURVE_TASK" == "true" ]]; then
   if [[ -z "$RA" || -z "$DEC" ]]; then
@@ -974,9 +970,24 @@ for BAND in "${BAND_ARRAY[@]}"; do
         FAILED_FORCED_PHOT+=("${night}/${BAND}")
         EXIT_CODE=1
         [[ "$CONTINUE_ON_ERROR" == "true" ]] || exit 2
+      else
+        # Only add collections that actually exist in the Butler
+        # (pipetask may succeed with exit 0 but produce no outputs for some bands)
+        if [[ "$FORCED_PHOT_IMAGE_TYPE" == "visit" || "$FORCED_PHOT_IMAGE_TYPE" == "both" ]]; then
+          _FP_COLL="Nickel/runs/${night}/forcedPhotRaDec/${RUN_ID}/visit_${BAND}"
+          if butler query-collections "$REPO" "$_FP_COLL" >/dev/null 2>&1; then
+            FORCED_PHOT_VISIT_COLLECTIONS+=("$_FP_COLL")
+          fi
+        fi
+        if [[ "$FORCED_PHOT_IMAGE_TYPE" == "diffim" || "$FORCED_PHOT_IMAGE_TYPE" == "both" ]]; then
+          _FP_COLL="Nickel/runs/${night}/forcedPhotRaDec/${RUN_ID}/diffim_${BAND}"
+          if butler query-collections "$REPO" "$_FP_COLL" >/dev/null 2>&1; then
+            FORCED_PHOT_DIFFIM_COLLECTIONS+=("$_FP_COLL")
+          fi
+        fi
       fi
     fi
-done
+  done
 done
 
 ########################################
@@ -996,6 +1007,22 @@ if [[ "$FORCED_PHOT_LIGHTCURVE" == "true" ]]; then
     HAS_VISIT=false
     HAS_DIFFIM=false
 
+    if [[ "$FORCED_PHOT" == "true" ]]; then
+      if [[ ${#FORCED_PHOT_VISIT_COLLECTIONS[@]} -gt 0 ]]; then
+        FORCED_PHOT_COLLECTIONS+=("${FORCED_PHOT_VISIT_COLLECTIONS[@]}")
+        HAS_VISIT=true
+      fi
+      if [[ ${#FORCED_PHOT_DIFFIM_COLLECTIONS[@]} -gt 0 ]]; then
+        FORCED_PHOT_COLLECTIONS+=("${FORCED_PHOT_DIFFIM_COLLECTIONS[@]}")
+        HAS_DIFFIM=true
+      fi
+      if [[ "$HAS_VISIT" == "false" && "$HAS_DIFFIM" == "false" ]]; then
+        log_warn "No forced phot collections recorded from this run"
+      fi
+    else
+      log_info "Forced phot lightcurve requested without --forced-phot; using latest available collections"
+    fi
+
     for night in "${SCIENCE_NIGHTS[@]}"; do
       PROCESSCCD_COLL="$(butler query-collections "$REPO" "Nickel/runs/${night}/processCcd/*/run" 2>/dev/null | \
         tail -n +3 | awk '{print $1}' | sort | tail -n 1)"
@@ -1005,23 +1032,35 @@ if [[ "$FORCED_PHOT_LIGHTCURVE" == "true" ]]; then
         log_warn "No processCcd collections found for night $night"
       fi
 
-      if [[ "$FORCED_PHOT_IMAGE_TYPE" == "visit" || "$FORCED_PHOT_IMAGE_TYPE" == "both" ]]; then
-        VISIT_COLL="Nickel/runs/${night}/forcedPhotRaDec/${RUN_ID}/visit"
-        if butler query-collections "$REPO" "$VISIT_COLL" 2>/dev/null | tail -n +3 | awk '{print $1}' | grep -q .; then
-          FORCED_PHOT_COLLECTIONS+=("$VISIT_COLL")
-          HAS_VISIT=true
-        else
-          log_warn "Forced phot visit collection not found: $VISIT_COLL"
+      if [[ "$FORCED_PHOT" != "true" ]]; then
+        # Discover existing forced phot collections from previous runs.
+        # Use only the latest RUN collection per night to avoid duplicate data.
+        if [[ "$FORCED_PHOT_IMAGE_TYPE" == "visit" || "$FORCED_PHOT_IMAGE_TYPE" == "both" ]]; then
+          _FP_COLL="$(butler query-collections "$REPO" "Nickel/runs/${night}/forcedPhotRaDec/*/visit_*/run" 2>/dev/null | \
+            tail -n +3 | awk '{print $1}' | sort | tail -n 1)"
+          if [[ -z "$_FP_COLL" ]]; then
+            # Fallback: try without band suffix (legacy collections)
+            _FP_COLL="$(butler query-collections "$REPO" "Nickel/runs/${night}/forcedPhotRaDec/*/visit/run" 2>/dev/null | \
+              tail -n +3 | awk '{print $1}' | sort | tail -n 1)"
+          fi
+          if [[ -n "$_FP_COLL" ]]; then
+            FORCED_PHOT_COLLECTIONS+=("$_FP_COLL")
+            HAS_VISIT=true
+          fi
         fi
-      fi
 
-      if [[ "$FORCED_PHOT_IMAGE_TYPE" == "diffim" || "$FORCED_PHOT_IMAGE_TYPE" == "both" ]]; then
-        DIFFIM_COLL="Nickel/runs/${night}/forcedPhotRaDec/${RUN_ID}/diffim"
-        if butler query-collections "$REPO" "$DIFFIM_COLL" 2>/dev/null | tail -n +3 | awk '{print $1}' | grep -q .; then
-          FORCED_PHOT_COLLECTIONS+=("$DIFFIM_COLL")
-          HAS_DIFFIM=true
-        else
-          log_warn "Forced phot diffim collection not found: $DIFFIM_COLL"
+        if [[ "$FORCED_PHOT_IMAGE_TYPE" == "diffim" || "$FORCED_PHOT_IMAGE_TYPE" == "both" ]]; then
+          _FP_COLL="$(butler query-collections "$REPO" "Nickel/runs/${night}/forcedPhotRaDec/*/diffim_*/run" 2>/dev/null | \
+            tail -n +3 | awk '{print $1}' | sort | tail -n 1)"
+          if [[ -z "$_FP_COLL" ]]; then
+            # Fallback: try without band suffix (legacy collections)
+            _FP_COLL="$(butler query-collections "$REPO" "Nickel/runs/${night}/forcedPhotRaDec/*/diffim/run" 2>/dev/null | \
+              tail -n +3 | awk '{print $1}' | sort | tail -n 1)"
+          fi
+          if [[ -n "$_FP_COLL" ]]; then
+            FORCED_PHOT_COLLECTIONS+=("$_FP_COLL")
+            HAS_DIFFIM=true
+          fi
         fi
       fi
     done
@@ -1053,13 +1092,17 @@ if [[ "$FORCED_PHOT_LIGHTCURVE" == "true" ]]; then
       elif [[ "$HAS_VISIT" == "true" ]]; then
         LIGHTCURVE_SUBSET="visit-lightcurve"
       elif [[ "$HAS_DIFFIM" == "true" ]]; then
-        LIGHTCURVE_SUBSET="diffim-lightcurve"
+        # Use the per-band + combined lightcurve subset for multi-band plots
+        LIGHTCURVE_SUBSET="diffim-lightcurve-combined"
       fi
 
       if [[ -z "$LIGHTCURVE_SUBSET" ]]; then
         log_warn "No forced phot collections available for lightcurve task; skipping"
       else
         DATA_QUERY="instrument='Nickel'"
+
+        # Ensure local packages are on PYTHONPATH for pipetask subprocess
+        export PYTHONPATH="${OBS_NICKEL}/python:${REPO_ROOT}/packages/obs_nickel_data/python:${PYTHONPATH:-}"
 
         PIPETASK_ARGS=(
           pipetask run
@@ -1077,6 +1120,12 @@ if [[ "$FORCED_PHOT_LIGHTCURVE" == "true" ]]; then
             PIPETASK_ARGS+=(-c "forcedPhotLightcurve:targetName=${LC_LABEL}")
           elif [[ "$LIGHTCURVE_SUBSET" == "diffim-lightcurve" ]]; then
             PIPETASK_ARGS+=(-c "forcedPhotDiffimLightcurve:targetName=${LC_LABEL}")
+          elif [[ "$LIGHTCURVE_SUBSET" == "diffim-lightcurve-combined" ]]; then
+            # Per-band + combined multi-band plots
+            PIPETASK_ARGS+=(
+              -c "plotForcedPhotDiffimLightcurveBand:targetName=${LC_LABEL}"
+              -c "plotForcedPhotDiffimLightcurveCombined:targetName=${LC_LABEL}"
+            )
           else
             PIPETASK_ARGS+=(
               -c "forcedPhotLightcurve:targetName=${LC_LABEL}"
@@ -1121,10 +1170,10 @@ if [[ "$DIA_LIGHTCURVE_TASK" == "true" ]]; then
         log_warn "No processCcd collections found for night $night"
       fi
 
-      while read -r diff_coll; do
-        [[ -n "$diff_coll" ]] && DIFF_COLLECTIONS+=("$diff_coll")
-      done < <(butler query-collections "$REPO" "Nickel/runs/${night}/diff/*/run" 2>/dev/null | \
-        tail -n +3 | awk '{print $1}')
+      # Use only the latest diff collection per night to avoid duplicate data
+      DIFF_COLL="$(butler query-collections "$REPO" "Nickel/runs/${night}/diff/*/run" 2>/dev/null | \
+        tail -n +3 | awk '{print $1}' | sort | tail -n 1)"
+      [[ -n "$DIFF_COLL" ]] && DIFF_COLLECTIONS+=("$DIFF_COLL")
     done
 
     PROCESSCCD_COLLECTIONS_CSV="$(printf "%s\n" "${PROCESSCCD_COLLECTIONS[@]}" | sort -u | paste -sd, -)"
@@ -1151,6 +1200,9 @@ if [[ "$DIA_LIGHTCURVE_TASK" == "true" ]]; then
         DATA_QUERY="${DATA_QUERY} AND band='${LIGHTCURVE_BAND}'"
       fi
 
+      # Ensure local packages are on PYTHONPATH for pipetask subprocess
+      export PYTHONPATH="${OBS_NICKEL}/python:${REPO_ROOT}/packages/obs_nickel_data/python:${PYTHONPATH:-}"
+
       PIPETASK_ARGS=(
         pipetask run
         --butler-config "$REPO"
@@ -1158,14 +1210,14 @@ if [[ "$DIA_LIGHTCURVE_TASK" == "true" ]]; then
         --output "$DIA_LIGHTCURVE_OUTPUT_COLLECTION"
         --output-run "$DIA_LIGHTCURVE_OUTPUT_RUN"
         --register-dataset-types
-        --pipeline "$OBS_NICKEL/pipelines/DIA.yaml#dia-lightcurve"
+        --pipeline "$OBS_NICKEL/pipelines/DIA.yaml#dia-lightcurve-combined"
         --data-query "$DATA_QUERY"
         -c "plotDiaLightcurve:ra=$RA"
         -c "plotDiaLightcurve:dec=$DEC"
         -c "plotDiaLightcurve:radiusArcsec=$LIGHTCURVE_RADIUS"
         -c "plotDiaLightcurve:minSnr=$LIGHTCURVE_MIN_SNR"
       )
-      [[ -n "$LC_LABEL" ]] && PIPETASK_ARGS+=(-c "plotDiaLightcurve:targetName=${LC_LABEL}")
+      [[ -n "$LC_LABEL" ]] && PIPETASK_ARGS+=(-c "plotDiaLightcurve:targetName=${LC_LABEL}" -c "plotDiaLightcurveCombined:targetName=${LC_LABEL}")
 
       if ! run_or_dry "${PIPETASK_ARGS[@]}"; then
         log_warn "DIA lightcurve task failed"

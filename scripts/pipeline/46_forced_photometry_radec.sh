@@ -336,8 +336,9 @@ fi
 
 if [[ "$IMAGE_TYPE" == "diffim" ]] || [[ "$IMAGE_TYPE" == "both" ]]; then
     # Check for difference image collection
+    # Use only the latest diff collection to avoid duplicate data from previous runs
     log_info "Looking for diff collections..."
-    RESOLVED_DIFF=$(butler query-collections "$REPO" "$DIFF_COLLECTION" 2>&1 | tail -n +3 | awk '{print $1}' | sort | tail -1)
+    RESOLVED_DIFF=$(butler query-collections "$REPO" "$DIFF_COLLECTION" 2>&1 | tail -n +3 | awk '{print $1}' | grep -E '/run$' | sort | tail -1)
 
     if [[ -z "$RESOLVED_DIFF" ]]; then
         log_warning "No diff collections found for night $NIGHT"

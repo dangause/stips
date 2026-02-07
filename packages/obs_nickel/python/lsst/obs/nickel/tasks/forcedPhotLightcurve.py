@@ -15,6 +15,7 @@ import lsst.pipe.base as pipeBase
 import matplotlib.pyplot as plt
 import numpy as np
 from astropy.table import Table
+from lsst.daf.butler import DeferredDatasetHandle
 from lsst.pipe.base import connectionTypes as ct
 
 if TYPE_CHECKING:
@@ -204,11 +205,13 @@ class ForcedPhotLightcurveTask(pipeBase.PipelineTask):
             mjd = visit_mjd.get(visit_id, np.nan)
             band = visit_band.get(visit_id, "unknown")
 
-            # Load catalog
+            # Load catalog (may be DeferredDatasetHandle)
             if hasattr(ref, "get"):
                 catalog = ref.get()
             else:
                 catalog = butlerQC.get(ref)
+            if isinstance(catalog, DeferredDatasetHandle):
+                catalog = catalog.get()
 
             if len(catalog) == 0:
                 continue
@@ -264,81 +267,117 @@ class ForcedPhotLightcurveTask(pipeBase.PipelineTask):
             return default
 
     def _make_plot(self, table: Table, band: str):
-        """Generate lightcurve plot."""
-        fig, ax = plt.subplots(figsize=(10, 6), dpi=150)
+        """Generate multi-band lightcurve plot with publication styling."""
+        from lsst.obs.nickel.plotting import (
+            FIGURE_SIZE,
+            format_lightcurve_axes,
+            plot_lightcurve_band,
+            publication_style,
+            set_title,
+            sort_bands,
+        )
 
-        x = table["mjd"] if "mjd" in table.colnames else np.arange(len(table))
+        with publication_style():
+            fig, ax = plt.subplots(figsize=FIGURE_SIZE)
+            x = table["mjd"] if "mjd" in table.colnames else np.arange(len(table))
+            bands_present = sort_bands(set(table["band"]))
 
-        if self.config.useMagnitude:
-            # Separate positive and negative flux
-            positive = table["flux"] > 0
-            negative = ~positive
-
-            # Plot positive flux as magnitudes
-            if np.any(positive):
-                y_pos = table["mag"][positive]
-                yerr_pos = table["mag_err"][positive]
-                x_pos = x[positive]
-                ax.errorbar(
-                    x_pos,
-                    y_pos,
-                    yerr=yerr_pos,
-                    fmt="o",
-                    capsize=3,
-                    alpha=0.8,
-                    label="Detection",
-                )
-
-            # Plot negative flux as upper limits
-            if self.config.showNegativeFlux and np.any(negative):
-                # For negative flux, show 3-sigma upper limit
-                flux_neg = table["flux"][negative]  # noqa: F841
-                flux_err_neg = table["flux_err"][negative]
-                # Upper limit: 3 * flux_err (or |flux| + 3*err)
-                upper_flux = 3 * flux_err_neg
-                # Convert to magnitude (approximate upper limit)
-                with np.errstate(divide="ignore", invalid="ignore"):
-                    upper_mag = (
-                        -2.5 * np.log10(upper_flux) + 31.4
-                    )  # Approximate zeropoint
-                    upper_mag = np.where(np.isfinite(upper_mag), upper_mag, np.nan)
-
-                x_neg = x[negative]
-                valid = np.isfinite(upper_mag)
-                if np.any(valid):
-                    ax.scatter(
-                        x_neg[valid],
-                        upper_mag[valid],
-                        marker="v",
-                        s=50,
-                        alpha=0.5,
-                        color="gray",
-                        label="Upper limit (3σ)",
+            if self.config.useMagnitude:
+                all_mag = []
+                for b in bands_present:
+                    mask = (table["band"] == b) & (table["flux"] > 0)
+                    if not np.any(mask):
+                        continue
+                    mag_vals = table["mag"][mask]
+                    all_mag.append(mag_vals)
+                    plot_lightcurve_band(
+                        ax,
+                        x[mask],
+                        mag_vals,
+                        table["mag_err"][mask],
+                        b,
+                        count=int(np.sum(mask)),
                     )
 
-            ax.invert_yaxis()
-            ax.set_ylabel("Magnitude")
-        else:
-            y = table["flux"]
-            yerr = table["flux_err"]
-            ax.errorbar(x, y, yerr=yerr, fmt="o", capsize=3, alpha=0.8)
-            ax.axhline(y=0, color="gray", linestyle="--", alpha=0.5)
-            ax.set_ylabel("Flux")
+                # Upper limits for negative flux
+                if self.config.showNegativeFlux:
+                    negative = table["flux"] <= 0
+                    if np.any(negative):
+                        flux_err_neg = table["flux_err"][negative]
+                        upper_flux = 3 * flux_err_neg
+                        with np.errstate(divide="ignore", invalid="ignore"):
+                            upper_mag = -2.5 * np.log10(upper_flux) + 31.4
+                            upper_mag = np.where(
+                                np.isfinite(upper_mag),
+                                upper_mag,
+                                np.nan,
+                            )
+                        valid = np.isfinite(upper_mag)
+                        if np.any(valid):
+                            ax.scatter(
+                                x[negative][valid],
+                                upper_mag[valid],
+                                marker="v",
+                                s=40,
+                                alpha=0.4,
+                                color="0.5",
+                                zorder=0,
+                                edgecolors="0.3",
+                                linewidths=0.5,
+                                label=r"Upper limit (3$\sigma$)",
+                            )
 
-        ax.set_xlabel("MJD")
-        ax.grid(True, alpha=0.3, linestyle="--")
-        ax.legend()
+                # Set y-limits from mag values only (ignore error bars);
+                # use normal order — format_lightcurve_axes will invert.
+                if all_mag:
+                    all_mag = np.concatenate(all_mag)
+                    finite = all_mag[np.isfinite(all_mag)]
+                    if len(finite) > 0:
+                        mag_min, mag_max = np.min(finite), np.max(finite)
+                        pad = 0.15 * (mag_max - mag_min) if mag_max > mag_min else 0.5
+                        ax.set_ylim(mag_min - pad, mag_max + pad)
 
-        # Title
-        if self.config.plotTitle:
-            title = self.config.plotTitle
-        elif self.config.targetName:
-            title = f"{self.config.targetName} - Forced Photometry ({band})"
-        else:
-            title = f"Forced Photometry Lightcurve ({band})"
-        ax.set_title(title)
+                format_lightcurve_axes(
+                    ax,
+                    ylabel="Apparent Magnitude (mag)",
+                    invert_y=True,
+                )
+            else:
+                for b in bands_present:
+                    mask = table["band"] == b
+                    if not np.any(mask):
+                        continue
+                    plot_lightcurve_band(
+                        ax,
+                        x[mask],
+                        table["flux"][mask],
+                        table["flux_err"][mask],
+                        b,
+                        count=int(np.sum(mask)),
+                    )
+                ax.axhline(
+                    y=0,
+                    color="0.6",
+                    linestyle="--",
+                    linewidth=0.8,
+                    alpha=0.6,
+                    zorder=0,
+                )
+                format_lightcurve_axes(
+                    ax,
+                    ylabel="Flux (counts)",
+                    invert_y=False,
+                )
 
-        fig.tight_layout()
+            if self.config.plotTitle:
+                ax.set_title(self.config.plotTitle)
+            elif self.config.targetName:
+                set_title(ax, self.config.targetName, subtitle="Forced Photometry")
+            else:
+                set_title(ax, "Forced Photometry Lightcurve")
+
+            ax.legend(loc="best")
+            fig.tight_layout()
         return fig
 
 
@@ -412,6 +451,21 @@ class ForcedPhotDiffimLightcurveConfig(
         default="",
         doc="Optional plot title override.",
     )
+    useMagnitude = pexConfig.Field(
+        dtype=bool,
+        default=True,
+        doc="Plot apparent magnitudes (True) or difference fluxes (False).",
+    )
+    zeroPoint = pexConfig.Field(
+        dtype=float,
+        default=31.4,
+        doc="Instrumental zero point for flux-to-magnitude conversion.",
+    )
+    showNegativeFlux = pexConfig.Field(
+        dtype=bool,
+        default=True,
+        doc="Show negative flux points as upper limits when plotting magnitudes.",
+    )
     fluxColumn = pexConfig.Field(
         dtype=str,
         default="diffFlux",
@@ -431,8 +485,10 @@ class ForcedPhotDiffimLightcurveTask(pipeBase.PipelineTask):
     flux values can be negative (source fainter than template) or positive
     (source brighter than template).
 
-    WARNING: Do not convert difference fluxes to magnitudes! The flux values
-    represent the difference between science and template, not absolute flux.
+    By default, positive difference fluxes are converted to apparent
+    magnitudes for plotting. Negative fluxes (source fainter than template)
+    are shown as upper limits. Set ``useMagnitude=False`` to plot raw
+    difference fluxes instead.
     """
 
     ConfigClass = ForcedPhotDiffimLightcurveConfig
@@ -504,10 +560,13 @@ class ForcedPhotDiffimLightcurveTask(pipeBase.PipelineTask):
             mjd = visit_mjd.get(visit_id, np.nan)
             band = visit_band.get(visit_id, "unknown")
 
+            # Load catalog (may be DeferredDatasetHandle)
             if hasattr(ref, "get"):
                 catalog = ref.get()
             else:
                 catalog = butlerQC.get(ref)
+            if isinstance(catalog, DeferredDatasetHandle):
+                catalog = catalog.get()
 
             if len(catalog) == 0:
                 continue
@@ -529,6 +588,15 @@ class ForcedPhotDiffimLightcurveTask(pipeBase.PipelineTask):
                 dec = self._get_value(record, "dec")
                 input_id = self._get_value(record, "input_id", default=0)
 
+                # Convert positive fluxes to apparent magnitude
+                zp = self.config.zeroPoint
+                if flux > 0:
+                    mag = -2.5 * np.log10(flux) + zp
+                    mag_err = 2.5 / np.log(10) * flux_err / flux
+                else:
+                    mag = np.nan
+                    mag_err = np.nan
+
                 rows.append(
                     {
                         "mjd": mjd,
@@ -539,6 +607,8 @@ class ForcedPhotDiffimLightcurveTask(pipeBase.PipelineTask):
                         "dec": dec,
                         "diff_flux": flux,
                         "diff_flux_err": flux_err,
+                        "mag": mag,
+                        "mag_err": mag_err,
                         "snr": snr,
                     }
                 )
@@ -556,54 +626,134 @@ class ForcedPhotDiffimLightcurveTask(pipeBase.PipelineTask):
             return default
 
     def _make_plot(self, table: Table, band: str):
-        """Generate difference flux lightcurve plot."""
-        fig, ax = plt.subplots(figsize=(10, 6), dpi=150)
+        """Generate multi-band lightcurve plot from difference image photometry."""
+        from lsst.obs.nickel.plotting import (
+            FIGURE_SIZE,
+            format_lightcurve_axes,
+            get_band_style,
+            plot_lightcurve_band,
+            publication_style,
+            set_title,
+            sort_bands,
+        )
 
-        x = table["mjd"] if "mjd" in table.colnames else np.arange(len(table))
-        y = table["diff_flux"]
-        yerr = table["diff_flux_err"]
+        with publication_style():
+            fig, ax = plt.subplots(figsize=FIGURE_SIZE)
+            x = table["mjd"] if "mjd" in table.colnames else np.arange(len(table))
+            bands_present = sort_bands(set(table["band"]))
 
-        # Color by sign of flux
-        positive = y > 0
-        negative = y < 0
+            if self.config.useMagnitude:
+                all_mag = []
+                for b in bands_present:
+                    mask = (table["band"] == b) & (table["diff_flux"] > 0)
+                    if not np.any(mask):
+                        continue
+                    mag_vals = table["mag"][mask]
+                    all_mag.append(mag_vals)
+                    plot_lightcurve_band(
+                        ax,
+                        x[mask],
+                        mag_vals,
+                        table["mag_err"][mask],
+                        b,
+                        count=int(np.sum(mask)),
+                    )
 
-        if np.any(positive):
-            ax.errorbar(
-                x[positive],
-                y[positive],
-                yerr=yerr[positive],
-                fmt="o",
-                capsize=3,
-                alpha=0.8,
-                color="C0",
-                label="Brighter than template",
-            )
-        if np.any(negative):
-            ax.errorbar(
-                x[negative],
-                y[negative],
-                yerr=yerr[negative],
-                fmt="s",
-                capsize=3,
-                alpha=0.8,
-                color="C1",
-                label="Fainter than template",
-            )
+                # Upper limits for negative flux (source fainter than template)
+                if self.config.showNegativeFlux:
+                    negative = table["diff_flux"] <= 0
+                    if np.any(negative):
+                        flux_err_neg = table["diff_flux_err"][negative]
+                        upper_flux = 3 * flux_err_neg
+                        with np.errstate(divide="ignore", invalid="ignore"):
+                            upper_mag = (
+                                -2.5 * np.log10(upper_flux) + self.config.zeroPoint
+                            )
+                            upper_mag = np.where(
+                                np.isfinite(upper_mag),
+                                upper_mag,
+                                np.nan,
+                            )
+                        valid = np.isfinite(upper_mag)
+                        if np.any(valid):
+                            ax.scatter(
+                                x[negative][valid],
+                                upper_mag[valid],
+                                marker="v",
+                                s=40,
+                                alpha=0.4,
+                                color="0.5",
+                                zorder=0,
+                                edgecolors="0.3",
+                                linewidths=0.5,
+                                label=r"Upper limit (3$\sigma$)",
+                            )
 
-        ax.axhline(y=0, color="gray", linestyle="--", alpha=0.5, label="Template level")
-        ax.set_xlabel("MJD")
-        ax.set_ylabel("Difference Flux (science - template)")
-        ax.grid(True, alpha=0.3, linestyle="--")
-        ax.legend()
+                # Set y-limits from mag values only (ignore error bars);
+                # use normal order — format_lightcurve_axes will invert.
+                if all_mag:
+                    all_mag = np.concatenate(all_mag)
+                    finite = all_mag[np.isfinite(all_mag)]
+                    if len(finite) > 0:
+                        mag_min, mag_max = np.min(finite), np.max(finite)
+                        pad = 0.15 * (mag_max - mag_min) if mag_max > mag_min else 0.5
+                        ax.set_ylim(mag_min - pad, mag_max + pad)
 
-        # Title
-        if self.config.plotTitle:
-            title = self.config.plotTitle
-        elif self.config.targetName:
-            title = f"{self.config.targetName} - Difference Flux ({band})"
-        else:
-            title = f"Difference Image Forced Photometry ({band})"
-        ax.set_title(title)
+                format_lightcurve_axes(
+                    ax,
+                    ylabel="Apparent Magnitude (mag)",
+                    invert_y=True,
+                )
+            else:
+                # Plot raw difference fluxes
+                y = table["diff_flux"]
+                yerr = table["diff_flux_err"]
+                for b in bands_present:
+                    mask = table["band"] == b
+                    if not np.any(mask):
+                        continue
+                    style = get_band_style(b)
+                    ax.errorbar(
+                        x[mask],
+                        y[mask],
+                        yerr=yerr[mask],
+                        fmt=style["marker"],
+                        color=style["color"],
+                        label=f'{style["label"]} (N={int(np.sum(mask))})',
+                        markersize=7,
+                        capsize=3,
+                        elinewidth=1.2,
+                        capthick=1.0,
+                        alpha=0.85,
+                        zorder=style["zorder"],
+                        markeredgecolor="black",
+                        markeredgewidth=0.4,
+                    )
 
-        fig.tight_layout()
+                ax.axhline(
+                    y=0,
+                    color="0.4",
+                    linestyle="--",
+                    linewidth=0.8,
+                    alpha=0.7,
+                    zorder=0,
+                    label="Template level",
+                )
+                format_lightcurve_axes(
+                    ax,
+                    ylabel=r"Difference Flux (science $-$ template)",
+                    invert_y=False,
+                )
+
+            if self.config.plotTitle:
+                ax.set_title(self.config.plotTitle)
+            elif self.config.targetName:
+                set_title(
+                    ax, self.config.targetName, subtitle="Difference Image Photometry"
+                )
+            else:
+                set_title(ax, "Difference Image Forced Photometry")
+
+            ax.legend(loc="best")
+            fig.tight_layout()
         return fig

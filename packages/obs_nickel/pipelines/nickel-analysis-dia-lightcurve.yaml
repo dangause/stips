@@ -4,6 +4,10 @@ description: |
   Build a visit table and generate DIA lightcurve tables/plots for a target.
   Configure plotDiaLightcurve.ra/dec at runtime.
 
+  The per-band task (plotDiaLightcurve) produces one table and plot per band.
+  The combined task (plotDiaLightcurveCombined) reads those per-band tables
+  and produces a single multi-band plot.
+
 tasks:
   makeDiaVisitTable:
     class: lsst.pipe.tasks.postprocess.MakeVisitTableTask
@@ -17,3 +21,9 @@ tasks:
       connections.diaSources: dia_source_unfiltered
       connections.visitTable: preliminary_visit_table
       connections.outputName: dia_lightcurve
+
+  plotDiaLightcurveCombined:
+    class: lsst.obs.nickel.tasks.DiaLightcurveCombinedPlotTask
+    config:
+      connections.inputName: dia_lightcurve
+      connections.outputName: dia_lightcurve_combined

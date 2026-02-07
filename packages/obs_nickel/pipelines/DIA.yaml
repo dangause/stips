@@ -225,7 +225,15 @@ subsets:
       - makeDiaVisitTable
       - plotDiaLightcurve
     description: >
-      Generate a DIA lightcurve table and plot for a configured target.
+      Generate per-band DIA lightcurve tables and plots for a configured target.
+
+  dia-lightcurve-combined:
+    subset:
+      - makeDiaVisitTable
+      - plotDiaLightcurve
+      - plotDiaLightcurveCombined
+    description: >
+      Generate per-band DIA lightcurves and a combined multi-band plot.
 
 # ==========================
 # Processing Steps

@@ -21,3 +21,11 @@ except ImportError:
     # Tasks require full LSST stack (pipe_base, etc.)
     # Package can still be used for basic instrument/translator functionality
     pass
+
+try:
+    from . import plotting  # noqa: F401
+
+    __all__.append("plotting")
+except ImportError:
+    # Plotting requires matplotlib
+    pass

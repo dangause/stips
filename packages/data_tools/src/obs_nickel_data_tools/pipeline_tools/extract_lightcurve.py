@@ -113,60 +113,80 @@ def resolve_object_name(object_name: str) -> coord.SkyCoord:
 
 
 def plot_light_curves(df: pd.DataFrame, output_path: Path, target_name: str):
-    """Generate a single multi-band light curve plot."""
-    bands = sorted(df["band"].unique())
+    """Generate a single multi-band light curve plot with publication styling."""
+    try:
+        from lsst.obs.nickel.plotting import (
+            FIGURE_SIZE,
+            apply_publication_style,
+            format_lightcurve_axes,
+            plot_lightcurve_band,
+            set_title,
+            sort_bands,
+        )
 
-    # Band colors for plotting
-    band_colors = {
-        "b": "blue",
-        "v": "green",
-        "r": "red",
-        "i": "darkred",
-        "g": "cyan",
-    }
+        _has_plotting = True
+    except ImportError:
+        _has_plotting = False
 
     print("\n=== GENERATING PLOT ===")
 
-    # Create multi-band plot with better styling
-    fig, ax = plt.subplots(figsize=(12, 8))
+    if _has_plotting:
+        apply_publication_style()
+        bands = sort_bands(df["band"].unique())
 
-    for band in bands:
-        band_data = df[df["band"] == band].copy()
-        color = band_colors.get(band, "black")
+        fig, ax = plt.subplots(figsize=FIGURE_SIZE)
 
-        ax.errorbar(
-            band_data["mjd"],
-            band_data["mag"],
-            yerr=band_data["mag_err"],
-            fmt="o",
-            color=color,
-            label=f"{band.upper()}-band (N={len(band_data)})",
-            markersize=8,
-            capsize=4,
-            elinewidth=1.5,
-            capthick=1.5,
-            alpha=0.8,
-        )
+        for band in bands:
+            band_data = df[df["band"] == band]
+            plot_lightcurve_band(
+                ax,
+                band_data["mjd"].values,
+                band_data["mag"].values,
+                band_data["mag_err"].values,
+                band,
+                count=len(band_data),
+            )
 
-    # Formatting with units and improved labels
-    ax.set_xlabel("Modified Julian Date (MJD)", fontsize=14, fontweight="bold")
-    ax.set_ylabel("Apparent Magnitude (mag)", fontsize=14, fontweight="bold")
-    ax.set_title(f"{target_name}", fontsize=16, fontweight="bold", pad=15)
-    ax.invert_yaxis()  # Brighter objects (lower mag) at top
-    ax.grid(True, alpha=0.3, linestyle="--", linewidth=0.5)
-    ax.legend(fontsize=11, framealpha=0.9, loc="best")
+        format_lightcurve_axes(ax, invert_y=True)
+        set_title(ax, target_name)
+        ax.legend(loc="best")
 
-    # Improve tick labels
-    ax.tick_params(axis="both", which="major", labelsize=11)
+    else:
+        # Fallback: basic styling when obs_nickel.plotting is unavailable
+        band_colors = {
+            "b": "blue",
+            "v": "green",
+            "r": "red",
+            "i": "darkred",
+            "g": "cyan",
+        }
+        bands = sorted(df["band"].unique())
+        fig, ax = plt.subplots(figsize=(8, 5))
 
-    # Add minor ticks
-    ax.minorticks_on()
-    ax.grid(True, which="minor", alpha=0.15, linestyle=":")
+        for band in bands:
+            band_data = df[df["band"] == band]
+            ax.errorbar(
+                band_data["mjd"],
+                band_data["mag"],
+                yerr=band_data["mag_err"],
+                fmt="o",
+                color=band_colors.get(band, "black"),
+                label=f"{band.upper()}-band (N={len(band_data)})",
+                markersize=7,
+                capsize=3,
+                alpha=0.8,
+            )
 
-    # Save plot with tight layout
+        ax.set_xlabel("Modified Julian Date (MJD)")
+        ax.set_ylabel("Apparent Magnitude (mag)")
+        ax.set_title(target_name)
+        ax.invert_yaxis()
+        ax.grid(True, alpha=0.3, linestyle="--")
+        ax.legend(loc="best")
+
     plot_filename = output_path.parent / f"{output_path.stem}.png"
-    plt.tight_layout()
-    plt.savefig(plot_filename, dpi=200, bbox_inches="tight")
+    fig.tight_layout()
+    plt.savefig(plot_filename)  # dpi and bbox from rcParams (or default)
     plt.close()
 
     print(f"  Saved light curve plot: {plot_filename}")

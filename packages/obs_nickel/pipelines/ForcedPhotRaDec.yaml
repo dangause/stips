@@ -40,6 +40,9 @@ description: |
 
 instrument: lsst.obs.nickel.Nickel
 
+imports:
+  - location: $OBS_NICKEL/pipelines/nickel-analysis-fphot-lightcurve.yaml
+
 tasks:
   # ============================================
   # Forced photometry on calibrated visit images
@@ -187,3 +190,21 @@ subsets:
     description: |
       Generate lightcurves from both visit and difference image forced photometry.
       Requires both forced_phot_radec and forced_phot_diffim_radec datasets.
+
+  # Per-band + combined lightcurve generation subsets
+  diffim-lightcurve-band:
+    subset:
+      - makeFphotVisitTable
+      - plotForcedPhotDiffimLightcurveBand
+    description: |
+      Generate per-band lightcurves from existing difference image forced photometry.
+      Produces one table and plot per band.
+
+  diffim-lightcurve-combined:
+    subset:
+      - makeFphotVisitTable
+      - plotForcedPhotDiffimLightcurveBand
+      - plotForcedPhotDiffimLightcurveCombined
+    description: |
+      Generate per-band lightcurves and a combined multi-band plot from
+      difference image forced photometry. Requires forced_phot_diffim_radec datasets.

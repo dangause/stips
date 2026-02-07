@@ -1,6 +1,16 @@
 """Tasks for the Nickel telescope obs package."""
 
+from .diaLightcurveCombinedPlot import (
+    DiaLightcurveCombinedPlotConfig,
+    DiaLightcurveCombinedPlotTask,
+)
 from .diaLightcurvePlot import DiaLightcurvePlotConfig, DiaLightcurvePlotTask
+from .forcedPhotDiffimLightcurveBand import (
+    ForcedPhotDiffimLightcurveBandConfig,
+    ForcedPhotDiffimLightcurveBandTask,
+    ForcedPhotDiffimLightcurveCombinedConfig,
+    ForcedPhotDiffimLightcurveCombinedTask,
+)
 from .forcedPhotLightcurve import (
     ForcedPhotDiffimLightcurveConfig,
     ForcedPhotDiffimLightcurveTask,
@@ -20,12 +30,19 @@ __all__ = [
     "ForcedPhotRaDecConfig",
     "ForcedPhotDiffimRaDecTask",
     "ForcedPhotDiffimRaDecConfig",
-    # Forced photometry lightcurve tasks
+    # Forced photometry lightcurve tasks (instrument-level)
     "ForcedPhotLightcurveTask",
     "ForcedPhotLightcurveConfig",
     "ForcedPhotDiffimLightcurveTask",
     "ForcedPhotDiffimLightcurveConfig",
-    # DIA lightcurve task
+    # Forced photometry lightcurve tasks (per-band + combined)
+    "ForcedPhotDiffimLightcurveBandTask",
+    "ForcedPhotDiffimLightcurveBandConfig",
+    "ForcedPhotDiffimLightcurveCombinedTask",
+    "ForcedPhotDiffimLightcurveCombinedConfig",
+    # DIA lightcurve tasks
     "DiaLightcurvePlotTask",
     "DiaLightcurvePlotConfig",
+    "DiaLightcurveCombinedPlotTask",
+    "DiaLightcurveCombinedPlotConfig",
 ]
