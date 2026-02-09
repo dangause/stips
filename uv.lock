@@ -1960,6 +1960,7 @@ version = "0.1.0"
 source = { editable = "packages/data_tools" }
 dependencies = [
     { name = "astropy" },
+    { name = "click" },
     { name = "matplotlib" },
     { name = "numpy" },
     { name = "pandas" },
@@ -1969,6 +1970,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "astropy" },
+    { name = "click", specifier = ">=8.0.0" },
     { name = "matplotlib", specifier = ">=3.5.0" },
     { name = "numpy" },
     { name = "pandas" },

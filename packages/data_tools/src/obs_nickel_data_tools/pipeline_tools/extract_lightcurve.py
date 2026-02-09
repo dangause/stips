@@ -356,18 +356,25 @@ def main():
                 flux_err = source["base_PsfFlux_instFluxErr"]
             except KeyError:
                 try:
-                    # Older naming without prefix
-                    flux = source["psfFlux"]
-                    flux_err = source["psfFluxErr"]
+                    # Forced photometry on difference images
+                    flux = source["diffFlux"]
+                    flux_err = source["diffFluxErr"]
                 except KeyError:
                     try:
-                        # Aperture flux fallback
-                        flux = source["base_CircularApertureFlux_12_0_instFlux"]
-                        flux_err = source["base_CircularApertureFlux_12_0_instFluxErr"]
+                        # Older naming without prefix
+                        flux = source["psfFlux"]
+                        flux_err = source["psfFluxErr"]
                     except KeyError:
-                        if args.verbose:
-                            print("    WARNING: No flux measurements found")
-                        continue
+                        try:
+                            # Aperture flux fallback
+                            flux = source["base_CircularApertureFlux_12_0_instFlux"]
+                            flux_err = source[
+                                "base_CircularApertureFlux_12_0_instFluxErr"
+                            ]
+                        except KeyError:
+                            if args.verbose:
+                                print("    WARNING: No flux measurements found")
+                            continue
 
             # Calculate S/N
             if flux_err > 0:

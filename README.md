@@ -18,14 +18,35 @@ uv sync --group dev
 cp .env.example .env  # Edit .env and set your paths
 
 # 3. Bootstrap your Butler repository (first time only)
-make bootstrap
+nickel bootstrap
 
-# 4. Run pipelines
-make archive-night NIGHT=20240625  # Download data
-make calibs NIGHT=20240625          # Process calibrations
-make science NIGHT=20240625         # Process science images
-make coadds TRACT=1099 BAND=r       # Build templates
-make dia NIGHT=20240625             # Run difference imaging
+# 4. Run pipelines using the nickel CLI
+nickel download 20240625              # Download data from archive
+nickel calibs 20240625                # Process calibrations
+nickel science 20240625               # Process science images
+nickel dia 20240625 --auto            # Run difference imaging
+
+# Or use Makefile targets (same functionality)
+make calibs NIGHT=20240625
+make science NIGHT=20240625
+```
+
+### Profile-Based Workflows
+
+Work with multiple Butler repositories using profiles:
+
+```bash
+# Create profile-specific env files
+cp .env.example .env.2023ixf
+# Edit .env.2023ixf with campaign-specific paths
+
+# Use profiles with the nickel CLI
+nickel -p 2023ixf calibs 20230519
+nickel -p 2023ixf dia 20230519 --band r --auto --prefer-ps1
+nickel -p 2023ixf fphot 20230519 --ra 210.91 --dec 54.32
+nickel -p 2023ixf lightcurve --ra 210.91 --dec 54.32 \
+    --collections "Nickel/runs/*/forcedPhotRaDec/*/run" \
+    --dataset-type forced_phot_diffim_radec --name "SN 2023ixf"
 ```
 
 See detailed workflows below.
@@ -53,12 +74,18 @@ See detailed workflows below.
 - Automatically loaded via `butler write-curated-calibrations`
 - Follows the same pattern as `obs_lsst_data` for consistency
 
-### Data Access & Analysis Tools
-- **Archive exploration & download** (`data_tools`)
+### Unified CLI (`nickel`)
+- **Profile-based configuration** for multi-repository workflows
+- **Integrated commands**: bootstrap, calibs, science, dia, ps1-template, fphot, lightcurve
+- **YAML-driven pipeline orchestration** for complete transient workflows
+- **PS1 template ingestion** for difference imaging
+- **Forced photometry** at arbitrary RA/Dec coordinates
+- **Light curve extraction** from DIA sources or forced photometry
+
+### Data Access & Analysis Tools (`data_tools`)
+- **Archive exploration & download**
 - **EDA tools**: Query archive metadata, inspect Butler repositories
-- **PS1 template ingest**
-- **SkyMap generation**
-- **Light curve extraction**
+- **Skymap generation**
 - **DIA quality assessment**
 - Defect mask generation (`defects`)
 - Color term fitting (`colorterms`)
@@ -93,6 +120,46 @@ nickel_processing_suite/
 ```
 
 All configuration and code lives in the `packages/` directory. Scripts reference package paths directly (e.g., `packages/obs_nickel/configs/`).
+
+---
+
+## The `nickel` CLI
+
+The unified command-line interface for all pipeline operations, provided by the `data_tools` package.
+
+### Commands Overview
+
+```bash
+nickel --help              # Show all commands
+nickel env                 # Show configuration and validate paths
+nickel bootstrap           # Initialize Butler repository
+nickel download NIGHT      # Fetch data from Lick archive
+nickel calibs NIGHT        # Run nightly calibrations
+nickel science NIGHT       # Process science frames
+nickel dia NIGHT           # Run difference imaging
+nickel ps1-template        # Download and ingest PS1 template
+nickel fphot NIGHT         # Run forced photometry at RA/Dec
+nickel lightcurve          # Extract lightcurve from sources
+nickel run CONFIG.yaml     # Run full pipeline from YAML config
+```
+
+### Profile-Based Configuration
+
+Use profiles to work with multiple Butler repositories:
+
+```bash
+# Create profile-specific env files
+cp .env.example .env.2023ixf  # For SN 2023ixf campaign
+cp .env.example .env.2020wnt  # For SN 2020wnt campaign
+
+# Use profiles with any command
+nickel -p 2023ixf calibs 20230519
+nickel -p 2020wnt dia 20201207 --auto
+
+# Profiles look for .env.{profile} or .env.{profile}.ps1
+```
+
+See [packages/data_tools/README.md](packages/data_tools/README.md) for complete CLI documentation.
 
 ---
 
@@ -317,9 +384,58 @@ The repository includes example configs at the repo root:
 
 ## Running Pipelines
 
-**No manual stack activation needed!** The Makefile handles it automatically.
+### Using the `nickel` CLI (Recommended)
 
-### Basic Workflow
+The `nickel` CLI provides a unified interface for all pipeline operations:
+
+```bash
+# Check configuration
+nickel env
+
+# Download data from archive
+nickel download 20240625
+
+# Process calibrations
+nickel calibs 20240625
+
+# Process science images
+nickel science 20240625
+
+# Run difference imaging (auto-discover template)
+nickel dia 20240625 --auto
+
+# With profile for specific campaign
+nickel -p 2023ixf dia 20230519 --band r --auto --prefer-ps1
+```
+
+#### Transient Analysis Workflow
+
+```bash
+# 1. Ingest PS1 template for r-band
+nickel ps1-template --ra 210.91 --dec 54.32 --band r
+
+# 2. Run forced photometry on difference images
+nickel fphot 20230519 --ra 210.91 --dec 54.32
+
+# 3. Extract lightcurve
+nickel lightcurve --ra 210.91 --dec 54.32 \
+    --collections "Nickel/runs/20230519/forcedPhotRaDec/*/run" \
+    --dataset-type forced_phot_diffim_radec \
+    --name "SN 2023ixf"
+```
+
+#### YAML-Driven Pipeline
+
+Run complete workflows from a configuration file:
+
+```bash
+nickel run scripts/config/2023ixf/pipeline.yaml
+nickel run pipeline.yaml --dry-run  # Preview without executing
+```
+
+### Using Make Targets
+
+The Makefile provides equivalent functionality (automatically activates LSST stack):
 
 ```bash
 # Download data from archive
@@ -336,12 +452,6 @@ make coadds TRACT=1099 BAND=r
 
 # Run difference imaging
 make dia NIGHT=20240625
-```
-
-### Full Transient Pipeline
-
-```bash
-make transient-pipeline ARGS="--template-nights template_nights.txt --dia-nights campaign_nights.txt --band r --tract 1099"
 ```
 
 ### Batch Processing Multiple Nights
@@ -364,24 +474,30 @@ make batch NIGHTS_FILE=nights.txt
 make help  # Show all available targets
 ```
 
-| Target | Description |
-|--------|-------------|
-| `setup-dev` | Install packages + dev tools |
-| `setup-dev-full` | Install all packages + notebooks + analysis |
-| `bootstrap` | Initialize Butler repo + refcats + skymap |
-| `archive-night` | Download night from archive (requires `NIGHT=YYYYMMDD`) |
-| `calibs` | Run nightly calibrations (requires `NIGHT=YYYYMMDD`) |
-| `science` | Run single-night science processing (requires `NIGHT=YYYYMMDD`) |
-| `coadds` | Build coadds/templates (requires `TRACT=NUM BAND=X`) |
-| `dia` | Run difference imaging (requires `NIGHT=YYYYMMDD`) |
-| `batch` | Batch process nights file (requires `NIGHTS_FILE=path`) |
-| `transient-pipeline` | Run full transient pipeline |
-| `dia-multiband` | Run multi-band DIA helper |
-| `stack-install` | Install LSST stack release (requires `TAG=version`) |
-| `lint` | Run ruff linter |
-| `format` | Run ruff formatter |
-| `test` | Run pytest suite |
-| `notebook` | Start Jupyter Lab with stack + venv |
+| Target | CLI Equivalent | Description |
+|--------|----------------|-------------|
+| `setup-dev` | - | Install packages + dev tools |
+| `setup-dev-full` | - | Install all packages + notebooks + analysis |
+| `bootstrap` | `nickel bootstrap` | Initialize Butler repo + refcats + skymap |
+| `archive-night` | `nickel download` | Download night from archive |
+| `calibs` | `nickel calibs` | Run nightly calibrations |
+| `science` | `nickel science` | Run single-night science processing |
+| `coadds` | - | Build coadds/templates |
+| `dia` | `nickel dia` | Run difference imaging |
+| `batch` | - | Batch process nights file |
+| `transient-pipeline` | `nickel run` | Run full transient pipeline |
+| `dia-multiband` | - | Run multi-band DIA helper |
+| `stack-install` | - | Install LSST stack release |
+| `lint` | - | Run ruff linter |
+| `format` | - | Run ruff formatter |
+| `test` | - | Run pytest suite |
+| `notebook` | - | Start Jupyter Lab with stack + venv |
+
+Additional `nickel` CLI commands (no Make equivalent):
+- `nickel ps1-template` - Download and ingest PS1 template
+- `nickel fphot` - Run forced photometry at RA/Dec
+- `nickel lightcurve` - Extract lightcurve from sources
+- `nickel env` - Show/validate configuration
 
 ---
 
@@ -392,13 +508,16 @@ make help  # Show all available targets
 Initialize the Butler repository, ingest reference catalogs, and register the skymap:
 
 ```bash
+nickel bootstrap
+# or with profile:
+nickel -p 2023ixf bootstrap
+# or via Make:
 make bootstrap
-# or manually:
-./scripts/pipeline/00_bootstrap_repo.sh
 ```
 
-This script:
+This step:
 - Creates Butler repository if needed
+- Registers the Nickel instrument
 - Ingests Gaia DR3 and PS1 reference catalogs
 - Ingests the_monster catalog (if available)
 - Chains reference catalogs for automatic selection
@@ -409,9 +528,9 @@ This script:
 ### Step 1: Download Archive Data (Optional)
 
 ```bash
+nickel download 20210219
+# or via Make:
 make archive-night NIGHT=20210219
-# or manually:
-./scripts/pipeline/01_download_archive.sh --night 20210219
 ```
 
 **Skip this step** if you already have raw data locally.
@@ -421,12 +540,13 @@ make archive-night NIGHT=20210219
 Build nightly calibration products (bias, flats, defects):
 
 ```bash
+nickel calibs 20210219
+nickel calibs 20210219 --jobs 8  # More parallel jobs
+# or via Make:
 make calibs NIGHT=20210219
-# or manually:
-./scripts/pipeline/10_calibs.sh --night 20210219
 ```
 
-This script:
+This step:
 - Ingests raw data for the night
 - Writes curated calibrations (camera geometry + defects from `obs_nickel_data`)
 - Constructs combined bias frames
@@ -440,18 +560,15 @@ This script:
 Process science images through the DRP pipeline:
 
 ```bash
+nickel science 20210219
+nickel science 20210219 --object "2020wnt"         # Filter by target
+nickel science 20210219 --bad 1032,1051,1052       # Exclude bad exposures
+nickel science 20210219 --skip-coadds              # Skip coadd generation
+# or via Make:
 make science NIGHT=20210219
-# or manually:
-./scripts/pipeline/20_science.sh --night 20210219
-
-# Process only specific object
-./scripts/pipeline/20_science.sh --night 20210219 --object "2020wnt"
-
-# Exclude bad exposures
-./scripts/pipeline/20_science.sh --night 20210219 --bad 1032,1051,1052
 ```
 
-This script:
+This step:
 - Runs ISR (Instrument Signature Removal)
 - Performs source detection and measurement
 - Computes astrometric solution (WCS)
@@ -478,22 +595,15 @@ make coadds TRACT=1099 BAND=r
 Run difference imaging to detect transients and variable sources:
 
 ```bash
+nickel dia 20210219 --auto                    # Auto-discover template
+nickel dia 20210219 --template templates/deep/r  # Use specific template
+nickel dia 20210219 --auto --prefer-ps1 --band r  # Prefer PS1 template
+nickel dia 20210219 --auto --object "2020wnt" --band r  # Filter by target
+# or via Make:
 make dia NIGHT=20210219
-# or manually:
-./scripts/pipeline/40_diff_imaging.sh --night 20210219 --auto-template
-
-# Use specific template
-./scripts/pipeline/40_diff_imaging.sh --night 20210219 --template templates/deep/r
-
-# Process specific object in specific band
-./scripts/pipeline/40_diff_imaging.sh \
-  --night 20210219 \
-  --auto-template \
-  --object "2020wnt" \
-  --band r
 ```
 
-This script:
+This step:
 - Reprocesses visit images with full calibration metadata
 - Warps template coadds to match science image geometry
 - Performs PSF-matched image subtraction (Alard-Lupton)
@@ -502,6 +612,34 @@ This script:
 - Generates quality metrics
 
 **Run this after science processing** to search for transients/variables.
+
+### Step 6: Forced Photometry (Optional)
+
+Run forced photometry at specific coordinates on difference images:
+
+```bash
+nickel fphot 20210219 --ra 123.456 --dec 45.678
+nickel fphot 20210219 --ra 123.456 --dec 45.678 --band r --image-type diffim
+```
+
+### Step 7: Light Curve Extraction (Optional)
+
+Extract light curves from DIA sources or forced photometry:
+
+```bash
+# From DIA sources
+nickel lightcurve --ra 123.456 --dec 45.678 \
+    --collections "Nickel/runs/20210219/diff/*/run" \
+    --name "Target Name"
+
+# From forced photometry (more reliable for known targets)
+nickel lightcurve --ra 123.456 --dec 45.678 \
+    --collections "Nickel/runs/20210219/forcedPhotRaDec/*/run" \
+    --dataset-type forced_phot_diffim_radec \
+    --name "Target Name"
+```
+
+Output files are saved to `{repo}/lightcurves/` by default.
 
 ---
 

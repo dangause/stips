@@ -1,0 +1,155 @@
+"""Lightcurve extraction from DIA source catalogs."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+from obs_nickel_data_tools.core.stack import run_with_stack
+
+if TYPE_CHECKING:
+    from obs_nickel_data_tools.core.config import Config
+
+
+@dataclass
+class LightcurveResult:
+    """Result of lightcurve extraction."""
+
+    success: bool
+    n_detections: int = 0
+    csv_path: str | None = None
+    plot_path: str | None = None
+    error: str | None = None
+
+
+def run(
+    ra: float,
+    dec: float,
+    collections: str,
+    config: Config,
+    *,
+    radius: float = 1.0,
+    min_snr: float = 3.0,
+    band: str | None = None,
+    name: str | None = None,
+    output: Path | None = None,
+    plot: bool = True,
+    dataset_type: str = "dia_source_unfiltered",
+) -> LightcurveResult:
+    """Extract lightcurve from DIA source catalogs or forced photometry.
+
+    Queries source catalogs for detections near the specified coordinates
+    and generates a lightcurve CSV and optional plot.
+
+    Args:
+        ra: Right ascension in degrees
+        dec: Declination in degrees
+        collections: Comma-separated collection patterns to search
+        config: Pipeline configuration
+        radius: Match radius in arcseconds (default: 1.0)
+        min_snr: Minimum S/N filter (default: 3.0)
+        band: Restrict to single band (default: all)
+        name: Target name for plot title
+        output: Output CSV file path
+        plot: Generate plot (default: True)
+        dataset_type: Dataset type to query (default: dia_source_unfiltered)
+
+    Returns:
+        LightcurveResult with output paths and statistics
+    """
+    # Set default output path in Butler repo under lightcurves/
+    if output is None:
+        name_part = name.replace(" ", "_") if name else f"ra{ra:.4f}_dec{dec:.4f}"
+        lightcurve_dir = config.repo / "lightcurves"
+        lightcurve_dir.mkdir(parents=True, exist_ok=True)
+        output = lightcurve_dir / f"lightcurve_{name_part}.csv"
+    else:
+        # If output is relative, make it relative to repo/lightcurves
+        if not output.is_absolute():
+            lightcurve_dir = config.repo / "lightcurves"
+            lightcurve_dir.mkdir(parents=True, exist_ok=True)
+            output = lightcurve_dir / output
+
+    # Build arguments for the extract_lightcurve script
+    args = [
+        "python",
+        "-m",
+        "obs_nickel_data_tools.pipeline_tools.extract_lightcurve",
+        "--repo",
+        str(config.repo),
+        "--collection",
+        collections,
+        "--ra",
+        str(ra),
+        "--dec",
+        str(dec),
+        "--radius",
+        str(radius),
+        "--min-snr",
+        str(min_snr),
+        "--output",
+        str(output),
+    ]
+
+    if band:
+        args.extend(["--band", band])
+
+    if name:
+        args.extend(["--name", name])
+
+    if dataset_type != "dia_source_unfiltered":
+        args.extend(["--dataset-type", dataset_type])
+
+    if plot:
+        args.append("--plot")
+
+    try:
+        result = run_with_stack(args, config, capture_output=True, check=False)
+
+        if result.returncode == 0:
+            # Parse output to get detection count
+            n_detections = 0
+            for line in result.stdout.split("\n"):
+                if "Total detections:" in line:
+                    try:
+                        n_detections = int(line.split(":")[-1].strip())
+                    except ValueError:
+                        pass
+
+            # Check for output files (use absolute paths)
+            csv_path = str(output) if output.exists() else None
+            plot_path = None
+            if plot:
+                plot_file = output.parent / f"{output.stem}.png"
+                if plot_file.exists():
+                    plot_path = str(plot_file)
+
+            return LightcurveResult(
+                success=True,
+                n_detections=n_detections,
+                csv_path=csv_path,
+                plot_path=plot_path,
+            )
+        else:
+            error_msg = result.stderr or result.stdout or "Unknown error"
+            # Check for "no detections" which is a common case
+            if (
+                "No detections found" in error_msg
+                or "No detections found" in result.stdout
+            ):
+                return LightcurveResult(
+                    success=False,
+                    n_detections=0,
+                    error="No detections found matching criteria",
+                )
+            return LightcurveResult(
+                success=False,
+                error=error_msg,
+            )
+
+    except Exception as e:
+        return LightcurveResult(
+            success=False,
+            error=str(e),
+        )
