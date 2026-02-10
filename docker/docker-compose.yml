@@ -1,0 +1,135 @@
+# Nickel Processing Suite - Docker Compose
+#
+# Local development and testing configuration.
+#
+# Usage:
+#   # Start with defaults
+#   docker-compose up -d
+#
+#   # With custom environment
+#   REPO=/path/to/repo RAW_PARENT_DIR=/path/to/raw docker-compose up -d
+#
+#   # Run a command
+#   docker-compose run --rm nps nickel calibs 20230519
+#
+#   # Interactive shell
+#   docker-compose run --rm nps bash
+
+version: '3.8'
+
+services:
+  # =============================================================================
+  # Main NPS Service
+  # =============================================================================
+  nps:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      args:
+        LSST_TAG: ${LSST_TAG:-v30_0_3}
+    image: nps:${NPS_VERSION:-latest}
+    container_name: nps-processing
+
+    volumes:
+      # Data volumes (read-write) - required for processing
+      - ${REPO:-./data/repo}:/data/repo
+      - ${RAW_PARENT_DIR:-./data/raw}:/data/raw
+
+      # Reference catalogs (read-only) - required for astrometry/photometry
+      - ${REFCAT_REPO:-./data/refcats}:/data/refcats:ro
+
+      # Configuration mount (read-only)
+      - ${CONFIG_DIR:-.}:/config:ro
+
+      # Output directory for results
+      - ${OUTPUT_DIR:-./outputs}:/data/outputs
+
+      # Quantum graph cache (persisted across runs)
+      - nps-qgraphs:/data/qgraphs
+
+      # Optional: Mount source for development
+      # Uncomment to enable live code reloading
+      # - ../packages/data_tools/src:/opt/nps/packages/data_tools/src:ro
+      # - ../packages/obs_nickel:/opt/nps/packages/obs_nickel:ro
+
+    environment:
+      # Core paths (override defaults if mounted elsewhere)
+      - REPO=/data/repo
+      - RAW_PARENT_DIR=/data/raw
+      - REFCAT_REPO=/data/refcats
+      - OBS_NICKEL=/opt/nps/packages/obs_nickel
+
+      # Optional: Profile to load from /config/.env.{profile}
+      - NPS_PROFILE=${NPS_PROFILE:-}
+
+      # LSST stack configuration
+      - LSST_CONDA_ENV_NAME=${LSST_CONDA_ENV_NAME:-}
+
+    # Resource limits for local execution
+    deploy:
+      resources:
+        limits:
+          cpus: '${DOCKER_CPUS:-8}'
+          memory: ${DOCKER_MEMORY:-32G}
+        reservations:
+          memory: 4G
+
+    working_dir: /data
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "bash", "-c", "source /opt/lsst/software/stack/loadLSST.bash && setup lsst_distrib && nickel --help > /dev/null"]
+      interval: 60s
+      timeout: 30s
+      retries: 3
+      start_period: 30s
+
+    # Keep container running for exec commands
+    stdin_open: true
+    tty: true
+
+  # =============================================================================
+  # Jupyter Lab Service (for interactive analysis)
+  # =============================================================================
+  jupyter:
+    extends:
+      service: nps
+    container_name: nps-jupyter
+    ports:
+      - "${JUPYTER_PORT:-8888}:8888"
+    command: >
+      bash -c "
+        source /opt/lsst/software/stack/loadLSST.bash &&
+        setup lsst_distrib &&
+        pip install jupyterlab --quiet &&
+        jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root \
+          --NotebookApp.token='' --NotebookApp.password=''
+      "
+    profiles:
+      - interactive
+
+  # =============================================================================
+  # BPS Local Worker (for testing BPS without cluster)
+  # =============================================================================
+  bps-worker:
+    extends:
+      service: nps
+    container_name: nps-bps-worker
+    command: ["bash", "-c", "echo 'BPS worker ready' && sleep infinity"]
+    profiles:
+      - bps
+
+# =============================================================================
+# Volumes
+# =============================================================================
+volumes:
+  # Persistent cache for quantum graphs
+  nps-qgraphs:
+    driver: local
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  default:
+    name: nps-network

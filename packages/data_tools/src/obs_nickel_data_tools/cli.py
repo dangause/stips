@@ -109,11 +109,13 @@ def cli(ctx: click.Context, env_file: Path | None, profile: str | None) -> None:
     ctx.obj["profile"] = profile
 
 
-def _load_config(ctx: click.Context) -> cfg_module.Config:
+def _load_config(
+    ctx: click.Context, inline_env: dict[str, str] | None = None
+) -> cfg_module.Config:
     """Load configuration from context."""
     env_file = ctx.obj.get("env_file")
     try:
-        return cfg_module.load(env_file=env_file)
+        return cfg_module.load(env_file=env_file, inline_env=inline_env)
     except ValueError as e:
         _print_error(str(e))
         sys.exit(1)
@@ -729,41 +731,61 @@ def run_pipeline(
     """Run full pipeline from YAML configuration file.
 
     CONFIG_FILE is a YAML file specifying target, nights, bands, and options.
+    The YAML can include environment configuration in two ways:
 
     \b
-    Example YAML format:
+    1. 'profile' field - loads .env.{profile}
+    2. 'env' section - inline environment variables (self-contained)
+
+    \b
+    Example with profile:
+        profile: "2023ixf"    # Loads .env.2023ixf
         object: "2023ixf"
-        ra: 210.910833
-        dec: 54.316389
-        bands: ["r", "i"]
+        ...
 
-        template:
-          type: ps1
-          degrade_seeing: 2.0
-
-        nights:
-          20230519:
-            r: []
-            i: []
-
-        options:
-          jobs: 8
-          forced_phot: true
-          lightcurve: true
+    \b
+    Example with inline env (self-contained):
+        env:
+          REPO: "/path/to/repo"
+          STACK_DIR: "/path/to/stack"
+          OBS_NICKEL: "/path/to/obs_nickel"
+          RAW_PARENT_DIR: "/path/to/raw"
+        object: "2023ixf"
+        ...
 
     \b
     Example:
         nickel run scripts/config/2023ixf/pipeline.yaml
         nickel run pipeline.yaml --dry-run
     """
-    config = _load_config(ctx)
+    from obs_nickel_data_tools.core import run as run_module
+
+    inline_env = None
+
+    # Check if the YAML specifies inline env vars (highest priority)
+    yaml_env = run_module.get_env_from_yaml(config_file)
+    if yaml_env:
+        inline_env = yaml_env
+        _print_info("Using inline environment from pipeline YAML")
+    else:
+        # Check if the YAML specifies a profile and no -p flag was given
+        cli_profile = ctx.obj.get("profile")
+        if not cli_profile:
+            yaml_profile = run_module.get_profile_from_yaml(config_file)
+            if yaml_profile:
+                # Resolve and use the YAML-specified profile
+                resolved = _resolve_env_file(None, yaml_profile)
+                if resolved:
+                    ctx.obj["env_file"] = resolved
+                    ctx.obj["profile"] = yaml_profile
+                    _print_info(f"Using profile '{yaml_profile}' from pipeline YAML")
+
+    config = _load_config(ctx, inline_env=inline_env)
 
     _print_info(f"Running pipeline from {config_file}...")
 
     if dry_run:
         _print_info("[DRY RUN] Commands will be printed but not executed")
-
-    from obs_nickel_data_tools.core import run as run_module
 
     result = run_module.run(
         config_file=config_file,
@@ -788,6 +810,201 @@ def run_pipeline(
         if result.failed_dia:
             click.echo(f"  Failed DIA: {result.failed_dia}")
         sys.exit(1)
+
+
+# =============================================================================
+# bps - Batch Processing Service integration
+# =============================================================================
+
+
+@cli.group()
+@click.pass_context
+def bps(ctx: click.Context) -> None:
+    """Submit and manage BPS workflows on HPC clusters.
+
+    BPS (Batch Processing Service) enables large-scale parallel processing
+    on Slurm, HTCondor, or local Parsl executors.
+
+    \b
+    Available sites:
+        slurm     - Slurm clusters via Parsl
+        htcondor  - HTCondor pools
+        local     - Local machine (for testing)
+
+    \b
+    Example:
+        nickel bps submit calibs 20230519 --site slurm
+        nickel bps submit dia 20230519 --site slurm --band r
+        nickel bps status RUN_ID
+        nickel bps cancel RUN_ID
+    """
+    pass
+
+
+@bps.command("submit")
+@click.argument("pipeline", type=click.Choice(["calibs", "science", "dia", "fphot"]))
+@click.argument("night")
+@click.option(
+    "--site",
+    default="slurm",
+    type=click.Choice(["slurm", "htcondor", "local"]),
+    help="Compute site (default: slurm)",
+)
+@click.option("-b", "--band", help="Band for DIA pipeline (required for dia)")
+@click.option("-t", "--template", help="Template collection for DIA")
+@click.option("--object", "object_filter", help="Filter by OBJECT header")
+@click.option("--coords", help="Coordinate collection for forced photometry")
+@click.option("--project", default="nickel", help="HPC project/account")
+@click.option("--dry-run", is_flag=True, help="Show what would be submitted")
+@click.pass_context
+def bps_submit(
+    ctx: click.Context,
+    pipeline: str,
+    night: str,
+    site: str,
+    band: str | None,
+    template: str | None,
+    object_filter: str | None,
+    coords: str | None,
+    project: str,
+    dry_run: bool,
+) -> None:
+    """Submit a pipeline to BPS for parallel execution.
+
+    PIPELINE is one of: calibs, science, dia, fphot
+    NIGHT is the observing date (YYYYMMDD)
+
+    \b
+    Example:
+        nickel bps submit calibs 20230519 --site slurm
+        nickel bps submit science 20230519 --site local --dry-run
+        nickel bps submit dia 20230519 --site slurm --band r
+    """
+    # Validate DIA requires band
+    if pipeline == "dia" and not band:
+        _print_error("DIA pipeline requires --band option")
+        sys.exit(1)
+
+    config = _load_config(ctx)
+
+    from obs_nickel_data_tools.core import bps as bps_module
+
+    bps_cfg = bps_module.BPSConfig(
+        pipeline=pipeline,
+        night=night,
+        site=site,
+        band=band,
+        template_collection=template,
+        object_filter=object_filter,
+        coord_collection=coords,
+        project=project,
+        dry_run=dry_run,
+    )
+
+    mode_str = "[DRY RUN] " if dry_run else ""
+    _print_info(f"{mode_str}Submitting {pipeline} pipeline for {night} to {site}...")
+
+    result = bps_module.submit(bps_cfg, config)
+
+    if result.success:
+        if dry_run:
+            _print_success(f"[DRY RUN] Would submit to {site}")
+            if result.config_file:
+                click.echo(f"  Config file: {result.config_file}")
+        else:
+            _print_success("BPS workflow submitted")
+        if result.submit_dir:
+            click.echo(f"  Submit dir: {result.submit_dir}")
+        if result.run_id:
+            click.echo(f"  Run ID: {result.run_id}")
+            click.echo(f"\n  Check status: nickel bps status {result.run_id}")
+    else:
+        _print_error(f"BPS submission failed: {result.error}")
+        if result.stderr:
+            click.echo(f"\nStderr:\n{result.stderr}")
+        sys.exit(1)
+
+
+@bps.command("status")
+@click.argument("run_id")
+@click.pass_context
+def bps_status(ctx: click.Context, run_id: str) -> None:
+    """Check status of a BPS run.
+
+    RUN_ID is the identifier returned by bps submit.
+
+    \b
+    Example:
+        nickel bps status 12345
+    """
+    config = _load_config(ctx)
+
+    from obs_nickel_data_tools.core import bps as bps_module
+
+    _print_info(f"Checking status of run {run_id}...")
+
+    result = bps_module.status(run_id, config)
+
+    if result.get("success"):
+        click.echo(result.get("output", "No output"))
+    else:
+        _print_error(f"Failed to get status: {result.get('error', 'Unknown error')}")
+        sys.exit(1)
+
+
+@bps.command("cancel")
+@click.argument("run_id")
+@click.option("--force", is_flag=True, help="Force cancellation")
+@click.pass_context
+def bps_cancel(ctx: click.Context, run_id: str, force: bool) -> None:
+    """Cancel a running BPS workflow.
+
+    RUN_ID is the identifier returned by bps submit.
+
+    \b
+    Example:
+        nickel bps cancel 12345
+    """
+    config = _load_config(ctx)
+
+    from obs_nickel_data_tools.core import bps as bps_module
+
+    if not force:
+        if not click.confirm(f"Cancel run {run_id}?"):
+            click.echo("Cancelled")
+            return
+
+    _print_info(f"Cancelling run {run_id}...")
+
+    if bps_module.cancel(run_id, config):
+        _print_success(f"Run {run_id} cancelled")
+    else:
+        _print_error(f"Failed to cancel run {run_id}")
+        sys.exit(1)
+
+
+@bps.command("list")
+@click.pass_context
+def bps_list(ctx: click.Context) -> None:
+    """List recent BPS runs.
+
+    \b
+    Example:
+        nickel bps list
+    """
+    config = _load_config(ctx)
+
+    from obs_nickel_data_tools.core import bps as bps_module
+
+    runs = bps_module.list_runs(config)
+
+    if not runs:
+        click.echo("No BPS runs found")
+        return
+
+    click.echo("Recent BPS runs:")
+    for run in runs:
+        click.echo(f"  {run.get('raw', run)}")
 
 
 def main() -> None:

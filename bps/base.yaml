@@ -1,0 +1,102 @@
+# Nickel Processing Suite - Base BPS Configuration
+#
+# This file contains shared settings for all BPS pipelines.
+# Pipeline-specific configs inherit from this via includeConfigs.
+#
+# Variables (substituted at submit time):
+#   {repo}              - Butler repository path
+#   {night}             - Observing night (YYYYMMDD)
+#   {timestamp}         - Run timestamp
+#   {obs_nickel}        - Path to obs_nickel package
+#   {cp_pipe_dir}       - Path to cp_pipe package
+#   {operator}          - Username for output collection
+#   {project}           - Project name for accounting
+
+# =============================================================================
+# Payload Defaults
+# =============================================================================
+# These are overridden by pipeline-specific configs
+payload:
+  payloadName: nickel-{pipeline}-{night}
+  butlerConfig: "{repo}"
+  runInit: true
+
+# =============================================================================
+# Resource Defaults
+# =============================================================================
+# Conservative defaults suitable for most tasks
+# Pipeline configs can override for specific tasks
+
+requestMemory: 4096          # 4 GB default
+requestCpus: 1               # Single CPU per quantum
+requestDisk: 10240000        # 10 GB scratch space
+
+# Retry configuration with memory scaling
+# On OOM failure, retry with memoryMultiplier * requestMemory
+memoryMultiplier: 2.0        # Double memory on retry
+numberOfRetries: 3           # Up to 3 retries
+requestMemoryMax: 32768      # 32 GB maximum (cap scaling)
+
+# =============================================================================
+# Execution Defaults
+# =============================================================================
+
+# Quantum clustering - single quantum per job is most robust
+# This prevents one bad quantum from failing a whole cluster
+clusterAlgorithm: lsst.ctrl.bps.quantum_clustering_funcs.single_quantum_clustering
+
+# Command execution options
+executionButlerQueryStep: false   # Use local butler for queries
+
+# =============================================================================
+# Logging Configuration
+# =============================================================================
+
+# Logging options for all pipetask commands
+defaultPreCmdOpts: "--long-log --log-level INFO"
+qgraphPreCmdOpts: "--long-log --log-level INFO"
+runPreCmdOpts: "--long-log --log-level INFO --log-tty"
+
+# =============================================================================
+# Environment Setup
+# =============================================================================
+# This gets prepended to all job commands
+# Override in site-specific configs with actual paths
+
+preScript: |
+  # Source LSST stack
+  source {stack_dir}/loadLSST.bash
+  setup lsst_distrib
+
+  # Setup NPS packages
+  if [[ -d "{obs_nickel}" ]]; then
+      setup -r {obs_nickel} obs_nickel 2>/dev/null || true
+  fi
+
+  # Setup obs_nickel_data if available
+  OBS_NICKEL_DATA="{obs_nickel}/../obs_nickel_data"
+  if [[ -d "$OBS_NICKEL_DATA" ]]; then
+      setup -r "$OBS_NICKEL_DATA" obs_nickel_data 2>/dev/null || true
+  fi
+
+# =============================================================================
+# Output Configuration
+# =============================================================================
+
+# Default output collection naming
+# Override in pipeline configs for specific naming
+output:
+  # Collections follow Nickel naming convention
+  run: "Nickel/runs/{night}/{pipeline}/{timestamp}/run"
+
+# =============================================================================
+# Submit Directory Configuration
+# =============================================================================
+
+# Where to create submit directories
+submitPath: "{repo}/bps/submit"
+
+# Keep logs for debugging
+saveClusteredQgraph: true
+saveDot: true
+saveExecutionButler: true

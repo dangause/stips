@@ -197,6 +197,55 @@ env-info: ## Show which env file(s) will be loaded and key paths
 			"$${REPO_ROOT:-<unset>}" "$${STACK_DIR:-<unset>}" "$${REPO:-<unset>}" "$${OBS_NICKEL:-<unset>}" "$${CP_PIPE_DIR:-<unset>}" "$${LSST_CONDA_ENV_NAME:-<unset>}"; \
 	'
 
+# =============================================================================
+# Docker targets
+# =============================================================================
+
+DOCKER_REGISTRY ?= ghcr.io
+DOCKER_IMAGE ?= $(DOCKER_REGISTRY)/lick-observatory/nps
+DOCKER_TAG ?= latest
+LSST_TAG ?= v30_0_3
+
+.PHONY: docker-build
+docker-build: ## Build Docker image locally
+	docker build -t $(DOCKER_IMAGE):$(DOCKER_TAG) \
+		--build-arg LSST_TAG=$(LSST_TAG) \
+		-f docker/Dockerfile .
+
+.PHONY: docker-build-dev
+docker-build-dev: ## Build Docker image for development (with source mounts)
+	docker build -t nps:dev \
+		--build-arg LSST_TAG=$(LSST_TAG) \
+		-f docker/Dockerfile .
+
+.PHONY: docker-push
+docker-push: ## Push Docker image to registry
+	docker push $(DOCKER_IMAGE):$(DOCKER_TAG)
+
+.PHONY: docker-run
+docker-run: ## Run NPS container interactively
+ifndef REPO
+	$(error REPO is required for docker-run)
+endif
+	docker run --rm -it \
+		-v $(REPO):/data/repo \
+		-v $(RAW_PARENT_DIR):/data/raw \
+		-v $(REFCAT_REPO):/data/refcats:ro \
+		$(DOCKER_IMAGE):$(DOCKER_TAG) \
+		$(CMD)
+
+.PHONY: docker-compose-up
+docker-compose-up: ## Start services via docker-compose
+	docker-compose -f docker/docker-compose.yml up -d
+
+.PHONY: docker-compose-down
+docker-compose-down: ## Stop services via docker-compose
+	docker-compose -f docker/docker-compose.yml down
+
+.PHONY: singularity-build
+singularity-build: docker-build ## Build Singularity image from Docker
+	singularity build nps.sif docker-daemon://$(DOCKER_IMAGE):$(DOCKER_TAG)
+
 .PHONY: help
 help: ## Show this help message
 	@echo "Nickel Processing Suite - Available targets:"

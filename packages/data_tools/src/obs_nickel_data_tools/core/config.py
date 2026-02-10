@@ -107,6 +107,26 @@ class Config:
         return errors
 
 
+def _expand_env_vars(value: str, local_env: dict[str, str] | None = None) -> str:
+    """Expand ${VAR} references in a string.
+
+    Args:
+        value: String potentially containing ${VAR} references
+        local_env: Local environment dict to check first
+
+    Returns:
+        String with all ${VAR} references expanded
+    """
+    local_env = local_env or {}
+    while "${" in value:
+        start = value.index("${")
+        end = value.index("}", start)
+        var_name = value[start + 2 : end]
+        var_value = local_env.get(var_name, os.environ.get(var_name, ""))
+        value = value[:start] + var_value + value[end + 1 :]
+    return value
+
+
 def _parse_env_file(path: Path) -> dict[str, str]:
     """Parse a .env file into a dict."""
     env = {}
@@ -130,12 +150,7 @@ def _parse_env_file(path: Path) -> dict[str, str]:
                 ):
                     value = value[1:-1]
                 # Expand ${VAR} references
-                while "${" in value:
-                    start = value.index("${")
-                    end = value.index("}", start)
-                    var_name = value[start + 2 : end]
-                    var_value = env.get(var_name, os.environ.get(var_name, ""))
-                    value = value[:start] + var_value + value[end + 1 :]
+                value = _expand_env_vars(value, env)
                 env[key] = value
     return env
 
@@ -143,12 +158,14 @@ def _parse_env_file(path: Path) -> dict[str, str]:
 def load(
     env_file: str | Path | None = None,
     extra_env: list[str | Path] | None = None,
+    inline_env: dict[str, str] | None = None,
 ) -> Config:
     """Load configuration from environment and .env files.
 
     Args:
         env_file: Primary .env file (default: .env or $ENV_FILE)
         extra_env: Additional .env files to layer on top
+        inline_env: Dict of environment variables (highest priority after os.environ)
 
     Returns:
         Validated Config object
@@ -156,16 +173,27 @@ def load(
     Raises:
         ValueError: If required configuration is missing
     """
-    # Determine primary env file
-    if env_file is None:
-        env_file = os.environ.get("ENV_FILE", ".env")
-    env_file = Path(env_file)
-
     # Load env files in order (later files override earlier)
     merged: dict[str, str] = {}
 
-    if env_file.exists():
-        merged.update(_parse_env_file(env_file))
+    # If inline_env is provided, expand ${VAR} references and use it
+    # It takes precedence over files but we still load files as fallback
+    if inline_env:
+        for k, v in inline_env.items():
+            merged[k] = _expand_env_vars(v, merged)
+
+    # Determine primary env file (skip if inline_env provided all required keys)
+    if env_file is None and not inline_env:
+        env_file = os.environ.get("ENV_FILE", ".env")
+
+    if env_file:
+        env_file = Path(env_file)
+        if env_file.exists():
+            # File values are base, inline_env overrides
+            file_env = _parse_env_file(env_file)
+            for k, v in file_env.items():
+                if k not in merged:
+                    merged[k] = v
 
     if extra_env:
         for extra in extra_env:

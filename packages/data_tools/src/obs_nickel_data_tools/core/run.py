@@ -4,6 +4,18 @@ This module reads a YAML configuration file and orchestrates the full pipeline:
 calibs → science → DIA → forced photometry → lightcurve.
 
 Example YAML format:
+    # Environment configuration (choose one approach):
+    #
+    # Option 1: Reference a profile (loads .env.{profile})
+    profile: "2023ixf"
+    #
+    # Option 2: Inline environment variables (self-contained config)
+    env:
+      REPO: "/path/to/butler/repo"
+      STACK_DIR: "/path/to/lsst_stack"
+      OBS_NICKEL: "/path/to/obs_nickel"
+      RAW_PARENT_DIR: "/path/to/raw/data"
+
     object: "SN2023ixf"   # Must match target_name in FITS (case-insensitive partial match)
     ra: 210.910833
     dec: 54.316389
@@ -103,6 +115,9 @@ class RunConfig:
     continue_on_error: bool = True
     use_fallbacks: bool = True
 
+    # Environment profile (optional - embedded in YAML instead of -p flag)
+    profile: str | None = None
+
     @classmethod
     def from_yaml(cls, path: Path) -> RunConfig:
         """Load configuration from YAML file."""
@@ -160,7 +175,46 @@ class RunConfig:
             lightcurve=options.get("lightcurve", True),
             continue_on_error=options.get("continue_on_error", True),
             use_fallbacks=options.get("use_fallbacks", True),
+            profile=data.get("profile"),
         )
+
+
+def get_profile_from_yaml(path: Path) -> str | None:
+    """Extract just the profile field from a pipeline YAML file.
+
+    This is a lightweight function to get the profile before loading
+    the full environment configuration.
+
+    Args:
+        path: Path to pipeline YAML file
+
+    Returns:
+        Profile name if specified, None otherwise
+    """
+    with open(path) as f:
+        data = yaml.safe_load(f)
+    return data.get("profile")
+
+
+def get_env_from_yaml(path: Path) -> dict[str, str] | None:
+    """Extract inline environment variables from a pipeline YAML file.
+
+    This allows pipeline configs to be self-contained by embedding
+    environment variables directly in the YAML.
+
+    Args:
+        path: Path to pipeline YAML file
+
+    Returns:
+        Dict of environment variables if 'env' section exists, None otherwise
+    """
+    with open(path) as f:
+        data = yaml.safe_load(f)
+    env_section = data.get("env")
+    if env_section and isinstance(env_section, dict):
+        # Convert all values to strings
+        return {str(k): str(v) for k, v in env_section.items()}
+    return None
 
 
 @dataclass

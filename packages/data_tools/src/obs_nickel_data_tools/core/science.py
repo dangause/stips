@@ -288,13 +288,17 @@ def run(
     config_used: Path | None = None
     fallback_used = False
 
+    successful_run: str | None = None
+
     for i, tuned_config in enumerate(configs_to_try):
         is_fallback = i > 0
         config_label = "fallback" if is_fallback else "primary"
         log.info(f"Trying {config_label} config: {tuned_config.name}")
 
-        # Generate unique qgraph filename for this attempt
+        # Generate unique qgraph and output run for this attempt
+        # This ensures each config attempt gets its own output collection
         qg_science = qg_dir / f"processCcd_{night}_{cols.run_ts}_cfg{i}.qg"
+        attempt_run = f"{cols.science_parent}/run_cfg{i}"
 
         try:
             # Build quantum graph
@@ -310,7 +314,7 @@ def run(
                     "-o",
                     cols.science_parent,
                     "--output-run",
-                    cols.science_run,
+                    attempt_run,
                     "--save-qgraph",
                     str(qg_science),
                     "--config-file",
@@ -341,6 +345,7 @@ def run(
             # Success!
             config_used = tuned_config
             fallback_used = is_fallback
+            successful_run = attempt_run
             log.info(
                 f"Science processing succeeded with {config_label} config: {tuned_config.name}"
             )
@@ -364,6 +369,7 @@ def run(
                 "not enough",
                 "PSF",
                 "converge",
+                "FAILED",  # pipetask quantum failures
             ]
             is_recoverable = any(
                 p.lower() in error_str.lower() for p in recoverable_patterns
@@ -379,7 +385,7 @@ def run(
                 log.error(f"All {len(configs_to_try)} configs failed for night {night}")
 
     # Check if any config succeeded
-    if config_used is None:
+    if config_used is None or successful_run is None:
         return ScienceResult(
             success=False,
             night=night,
@@ -390,13 +396,13 @@ def run(
 
     try:
 
-        # Update collection chain
+        # Update collection chain to point to the successful run
         run_butler(
             [
                 "collection-chain",
                 repo,
                 cols.science_parent,
-                cols.science_run,
+                successful_run,
                 "--mode",
                 "redefine",
             ],
@@ -459,7 +465,7 @@ def run(
         return ScienceResult(
             success=True,
             night=night,
-            science_run=cols.science_run,
+            science_run=successful_run,
             coadd_run=coadd_run,
             config_used=str(config_used) if config_used else None,
             fallback_used=fallback_used,
@@ -469,7 +475,7 @@ def run(
         return ScienceResult(
             success=False,
             night=night,
-            science_run=cols.science_run,
+            science_run=successful_run,
             coadd_run=None,
             error=str(e),
             config_used=str(config_used) if config_used else None,

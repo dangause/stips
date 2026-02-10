@@ -1,0 +1,157 @@
+# Full pipeline configuration for SN 2023ixf using PS1 templates
+#
+# Usage:
+#   nickel run scripts/config/2023ixf/pipeline_ps1_template.yaml
+#   nickel run scripts/config/2023ixf/pipeline_ps1_template.yaml --dry-run
+#
+# This orchestrates the full DIA pipeline:
+#   1. Ingest PS1 templates (r/i bands)
+#   2. Run calibrations per night
+#   3. Run science processing per night
+#   4. Run DIA per night per band
+#   5. Run forced photometry at SN coordinates
+#   6. Extract combined lightcurve
+#
+# SN 2023ixf is a Type II-P supernova in M101 (NGC 5457), one of the
+# closest and brightest SNe in recent years.
+
+# =============================================================================
+# Environment Configuration (self-contained)
+# =============================================================================
+env:
+  REPO: "/Users/dangause/Developer/lick/lsst/data/nickel/2023ixf_ps1_fphot_repo"
+  STACK_DIR: "/Users/dangause/Developer/lick/lsst/lsst_stack"
+  OBS_NICKEL: "/Users/dangause/Developer/lick/lsst/lsst_stack/stack/nickel_processing_suite/packages/obs_nickel"
+  RAW_PARENT_DIR: "/Users/dangause/Developer/lick/data"
+  REFCAT_REPO: "/Users/dangause/Developer/lick/lsst/lsst_stack/stack/refcats"
+  CP_PIPE_DIR: "${STACK_DIR}/cp_pipe"
+  LICK_ARCHIVE_DIR: "/Users/dangause/Developer/lick/lick_searchable_archive"
+  LICK_ARCHIVE_URL: "https://archive.ucolick.org/archive"
+  LICK_ARCHIVE_INSTR: "NICKEL_DIR"
+
+# Target information
+# SN 2023ixf in M101 (Pinwheel Galaxy)
+# Coordinates from TNS/Transient Name Server
+object: "2023ixf"
+ra: 210.910833
+dec: 54.316389
+
+# Bands to process (PS1 templates only support r/i)
+bands: ["r", "i"]
+
+# Template configuration
+template:
+  type: ps1
+  degrade_seeing: 2.0  # Convolve PS1 to ~2 arcsec FWHM to match Nickel seeing
+
+# Science nights - SN observations from discovery through late 2023
+nights:
+  20230519:
+    r: []
+    i: []
+
+  20230521:
+    r: []
+    i: []
+
+  20230523:
+    r: []
+    i: []
+
+  20230527:
+    r: []
+    i: []
+
+  20230531:
+    r: []
+    i: []
+
+  20230602:
+    r: []
+    i: []
+
+  20230608:
+    r: []
+    i: []
+
+  20230611:
+    r: []
+    i: []
+
+  20230616:
+    r: []
+    i: []
+
+  20230618:
+    r: []
+    i: []
+
+  20230625:
+    r: []
+    i: []
+
+  20230629:
+    r: []
+    i: []
+
+  20230703:
+    r: []
+    i: []
+
+  20230706:
+    r: []
+    i: []
+
+  20230709:
+    r: []
+    i: []
+
+  20230714:
+    r: []
+    i: []
+
+  20230728:
+    r: []
+    i: []
+
+  20230801:
+    r: []
+    i: []
+
+  20230817:
+    r: []
+    i: []
+
+  20230905:
+    r: []
+    i: []
+
+  20230910:
+    r: []
+    i: []
+
+  20231211:
+    r: []
+    i: []
+
+# Pipeline configuration files (paths relative to obs_nickel/configs/)
+configs:
+  science:
+    calibrate_image: calibrateImage/tuned_configs/2023ixf_relaxed.py
+    calibrate_image_fallbacks:
+      - calibrateImage/tuned_configs/2023ixf_relaxed_psfex_sparse.py
+    colorterms: apply_colorterms.py
+  dia:
+    subtract_images: dia/subtractImages.py
+    detect_and_measure: dia/detectAndMeasure.py
+
+# Processing options
+options:
+  jobs: 8
+  skip_calibs: false
+  skip_science: false
+  skip_dia: false
+  forced_phot: true
+  lightcurve: true
+  continue_on_error: true
+  use_fallbacks: true

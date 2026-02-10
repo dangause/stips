@@ -1,7 +1,7 @@
 # Example pipeline configuration for nickel run command
 #
 # Usage:
-#   nickel -p 2023ixf run scripts/config/example_pipeline.yaml
+#   nickel run scripts/config/example_pipeline.yaml
 #   nickel run scripts/config/example_pipeline.yaml --dry-run
 #
 # This file orchestrates the full pipeline:
@@ -11,6 +11,24 @@
 #   4. Run DIA per night per band
 #   5. Run forced photometry per night
 #   6. Extract combined lightcurve
+
+# =============================================================================
+# Environment Configuration (choose ONE approach)
+# =============================================================================
+#
+# Option 1: Use a profile (loads .env.{profile} file)
+profile: "2023ixf"
+#
+# Option 2: Inline environment variables (self-contained, no .env file needed)
+# Uncomment and fill in paths for your system:
+# env:
+#   REPO: "${HOME}/Data/lick/nickel/repo"
+#   STACK_DIR: "${HOME}/lsst_stack"
+#   OBS_NICKEL: "${HOME}/Developer/obs_nickel"
+#   RAW_PARENT_DIR: "${HOME}/Data/lick/nickel/raw"
+#   # Optional:
+#   # REFCAT_REPO: "${HOME}/Data/refcats"
+#   # CP_PIPE_DIR: ""  # Auto-discovered from stack
 
 # Target information
 # NOTE: object uses flexible matching (case-insensitive, partial match)

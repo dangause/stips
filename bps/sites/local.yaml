@@ -1,0 +1,73 @@
+# Nickel Processing Suite - Local Site Configuration
+#
+# BPS configuration for local development and testing.
+# Runs on the local machine using Parsl's ThreadPoolExecutor.
+#
+# Usage:
+#   nickel bps submit calibs 20230519 --site local
+#   nickel bps submit science 20230519 --site local --dry-run
+
+includeConfigs:
+  - ../base.yaml
+
+# =============================================================================
+# WMS Backend Selection
+# =============================================================================
+wmsServiceClass: lsst.ctrl.bps.parsl.ParslService
+computeSite: local
+
+# =============================================================================
+# Parsl Configuration
+# =============================================================================
+parsl:
+  # More verbose logging for debugging
+  log_level: DEBUG
+
+  # Fewer retries for faster failure
+  retries: 1
+
+# =============================================================================
+# Local Site Definition
+# =============================================================================
+site:
+  local:
+    class: lsst.ctrl.bps.parsl.sites.Local
+
+    # Number of parallel workers
+    # Adjust based on your machine's resources
+    cores: 8
+
+    # Memory per worker (MB)
+    mem_per_worker: 4096
+
+    # Working directory for Parsl
+    # run_dir: "/tmp/nps-bps"
+
+# =============================================================================
+# Reduced Resources for Local Testing
+# =============================================================================
+# Override base.yaml defaults with smaller values for local testing
+
+requestMemory: 2048              # 2 GB for local testing
+requestCpus: 1
+numberOfRetries: 1               # Fail fast for debugging
+memoryMultiplier: 1.5            # Smaller scaling for local
+
+# =============================================================================
+# Task-Specific Overrides (Local)
+# =============================================================================
+pipetask:
+  # All tasks get reduced memory for local testing
+  isr:
+    requestMemory: 2048
+
+  calibrateImage:
+    requestMemory: 4096
+    requestCpus: 2
+
+  subtractImages:
+    requestMemory: 8192
+    requestCpus: 2
+
+  detectAndMeasureDiaSource:
+    requestMemory: 4096
