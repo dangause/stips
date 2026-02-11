@@ -423,65 +423,73 @@ def download(ctx: click.Context, night: str, overwrite: bool) -> None:
 
 
 @cli.command()
+@click.argument(
+    "config_file", type=click.Path(exists=True, path_type=Path), required=False
+)
 @click.pass_context
-def bootstrap(ctx: click.Context) -> None:
+def bootstrap(ctx: click.Context, config_file: Path | None) -> None:
     """Initialize a new Butler repository.
 
     Creates the Butler repo, registers the instrument, ingests reference
     catalogs, and sets up the skymap. Run this once before processing data.
 
+    Configuration can be provided in three ways (in order of precedence):
+
     \b
-    Example:
+    1. Pipeline YAML file with 'env' section (recommended):
+       nickel bootstrap scripts/config/2023ixf/pipeline_ps1_template.yaml
+
+    \b
+    2. Profile flag:
+       nickel -p 2023ixf bootstrap
+
+    \b
+    3. Environment file:
+       nickel --env-file .env.2023ixf bootstrap
+
+    \b
+    Examples:
+        nickel bootstrap scripts/config/2023ixf/pipeline_ps1_template.yaml
+        nickel bootstrap scripts/config/2020wnt/pipeline_nickel_template.yaml
         nickel -p 2023ixf bootstrap
     """
-    config = _load_config(ctx)
+    from obs_nickel_data_tools.core import bootstrap as bootstrap_module
+    from obs_nickel_data_tools.core import run as run_module
+
+    inline_env = None
+
+    # If a pipeline YAML is provided, extract env from it
+    if config_file:
+        yaml_env = run_module.get_env_from_yaml(config_file)
+        if yaml_env:
+            inline_env = yaml_env
+            _print_info(f"Using environment from: {config_file}")
+        else:
+            # Check for profile in YAML
+            cli_profile = ctx.obj.get("profile")
+            if not cli_profile:
+                yaml_profile = run_module.get_profile_from_yaml(config_file)
+                if yaml_profile:
+                    resolved = _resolve_env_file(None, yaml_profile)
+                    if resolved:
+                        ctx.obj["env_file"] = resolved
+                        ctx.obj["profile"] = yaml_profile
+                        _print_info(
+                            f"Using profile '{yaml_profile}' from: {config_file}"
+                        )
+
+    config = _load_config(ctx, inline_env=inline_env)
 
     _print_info("Bootstrapping Butler repository...")
     _print_info(f"  Repo: {config.repo}")
 
-    # Find the bootstrap script
-    # obs_nickel could be the package dir or the monorepo root
-    script_candidates = [
-        config.obs_nickel.parent.parent / "scripts/pipeline/00_bootstrap_repo.sh",
-        config.obs_nickel / "../../scripts/pipeline/00_bootstrap_repo.sh",
-    ]
+    result = bootstrap_module.run(config)
 
-    # Also check if we're in the monorepo
-    cwd = Path.cwd()
-    script_candidates.insert(0, cwd / "scripts/pipeline/00_bootstrap_repo.sh")
-
-    bootstrap_script = None
-    for candidate in script_candidates:
-        resolved = candidate.resolve()
-        if resolved.exists():
-            bootstrap_script = resolved
-            break
-
-    if not bootstrap_script:
-        _print_error(
-            "Bootstrap script not found. Run from the nickel_processing_suite directory."
-        )
-        sys.exit(1)
-
-    from obs_nickel_data_tools.core.stack import run_with_stack
-
-    try:
-        # Run the bootstrap script through the stack
-        result = run_with_stack(
-            [str(bootstrap_script)],
-            config,
-            check=False,
-        )
-
-        if result.returncode == 0:
-            _print_success("✓ Bootstrap complete")
-            click.echo(f"  Repository ready: {config.repo}")
-        else:
-            _print_error(f"Bootstrap failed with exit code {result.returncode}")
-            sys.exit(result.returncode)
-
-    except Exception as e:
-        _print_error(f"Bootstrap failed: {e}")
+    if result.success:
+        _print_success("✓ Bootstrap complete")
+        click.echo(f"  Repository ready: {config.repo}")
+    else:
+        _print_error(f"Bootstrap failed: {result.error}")
         sys.exit(1)
 
 

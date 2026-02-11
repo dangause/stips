@@ -5,6 +5,7 @@
 #   nickel run scripts/config/2023ixf/pipeline_nickel_template.yaml --dry-run
 #
 # This orchestrates the full DIA pipeline:
+#   0. Bootstrap repository (automatic if needed)
 #   1. Build coadd templates from late-time Nickel observations (SN faded)
 #   2. Run calibrations per night
 #   3. Run science processing per night

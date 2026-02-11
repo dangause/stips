@@ -5,6 +5,7 @@
 #   nickel run scripts/config/example_pipeline.yaml --dry-run
 #
 # This file orchestrates the full pipeline:
+#   0. Bootstrap repository (automatic if needed)
 #   1. Ingest PS1 templates (r/i bands only)
 #   2. Run calibrations per night
 #   3. Run science processing per night

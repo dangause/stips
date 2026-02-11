@@ -283,77 +283,128 @@ def run(
         f"{object_expr}{exclusion_expr}"
     )
 
-    # Try each config in order until one succeeds
-    last_error: str | None = None
+    # Import processing log for tracking
+    from obs_nickel_data_tools.core import processing_log
+
+    # Create processing log for this night
+    plog = processing_log.create_log(night, "science")
+
+    # Single output run - all configs write here
+    output_run = cols.science_run
+
+    # Try each config in order, using --extend-run for fallbacks
     config_used: Path | None = None
     fallback_used = False
-
-    successful_run: str | None = None
+    any_success = False
 
     for i, tuned_config in enumerate(configs_to_try):
         is_fallback = i > 0
         config_label = "fallback" if is_fallback else "primary"
         log.info(f"Trying {config_label} config: {tuned_config.name}")
 
-        # Generate unique qgraph and output run for this attempt
-        # This ensures each config attempt gets its own output collection
+        # Each attempt gets its own qgraph (different config = different plan)
         qg_science = qg_dir / f"processCcd_{night}_{cols.run_ts}_cfg{i}.qg"
-        attempt_run = f"{cols.science_parent}/run_cfg{i}"
+
+        # Track this attempt
+        attempt = processing_log.ConfigAttempt(
+            config=tuned_config.name,
+            is_fallback=is_fallback,
+        )
 
         try:
+            # Build qgraph arguments
+            qgraph_args = [
+                "qgraph",
+                "-b",
+                repo,
+                "-p",
+                f"{pipeline}#stage1-single-visit",
+                "-i",
+                f"{raw_run},{cols.calib_chain},{REFCATS_CHAIN},{SKYMAPS_CHAIN}",
+                "-o",
+                cols.science_parent,
+                "--output-run",
+                output_run,
+                "--save-qgraph",
+                str(qg_science),
+                "--config-file",
+                f"calibrateImage:{tuned_config}",
+                "--config-file",
+                f"calibrateImage:{colorterms_config}",
+                "-d",
+                data_query,
+            ]
+
+            # For fallback attempts, add --extend-run to skip already-completed quanta
+            if is_fallback:
+                qgraph_args.append("--extend-run")
+
             # Build quantum graph
-            run_pipetask(
-                [
-                    "qgraph",
-                    "-b",
-                    repo,
-                    "-p",
-                    f"{pipeline}#stage1-single-visit",
-                    "-i",
-                    f"{raw_run},{cols.calib_chain},{REFCATS_CHAIN},{SKYMAPS_CHAIN}",
-                    "-o",
-                    cols.science_parent,
-                    "--output-run",
-                    attempt_run,
-                    "--save-qgraph",
-                    str(qg_science),
-                    "--config-file",
-                    f"calibrateImage:{tuned_config}",
-                    "--config-file",
-                    f"calibrateImage:{colorterms_config}",
-                    "-d",
-                    data_query,
-                ],
-                config,
-            )
+            run_pipetask(qgraph_args, config)
+
+            # Build run arguments
+            run_args = [
+                "run",
+                "-b",
+                repo,
+                "-g",
+                str(qg_science),
+                "-j",
+                str(jobs),
+                "--register-dataset-types",
+            ]
+
+            # For fallback attempts, add --clobber-outputs to replace failed quanta
+            if is_fallback:
+                run_args.extend(["--clobber-outputs", "--extend-run"])
 
             # Run science processing
-            run_pipetask(
-                [
-                    "run",
-                    "-b",
-                    repo,
-                    "-g",
-                    str(qg_science),
-                    "-j",
-                    str(jobs),
-                    "--register-dataset-types",
-                ],
+            result = run_pipetask(
+                run_args,
                 config,
+                capture_output=True,
+                check=False,
             )
 
-            # Success!
-            config_used = tuned_config
-            fallback_used = is_fallback
-            successful_run = attempt_run
-            log.info(
-                f"Science processing succeeded with {config_label} config: {tuned_config.name}"
-            )
-            break
+            if result.returncode == 0:
+                # Full success with this config
+                attempt.quanta_succeeded = 1  # Placeholder - actual count from Butler
+                any_success = True
+                config_used = tuned_config
+                fallback_used = is_fallback
+                log.info(
+                    f"Science processing succeeded with {config_label} config: {tuned_config.name}"
+                )
+                plog.add_attempt(attempt)
+                break
+            else:
+                # Partial failure - some quanta may have succeeded
+                attempt.error = (
+                    result.stderr[:500] if result.stderr else "Unknown error"
+                )
+                attempt.failed_exposures = processing_log.parse_pipetask_failures(
+                    result.stderr or "", result.stdout or ""
+                )
+                attempt.quanta_failed = len(attempt.failed_exposures) or 1
+                plog.add_attempt(attempt)
+
+                # Check if we should try fallback
+                if not use_fallbacks or i == len(configs_to_try) - 1:
+                    log.error(f"Config failed: {tuned_config.name}")
+                    if i == len(configs_to_try) - 1:
+                        log.error(
+                            f"All {len(configs_to_try)} configs exhausted for {night}"
+                        )
+                else:
+                    log.warning(
+                        f"{config_label} config had failures, trying fallback..."
+                    )
 
         except Exception as e:
             error_str = str(e)
-            last_error = error_str
+            attempt.error = error_str[:500]
+            attempt.quanta_failed = 1
+            plog.add_attempt(attempt)
             log.warning(
                 f"{config_label.capitalize()} config failed: {tuned_config.name}"
             )
@@ -381,11 +432,16 @@ def run(
                 )
                 break
 
-            if i == len(configs_to_try) - 1:
-                log.error(f"All {len(configs_to_try)} configs failed for night {night}")
+    # Finalize and save processing log
+    plog.output_collection = output_run
+    plog.finalize()
+    processing_log.save_log(plog, config)
 
     # Check if any config succeeded
-    if config_used is None or successful_run is None:
+    if not any_success:
+        last_error = (
+            plog.configs_tried[-1].error if plog.configs_tried else "No configs tried"
+        )
         return ScienceResult(
             success=False,
             night=night,
@@ -395,14 +451,13 @@ def run(
         )
 
     try:
-
-        # Update collection chain to point to the successful run
+        # Update collection chain to point to the output run
         run_butler(
             [
                 "collection-chain",
                 repo,
                 cols.science_parent,
-                successful_run,
+                output_run,
                 "--mode",
                 "redefine",
             ],
@@ -465,7 +520,7 @@ def run(
         return ScienceResult(
             success=True,
             night=night,
-            science_run=successful_run,
+            science_run=output_run,
             coadd_run=coadd_run,
             config_used=str(config_used) if config_used else None,
             fallback_used=fallback_used,
@@ -475,7 +530,7 @@ def run(
         return ScienceResult(
             success=False,
             night=night,
-            science_run=successful_run,
+            science_run=output_run,
             coadd_run=None,
             error=str(e),
             config_used=str(config_used) if config_used else None,

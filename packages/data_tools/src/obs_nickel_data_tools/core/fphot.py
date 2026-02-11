@@ -79,18 +79,23 @@ def run(
     errors: list[str] = []
 
     # Find processCcd collection
-    result = run_butler(
-        ["query-collections", repo, f"Nickel/runs/{night}/processCcd/*/run"],
-        config,
-        capture_output=True,
-        check=False,
-    )
-
+    # Try patterns in order of preference: /run (current), /run_cfg* (legacy fallback)
     processccd_coll = None
-    if result.returncode == 0:
-        colls = _parse_collections(result.stdout)
-        if colls:
-            processccd_coll = sorted(colls)[-1]  # Latest
+    for pattern in [
+        f"Nickel/runs/{night}/processCcd/*/run",
+        f"Nickel/runs/{night}/processCcd/*/run_cfg*",
+    ]:
+        result = run_butler(
+            ["query-collections", repo, pattern],
+            config,
+            capture_output=True,
+            check=False,
+        )
+        if result.returncode == 0:
+            colls = _parse_collections(result.stdout)
+            if colls:
+                processccd_coll = sorted(colls)[-1]  # Latest
+                break
 
     if not processccd_coll:
         return ForcedPhotResult(

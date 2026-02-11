@@ -240,6 +240,7 @@ def run(
     """Run full pipeline from YAML configuration.
 
     This orchestrates:
+    0. Bootstrap repository if needed (auto-detected)
     1. PS1 template ingestion (or coadd building) per band
     2. Calibrations per night
     3. Science processing per night
@@ -256,6 +257,7 @@ def run(
         RunResult with status and any failures
     """
     from obs_nickel_data_tools.core import (
+        bootstrap,
         calibs,
         dia,
         fphot,
@@ -264,6 +266,20 @@ def run(
         science,
     )
     from obs_nickel_data_tools.core.science import ScienceConfig
+
+    # Step 0: Check if bootstrap is needed
+    if bootstrap.needs_bootstrap(config):
+        log.info(f"Repository not initialized, running bootstrap: {config.repo}")
+        if not dry_run:
+            bootstrap_result = bootstrap.run(config)
+            if not bootstrap_result.success:
+                return RunResult(
+                    success=False,
+                    error=f"Bootstrap failed: {bootstrap_result.error}",
+                )
+            log.info("Bootstrap complete")
+        else:
+            log.info("[DRY RUN] Would run bootstrap")
 
     # Load run configuration
     run_cfg = RunConfig.from_yaml(config_file)
