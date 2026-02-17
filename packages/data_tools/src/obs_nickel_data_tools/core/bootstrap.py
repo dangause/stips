@@ -76,6 +76,7 @@ def run(
     config: Config,
     *,
     dry_run: bool = False,
+    log_file: Path | None = None,
 ) -> BootstrapResult:
     """Bootstrap a Butler repository.
 
@@ -85,6 +86,7 @@ def run(
     Args:
         config: Pipeline configuration with REPO, STACK_DIR, etc.
         dry_run: Print commands without executing
+        log_file: Optional path to write LSST pipeline logs
 
     Returns:
         BootstrapResult with status

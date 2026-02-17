@@ -20,7 +20,7 @@
 # Environment Configuration (self-contained)
 # =============================================================================
 env:
-  REPO: "/Users/dangause/Developer/lick/lsst/data/nickel/2023ixf_ps1_fphot_repo"
+  REPO: "/Users/dangause/Developer/lick/lsst/data/nickel/2023ixf_ps1_021226_repo"
   STACK_DIR: "/Users/dangause/Developer/lick/lsst/lsst_stack"
   OBS_NICKEL: "/Users/dangause/Developer/lick/lsst/lsst_stack/stack/nickel_processing_suite/packages/obs_nickel"
   RAW_PARENT_DIR: "/Users/dangause/Developer/lick/data"
@@ -138,9 +138,11 @@ nights:
 # Pipeline configuration files (paths relative to obs_nickel/configs/)
 configs:
   science:
-    calibrate_image: calibrateImage/tuned_configs/2023ixf_relaxed.py
+    calibrate_image: calibrateImage/tuned_configs/dense_strict.py
     calibrate_image_fallbacks:
-      - calibrateImage/tuned_configs/2023ixf_relaxed_psfex_sparse.py
+      - calibrateImage/tuned_configs/dense_relaxed.py
+      - calibrateImage/tuned_configs/sparse_strict.py
+      - calibrateImage/tuned_configs/sparse_relaxed.py
     colorterms: apply_colorterms.py
   dia:
     subtract_images: dia/subtractImages.py
@@ -148,11 +150,14 @@ configs:
 
 # Processing options
 options:
-  jobs: 8
-  skip_calibs: false
+  jobs: 6
+  skip_calibs: true
   skip_science: false
   skip_dia: false
   forced_phot: true
+  forced_phot_image_type: diffim
   lightcurve: true
+  lightcurve_dataset_type: forced_phot_diffim_radec
+  lightcurve_min_snr: -999
   continue_on_error: true
   use_fallbacks: true

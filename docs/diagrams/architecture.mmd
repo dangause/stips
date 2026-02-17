@@ -1,0 +1,111 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#4a90d9', 'primaryTextColor': '#fff', 'primaryBorderColor': '#2d5986', 'lineColor': '#5c5c5c', 'secondaryColor': '#f4f4f4', 'tertiaryColor': '#e8f4f8'}}}%%
+
+flowchart TB
+    subgraph UserInterface["User Interface Layer"]
+        CLI["nickel CLI"]
+        YAML["Pipeline YAML Configs"]
+        ENV[".env Profiles"]
+    end
+
+    subgraph CoreModules["Core Processing Modules"]
+        direction TB
+        Bootstrap["bootstrap.py<br/>Repository Init"]
+        Calibs["calibs.py<br/>Nightly Calibrations"]
+        Science["science.py<br/>ISR + WCS + Photometry"]
+        DIA["dia.py<br/>Difference Imaging"]
+        FPhot["fphot.py<br/>Forced Photometry"]
+        LC["lightcurve.py<br/>Light Curve Extraction"]
+        PS1["ps1_template.py<br/>PS1 Template Ingestion"]
+    end
+
+    subgraph Orchestration["Orchestration Layer"]
+        Run["run.py<br/>YAML Pipeline Runner"]
+        BPS["bps.py<br/>HPC Batch Submission"]
+        ProcLog["processing_log.py<br/>Failure Tracking"]
+    end
+
+    subgraph Infrastructure["Infrastructure Layer"]
+        Config["config.py<br/>Environment Loading"]
+        Stack["stack.py<br/>LSST Stack Activation"]
+        Pipeline["pipeline.py<br/>Collection Naming"]
+    end
+
+    subgraph External["External Systems"]
+        Butler["Butler Repository"]
+        LSST["LSST Science Pipelines"]
+        Archive["Lick Archive"]
+        HPC["HPC Cluster<br/>(Slurm/HTCondor)"]
+    end
+
+    subgraph Packages["Package Layer"]
+        ObsNickel["obs_nickel<br/>Instrument Definition"]
+        ObsNickelData["obs_nickel_data<br/>Curated Calibrations"]
+        DataTools["data_tools<br/>CLI & Core Modules"]
+    end
+
+    %% User to Interface
+    CLI --> Run
+    CLI --> Bootstrap
+    CLI --> Calibs
+    CLI --> Science
+    CLI --> DIA
+    CLI --> FPhot
+    CLI --> LC
+    CLI --> BPS
+
+    YAML --> Run
+    ENV --> Config
+
+    %% Orchestration
+    Run --> Bootstrap
+    Run --> Calibs
+    Run --> Science
+    Run --> DIA
+    Run --> FPhot
+    Run --> LC
+    Run --> PS1
+    Run --> ProcLog
+
+    %% Core to Infrastructure
+    Bootstrap --> Stack
+    Calibs --> Stack
+    Science --> Stack
+    DIA --> Stack
+    FPhot --> Stack
+    Science --> ProcLog
+
+    Bootstrap --> Config
+    Calibs --> Config
+    Science --> Config
+    DIA --> Config
+
+    Calibs --> Pipeline
+    Science --> Pipeline
+    DIA --> Pipeline
+    FPhot --> Pipeline
+
+    %% Infrastructure to External
+    Stack --> LSST
+    Stack --> Butler
+    Config --> ENV
+    BPS --> HPC
+
+    %% Packages
+    ObsNickel --> LSST
+    ObsNickelData --> Butler
+    DataTools --> ObsNickel
+
+    %% Styling
+    classDef userLayer fill:#4a90d9,stroke:#2d5986,color:#fff
+    classDef coreLayer fill:#5cb85c,stroke:#3d8b3d,color:#fff
+    classDef orchLayer fill:#f0ad4e,stroke:#c77c11,color:#fff
+    classDef infraLayer fill:#d9534f,stroke:#a33d3a,color:#fff
+    classDef extLayer fill:#777,stroke:#555,color:#fff
+    classDef pkgLayer fill:#9b59b6,stroke:#7d3c98,color:#fff
+
+    class CLI,YAML,ENV userLayer
+    class Bootstrap,Calibs,Science,DIA,FPhot,LC,PS1 coreLayer
+    class Run,BPS,ProcLog orchLayer
+    class Config,Stack,Pipeline infraLayer
+    class Butler,LSST,Archive,HPC extLayer
+    class ObsNickel,ObsNickelData,DataTools pkgLayer

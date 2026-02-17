@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -14,6 +15,7 @@ from obs_nickel_data_tools.core.pipeline import (
     SKYMAPS_CHAIN,
     CollectionNames,
     build_exclusion_expr,
+    find_bad_coord_exposures,
     parse_bad_exposures,
     validate_night,
 )
@@ -23,6 +25,47 @@ if TYPE_CHECKING:
     from obs_nickel_data_tools.core.config import Config
 
 log = logging.getLogger(__name__)
+
+
+def _parse_quanta_summary(output: str, log_file: Path | None = None) -> tuple[int, int]:
+    """Parse pipetask output for quanta success/failure counts.
+
+    Looks for the final "Executed N quanta successfully, M failed and 0 remain"
+    line in the pipetask output or log file.
+
+    Args:
+        output: Captured stdout/stderr from pipetask
+        log_file: Optional path to LSST log file (checked when --no-log-tty is used)
+
+    Returns:
+        Tuple of (succeeded, failed) counts. Returns (0, 0) if not found.
+    """
+    succeeded = 0
+    failed = 0
+    pattern = re.compile(
+        r"Executed (\d+) quanta successfully, (\d+) failed and (\d+) remain"
+    )
+
+    # Check captured output first
+    for line in output.splitlines():
+        m = pattern.search(line)
+        if m:
+            succeeded = int(m.group(1))
+            failed = int(m.group(2))
+
+    # If not found in captured output, check log file (LSST logs go there with --no-log-tty)
+    if succeeded == 0 and failed == 0 and log_file and log_file.exists():
+        try:
+            with open(log_file) as f:
+                for line in f:
+                    m = pattern.search(line)
+                    if m:
+                        succeeded = int(m.group(1))
+                        failed = int(m.group(2))
+        except OSError:
+            pass
+
+    return succeeded, failed
 
 
 @dataclass
@@ -61,6 +104,8 @@ class ScienceResult:
     error: str | None = None
     config_used: str | None = None  # Which config file succeeded
     fallback_used: bool = False  # Whether a fallback config was used
+    quanta_succeeded: int = 0
+    quanta_failed: int = 0
 
 
 def resolve_object_filter(
@@ -102,6 +147,7 @@ def resolve_object_filter(
             ],
             config,
             capture_output=True,
+            log_file=None,  # Don't log query operations
         )
 
         # Parse unique target names from output
@@ -165,6 +211,9 @@ def run(
     science_config: Path | None = None,
     science_cfg: ScienceConfig | None = None,
     use_fallbacks: bool = True,
+    target_ra: float | None = None,
+    target_dec: float | None = None,
+    log_file: Path | None = None,
 ) -> ScienceResult:
     """Run science processing for a night.
 
@@ -183,6 +232,9 @@ def run(
         science_config: Override calibrateImage config file (legacy, prefer science_cfg)
         science_cfg: Full science configuration with fallbacks
         use_fallbacks: Try fallback configs on failure
+        target_ra: Expected target RA in degrees (enables coordinate validation)
+        target_dec: Expected target Dec in degrees (enables coordinate validation)
+        log_file: Optional path to write LSST pipeline logs
 
     Returns:
         ScienceResult with collection names and status
@@ -203,6 +255,7 @@ def run(
             ["query-collections", repo],
             config,
             capture_output=True,
+            log_file=log_file,
         )
         raw_run = None
         for line in result.stdout.splitlines():
@@ -228,6 +281,24 @@ def run(
 
     # Build exclusion expression
     bad_ids = parse_bad_exposures(bad_exposures, bad_file)
+
+    # Pre-flight coordinate validation: find exposures with bad coordinates
+    if target_ra is not None and target_dec is not None:
+        coord_bad_ids = find_bad_coord_exposures(
+            config,
+            night,
+            target_ra,
+            target_dec,
+            object_filter=object_filter,
+        )
+        if coord_bad_ids:
+            log.warning(
+                f"Excluding {len(coord_bad_ids)} exposures with bad coordinates: "
+                f"{coord_bad_ids}"
+            )
+            bad_ids.extend(coord_bad_ids)
+            bad_ids = sorted(set(bad_ids))
+
     exclusion_expr = build_exclusion_expr(bad_ids)
 
     # Resolve object filter with flexible matching
@@ -270,7 +341,12 @@ def run(
 
     # Register instrument
     try:
-        run_butler(["register-instrument", repo, INSTRUMENT], config, check=False)
+        run_butler(
+            ["register-instrument", repo, INSTRUMENT],
+            config,
+            check=False,
+            log_file=log_file,
+        )
     except Exception:
         pass  # Already registered
 
@@ -296,6 +372,7 @@ def run(
     config_used: Path | None = None
     fallback_used = False
     any_success = False
+    primary_created_run = False  # Track if primary config created the output run
 
     for i, tuned_config in enumerate(configs_to_try):
         is_fallback = i > 0
@@ -335,12 +412,24 @@ def run(
                 data_query,
             ]
 
-            # For fallback attempts, add --extend-run to skip already-completed quanta
-            if is_fallback:
-                qgraph_args.append("--extend-run")
+            # For fallback attempts, only use --extend-run if primary created the run collection
+            # (i.e., primary succeeded at qgraph stage even if execution had failures)
+            if is_fallback and primary_created_run:
+                qgraph_args.extend(
+                    [
+                        "--extend-run",
+                        "--skip-existing-in",
+                        output_run,
+                        "--clobber-outputs",
+                    ]
+                )
 
             # Build quantum graph
-            run_pipetask(qgraph_args, config)
+            run_pipetask(qgraph_args, config, log_file=log_file)
+
+            # If qgraph succeeded, the run collection now exists
+            if i == 0:  # primary config
+                primary_created_run = True
 
             # Build run arguments
             run_args = [
@@ -355,7 +444,8 @@ def run(
             ]
 
             # For fallback attempts, add --clobber-outputs to replace failed quanta
-            if is_fallback:
+            # Only use --extend-run if the run collection exists (primary created it)
+            if is_fallback and primary_created_run:
                 run_args.extend(["--clobber-outputs", "--extend-run"])
 
             # Run science processing
@@ -364,40 +454,73 @@ def run(
                 config,
                 capture_output=True,
                 check=False,
+                log_file=log_file,
             )
+
+            # Parse actual quanta counts from output (or log file if --no-log-tty)
+            combined_output = (result.stdout or "") + "\n" + (result.stderr or "")
+            quanta_ok, quanta_fail = _parse_quanta_summary(combined_output, log_file)
 
             if result.returncode == 0:
                 # Full success with this config
-                attempt.quanta_succeeded = 1  # Placeholder - actual count from Butler
+                attempt.quanta_succeeded = quanta_ok or 1
                 any_success = True
                 config_used = tuned_config
                 fallback_used = is_fallback
                 log.info(
-                    f"Science processing succeeded with {config_label} config: {tuned_config.name}"
+                    f"Science processing fully succeeded with {config_label} config: "
+                    f"{tuned_config.name} ({quanta_ok} quanta)"
                 )
                 plog.add_attempt(attempt)
                 break
+            elif quanta_ok > 0:
+                # Partial success - some quanta succeeded, some failed
+                # This is still a usable result
+                attempt.quanta_succeeded = quanta_ok
+                attempt.quanta_failed = quanta_fail
+                attempt.failed_exposures = processing_log.parse_pipetask_failures(
+                    result.stderr or "", result.stdout or ""
+                )
+                any_success = True
+                config_used = tuned_config
+                fallback_used = is_fallback
+                log.warning(
+                    f"Partial success with {config_label} config: {tuned_config.name} "
+                    f"({quanta_ok} quanta succeeded, {quanta_fail} failed)"
+                )
+                plog.add_attempt(attempt)
+                # Don't break - try fallback for the remaining failures
+                if not use_fallbacks or i == len(configs_to_try) - 1:
+                    log.info(
+                        f"Accepting partial result with {quanta_ok} successful quanta"
+                    )
+                    break
+                else:
+                    log.info(
+                        f"Trying fallback config for {quanta_fail} remaining failures..."
+                    )
             else:
-                # Partial failure - some quanta may have succeeded
+                # Total failure - no quanta succeeded
                 attempt.error = (
                     result.stderr[:500] if result.stderr else "Unknown error"
                 )
                 attempt.failed_exposures = processing_log.parse_pipetask_failures(
                     result.stderr or "", result.stdout or ""
                 )
-                attempt.quanta_failed = len(attempt.failed_exposures) or 1
+                attempt.quanta_failed = quanta_fail or 1
                 plog.add_attempt(attempt)
 
-                # Check if we should try fallback
+                log.error(
+                    f"No quanta succeeded with {config_label} config: {tuned_config.name}"
+                )
                 if not use_fallbacks or i == len(configs_to_try) - 1:
-                    log.error(f"Config failed: {tuned_config.name}")
                     if i == len(configs_to_try) - 1:
                         log.error(
                             f"All {len(configs_to_try)} configs exhausted for {night}"
                         )
                 else:
                     log.warning(
-                        f"{config_label} config had failures, trying fallback..."
+                        f"{config_label} config had total failure, trying fallback..."
                     )
 
         except Exception as e:
@@ -405,10 +528,29 @@ def run(
             attempt.error = error_str[:500]
             attempt.quanta_failed = 1
             plog.add_attempt(attempt)
+
+            # Log detailed error information
             log.warning(
                 f"{config_label.capitalize()} config failed: {tuned_config.name}"
             )
-            log.debug(f"Error: {error_str}")
+
+            # Surface key parts of the error for diagnostics
+            if "FileNotFoundError" in error_str and "astrometry_ref_cat" in error_str:
+                log.error(
+                    "Reference catalog not found for this field - no refcat shard available"
+                )
+                log.error("This usually means the field is outside the refcat coverage")
+            elif "Cannot --extend-run" in error_str:
+                log.error("Primary config failed before creating run collection")
+                log.error("Fallback cannot extend non-existent run - this is expected")
+            elif "FileNotFoundError" in error_str:
+                # Extract the specific file/dataset that's missing
+                match = re.search(r"connection (\S+)", error_str)
+                if match:
+                    log.error(f"Missing required dataset: {match.group(1)}")
+                log.error(f"Full error: {error_str[:200]}")
+            else:
+                log.error(f"Error: {error_str[:200]}")
 
             # Check if this is a recoverable error that fallback might help with
             recoverable_patterns = [
@@ -426,6 +568,15 @@ def run(
                 p.lower() in error_str.lower() for p in recoverable_patterns
             )
 
+            # Don't try fallback if the issue is missing refcat or cannot --extend-run
+            if "FileNotFoundError" in error_str and "astrometry_ref_cat" in error_str:
+                log.info("Refcat missing - skipping fallback (won't help)")
+                break
+            elif "Cannot --extend-run" in error_str:
+                # This is expected for fallback when primary failed at qgraph
+                # Don't log as an error, just move on
+                pass
+
             if not is_recoverable and use_fallbacks:
                 log.info(
                     "Error doesn't appear to be config-related, skipping fallbacks"
@@ -436,6 +587,10 @@ def run(
     plog.output_collection = output_run
     plog.finalize()
     processing_log.save_log(plog, config)
+
+    # Aggregate quanta counts across all attempts
+    total_succeeded = sum(a.quanta_succeeded for a in plog.configs_tried)
+    total_failed = sum(a.quanta_failed for a in plog.configs_tried)
 
     # Check if any config succeeded
     if not any_success:
@@ -448,6 +603,8 @@ def run(
             science_run=cols.science_run,
             coadd_run=None,
             error=last_error or "All configs failed",
+            quanta_succeeded=total_succeeded,
+            quanta_failed=total_failed,
         )
 
     try:
@@ -462,6 +619,7 @@ def run(
                 "redefine",
             ],
             config,
+            log_file=log_file,
         )
 
         coadd_run = None
@@ -488,6 +646,7 @@ def run(
                     f"instrument='Nickel' AND skymap='{SKYMAP_NAME}'",
                 ],
                 config,
+                log_file=log_file,
             )
 
             run_pipetask(
@@ -502,6 +661,7 @@ def run(
                     "--register-dataset-types",
                 ],
                 config,
+                log_file=log_file,
             )
 
             run_butler(
@@ -514,6 +674,7 @@ def run(
                     "redefine",
                 ],
                 config,
+                log_file=log_file,
             )
             coadd_run = cols.coadd_run
 
@@ -524,6 +685,8 @@ def run(
             coadd_run=coadd_run,
             config_used=str(config_used) if config_used else None,
             fallback_used=fallback_used,
+            quanta_succeeded=total_succeeded,
+            quanta_failed=total_failed,
         )
 
     except Exception as e:
@@ -535,4 +698,6 @@ def run(
             error=str(e),
             config_used=str(config_used) if config_used else None,
             fallback_used=fallback_used,
+            quanta_succeeded=total_succeeded,
+            quanta_failed=total_failed,
         )

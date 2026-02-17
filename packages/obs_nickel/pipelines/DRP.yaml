@@ -53,8 +53,10 @@ tasks:
       connections.exposure: preliminary_visit_image
       connections.background: preliminary_visit_image_background
       id_generator.release_id: parameters.release_id
-      # Calibration file
-      file: $OBS_NICKEL/configs/calibrateImage/tuned_configs/best_calib_t071.py
+      # NOTE: calibrateImage config is applied via --config-file in science.py
+      # to allow fallback configs (dense_strict → dense_relaxed → sparse_*).
+      # All tuned configs load best_calib_t071.py as their base.
+      # DO NOT add a 'file:' directive here — it overrides --config-file CLI args.
       # --- bootstrap PSF for first-pass detection ---
       install_simple_psf.fwhm: 2.0
       install_simple_psf.width: 35
@@ -164,7 +166,7 @@ tasks:
     config:
       connections.visitSummaries: preliminary_visit_summary
       connections.goodVisits: deep_coadd_visit_selection
-      maxPsfFwhm: 2.0         # adjust if Nickel seeing differs
+      maxPsfFwhm: 2.5         # adjust if Nickel seeing differs
       nVisitsMax: -1
 
   selectTemplateCoaddVisits:

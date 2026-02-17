@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from obs_nickel_data_tools.core.pipeline import (
@@ -36,6 +37,7 @@ def run(
     config: Config,
     *,
     jobs: int = 4,
+    log_file: Path | None = None,
 ) -> CalibsResult:
     """Run nightly calibration processing.
 
@@ -50,6 +52,7 @@ def run(
         night: Observing night (YYYYMMDD)
         config: Pipeline configuration
         jobs: Number of parallel jobs
+        log_file: Optional path to write LSST pipeline logs
 
     Returns:
         CalibsResult with collection names and status
@@ -85,7 +88,12 @@ def run(
 
     try:
         # Register instrument (idempotent)
-        run_butler(["register-instrument", repo, INSTRUMENT], config, check=False)
+        run_butler(
+            ["register-instrument", repo, INSTRUMENT],
+            config,
+            check=False,
+            log_file=log_file,
+        )
 
         # Ingest raws
         run_butler(
@@ -100,10 +108,11 @@ def run(
             ],
             config,
             check=False,  # May fail if already ingested
+            log_file=log_file,
         )
 
         # Define visits
-        run_butler(["define-visits", repo, "Nickel"], config)
+        run_butler(["define-visits", repo, "Nickel"], config, log_file=log_file)
 
         # Write curated calibrations
         run_butler(
@@ -116,6 +125,7 @@ def run(
                 cols.curated_run,
             ],
             config,
+            log_file=log_file,
         )
         run_butler(
             [
@@ -127,6 +137,7 @@ def run(
                 "redefine",
             ],
             config,
+            log_file=log_file,
         )
 
         # Build bias
@@ -152,6 +163,7 @@ def run(
                 "instrument='Nickel' AND exposure.observation_type='bias'",
             ],
             config,
+            log_file=log_file,
         )
 
         run_pipetask(
@@ -166,6 +178,7 @@ def run(
                 "--register-dataset-types",
             ],
             config,
+            log_file=log_file,
         )
 
         run_butler(
@@ -178,6 +191,7 @@ def run(
                 "redefine",
             ],
             config,
+            log_file=log_file,
         )
 
         # Certify bias (check=False to handle already-certified case)
@@ -196,6 +210,7 @@ def run(
             ],
             config,
             check=False,  # May already exist from previous run
+            log_file=log_file,
         )
 
         # Build flat
@@ -224,6 +239,7 @@ def run(
                 "cpFlatIsr:doOverscan=True",
             ],
             config,
+            log_file=log_file,
         )
 
         run_pipetask(
@@ -238,6 +254,7 @@ def run(
                 "--register-dataset-types",
             ],
             config,
+            log_file=log_file,
         )
 
         run_butler(
@@ -250,6 +267,7 @@ def run(
                 "redefine",
             ],
             config,
+            log_file=log_file,
         )
 
         # Certify flat
@@ -267,6 +285,7 @@ def run(
             ],
             config,
             check=False,  # May already exist
+            log_file=log_file,
         )
 
         # Update unified calib chain
@@ -282,6 +301,7 @@ def run(
             ],
             config,
             check=False,
+            log_file=log_file,
         )
 
         return CalibsResult(

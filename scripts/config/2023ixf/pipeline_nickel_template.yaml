@@ -23,7 +23,7 @@
 # Environment Configuration (self-contained)
 # =============================================================================
 env:
-  REPO: "/Users/dangause/Developer/lick/lsst/data/nickel/2023ixf_nickel_template_repo"
+  REPO: "/Users/dangause/Developer/lick/lsst/data/nickel/2023ixf_nickel_template_021226_repo"
   STACK_DIR: "/Users/dangause/Developer/lick/lsst/lsst_stack"
   OBS_NICKEL: "/Users/dangause/Developer/lick/lsst/lsst_stack/stack/nickel_processing_suite/packages/obs_nickel"
   RAW_PARENT_DIR: "/Users/dangause/Developer/lick/data"
@@ -49,6 +49,13 @@ template:
   # Late-time nights when SN had faded, used to build template coadds
   # Using late 2023 observations (post-plateau phase)
   nights:
+    - "20230625"
+    - "20230629"
+    - "20230706"
+    - "20230714"
+    - "20230728"
+    - "20230801"
+    - "20230817"
     - "20230905"
     - "20230910"
     - "20231211"
@@ -57,99 +64,92 @@ template:
 # Excluding template nights from science processing
 nights:
   20230519:
+    b: []
+    v: []
     r: []
     i: []
-
   20230521:
+    b: []
+    v: []
     r: []
     i: []
-
   20230523:
+    b: []
+    v: []
     r: []
     i: []
-
   20230527:
+    b: []
+    v: []
     r: []
     i: []
-
   20230531:
+    b: []
+    v: []
     r: []
     i: []
-
   20230602:
+    b: []
+    v: []
     r: []
     i: []
-
   20230608:
+    b: []
+    v: []
     r: []
     i: []
-
-  20230611:
-    r: []
-    i: []
-
   20230616:
+    b: []
+    v: []
     r: []
     i: []
-
-  20230618:
-    r: []
-    i: []
-
-  20230625:
-    r: []
-    i: []
-
-  20230629:
-    r: []
-    i: []
-
   20230703:
+    b: []
+    v: []
     r: []
     i: []
-
-  20230706:
-    r: []
-    i: []
-
   20230709:
+    b: []
+    v: []
+    r: []
+    i: []
+  20230611:
+    b: []
+    v: []
+    r: []
+    i: []
+  20230618:
+    b: []
+    v: []
     r: []
     i: []
 
-  20230714:
-    r: []
-    i: []
-
-  20230728:
-    r: []
-    i: []
-
-  20230801:
-    r: []
-    i: []
-
-  20230817:
-    r: []
-    i: []
 
 # Pipeline configuration files (paths relative to obs_nickel/configs/)
 configs:
   science:
-    calibrate_image: calibrateImage/tuned_configs/2023ixf_relaxed.py
+    calibrate_image: calibrateImage/tuned_configs/dense_strict.py
     calibrate_image_fallbacks:
-      - calibrateImage/tuned_configs/2023ixf_relaxed_psfex_sparse.py
+      - calibrateImage/tuned_configs/dense_relaxed.py
+      - calibrateImage/tuned_configs/sparse_strict.py
+      - calibrateImage/tuned_configs/sparse_relaxed.py
     colorterms: apply_colorterms.py
+  coadd:
+    make_direct_warp: coadds/makeDirectWarp_relaxed.py
   dia:
     subtract_images: dia/subtractImages.py
     detect_and_measure: dia/detectAndMeasure.py
 
 # Processing options
 options:
-  jobs: 8
-  skip_calibs: false
+  jobs: 6
+  skip_calibs: true
   skip_science: false
   skip_dia: false
   forced_phot: true
+  forced_phot_image_type: diffim
   lightcurve: true
+  lightcurve_dataset_type: forced_phot_diffim_radec
+  lightcurve_min_snr: -999
   continue_on_error: true
   use_fallbacks: true

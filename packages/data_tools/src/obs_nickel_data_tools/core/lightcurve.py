@@ -36,6 +36,7 @@ def run(
     output: Path | None = None,
     plot: bool = True,
     dataset_type: str = "dia_source_unfiltered",
+    log_file: Path | None = None,
 ) -> LightcurveResult:
     """Extract lightcurve from DIA source catalogs or forced photometry.
 
@@ -54,6 +55,7 @@ def run(
         output: Output CSV file path
         plot: Generate plot (default: True)
         dataset_type: Dataset type to query (default: dia_source_unfiltered)
+        log_file: Optional path to write LSST pipeline logs
 
     Returns:
         LightcurveResult with output paths and statistics
@@ -72,10 +74,14 @@ def run(
             output = lightcurve_dir / output
 
     # Build arguments for the extract_lightcurve script
+    # Use direct path instead of python -m to avoid PYTHONPATH issues
+    # in the LSST stack environment
+    script_path = (
+        Path(__file__).parent.parent / "pipeline_tools" / "extract_lightcurve.py"
+    )
     args = [
         "python",
-        "-m",
-        "obs_nickel_data_tools.pipeline_tools.extract_lightcurve",
+        str(script_path),
         "--repo",
         str(config.repo),
         "--collection",

@@ -107,6 +107,11 @@ export RAW_PARENT_DIR="{config.raw_parent_dir}"
     if config.lick_archive_dir:
         env_exports += f'export LICK_ARCHIVE_DIR="{config.lick_archive_dir}"\n'
 
+    # Pass through RUN_ID so shell scripts log to the same directory
+    run_id = os.environ.get("RUN_ID")
+    if run_id:
+        env_exports += f'export RUN_ID="{run_id}"\n'
+
     # Path to data_tools package (this package)
     data_tools_src = config.obs_nickel.parent / "data_tools" / "src"
 
@@ -154,6 +159,8 @@ def run_pipetask(
     *,
     capture_output: bool = False,
     check: bool = True,
+    log_file: Path | None = None,
+    log_level: str = "INFO",
 ) -> subprocess.CompletedProcess:
     """Run pipetask with the given arguments.
 
@@ -162,12 +169,43 @@ def run_pipetask(
         config: Pipeline configuration
         capture_output: If True, capture stdout/stderr
         check: If True, raise on non-zero exit
+        log_file: Optional path to write pipetask log output (appends if exists)
+        log_level: Logging level (CRITICAL|ERROR|WARNING|INFO|VERBOSE|DEBUG|TRACE)
 
     Returns:
         CompletedProcess with return code and output
+
+    Note:
+        When using parallel execution (-j > 1), LSST's logging system writes
+        log messages with timestamps in --long-log format. While multiple workers
+        may write simultaneously, the timestamped entries allow chronological
+        reconstruction. For perfectly ordered logs, consider using -j 1 or
+        post-processing the log file to sort by timestamp.
     """
+    # Build pipetask command with logging options
+    pipetask_args = ["pipetask"]
+
+    # Add logging options before the subcommand
+    if log_file:
+        # Ensure parent directory exists
+        log_file.parent.mkdir(parents=True, exist_ok=True)
+        pipetask_args.extend(["--log-file", str(log_file)])
+
+        # Disable terminal logging when writing to file to avoid duplicate output
+        # and to ensure all log messages go to the file
+        pipetask_args.append("--no-log-tty")
+
+    # Set log level (affects LSST default loggers)
+    pipetask_args.extend(["--log-level", log_level])
+
+    # Use long format for better readability and to enable timestamp-based sorting
+    pipetask_args.append("--long-log")
+
+    # Add the actual command arguments
+    pipetask_args.extend(args)
+
     return run_with_stack(
-        ["pipetask"] + args,
+        pipetask_args,
         config,
         capture_output=capture_output,
         check=check,
@@ -180,6 +218,8 @@ def run_butler(
     *,
     capture_output: bool = False,
     check: bool = True,
+    log_file: Path | None = None,
+    log_level: str = "INFO",
 ) -> subprocess.CompletedProcess:
     """Run butler with the given arguments.
 
@@ -188,12 +228,35 @@ def run_butler(
         config: Pipeline configuration
         capture_output: If True, capture stdout/stderr
         check: If True, raise on non-zero exit
+        log_file: Optional path to write butler log output (appends if exists)
+        log_level: Logging level (CRITICAL|ERROR|WARNING|INFO|VERBOSE|DEBUG|TRACE)
 
     Returns:
         CompletedProcess with return code and output
     """
+    # Build butler command with logging options
+    butler_args = ["butler"]
+
+    # Add logging options before the subcommand
+    if log_file:
+        # Ensure parent directory exists
+        log_file.parent.mkdir(parents=True, exist_ok=True)
+        butler_args.extend(["--log-file", str(log_file)])
+
+        # Disable terminal logging when writing to file
+        butler_args.append("--no-log-tty")
+
+    # Set log level
+    butler_args.extend(["--log-level", log_level])
+
+    # Use long format for better readability
+    butler_args.append("--long-log")
+
+    # Add the actual command arguments
+    butler_args.extend(args)
+
     return run_with_stack(
-        ["butler"] + args,
+        butler_args,
         config,
         capture_output=capture_output,
         check=check,

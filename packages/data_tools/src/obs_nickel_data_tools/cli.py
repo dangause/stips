@@ -16,6 +16,7 @@ Profiles:
 
 from __future__ import annotations
 
+import logging
 import sys
 from pathlib import Path
 
@@ -79,8 +80,16 @@ def _resolve_env_file(env_file: Path | None, profile: str | None) -> Path | None
     "--profile",
     help="Profile name (loads .env.{profile})",
 )
+@click.option(
+    "-v",
+    "--verbose",
+    is_flag=True,
+    help="Enable verbose logging (DEBUG level)",
+)
 @click.pass_context
-def cli(ctx: click.Context, env_file: Path | None, profile: str | None) -> None:
+def cli(
+    ctx: click.Context, env_file: Path | None, profile: str | None, verbose: bool
+) -> None:
     """Nickel Processing Suite - LSST pipeline tools for Nickel telescope data.
 
     Process Nickel 1-meter telescope observations using LSST Science Pipelines.
@@ -98,6 +107,13 @@ def cli(ctx: click.Context, env_file: Path | None, profile: str | None) -> None:
         nickel -p 2023ixf env         # Uses .env.2023ixf
         nickel -p 2020wnt calibs ...  # Uses .env.2020wnt
     """
+    # Configure logging for all core modules
+    log_level = logging.DEBUG if verbose else logging.INFO
+    logging.basicConfig(
+        level=log_level,
+        format="[%(levelname)s] %(message)s",
+    )
+
     ctx.ensure_object(dict)
 
     if env_file and profile:
@@ -110,12 +126,22 @@ def cli(ctx: click.Context, env_file: Path | None, profile: str | None) -> None:
 
 
 def _load_config(
-    ctx: click.Context, inline_env: dict[str, str] | None = None
+    ctx: click.Context,
+    inline_env: dict[str, str] | None = None,
+    prefer_inline: bool = False,
 ) -> cfg_module.Config:
-    """Load configuration from context."""
+    """Load configuration from context.
+
+    Args:
+        ctx: Click context
+        inline_env: Inline environment variables (from YAML)
+        prefer_inline: If True, inline_env overrides os.environ (for YAML configs)
+    """
     env_file = ctx.obj.get("env_file")
     try:
-        return cfg_module.load(env_file=env_file, inline_env=inline_env)
+        return cfg_module.load(
+            env_file=env_file, inline_env=inline_env, prefer_inline=prefer_inline
+        )
     except ValueError as e:
         _print_error(str(e))
         sys.exit(1)
@@ -239,6 +265,12 @@ def calibs(ctx: click.Context, night: str, jobs: int) -> None:
     type=click.Path(exists=True, path_type=Path),
     help="Override calibrateImage config",
 )
+@click.option(
+    "--ra", type=float, help="Target RA in degrees (enables coordinate validation)"
+)
+@click.option(
+    "--dec", type=float, help="Target Dec in degrees (enables coordinate validation)"
+)
 @click.pass_context
 def science(
     ctx: click.Context,
@@ -249,17 +281,28 @@ def science(
     object_filter: str | None,
     skip_coadds: bool,
     science_config: Path | None,
+    ra: float | None,
+    dec: float | None,
 ) -> None:
     """Run science processing (ISR, WCS, photometry).
 
     NIGHT is the observing date in YYYYMMDD format.
+
+    When --ra and --dec are provided, exposures with coordinates far from
+    the target are automatically excluded to prevent qgraph failures from
+    missing reference catalog coverage.
 
     \b
     Example:
         nickel science 20240625
         nickel science 20240625 --object 2020wnt --skip-coadds
         nickel science 20240625 --bad 12345,12346
+        nickel science 20240625 --object 2023ixf --ra 210.91 --dec 54.32
     """
+    if (ra is None) != (dec is None):
+        _print_error("--ra and --dec must be provided together")
+        sys.exit(1)
+
     config = _load_config(ctx)
 
     _print_info(f"Running science processing for {night}...")
@@ -275,6 +318,8 @@ def science(
         object_filter=object_filter,
         skip_coadds=skip_coadds,
         science_config=science_config,
+        target_ra=ra,
+        target_dec=dec,
     )
 
     if result.success:
@@ -478,7 +523,9 @@ def bootstrap(ctx: click.Context, config_file: Path | None) -> None:
                             f"Using profile '{yaml_profile}' from: {config_file}"
                         )
 
-    config = _load_config(ctx, inline_env=inline_env)
+    # When loading from YAML with inline env, prefer YAML values
+    prefer_inline = inline_env is not None
+    config = _load_config(ctx, inline_env=inline_env, prefer_inline=prefer_inline)
 
     _print_info("Bootstrapping Butler repository...")
     _print_info(f"  Repo: {config.repo}")
@@ -490,6 +537,158 @@ def bootstrap(ctx: click.Context, config_file: Path | None) -> None:
         click.echo(f"  Repository ready: {config.repo}")
     else:
         _print_error(f"Bootstrap failed: {result.error}")
+        sys.exit(1)
+
+
+# =============================================================================
+# clean - Remove processing runs from Butler repo
+# =============================================================================
+
+
+@cli.command()
+@click.argument(
+    "config_file", type=click.Path(exists=True, path_type=Path), required=False
+)
+@click.option(
+    "--night",
+    "nights",
+    multiple=True,
+    help="Only clean this night (repeatable, e.g. --night 20201207 --night 20201219)",
+)
+@click.option(
+    "--step",
+    "steps",
+    multiple=True,
+    type=click.Choice(["science", "dia", "fphot", "coadd"]),
+    help="Only clean this step (repeatable, e.g. --step science --step dia)",
+)
+@click.option(
+    "--dry-run", is_flag=True, help="List what would be removed without deleting"
+)
+@click.option(
+    "-y",
+    "--yes",
+    is_flag=True,
+    help="Skip confirmation prompt",
+)
+@click.pass_context
+def clean(
+    ctx: click.Context,
+    config_file: Path | None,
+    nights: tuple[str, ...],
+    steps: tuple[str, ...],
+    dry_run: bool,
+    yes: bool,
+) -> None:
+    """Remove processing runs from the Butler repository.
+
+    Deletes science (processCcd), DIA (diff), forced photometry, and per-night
+    coadd runs. Preserves raws, calibrations, reference catalogs, skymaps,
+    and templates.
+
+    Configuration can come from a pipeline YAML, profile, or env file
+    (same as other commands).
+
+    \b
+    Examples:
+        # Preview what would be removed
+        nickel clean pipeline.yaml --dry-run
+
+    \b
+        # Remove all processing runs
+        nickel clean pipeline.yaml -y
+
+    \b
+        # Remove only DIA and forced phot runs
+        nickel clean pipeline.yaml --step dia --step fphot
+
+    \b
+        # Remove runs for specific nights only
+        nickel clean pipeline.yaml --night 20201207 --night 20201219
+
+    \b
+        # Using profile instead of YAML
+        nickel -p 2020wnt clean --dry-run
+    """
+    from obs_nickel_data_tools.core import clean as clean_module
+    from obs_nickel_data_tools.core import run as run_module
+
+    inline_env = None
+
+    # If a pipeline YAML is provided, extract env from it
+    if config_file:
+        yaml_env = run_module.get_env_from_yaml(config_file)
+        if yaml_env:
+            inline_env = yaml_env
+        else:
+            cli_profile = ctx.obj.get("profile")
+            if not cli_profile:
+                yaml_profile = run_module.get_profile_from_yaml(config_file)
+                if yaml_profile:
+                    resolved = _resolve_env_file(None, yaml_profile)
+                    if resolved:
+                        ctx.obj["env_file"] = resolved
+                        ctx.obj["profile"] = yaml_profile
+
+    # When loading from YAML with inline env, prefer YAML values
+    prefer_inline = inline_env is not None
+    config = _load_config(ctx, inline_env=inline_env, prefer_inline=prefer_inline)
+
+    nights_list = list(nights) if nights else None
+    steps_list = list(steps) if steps else None
+
+    # First show what would be removed
+    _print_info(f"Repository: {config.repo}")
+    if nights_list:
+        _print_info(f"Nights: {', '.join(nights_list)}")
+    if steps_list:
+        _print_info(f"Steps: {', '.join(steps_list)}")
+
+    # Dry-run or preview
+    preview = clean_module.run(
+        config,
+        nights=nights_list,
+        steps=steps_list,
+        dry_run=True,
+    )
+
+    if not preview.collections_removed:
+        _print_info("No processing runs found to remove")
+        return
+
+    _print_info(f"\nFound {len(preview.collections_removed)} collections to remove:")
+    for col in preview.collections_removed:
+        click.echo(f"  {col}")
+
+    if dry_run:
+        _print_info("\n[DRY RUN] No changes made")
+        return
+
+    # Confirm
+    if not yes:
+        click.echo()
+        if not click.confirm(f"Remove {len(preview.collections_removed)} collections?"):
+            click.echo("Cancelled")
+            return
+
+    # Do the actual removal
+    result = clean_module.run(
+        config,
+        nights=nights_list,
+        steps=steps_list,
+        dry_run=False,
+    )
+
+    if result.success:
+        _print_success(f"\n✓ Removed {len(result.collections_removed)} collections")
+    else:
+        _print_error("Some collections could not be removed:")
+        for err in result.errors:
+            click.echo(f"  {err}")
+        if result.collections_removed:
+            click.echo(
+                f"\n  ({len(result.collections_removed)} collections were removed successfully)"
+            )
         sys.exit(1)
 
 
@@ -788,7 +987,9 @@ def run_pipeline(
                     ctx.obj["profile"] = yaml_profile
                     _print_info(f"Using profile '{yaml_profile}' from pipeline YAML")
 
-    config = _load_config(ctx, inline_env=inline_env)
+    # When loading from YAML with inline env, prefer YAML values over shell environment
+    prefer_inline = inline_env is not None
+    config = _load_config(ctx, inline_env=inline_env, prefer_inline=prefer_inline)
 
     _print_info(f"Running pipeline from {config_file}...")
 
@@ -809,6 +1010,8 @@ def run_pipeline(
                 click.echo(f"    {band}: {coll}")
         if result.lightcurve_path:
             click.echo(f"  Lightcurve: {result.lightcurve_path}")
+        if result.log_dir:
+            click.echo(f"  Logs: {result.log_dir}")
     else:
         _print_error(f"Pipeline failed: {result.error}")
         if result.failed_calibs:
@@ -817,6 +1020,8 @@ def run_pipeline(
             click.echo(f"  Failed science: {result.failed_science}")
         if result.failed_dia:
             click.echo(f"  Failed DIA: {result.failed_dia}")
+        if result.log_dir:
+            click.echo(f"  Logs: {result.log_dir}")
         sys.exit(1)
 
 

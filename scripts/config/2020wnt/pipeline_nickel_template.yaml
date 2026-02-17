@@ -37,8 +37,8 @@ object: "2020wnt"
 ra: 56.66
 dec: 43.23
 
-# Bands to process
-bands: ["b", "v", "r", "i"]
+# Bands to process (only r/i have data in the science nights)
+bands: ["v", "r", "i"]
 
 # Template configuration - use Nickel coadds from faded SN epochs
 template:
@@ -57,135 +57,135 @@ template:
 # Science nights - SN observations during bright phase
 nights:
   20201207:
-    r: []
-    i: []
+    # r: []
+    # i: []
 
   20201219:
-    r: []
-    i: []
+    # r: []
+    # i: []
 
   20210218:
-    r: []
-    i: []
+    # r: []
+    # i: []
 
   20210228:
-    r: []
-    i: []
+    # r: []
+    # i: []
 
   20210306:
-    r: []
-    i: []
+    # r: []
+    # i: []
 
   20210321:
-    r: []
-    i: []
+    # r: []
+    # i: []
 
   20210324:
-    r: []
+    # r: []
 
   20210706:
-    r: []
-    i: []
+    # r: []
+    # i: []
 
   20210712:
-    r: []
-    i: []
+    # r: []
+    # i: []
 
   20210715:
-    r: []
-    i: []
+    # r: []
+    # i: []
 
   20210721:
-    r: []
+    # r: []
 
   20210724:
-    r: []
+    # r: []
 
   20210810:
-    r: []
-    i: []
+    # r: []
+    # i: []
 
   20210825:
-    r: []
-    i: []
+    # r: []
+    # i: []
 
   20210904:
-    r: []
-    i: []
+    # r: []
+    # i: []
 
   20210906:
-    r: []
-    i: []
+    # r: []
+    # i: []
 
   20210916:
-    r: []
-    i: []
+    # r: []
+    # i: []
 
   20210923:
-    r: []
-    i: []
+    # r: []
+    # i: []
 
   20210926:
-    r: []
-    i: []
+    # r: []
+    # i: []
 
   20210928:
-    r: []
-    i: []
+    # r: []
+    # i: []
 
   20210930:
-    r: []
-    i: []
+    # r: []
+    # i: []
 
   20211004:
-    r: []
-    i: []
+    # r: []
+    # i: []
 
   20211009:
-    r: []
+    # r: []
 
   20211013:
-    r: []
-    i: []
+    # r: []
+    # i: []
 
   20211018:
-    r: []
-    i: []
+    # r: []
+    # i: []
 
   20211027:
-    r: []
-    i: []
+    # r: []
+    # i: []
 
   20211030:
-    r: []
-    i: []
+    # r: []
+    # i: []
 
   20211111:
-    i: []
+    # i: []
 
   20211113:
-    r: []
-    i: []
+    # r: []
+    # i: []
 
   20211121:
-    r: []
-    i: []
+    # r: []
+    # i: []
 
   20211125:
-    r: []
-    i: []
+    # r: []
+    # i: []
 
   20211129:
-    r: []
-    i: []
+    # r: []
+    # i: []
 
   20211201:
-    r: []
-    i: []
+    # r: []
+    # i: []
 
   20211217:
-    r: []
-    i: []
+    # r: []
+    # i: []
 
 # Pipeline configuration files (paths relative to obs_nickel/configs/)
 configs:
@@ -194,6 +194,8 @@ configs:
     calibrate_image_fallbacks:
       - calibrateImage/tuned_configs/2023ixf_relaxed_psfex_sparse.py
     colorterms: apply_colorterms.py
+  coadd:
+    make_direct_warp: coadds/makeDirectWarp_relaxed.py
   dia:
     subtract_images: dia/subtractImages.py
     detect_and_measure: dia/detectAndMeasure.py
@@ -201,10 +203,13 @@ configs:
 # Processing options
 options:
   jobs: 8
-  skip_calibs: false
-  skip_science: false
-  skip_dia: false
+  skip_calibs: true
+  skip_science: true
+  skip_dia: true
   forced_phot: true
+  forced_phot_image_type: diffim
   lightcurve: true
+  lightcurve_dataset_type: forced_phot_diffim_radec
+  lightcurve_min_snr: -999
   continue_on_error: true
   use_fallbacks: true

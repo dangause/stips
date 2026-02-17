@@ -38,6 +38,7 @@ def run(
     output_dir: Path | None = None,
     degrade_seeing: float | None = None,
     overwrite: bool = False,
+    log_file: Path | None = None,
 ) -> PS1TemplateResult:
     """Download and ingest PS1 template for DIA.
 
@@ -55,6 +56,7 @@ def run(
         output_dir: Directory for downloaded FITS files
         degrade_seeing: Convolve to this FWHM in arcsec (e.g., 2.0)
         overwrite: Replace existing template if present
+        log_file: Optional path to write LSST pipeline logs
 
     Returns:
         PS1TemplateResult with collection and status

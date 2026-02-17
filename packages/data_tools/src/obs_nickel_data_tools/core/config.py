@@ -159,54 +159,38 @@ def load(
     env_file: str | Path | None = None,
     extra_env: list[str | Path] | None = None,
     inline_env: dict[str, str] | None = None,
+    prefer_inline: bool = False,
 ) -> Config:
     """Load configuration from environment and .env files.
 
     Args:
         env_file: Primary .env file (default: .env or $ENV_FILE)
         extra_env: Additional .env files to layer on top
-        inline_env: Dict of environment variables (highest priority after os.environ)
+        inline_env: Dict of environment variables (from YAML 'env' section)
+        prefer_inline: If True, inline_env overrides os.environ (for nickel run YAML configs)
 
     Returns:
         Validated Config object
 
     Raises:
         ValueError: If required configuration is missing
+
+    Priority (when prefer_inline=False, default):
+        1. os.environ (highest)
+        2. inline_env
+        3. env_file
+        4. extra_env (lowest)
+
+    Priority (when prefer_inline=True, for YAML configs):
+        1. inline_env (highest - YAML 'env' section)
+        2. env_file (if keys not in inline_env)
+        3. extra_env
+        4. os.environ (lowest - only for keys not in inline_env)
     """
     # Load env files in order (later files override earlier)
     merged: dict[str, str] = {}
 
-    # If inline_env is provided, expand ${VAR} references and use it
-    # It takes precedence over files but we still load files as fallback
-    if inline_env:
-        for k, v in inline_env.items():
-            merged[k] = _expand_env_vars(v, merged)
-
-    # Determine primary env file (skip if inline_env provided all required keys)
-    if env_file is None and not inline_env:
-        env_file = os.environ.get("ENV_FILE", ".env")
-
-    if env_file:
-        env_file = Path(env_file)
-        if env_file.exists():
-            # File values are base, inline_env overrides
-            file_env = _parse_env_file(env_file)
-            for k, v in file_env.items():
-                if k not in merged:
-                    merged[k] = v
-
-    if extra_env:
-        for extra in extra_env:
-            extra_path = Path(extra)
-            if extra_path.exists():
-                merged.update(_parse_env_file(extra_path))
-
-    # Environment variables take precedence
-    for key in merged:
-        if key in os.environ:
-            merged[key] = os.environ[key]
-
-    # Also check environment for keys not in files
+    # Start with OS environment as base (will be overridden if prefer_inline=True)
     env_keys = [
         "REPO",
         "STACK_DIR",
@@ -219,8 +203,36 @@ def load(
         "LICK_ARCHIVE_INSTR",
     ]
     for key in env_keys:
-        if key in os.environ and key not in merged:
+        if key in os.environ:
             merged[key] = os.environ[key]
+
+    # Determine primary env file
+    if env_file is None and not inline_env:
+        env_file = os.environ.get("ENV_FILE", ".env")
+
+    if env_file:
+        env_file = Path(env_file)
+        if env_file.exists():
+            file_env = _parse_env_file(env_file)
+            merged.update(file_env)
+
+    if extra_env:
+        for extra in extra_env:
+            extra_path = Path(extra)
+            if extra_path.exists():
+                merged.update(_parse_env_file(extra_path))
+
+    # Handle inline_env based on priority mode
+    if inline_env:
+        if prefer_inline:
+            # For YAML configs: inline_env has highest priority
+            for k, v in inline_env.items():
+                merged[k] = _expand_env_vars(v, inline_env)
+        else:
+            # For CLI: only use inline_env for keys not in os.environ
+            for k, v in inline_env.items():
+                if k not in os.environ:
+                    merged[k] = _expand_env_vars(v, inline_env)
 
     # Validate required fields
     required = ["REPO", "STACK_DIR", "OBS_NICKEL", "RAW_PARENT_DIR"]

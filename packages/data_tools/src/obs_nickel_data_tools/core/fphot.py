@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from obs_nickel_data_tools.core.pipeline import generate_run_timestamp, validate_night
@@ -52,6 +53,7 @@ def run(
     *,
     band: str | None = None,
     image_type: str = "diffim",
+    log_file: Path | None = None,
 ) -> ForcedPhotResult:
     """Run forced photometry at specified coordinates.
 
@@ -66,6 +68,7 @@ def run(
         config: Pipeline configuration
         band: Filter by band (default: all bands)
         image_type: 'visit', 'diffim', or 'both' (default: diffim)
+        log_file: Optional path to write LSST pipeline logs
 
     Returns:
         ForcedPhotResult with output collections
@@ -90,6 +93,7 @@ def run(
             config,
             capture_output=True,
             check=False,
+            log_file=log_file,
         )
         if result.returncode == 0:
             colls = _parse_collections(result.stdout)
@@ -154,6 +158,7 @@ def run(
                 config,
                 capture_output=True,
                 check=False,
+                log_file=log_file,
             )
 
             if result.returncode == 0:
@@ -172,6 +177,7 @@ def run(
                 config,
                 capture_output=True,
                 check=False,
+                log_file=log_file,
             )
 
             diff_coll = None
@@ -182,11 +188,43 @@ def run(
 
             if not diff_coll:
                 err_msg = (
-                    f"No diff collection found for {night}. Run 'nickel dia' first."
+                    f"No diff collection found for {night}. "
+                    f"DIA may not have produced results for this night."
                 )
-                log.warning(err_msg)
+                log.info(err_msg)
                 errors.append(err_msg)
             else:
+                # Verify diff collection actually has difference_image datasets
+                verify_result = run_butler(
+                    [
+                        "query-datasets",
+                        repo,
+                        "difference_image",
+                        "--collections",
+                        diff_coll,
+                        "--limit",
+                        "1",
+                    ],
+                    config,
+                    capture_output=True,
+                    check=False,
+                    log_file=log_file,
+                )
+                verify_lines = [
+                    line
+                    for line in (verify_result.stdout or "").strip().split("\n")
+                    if line.strip()
+                ]
+                if verify_result.returncode != 0 or len(verify_lines) <= 2:
+                    err_msg = (
+                        f"Diff collection {diff_coll} has no difference_image datasets. "
+                        f"DIA may have failed for this night."
+                    )
+                    log.info(err_msg)
+                    errors.append(err_msg)
+                    diff_coll = None
+
+            if diff_coll:
                 input_colls = f"{processccd_coll},{diff_coll}"
                 band_suffix = f"_{band}" if band else ""
                 output_coll = (
@@ -224,6 +262,7 @@ def run(
                     config,
                     capture_output=True,
                     check=False,
+                    log_file=log_file,
                 )
 
                 if result.returncode == 0:

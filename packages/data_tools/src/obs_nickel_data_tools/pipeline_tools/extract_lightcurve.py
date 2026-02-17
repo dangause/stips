@@ -112,6 +112,21 @@ def resolve_object_name(object_name: str) -> coord.SkyCoord:
         sys.exit(1)
 
 
+def _clamp_ylim(ax, df: pd.DataFrame):
+    """Clamp y-axis limits to magnitude range with 15% padding.
+
+    Prevents extreme error bars from stretching the axes.
+    Uses the same approach as the forced photometry lightcurve tasks.
+    """
+    finite_mags = df["mag"][np.isfinite(df["mag"])]
+    if len(finite_mags) == 0:
+        return
+    mag_min, mag_max = finite_mags.min(), finite_mags.max()
+    pad = 0.15 * (mag_max - mag_min) if mag_max > mag_min else 0.5
+    # Axes are inverted (brighter = lower mag = higher on plot)
+    ax.set_ylim(mag_max + pad, mag_min - pad)
+
+
 def plot_light_curves(df: pd.DataFrame, output_path: Path, target_name: str):
     """Generate a single multi-band light curve plot with publication styling."""
     try:
@@ -151,6 +166,9 @@ def plot_light_curves(df: pd.DataFrame, output_path: Path, target_name: str):
         set_title(ax, target_name)
         ax.legend(loc="best")
 
+        # Clamp ylim to magnitude range (ignoring extreme error bars)
+        _clamp_ylim(ax, df)
+
     else:
         # Fallback: basic styling when obs_nickel.plotting is unavailable
         band_colors = {
@@ -184,6 +202,9 @@ def plot_light_curves(df: pd.DataFrame, output_path: Path, target_name: str):
         ax.grid(True, alpha=0.3, linestyle="--")
         ax.legend(loc="best")
 
+        # Clamp ylim to magnitude range (ignoring extreme error bars)
+        _clamp_ylim(ax, df)
+
     plot_filename = output_path.parent / f"{output_path.stem}.png"
     fig.tight_layout()
     plt.savefig(plot_filename)  # dpi and bbox from rcParams (or default)
@@ -215,13 +236,20 @@ def main():
     butler = Butler(args.repo)
 
     # Resolve collection wildcards
+    # The --collection argument may be comma-separated (from the orchestrator)
+    # or a single glob pattern (from CLI usage). Split on commas and resolve each.
+    collection_patterns = [c.strip() for c in args.collection.split(",") if c.strip()]
     try:
-        resolved_collections = list(
-            butler.registry.queryCollections(args.collection, flattenChains=True)
-        )
+        resolved_collections = []
+        seen = set()
+        for pattern in collection_patterns:
+            for coll in butler.registry.queryCollections(pattern, flattenChains=True):
+                if coll not in seen:
+                    resolved_collections.append(coll)
+                    seen.add(coll)
         if not resolved_collections:
             print(
-                f"ERROR: No collections found matching pattern '{args.collection}'",
+                f"ERROR: No collections found matching {len(collection_patterns)} pattern(s)",
                 file=sys.stderr,
             )
             sys.exit(1)

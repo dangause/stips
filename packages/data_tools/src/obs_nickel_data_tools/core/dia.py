@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -20,6 +22,45 @@ from obs_nickel_data_tools.core.stack import run_butler, run_pipetask
 
 if TYPE_CHECKING:
     from obs_nickel_data_tools.core.config import Config
+
+log = logging.getLogger(__name__)
+
+
+def _parse_quanta_summary(output: str, log_file: Path | None = None) -> tuple[int, int]:
+    """Parse pipetask output for quanta success/failure counts.
+
+    Returns:
+        Tuple of (succeeded, failed) counts. Returns (0, 0) if not found.
+    """
+    succeeded = 0
+    failed = 0
+    pattern = re.compile(
+        r"Executed (\d+) quanta successfully, (\d+) failed and (\d+) remain"
+    )
+
+    for line in output.splitlines():
+        m = pattern.search(line)
+        if m:
+            succeeded = int(m.group(1))
+            failed = int(m.group(2))
+
+    if succeeded == 0 and failed == 0 and log_file and log_file.exists():
+        try:
+            with open(log_file) as f:
+                for line in f:
+                    m = pattern.search(line)
+                    if m:
+                        succeeded = int(m.group(1))
+                        failed = int(m.group(2))
+        except OSError:
+            pass
+
+    return succeeded, failed
+
+
+def _is_empty_qgraph(output: str) -> bool:
+    """Check if pipetask output indicates an empty quantum graph."""
+    return "QuantumGraph contains no quanta" in output
 
 
 @dataclass
@@ -53,7 +94,9 @@ def find_template(
     repo = str(config.repo)
 
     try:
-        result = run_butler(["query-collections", repo], config, capture_output=True)
+        result = run_butler(
+            ["query-collections", repo], config, capture_output=True, log_file=None
+        )
     except Exception:
         return None
 
@@ -98,6 +141,7 @@ def run(
     object_filter: str | None = None,
     bad_exposures: str | None = None,
     bad_file: Path | None = None,
+    log_file: Path | None = None,
 ) -> DIAResult:
     """Run difference imaging for a night.
 
@@ -112,6 +156,7 @@ def run(
         object_filter: Filter by OBJECT header value
         bad_exposures: Comma-separated exposure IDs to exclude
         bad_file: File with exposure IDs to exclude
+        log_file: Optional path to write LSST pipeline logs
 
     Returns:
         DIAResult with collection names and counts
@@ -137,7 +182,9 @@ def run(
 
     # Find science collection
     try:
-        result = run_butler(["query-collections", repo], config, capture_output=True)
+        result = run_butler(
+            ["query-collections", repo], config, capture_output=True, log_file=log_file
+        )
         sci_parent = None
         for line in result.stdout.splitlines():
             col = line.split()[0] if line.split() else ""
@@ -187,7 +234,12 @@ def run(
 
     try:
         # Register instrument
-        run_butler(["register-instrument", repo, INSTRUMENT], config, check=False)
+        run_butler(
+            ["register-instrument", repo, INSTRUMENT],
+            config,
+            check=False,
+            log_file=log_file,
+        )
 
         # Build quantum graph
         qg_dir = config.repo / "qgraphs"
@@ -196,7 +248,9 @@ def run(
 
         # Find raw collection (optional for DIA)
         raw_run = ""
-        result = run_butler(["query-collections", repo], config, capture_output=True)
+        result = run_butler(
+            ["query-collections", repo], config, capture_output=True, log_file=log_file
+        )
         for line in result.stdout.splitlines():
             col = line.split()[0] if line.split() else ""
             if col.startswith(f"Nickel/raw/{night}/"):
@@ -232,10 +286,41 @@ def run(
                 ["--config-file", f"detectAndMeasureDiaSource:{detect_config}"]
             )
 
-        run_pipetask(qgraph_args, config)
+        qg_result = run_pipetask(
+            qgraph_args,
+            config,
+            capture_output=True,
+            check=False,
+            log_file=log_file,
+        )
+
+        # Check for empty quantum graph (no matching data for this night/band)
+        combined_qg_output = (qg_result.stdout or "") + (qg_result.stderr or "")
+        if _is_empty_qgraph(combined_qg_output):
+            log.warning(
+                f"Empty quantum graph for {night}/{band or 'all'} — "
+                f"no matching science data found for DIA"
+            )
+            return DIAResult(
+                success=False,
+                night=night,
+                diff_run=cols.diff_run,
+                template_collection=template_collection,
+                error=f"No matching science data for DIA (empty quantum graph). "
+                f"Query: {data_query}",
+            )
+
+        if qg_result.returncode != 0:
+            return DIAResult(
+                success=False,
+                night=night,
+                diff_run=cols.diff_run,
+                template_collection=template_collection,
+                error=f"QGraph build failed: {qg_result.stderr or qg_result.stdout}",
+            )
 
         # Run DIA
-        run_pipetask(
+        dia_result = run_pipetask(
             [
                 "run",
                 "-b",
@@ -247,7 +332,29 @@ def run(
                 "--register-dataset-types",
             ],
             config,
+            capture_output=True,
+            check=False,
+            log_file=log_file,
         )
+
+        # Parse quanta counts to handle partial success
+        combined_output = (dia_result.stdout or "") + (dia_result.stderr or "")
+        quanta_ok, quanta_fail = _parse_quanta_summary(combined_output, log_file)
+
+        if dia_result.returncode != 0 and quanta_ok == 0:
+            return DIAResult(
+                success=False,
+                night=night,
+                diff_run=cols.diff_run,
+                template_collection=template_collection,
+                error=f"DIA pipeline failed: {dia_result.stderr or dia_result.stdout}",
+            )
+
+        if quanta_fail > 0:
+            log.warning(
+                f"DIA partial success for {night}/{band or 'all'}: "
+                f"{quanta_ok} quanta succeeded, {quanta_fail} failed"
+            )
 
         # Update collection chain
         run_butler(
@@ -260,6 +367,7 @@ def run(
                 "redefine",
             ],
             config,
+            log_file=log_file,
         )
 
         # Count outputs
@@ -278,6 +386,7 @@ def run(
                 ],
                 config,
                 capture_output=True,
+                log_file=log_file,
             )
             diff_count = max(0, len(result.stdout.splitlines()) - 2)
         except Exception:
@@ -296,6 +405,7 @@ def run(
                 ],
                 config,
                 capture_output=True,
+                log_file=log_file,
             )
             src_count = max(0, len(result.stdout.splitlines()) - 2)
         except Exception:

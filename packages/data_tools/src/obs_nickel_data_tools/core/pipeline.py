@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import logging
 import re
 from datetime import datetime, timezone
 from pathlib import Path
@@ -9,6 +11,8 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from obs_nickel_data_tools.core.config import Config
+
+log = logging.getLogger(__name__)
 
 
 def validate_night(night: str) -> str:
@@ -128,6 +132,132 @@ def build_exclusion_expr(bad_ids: list[int]) -> str:
         return ""
     csv = ",".join(str(i) for i in bad_ids)
     return f" AND NOT (exposure IN ({csv}) OR visit IN ({csv}))"
+
+
+def find_bad_coord_exposures(
+    config: Config,
+    night: str,
+    target_ra: float,
+    target_dec: float,
+    *,
+    object_filter: str | None = None,
+    tolerance_deg: float = 5.0,
+) -> list[int]:
+    """Find exposures with coordinates far from the expected target.
+
+    Queries Butler for exposure records and compares tracking_ra/tracking_dec
+    against the expected target coordinates. Exposures outside the tolerance
+    are returned for exclusion from the data query.
+
+    This catches the Nickel telescope's known issue where the DEC keyword
+    gets "stuck" at a previous pointing's value, causing both CRVAL2 and DEC
+    to agree on a wrong coordinate (defeating the translator's fallback).
+
+    Args:
+        config: Pipeline configuration
+        night: Observing night (YYYYMMDD)
+        target_ra: Expected target RA in degrees
+        target_dec: Expected target Dec in degrees
+        object_filter: Optional object name to restrict query
+        tolerance_deg: Max offset in degrees before flagging (default: 5.0)
+
+    Returns:
+        Sorted list of exposure IDs with bad coordinates
+    """
+    from obs_nickel_data_tools.core.stack import run_with_stack
+
+    day_obs = night_to_day_obs(night)
+
+    # Build WHERE clause
+    where = (
+        f"instrument='Nickel' AND exposure.observation_type='science'"
+        f" AND exposure.day_obs={day_obs}"
+    )
+    if object_filter:
+        where += f" AND exposure.target_name='{object_filter}'"
+
+    # Use a Python script executed in the LSST stack environment to query
+    # Butler directly. This is more robust than parsing tabular CLI output
+    # for floating-point coordinate values.
+    script = f"""
+import json
+from lsst.daf.butler import Butler
+
+butler = Butler("{config.repo}")
+records = list(butler.registry.queryDimensionRecords(
+    "exposure",
+    where="{where}",
+))
+
+results = []
+for exp in records:
+    results.append({{
+        "id": exp.id,
+        "tracking_ra": exp.tracking_ra,
+        "tracking_dec": exp.tracking_dec,
+        "target_name": exp.target_name,
+        "physical_filter": exp.physical_filter,
+    }})
+
+print(json.dumps(results))
+"""
+
+    try:
+        result = run_with_stack(
+            ["python", "-c", script],
+            config,
+            capture_output=True,
+            check=True,
+        )
+    except Exception as e:
+        log.warning(f"Failed to query exposure coordinates for {night}: {e}")
+        return []
+
+    # Parse JSON output (skip any non-JSON lines from stack setup)
+    exposures = []
+    for line in result.stdout.strip().splitlines():
+        line = line.strip()
+        if line.startswith("["):
+            try:
+                exposures = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+
+    if not exposures:
+        return []
+
+    bad_ids: list[int] = []
+    for exp in exposures:
+        ra = exp.get("tracking_ra")
+        dec = exp.get("tracking_dec")
+        if ra is None or dec is None:
+            log.warning(f"Exposure {exp['id']} has no tracking coordinates, excluding")
+            bad_ids.append(exp["id"])
+            continue
+
+        ra_diff = abs(ra - target_ra)
+        dec_diff = abs(dec - target_dec)
+
+        # Handle RA wrap-around
+        if ra_diff > 180:
+            ra_diff = 360 - ra_diff
+
+        if ra_diff > tolerance_deg or dec_diff > tolerance_deg:
+            log.warning(
+                f"Exposure {exp['id']} ({exp.get('physical_filter', '?')}) has bad coordinates: "
+                f"RA={ra:.4f}, Dec={dec:.4f} "
+                f"(expected RA={target_ra:.4f}, Dec={target_dec:.4f}, "
+                f"offset: dRA={ra_diff:.2f}, dDec={dec_diff:.2f})"
+            )
+            bad_ids.append(exp["id"])
+
+    if bad_ids:
+        log.info(
+            f"Found {len(bad_ids)}/{len(exposures)} exposures with bad coordinates "
+            f"on night {night}"
+        )
+
+    return sorted(bad_ids)
 
 
 class CollectionNames:
