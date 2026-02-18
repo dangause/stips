@@ -411,6 +411,28 @@ def run(
         except Exception:
             pass
 
+        # If pipeline "succeeded" but produced no difference images, report failure.
+        # This commonly happens when rewarpTemplate finds no template overlap for
+        # any visit, so subtractImages is silently skipped by the framework.
+        if diff_count == 0:
+            log.warning(
+                f"DIA pipeline ran but produced no difference images for "
+                f"{night}/{band or 'all'} ({quanta_ok} quanta ran, "
+                f"{quanta_fail} failed). Template may not overlap science visits."
+            )
+            return DIAResult(
+                success=False,
+                night=night,
+                diff_run=cols.diff_run,
+                template_collection=template_collection,
+                diff_image_count=0,
+                dia_source_count=0,
+                error=(
+                    f"No difference images produced ({quanta_ok} quanta ran, "
+                    f"{quanta_fail} failed). Template may not overlap science visits."
+                ),
+            )
+
         return DIAResult(
             success=True,
             night=night,

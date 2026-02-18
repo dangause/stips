@@ -110,14 +110,14 @@ def _get_step_log_file(step: str, night: str = "", band: str = "") -> Path | Non
     base_dir = Path(run_log_dir)
 
     # Map step names to subdirectories
-    # Template-related steps go into templates/
+    # Template-related steps go into templates/{band}/
+    # Matches the shell script (30_coadds.sh) directory structure
     if step in ("ps1_template", "coadd_template"):
-        step_dir = base_dir / "templates"
-        # For templates, use band as the main identifier
         if band:
-            log_name = f"{step}_{band}.log"
+            step_dir = base_dir / "templates" / band
         else:
-            log_name = f"{step}.log"
+            step_dir = base_dir / "templates"
+        log_name = f"{step}.log"
     # Template night processing goes into separate dirs
     elif step in ("calibs_template", "science_template"):
         base_step = step.replace("_template", "")
@@ -241,7 +241,7 @@ def _split_single_log(log_file: Path) -> None:
         with open(out_path, "w") as f:
             f.writelines(exp_lines)
 
-    log.info(
+    log.debug(
         f"Split {log_file.name} → {split_dir.name}/ "
         f"({len(real_exposures)} exposures + general)"
     )
@@ -346,6 +346,7 @@ class RunConfig:
     # Template configuration
     template_type: str = "ps1"  # "ps1" or "coadd"
     template_degrade_seeing: float | None = None
+    template_size: float = 0.3  # PS1 cutout size in degrees (default: 0.3)
     template_nights: list[str] = field(default_factory=list)
 
     # Pipeline config files
@@ -379,6 +380,7 @@ class RunConfig:
         template = data.get("template", {})
         template_type = template.get("type", "ps1")
         template_degrade_seeing = template.get("degrade_seeing")
+        template_size = float(template.get("size", 0.3))
         # Convert template nights to strings (YAML parses 20230519 as int)
         template_nights = [str(n) for n in template.get("nights", [])]
 
@@ -421,6 +423,7 @@ class RunConfig:
             nights=nights,
             template_type=template_type,
             template_degrade_seeing=template_degrade_seeing,
+            template_size=template_size,
             template_nights=template_nights,
             science_configs=science_configs,
             dia_configs=dia_configs,
@@ -606,6 +609,7 @@ def run(
                     dec=run_cfg.dec,
                     band=band,
                     config=config,
+                    size=run_cfg.template_size,
                     degrade_seeing=run_cfg.template_degrade_seeing,
                     log_file=ps1_log,
                 )
@@ -676,6 +680,8 @@ def run(
                         skip_coadds=True,
                         science_cfg=science_cfg,
                         use_fallbacks=run_cfg.use_fallbacks,
+                        target_ra=run_cfg.ra,
+                        target_dec=run_cfg.dec,
                         log_file=sci_log,
                     )
                     _maybe_split_log(sci_log)
@@ -692,6 +698,11 @@ def run(
                     log.info(f"  [DRY RUN] science.run({night})")
 
         # Step 1b: Build coadd templates per band
+        # Force rebuild if science was re-processed (template inputs may have changed)
+        force_rebuild_templates = not run_cfg.skip_science
+        if force_rebuild_templates:
+            log.info("Science was (re-)processed — forcing template rebuild")
+
         for band in run_cfg.bands:
             log.info(f"Building coadd template for {band}-band...")
 
@@ -714,6 +725,7 @@ def run(
                     ra=run_cfg.ra,
                     dec=run_cfg.dec,
                     jobs=run_cfg.jobs,
+                    overwrite=force_rebuild_templates,
                     config_files=coadd_config_files or None,
                     log_file=coadd_log,
                 )
@@ -853,50 +865,65 @@ def run(
                 else:
                     log.info(f"  [DRY RUN] dia.run({night}, band={band})")
 
-    # Step 5: Forced photometry per night
+    # Step 5: Forced photometry per night per successful DIA band
+    # Run fphot per-band so that bands with difference images get measured
+    # even when other bands failed DIA for that night.
     failed_dia_set = set(result.failed_dia)
     if run_cfg.forced_phot:
         for night in all_nights:
-            # Skip fphot for nights where ALL DIA bands failed (no diff images to measure)
             night_bands = run_cfg.nights.get(night, {})
             if night_bands:
                 bands_for_night = [b for b in run_cfg.bands if b in night_bands]
             else:
                 bands_for_night = list(run_cfg.bands)
-            all_dia_failed = all(
-                f"{night}/{b}" in failed_dia_set for b in bands_for_night
-            )
-            if all_dia_failed and bands_for_night:
+
+            # Find which bands succeeded DIA for this night
+            successful_bands = [
+                b for b in bands_for_night if f"{night}/{b}" not in failed_dia_set
+            ]
+
+            if not successful_bands:
                 log.info(
                     f"Skipping forced photometry for {night} (all DIA bands failed)"
                 )
                 result.failed_fphot.append(night)
                 continue
 
-            log.info(f"Running forced photometry for {night}...")
+            night_fphot_colls: list[str] = []
+            night_had_failure = False
 
-            if not dry_run:
-                fphot_log = _get_step_log_file("fphot", night=night)
-                fphot_result = fphot.run(
-                    night=night,
-                    ra=run_cfg.ra,
-                    dec=run_cfg.dec,
-                    config=config,
-                    image_type=run_cfg.forced_phot_image_type,
-                    log_file=fphot_log,
-                )
-                _maybe_split_log(fphot_log)
-                if not fphot_result.success:
-                    result.failed_fphot.append(night)
-                    log.warning(f"Forced phot failed for {night}: {fphot_result.error}")
-                else:
-                    result.forced_phot_collections[night] = (
-                        fphot_result.output_collections
+            for band in successful_bands:
+                log.info(f"Running forced photometry for {night}/{band}...")
+
+                if not dry_run:
+                    fphot_log = _get_step_log_file("fphot", night=night, band=band)
+                    fphot_result = fphot.run(
+                        night=night,
+                        ra=run_cfg.ra,
+                        dec=run_cfg.dec,
+                        config=config,
+                        band=band,
+                        image_type=run_cfg.forced_phot_image_type,
+                        log_file=fphot_log,
                     )
-            else:
-                log.info(
-                    f"  [DRY RUN] fphot.run({night}, image_type={run_cfg.forced_phot_image_type})"
-                )
+                    _maybe_split_log(fphot_log)
+                    if not fphot_result.success:
+                        night_had_failure = True
+                        log.warning(
+                            f"Forced phot failed for {night}/{band}: {fphot_result.error}"
+                        )
+                    else:
+                        night_fphot_colls.extend(fphot_result.output_collections)
+                else:
+                    log.info(
+                        f"  [DRY RUN] fphot.run({night}, band={band}, "
+                        f"image_type={run_cfg.forced_phot_image_type})"
+                    )
+
+            if night_fphot_colls:
+                result.forced_phot_collections[night] = night_fphot_colls
+            if night_had_failure and not night_fphot_colls:
+                result.failed_fphot.append(night)
 
     # Step 6: Lightcurve extraction
     if run_cfg.lightcurve:

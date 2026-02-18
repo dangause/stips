@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 from dataclasses import dataclass, field
@@ -16,10 +17,11 @@ from obs_nickel_data_tools.core.pipeline import (
     CollectionNames,
     build_exclusion_expr,
     find_bad_coord_exposures,
+    night_to_day_obs,
     parse_bad_exposures,
     validate_night,
 )
-from obs_nickel_data_tools.core.stack import run_butler, run_pipetask
+from obs_nickel_data_tools.core.stack import run_butler, run_pipetask, run_with_stack
 
 if TYPE_CHECKING:
     from obs_nickel_data_tools.core.config import Config
@@ -66,6 +68,39 @@ def _parse_quanta_summary(output: str, log_file: Path | None = None) -> tuple[in
             pass
 
     return succeeded, failed
+
+
+def _count_matching_exposures(config: "Config", where: str) -> int | None:
+    """Count exposure records matching a Butler WHERE expression.
+
+    Returns None if the query fails.
+    """
+    script = f"""
+from lsst.daf.butler import Butler
+
+butler = Butler({str(config.repo)!r})
+rows = butler.registry.queryDimensionRecords("exposure", where={where!r})
+print(sum(1 for _ in rows))
+"""
+    try:
+        result = run_with_stack(
+            ["python", "-c", script],
+            config,
+            capture_output=True,
+            check=True,
+        )
+    except Exception as e:
+        log.warning(f"Failed to count matching exposures: {e}")
+        return None
+
+    for line in reversed(result.stdout.splitlines()):
+        line = line.strip()
+        if not line:
+            continue
+        if line.isdigit():
+            return int(line)
+
+    return None
 
 
 @dataclass
@@ -126,9 +161,7 @@ def resolve_object_filter(
     Returns:
         Exact target_name from FITS headers, or None if no match
     """
-    repo = str(config.repo)
-
-    # Query all unique target names
+    # Query all unique target names from Butler directly.
     where = "instrument='Nickel' AND exposure.observation_type='science'"
     if night:
         from obs_nickel_data_tools.core.pipeline import night_to_day_obs
@@ -137,49 +170,51 @@ def resolve_object_filter(
         where += f" AND day_obs={day_obs}"
 
     try:
-        result = run_butler(
-            [
-                "query-dimension-records",
-                repo,
-                "exposure",
-                "--where",
-                where,
-            ],
+        script = f"""
+import json
+from lsst.daf.butler import Butler
+
+butler = Butler({str(config.repo)!r})
+records = butler.registry.queryDimensionRecords("exposure", where={where!r})
+target_names = sorted(
+    {{
+        str(rec.target_name).strip()
+        for rec in records
+        if getattr(rec, "target_name", None) not in (None, "")
+    }}
+)
+print(json.dumps(target_names))
+"""
+        result = run_with_stack(
+            ["python", "-c", script],
             config,
             capture_output=True,
-            log_file=None,  # Don't log query operations
+            check=True,
         )
 
-        # Parse unique target names from output
-        target_names: set[str] = set()
+        # Parse JSON output (skip any stack setup chatter lines).
+        target_names: list[str] = []
         for line in result.stdout.splitlines():
-            # Skip header lines
-            if "target_name" in line.lower() or line.startswith("-"):
-                continue
-            parts = line.split()
-            # target_name is typically the 12th column, but parse more robustly
-            # by looking for the column that matches known patterns
-            for part in parts:
-                # Skip obvious non-target fields
-                if part in ("Nickel", "science", "NEWCAM", "None", "True", "False"):
+            line = line.strip()
+            if line.startswith("["):
+                try:
+                    target_names = json.loads(line)
+                    break
+                except json.JSONDecodeError:
                     continue
-                if part.isdigit() or "." in part or part.startswith("["):
-                    continue
-                if len(part) >= 3:  # Reasonable target name length
-                    target_names.add(part)
 
         # Find matches (case-insensitive substring)
         object_lower = object_filter.lower()
         matches = [t for t in target_names if object_lower in t.lower()]
 
         if len(matches) == 1:
-            log.info(f"Resolved object filter '{object_filter}' -> '{matches[0]}'")
+            log.debug(f"Resolved object filter '{object_filter}' -> '{matches[0]}'")
             return matches[0]
         elif len(matches) > 1:
             # Prefer exact match (case-insensitive) if available
             exact = [t for t in matches if t.lower() == object_lower]
             if exact:
-                log.info(
+                log.debug(
                     f"Resolved object filter '{object_filter}' -> '{exact[0]}' (exact)"
                 )
                 return exact[0]
@@ -190,7 +225,7 @@ def resolve_object_filter(
             return matches[0]
         else:
             log.warning(
-                f"No target_name matches for '{object_filter}'. Available: {sorted(target_names)[:10]}"
+                f"No target_name matches for '{object_filter}'. Available: {target_names[:10]}"
             )
             return None
 
@@ -282,14 +317,31 @@ def run(
     # Build exclusion expression
     bad_ids = parse_bad_exposures(bad_exposures, bad_file)
 
-    # Pre-flight coordinate validation: find exposures with bad coordinates
+    # Resolve object filter with flexible matching
+    object_expr = ""
+    resolved_object = None
+    if object_filter:
+        resolved_object = resolve_object_filter(object_filter, config, night)
+        if resolved_object:
+            object_expr = f" AND exposure.target_name='{resolved_object}'"
+        else:
+            # No match found - coordinate filtering (below) can still prune by target position.
+            log.warning(
+                f"Could not resolve object '{object_filter}' to exact target_name. "
+                "Processing all science exposures for this night."
+            )
+
+    # Pre-flight coordinate validation: find exposures with bad coordinates.
+    # If object resolution failed, validate against all science exposures for the
+    # night and keep only those near the requested target coordinates.
     if target_ra is not None and target_dec is not None:
+        coord_filter = resolved_object if resolved_object else None
         coord_bad_ids = find_bad_coord_exposures(
             config,
             night,
             target_ra,
             target_dec,
-            object_filter=object_filter,
+            object_filter=coord_filter,
         )
         if coord_bad_ids:
             log.warning(
@@ -300,20 +352,6 @@ def run(
             bad_ids = sorted(set(bad_ids))
 
     exclusion_expr = build_exclusion_expr(bad_ids)
-
-    # Resolve object filter with flexible matching
-    object_expr = ""
-    resolved_object = None
-    if object_filter:
-        resolved_object = resolve_object_filter(object_filter, config, night)
-        if resolved_object:
-            object_expr = f" AND exposure.target_name='{resolved_object}'"
-        else:
-            # No match found - warn but continue (will process all science exposures)
-            log.warning(
-                f"Could not resolve object '{object_filter}' to exact target_name. "
-                "Processing all science exposures for this night."
-            )
 
     # Pipeline and config paths
     pipeline = config.obs_nickel / "pipelines" / "DRP.yaml"
@@ -339,6 +377,29 @@ def run(
             error=f"No valid config files found. Tried: {science_cfg.calibrate_image}",
         )
 
+    day_obs = night_to_day_obs(night)
+    data_query = (
+        f"instrument='Nickel' AND exposure.observation_type='science'"
+        f" AND day_obs={day_obs}{object_expr}{exclusion_expr}"
+    )
+
+    # Fail fast if this night has no matching exposures after filtering.
+    match_count = _count_matching_exposures(config, data_query)
+    if match_count == 0:
+        reason = (
+            f"No science exposures matched selection for night {night} "
+            "(after object/coordinate/bad-exposure filtering)"
+        )
+        return ScienceResult(
+            success=False,
+            night=night,
+            science_run=cols.science_run,
+            coadd_run=None,
+            error=reason,
+        )
+    if match_count is not None:
+        log.info(f"Found {match_count} matching science exposures for {night}")
+
     # Register instrument
     try:
         run_butler(
@@ -354,11 +415,6 @@ def run(
     qg_dir = config.repo / "qgraphs"
     qg_dir.mkdir(parents=True, exist_ok=True)
 
-    data_query = (
-        f"instrument='Nickel' AND exposure.observation_type='science'"
-        f"{object_expr}{exclusion_expr}"
-    )
-
     # Import processing log for tracking
     from obs_nickel_data_tools.core import processing_log
 
@@ -368,11 +424,12 @@ def run(
     # Single output run - all configs write here
     output_run = cols.science_run
 
-    # Try each config in order, using --extend-run for fallbacks
+    # Try each config in order, using --skip-existing-in for fallbacks
     config_used: Path | None = None
     fallback_used = False
     any_success = False
     primary_created_run = False  # Track if primary config created the output run
+    cumulative_succeeded = 0  # Track total successes across all configs
 
     for i, tuned_config in enumerate(configs_to_try):
         is_fallback = i > 0
@@ -412,15 +469,16 @@ def run(
                 data_query,
             ]
 
-            # For fallback attempts, only use --extend-run if primary created the run collection
-            # (i.e., primary succeeded at qgraph stage even if execution had failures)
+            # For fallback attempts, build a qgraph that excludes quanta
+            # whose outputs already exist (i.e., the ones that succeeded).
+            # --skip-existing-in filters at graph-build time based on _metadata
+            # datasets in the output collection, so the qgraph only contains
+            # the failed quanta that need retrying with a different config.
             if is_fallback and primary_created_run:
                 qgraph_args.extend(
                     [
-                        "--extend-run",
                         "--skip-existing-in",
                         output_run,
-                        "--clobber-outputs",
                     ]
                 )
 
@@ -443,11 +501,8 @@ def run(
                 "--register-dataset-types",
             ]
 
-            # For fallback attempts, add --clobber-outputs to replace failed quanta
-            # Only use --extend-run if the run collection exists (primary created it)
-            if is_fallback and primary_created_run:
-                run_args.extend(["--clobber-outputs", "--extend-run"])
-
+            # Fallback qgraphs are already reduced to unresolved quanta via
+            # --skip-existing-in at qgraph build time; execute directly.
             # Run science processing
             result = run_pipetask(
                 run_args,
@@ -464,18 +519,25 @@ def run(
             if result.returncode == 0:
                 # Full success with this config
                 attempt.quanta_succeeded = quanta_ok or 1
+                cumulative_succeeded += quanta_ok or 1
                 any_success = True
                 config_used = tuned_config
                 fallback_used = is_fallback
-                log.info(
-                    f"Science processing fully succeeded with {config_label} config: "
-                    f"{tuned_config.name} ({quanta_ok} quanta)"
-                )
+                if is_fallback:
+                    new_wins = quanta_ok
+                    log.info(
+                        f"Fallback config {tuned_config.name} rescued all "
+                        f"{new_wins} remaining quanta"
+                    )
+                else:
+                    log.info(
+                        f"Science processing fully succeeded with {config_label} "
+                        f"config: {tuned_config.name} ({quanta_ok} quanta)"
+                    )
                 plog.add_attempt(attempt)
                 break
             elif quanta_ok > 0:
                 # Partial success - some quanta succeeded, some failed
-                # This is still a usable result
                 attempt.quanta_succeeded = quanta_ok
                 attempt.quanta_failed = quanta_fail
                 attempt.failed_exposures = processing_log.parse_pipetask_failures(
@@ -484,20 +546,44 @@ def run(
                 any_success = True
                 config_used = tuned_config
                 fallback_used = is_fallback
-                log.warning(
-                    f"Partial success with {config_label} config: {tuned_config.name} "
-                    f"({quanta_ok} quanta succeeded, {quanta_fail} failed)"
-                )
+
+                # Determine how many NEW successes this config produced
+                if is_fallback:
+                    new_wins = quanta_ok  # Fallback qgraph only has failed quanta
+                    cumulative_succeeded += new_wins
+                    log.warning(
+                        f"Fallback config {tuned_config.name}: "
+                        f"{new_wins} new quanta rescued, {quanta_fail} still failing "
+                        f"(cumulative: {cumulative_succeeded} succeeded)"
+                    )
+                    # If this fallback rescued zero new quanta, stop trying
+                    if new_wins == 0:
+                        log.info(
+                            "Fallback produced no new successes — remaining "
+                            f"{quanta_fail} failures appear to be data-quality "
+                            "issues, not config-related. Stopping fallback attempts."
+                        )
+                        plog.add_attempt(attempt)
+                        break
+                else:
+                    cumulative_succeeded = quanta_ok
+                    log.warning(
+                        f"Partial success with primary config: {tuned_config.name} "
+                        f"({quanta_ok} quanta succeeded, {quanta_fail} failed)"
+                    )
+
                 plog.add_attempt(attempt)
                 # Don't break - try fallback for the remaining failures
                 if not use_fallbacks or i == len(configs_to_try) - 1:
                     log.info(
-                        f"Accepting partial result with {quanta_ok} successful quanta"
+                        f"Accepting partial result with {cumulative_succeeded} "
+                        "successful quanta"
                     )
                     break
                 else:
                     log.info(
-                        f"Trying fallback config for {quanta_fail} remaining failures..."
+                        f"Trying fallback config for {quanta_fail} remaining "
+                        "failures..."
                     )
             else:
                 # Total failure - no quanta succeeded
@@ -511,16 +597,19 @@ def run(
                 plog.add_attempt(attempt)
 
                 log.error(
-                    f"No quanta succeeded with {config_label} config: {tuned_config.name}"
+                    f"No quanta succeeded with {config_label} config: "
+                    f"{tuned_config.name}"
                 )
                 if not use_fallbacks or i == len(configs_to_try) - 1:
                     if i == len(configs_to_try) - 1:
                         log.error(
-                            f"All {len(configs_to_try)} configs exhausted for {night}"
+                            f"All {len(configs_to_try)} configs exhausted for "
+                            f"{night}"
                         )
                 else:
                     log.warning(
-                        f"{config_label} config had total failure, trying fallback..."
+                        f"{config_label} config had total failure, trying "
+                        "fallback..."
                     )
 
         except Exception as e:
@@ -540,9 +629,6 @@ def run(
                     "Reference catalog not found for this field - no refcat shard available"
                 )
                 log.error("This usually means the field is outside the refcat coverage")
-            elif "Cannot --extend-run" in error_str:
-                log.error("Primary config failed before creating run collection")
-                log.error("Fallback cannot extend non-existent run - this is expected")
             elif "FileNotFoundError" in error_str:
                 # Extract the specific file/dataset that's missing
                 match = re.search(r"connection (\S+)", error_str)
@@ -568,14 +654,10 @@ def run(
                 p.lower() in error_str.lower() for p in recoverable_patterns
             )
 
-            # Don't try fallback if the issue is missing refcat or cannot --extend-run
+            # Don't try fallback if the issue is missing refcat
             if "FileNotFoundError" in error_str and "astrometry_ref_cat" in error_str:
                 log.info("Refcat missing - skipping fallback (won't help)")
                 break
-            elif "Cannot --extend-run" in error_str:
-                # This is expected for fallback when primary failed at qgraph
-                # Don't log as an error, just move on
-                pass
 
             if not is_recoverable and use_fallbacks:
                 log.info(
@@ -588,9 +670,11 @@ def run(
     plog.finalize()
     processing_log.save_log(plog, config)
 
-    # Aggregate quanta counts across all attempts
-    total_succeeded = sum(a.quanta_succeeded for a in plog.configs_tried)
-    total_failed = sum(a.quanta_failed for a in plog.configs_tried)
+    # Use cumulative counts — cumulative_succeeded tracks unique successes
+    # across all configs, and the last attempt's failure count represents
+    # the remaining unresolved failures.
+    total_succeeded = cumulative_succeeded
+    total_failed = plog.configs_tried[-1].quanta_failed if plog.configs_tried else 0
 
     # Check if any config succeeded
     if not any_success:

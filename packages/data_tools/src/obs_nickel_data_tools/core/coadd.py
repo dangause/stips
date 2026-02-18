@@ -191,8 +191,18 @@ def find_science_collections_for_nights(
             # Parse collection names from output
             night_colls = _parse_collection_names(result.stdout)
             if not night_colls:
-                log.warning(f"  No processCcd collections parsed for {night}")
-                log.debug(f"  Raw output: {result.stdout[:500]}")
+                raw_output = result.stdout.strip()
+                if "Nickel/" in raw_output:
+                    log.warning(
+                        f"  Could not parse processCcd collections for {night}; "
+                        "unexpected query-collections output format"
+                    )
+                    log.debug(f"  Raw output: {raw_output[:500]}")
+                else:
+                    log.info(
+                        f"  No processCcd collections found for {night} "
+                        "(likely no successful science run)"
+                    )
                 continue
 
             # Prefer /run collections (RUN type) over parent (CHAINED type)

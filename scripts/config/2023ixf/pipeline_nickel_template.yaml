@@ -23,7 +23,7 @@
 # Environment Configuration (self-contained)
 # =============================================================================
 env:
-  REPO: "/Users/dangause/Developer/lick/lsst/data/nickel/2023ixf_nickel_template_021226_repo"
+  REPO: "/Users/dangause/Developer/lick/lsst/data/nickel/2023ixf_nickel_template_021726_repo"
   STACK_DIR: "/Users/dangause/Developer/lick/lsst/lsst_stack"
   OBS_NICKEL: "/Users/dangause/Developer/lick/lsst/lsst_stack/stack/nickel_processing_suite/packages/obs_nickel"
   RAW_PARENT_DIR: "/Users/dangause/Developer/lick/data"
@@ -143,7 +143,7 @@ configs:
 # Processing options
 options:
   jobs: 6
-  skip_calibs: true
+  skip_calibs: false
   skip_science: false
   skip_dia: false
   forced_phot: true

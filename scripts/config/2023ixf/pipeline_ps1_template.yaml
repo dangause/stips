@@ -20,7 +20,7 @@
 # Environment Configuration (self-contained)
 # =============================================================================
 env:
-  REPO: "/Users/dangause/Developer/lick/lsst/data/nickel/2023ixf_ps1_021226_repo"
+  REPO: "/Users/dangause/Developer/lick/lsst/data/nickel/2023ixf_ps1_021726_repo"
   STACK_DIR: "/Users/dangause/Developer/lick/lsst/lsst_stack"
   OBS_NICKEL: "/Users/dangause/Developer/lick/lsst/lsst_stack/stack/nickel_processing_suite/packages/obs_nickel"
   RAW_PARENT_DIR: "/Users/dangause/Developer/lick/data"
@@ -43,6 +43,7 @@ bands: ["r", "i"]
 # Template configuration
 template:
   type: ps1
+  size: 0.3            # Cutout size in degrees (18 arcmin, ~6 arcmin margin over Nickel FOV)
   degrade_seeing: 2.0  # Convolve PS1 to ~2 arcsec FWHM to match Nickel seeing
 
 # Science nights - SN observations from discovery through late 2023
@@ -151,13 +152,13 @@ configs:
 # Processing options
 options:
   jobs: 6
-  skip_calibs: true
+  skip_calibs: false
   skip_science: false
   skip_dia: false
   forced_phot: true
   forced_phot_image_type: diffim
   lightcurve: true
   lightcurve_dataset_type: forced_phot_diffim_radec
-  lightcurve_min_snr: -999
+  lightcurve_min_snr: 0
   continue_on_error: true
   use_fallbacks: true

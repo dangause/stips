@@ -151,8 +151,11 @@ tasks:
       useVisitSummaryPsf: false
       useVisitSummaryWcs: false
       useVisitSummaryPhotoCalib: false
-      select.maxEllipResidual: 0.015
-      select.maxScaledSizeScatter: 0.022
+      # Relaxed selection thresholds for Nickel 1-m telescope.
+      # LSST defaults (0.015 / 0.022) reject most Nickel visits due to
+      # the telescope's larger PSF variations.
+      select.maxEllipResidual: 0.05
+      select.maxScaledSizeScatter: 0.05
       doPreWarpInterpolation: true
 
   makePsfMatchedWarp:
@@ -166,7 +169,7 @@ tasks:
     config:
       connections.visitSummaries: preliminary_visit_summary
       connections.goodVisits: deep_coadd_visit_selection
-      maxPsfFwhm: 2.5         # adjust if Nickel seeing differs
+      maxPsfFwhm: 4.0         # Nickel seeing typically 1.5-3.5 arcsec
       nVisitsMax: -1
 
   selectTemplateCoaddVisits:
@@ -174,6 +177,13 @@ tasks:
     config:
       connections.visitSummaries: preliminary_visit_summary
       connections.goodVisits: template_coadd_visit_selection
+      # Use all available visits for template building. Nickel data is sparse
+      # (few visits per band per patch), so the default qMax=0.33 (best 33%)
+      # would discard most input data.
+      # Must be strictly < 1 for BestSeeingQuantileSelectVisitsTask.
+      # 0.9999 is effectively "use all visits" for realistic Nickel visit counts.
+      qMax: 0.9999
+      nVisitsMin: 1
 
   assembleDeepCoadd:
     class: lsst.drp.tasks.assemble_coadd.CompareWarpAssembleCoaddTask

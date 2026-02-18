@@ -559,8 +559,8 @@ def bootstrap(ctx: click.Context, config_file: Path | None) -> None:
     "--step",
     "steps",
     multiple=True,
-    type=click.Choice(["science", "dia", "fphot", "coadd"]),
-    help="Only clean this step (repeatable, e.g. --step science --step dia)",
+    type=click.Choice(["calibs", "science", "dia", "fphot", "coadd"]),
+    help="Only clean this step (repeatable, e.g. --step calibs --step science)",
 )
 @click.option(
     "--dry-run", is_flag=True, help="List what would be removed without deleting"
@@ -583,8 +583,8 @@ def clean(
     """Remove processing runs from the Butler repository.
 
     Deletes science (processCcd), DIA (diff), forced photometry, and per-night
-    coadd runs. Preserves raws, calibrations, reference catalogs, skymaps,
-    and templates.
+    coadd runs. Calibrations (cp, calib) are only removed when explicitly
+    requested via --step calibs. Preserves raws, reference catalogs, and skymaps.
 
     Configuration can come from a pipeline YAML, profile, or env file
     (same as other commands).
@@ -595,8 +595,12 @@ def clean(
         nickel clean pipeline.yaml --dry-run
 
     \b
-        # Remove all processing runs
+        # Remove all processing runs (not calibs)
         nickel clean pipeline.yaml -y
+
+    \b
+        # Remove calibs and all processing runs
+        nickel clean pipeline.yaml --step calibs --step science --step dia --step fphot --step coadd -y
 
     \b
         # Remove only DIA and forced phot runs
@@ -653,7 +657,7 @@ def clean(
     )
 
     if not preview.collections_removed:
-        _print_info("No processing runs found to remove")
+        _print_info("No collections found to remove")
         return
 
     _print_info(f"\nFound {len(preview.collections_removed)} collections to remove:")

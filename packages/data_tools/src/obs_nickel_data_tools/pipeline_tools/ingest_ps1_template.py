@@ -255,18 +255,52 @@ def download_ps1_cutout(
     output_path.mkdir(parents=True, exist_ok=True)
     output_file = output_path / f"ps1_{band}_ra{ra:.4f}_dec{dec:.4f}.fits"
 
-    # Check if file already exists
+    # Check if file already exists and is large enough
     if output_file.exists() and output_file.stat().st_size > 10000:
-        if ps1_file_covers_target(output_file, ra, dec):
+        redownload = False
+        if not ps1_file_covers_target(output_file, ra, dec):
+            log.warning(
+                f"Existing PS1 file {output_file} does not cover target; re-downloading"
+            )
+            redownload = True
+        else:
+            # Check if the cached file is at least as large as requested
+            try:
+                with fits.open(output_file) as hdul:
+                    image_hdu = next(
+                        (
+                            h
+                            for h in hdul
+                            if getattr(h, "data", None) is not None
+                            and isinstance(h.data, np.ndarray)
+                            and h.data.ndim >= 2
+                        ),
+                        None,
+                    )
+                    if image_hdu is not None:
+                        wcs_cached = WCS(image_hdu.header)
+                        pixel_scale = (
+                            abs(wcs_cached.wcs.cdelt[0])
+                            if wcs_cached.wcs.cdelt[0] != 0
+                            else abs(wcs_cached.wcs.cd[0][0])
+                        )
+                        cached_size = max(image_hdu.data.shape) * pixel_scale
+                        if cached_size < size_deg * 0.9:  # 10% tolerance
+                            log.info(
+                                f"Cached PS1 file is {cached_size:.3f}° but {size_deg:.3f}° requested; re-downloading"
+                            )
+                            redownload = True
+            except Exception:
+                pass  # If we can't check, use the cached file
+
+        if redownload:
+            try:
+                output_file.unlink()
+            except Exception as e:
+                log.warning(f"  Could not remove stale PS1 file: {e}")
+        else:
             log.info(f"Using existing file: {output_file}")
             return str(output_file)
-        log.warning(
-            f"Existing PS1 file {output_file} does not cover target; re-downloading"
-        )
-        try:
-            output_file.unlink()
-        except Exception as e:
-            log.warning(f"  Could not remove stale PS1 file: {e}")
 
     # Method 1: Try PS1 via MAST (cloud-first stack + cutout)
     if force_service is None or force_service == "mast":
