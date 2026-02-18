@@ -8,6 +8,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from obs_nickel_data_tools.core.pipeline import (
+    REFCATS_CHAIN,
+    SKYMAPS_CHAIN,
     butler_query_has_results,
     generate_run_timestamp,
     parse_butler_query_output,
@@ -187,8 +189,10 @@ def run(
             )
             output_run = f"{output_coll}/run"
 
+            visit_input = f"{processccd_coll},Nickel/calib/current,{REFCATS_CHAIN},{SKYMAPS_CHAIN}"
+
             log.info("Running forced photometry on visit images...")
-            log.info(f"  Input: {processccd_coll}")
+            log.info(f"  Input: {visit_input}")
             log.info(f"  Output: {output_coll}")
 
             result = run_pipetask(
@@ -197,7 +201,7 @@ def run(
                     "-b",
                     repo,
                     "--input",
-                    processccd_coll,
+                    visit_input,
                     "--output",
                     output_coll,
                     "--output-run",
@@ -246,7 +250,7 @@ def run(
                 errors.append(err_msg)
 
             if diff_coll:
-                input_colls = f"{processccd_coll},{diff_coll}"
+                input_colls = f"{processccd_coll},{diff_coll},Nickel/calib/current,{REFCATS_CHAIN},{SKYMAPS_CHAIN}"
                 band_suffix = f"_{band}" if band else ""
                 output_coll = (
                     f"Nickel/runs/{night}/forcedPhotRaDec/{run_ts}/diffim{band_suffix}"

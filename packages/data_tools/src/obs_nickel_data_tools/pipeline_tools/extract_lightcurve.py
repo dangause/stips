@@ -410,8 +410,8 @@ def main():
             else:
                 snr = 0.0
 
-            # Apply S/N cut
-            if snr < args.min_snr:
+            # Apply S/N cut (use abs for diffim where negative flux is meaningful)
+            if abs(snr) < args.min_snr:
                 if args.verbose:
                     print(f"    Source {j}: S/N={snr:.1f} < {args.min_snr} (skipped)")
                 continue

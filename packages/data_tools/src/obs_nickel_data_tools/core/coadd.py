@@ -171,7 +171,14 @@ def find_science_collections_for_nights(
             # Prefer the CHAINED parent collection over individual RUN
             # collections — the CHAINED collection includes results from
             # both the primary config and any fallback configs.
-            night_colls.sort(key=lambda c: (1 if c.endswith("/run") else 0, c))
+            # Within each group, sort descending to pick the newest timestamp.
+            night_colls.sort(
+                key=lambda c: (
+                    1 if not c.endswith("/run") and "/run_fb" not in c else 0,
+                    c,
+                ),
+                reverse=True,
+            )
 
             found = False
             for coll in night_colls:
@@ -423,6 +430,20 @@ def run(
             config,
             log_file=log_file,
         )
+
+        # Verify that template_coadd datasets were actually produced
+        verified = check_template_exists(band, tract, config)
+        if not verified:
+            return CoaddResult(
+                success=False,
+                band=band,
+                tract=tract,
+                nights_used=nights,
+                error=(
+                    f"Coadd pipeline ran but produced no template_coadd datasets "
+                    f"for band={band}, tract={tract}. Check pipeline logs."
+                ),
+            )
 
         collection = template_parent
         log.info(f"Coadd template built: {collection}")

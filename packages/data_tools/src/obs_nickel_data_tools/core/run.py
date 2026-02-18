@@ -597,6 +597,7 @@ def _run_coadd_templates(
                 )
                 _maybe_split_log(calib_log)
                 if not calib_result.success:
+                    result.failed_calibs.append(f"template:{night}")
                     log.warning(
                         f"Calibrations failed for template night {night}: {calib_result.error}"
                     )
@@ -637,6 +638,7 @@ def _run_coadd_templates(
                 )
                 _maybe_split_log(sci_log)
                 if not sci_result.success:
+                    result.failed_science.append(f"template:{night}")
                     log.warning(
                         f"Science failed for template night {night}: {sci_result.error}"
                     )
@@ -825,6 +827,16 @@ def _run_dia_step(
 
             if not dry_run:
                 dia_log = _get_step_log_file("dia", night=night, band=band)
+
+                # Resolve DIA config file paths from YAML
+                configs_dir = config.obs_nickel / "configs"
+                subtract_cfg = None
+                if run_cfg.dia_configs.subtract_images:
+                    subtract_cfg = configs_dir / run_cfg.dia_configs.subtract_images
+                detect_cfg = None
+                if run_cfg.dia_configs.detect_and_measure:
+                    detect_cfg = configs_dir / run_cfg.dia_configs.detect_and_measure
+
                 dia_result = dia.run(
                     night,
                     config,
@@ -834,6 +846,8 @@ def _run_dia_step(
                     prefer_ps1=run_cfg.template_type == "ps1",
                     band=band,
                     object_filter=run_cfg.object_name,
+                    subtract_config_file=subtract_cfg,
+                    detect_config_file=detect_cfg,
                     log_file=dia_log,
                 )
                 _maybe_split_log(dia_log)
@@ -984,27 +998,32 @@ def _discover_fphot_collections(
     # If no forced phot ran this session, discover from Butler
     if not fphot_colls and not dry_run:
         log.info("No forced phot from this run, discovering from Butler...")
-        fphot_suffix = run_cfg.forced_phot_image_type
+        # When image_type is "both", search for both visit and diffim patterns
+        if run_cfg.forced_phot_image_type == "both":
+            fphot_suffixes = ["visit", "diffim"]
+        else:
+            fphot_suffixes = [run_cfg.forced_phot_image_type]
         for night in all_nights:
-            try:
-                check_result = run_butler_query(
-                    [
-                        "query-collections",
-                        str(config.repo),
-                        f"Nickel/runs/{night}/forcedPhotRaDec/*/{fphot_suffix}*",
-                    ],
-                    config,
-                    check=False,
-                )
-                if check_result.returncode == 0:
-                    fphot_colls.extend(
-                        parse_butler_query_output(
-                            check_result.stdout,
-                            prefix_filter="Nickel/runs/",
-                        )
+            for fphot_suffix in fphot_suffixes:
+                try:
+                    check_result = run_butler_query(
+                        [
+                            "query-collections",
+                            str(config.repo),
+                            f"Nickel/runs/{night}/forcedPhotRaDec/*/{fphot_suffix}*",
+                        ],
+                        config,
+                        check=False,
                     )
-            except Exception:
-                pass
+                    if check_result.returncode == 0:
+                        fphot_colls.extend(
+                            parse_butler_query_output(
+                                check_result.stdout,
+                                prefix_filter="Nickel/runs/",
+                            )
+                        )
+                except Exception:
+                    pass
     elif not fphot_colls and dry_run:
         for night in all_nights:
             fphot_colls.append(f"Nickel/runs/{night}/forcedPhotRaDec/*/run")

@@ -60,7 +60,7 @@ def find_template(
 
     # Query PS1 and coadd templates with targeted glob patterns
     candidates = []
-    for pattern in ["templates/ps1/*", "templates/deep/*"]:
+    for pattern in ["templates/ps1/*", "templates/deep/*/*"]:
         try:
             result = run_butler_query(
                 ["query-collections", repo, pattern], config, check=False
@@ -107,6 +107,8 @@ def run(
     object_filter: str | None = None,
     bad_exposures: str | None = None,
     bad_file: Path | None = None,
+    subtract_config_file: Path | None = None,
+    detect_config_file: Path | None = None,
     log_file: Path | None = None,
 ) -> DIAResult:
     """Run difference imaging for a night.
@@ -204,8 +206,12 @@ def run(
 
     # Pipeline and config paths
     pipeline = config.obs_nickel / "pipelines" / "DIA.yaml"
-    subtract_config = config.obs_nickel / "configs/dia/subtractImages.py"
-    detect_config = config.obs_nickel / "configs/dia/detectAndMeasure.py"
+    subtract_config = subtract_config_file or (
+        config.obs_nickel / "configs/dia/subtractImages.py"
+    )
+    detect_config = detect_config_file or (
+        config.obs_nickel / "configs/dia/detectAndMeasure.py"
+    )
 
     try:
         # Register instrument
