@@ -497,6 +497,7 @@ def process_template_nights(
             jobs=jobs,
             object_filter=object_filter,
             skip_coadds=True,
+            bands=bands,
             log_file=log_file,
         )
         if not sci_result.success:

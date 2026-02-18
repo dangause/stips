@@ -29,7 +29,11 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
-def _parse_quanta_summary(output: str, log_file: Path | None = None) -> tuple[int, int]:
+def _parse_quanta_summary(
+    output: str,
+    log_file: Path | None = None,
+    log_start_pos: int | None = None,
+) -> tuple[int, int]:
     """Parse pipetask output for quanta success/failure counts.
 
     Looks for the final "Executed N quanta successfully, M failed and 0 remain"
@@ -38,6 +42,8 @@ def _parse_quanta_summary(output: str, log_file: Path | None = None) -> tuple[in
     Args:
         output: Captured stdout/stderr from pipetask
         log_file: Optional path to LSST log file (checked when --no-log-tty is used)
+        log_start_pos: Optional byte offset in log_file to start reading from.
+            If provided, only new log lines written after this position are parsed.
 
     Returns:
         Tuple of (succeeded, failed) counts. Returns (0, 0) if not found.
@@ -59,6 +65,8 @@ def _parse_quanta_summary(output: str, log_file: Path | None = None) -> tuple[in
     if succeeded == 0 and failed == 0 and log_file and log_file.exists():
         try:
             with open(log_file) as f:
+                if log_start_pos is not None:
+                    f.seek(log_start_pos)
                 for line in f:
                     m = pattern.search(line)
                     if m:
@@ -246,6 +254,7 @@ def run(
     science_config: Path | None = None,
     science_cfg: ScienceConfig | None = None,
     use_fallbacks: bool = True,
+    bands: list[str] | None = None,
     target_ra: float | None = None,
     target_dec: float | None = None,
     log_file: Path | None = None,
@@ -267,6 +276,7 @@ def run(
         science_config: Override calibrateImage config file (legacy, prefer science_cfg)
         science_cfg: Full science configuration with fallbacks
         use_fallbacks: Try fallback configs on failure
+        bands: Optional list of bands to process (e.g. ["r", "i"])
         target_ra: Expected target RA in degrees (enables coordinate validation)
         target_dec: Expected target Dec in degrees (enables coordinate validation)
         log_file: Optional path to write LSST pipeline logs
@@ -351,6 +361,27 @@ def run(
             bad_ids.extend(coord_bad_ids)
             bad_ids = sorted(set(bad_ids))
 
+    # Optional band filter (LSST dimension key: "band")
+    band_expr = ""
+    if bands:
+        normalized_bands: list[str] = []
+        for band in bands:
+            b = str(band).strip().lower()
+            if not b:
+                continue
+            if not re.fullmatch(r"[A-Za-z0-9_]+", b):
+                raise ValueError(
+                    f"Invalid band value in science bands filter: {band!r}"
+                )
+            normalized_bands.append(b)
+
+        if normalized_bands:
+            # Keep deterministic order while dropping duplicates.
+            unique_bands = list(dict.fromkeys(normalized_bands))
+            band_csv = ",".join(f"'{b}'" for b in unique_bands)
+            band_expr = f" AND band IN ({band_csv})"
+            log.info(f"Filtering science processing to bands: {unique_bands}")
+
     exclusion_expr = build_exclusion_expr(bad_ids)
 
     # Pipeline and config paths
@@ -380,7 +411,7 @@ def run(
     day_obs = night_to_day_obs(night)
     data_query = (
         f"instrument='Nickel' AND exposure.observation_type='science'"
-        f" AND day_obs={day_obs}{object_expr}{exclusion_expr}"
+        f" AND day_obs={day_obs}{object_expr}{band_expr}{exclusion_expr}"
     )
 
     # Fail fast if this night has no matching exposures after filtering.
@@ -474,9 +505,16 @@ def run(
             # --skip-existing-in filters at graph-build time based on _metadata
             # datasets in the output collection, so the qgraph only contains
             # the failed quanta that need retrying with a different config.
+            #
+            # LSST-native behavior for reprocessing into an existing RUN requires:
+            #   - --extend-run: allow writing to an existing output-run
+            #   - --clobber-outputs: remove partial outputs from failed quanta
+            #     that would otherwise trigger OutputExistsError in qgraph build.
             if is_fallback and primary_created_run:
                 qgraph_args.extend(
                     [
+                        "--extend-run",
+                        "--clobber-outputs",
                         "--skip-existing-in",
                         output_run,
                     ]
@@ -501,8 +539,25 @@ def run(
                 "--register-dataset-types",
             ]
 
+            # Fallback run writes into the existing output RUN created by the
+            # primary attempt, so it must explicitly extend that run.
+            if is_fallback and primary_created_run:
+                run_args.extend(
+                    [
+                        "--extend-run",
+                        "--clobber-outputs",
+                    ]
+                )
+
             # Fallback qgraphs are already reduced to unresolved quanta via
             # --skip-existing-in at qgraph build time; execute directly.
+            log_start_pos = None
+            if log_file and log_file.exists():
+                try:
+                    log_start_pos = log_file.stat().st_size
+                except OSError:
+                    pass
+
             # Run science processing
             result = run_pipetask(
                 run_args,
@@ -514,7 +569,11 @@ def run(
 
             # Parse actual quanta counts from output (or log file if --no-log-tty)
             combined_output = (result.stdout or "") + "\n" + (result.stderr or "")
-            quanta_ok, quanta_fail = _parse_quanta_summary(combined_output, log_file)
+            quanta_ok, quanta_fail = _parse_quanta_summary(
+                combined_output,
+                log_file,
+                log_start_pos=log_start_pos,
+            )
 
             if result.returncode == 0:
                 # Full success with this config

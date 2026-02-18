@@ -669,6 +669,19 @@ def run(
 
         if not run_cfg.skip_science:
             for night in template_nights_to_process:
+                night_bands = run_cfg.nights.get(night, {})
+                if night_bands:
+                    bands_for_night = [b for b in run_cfg.bands if b in night_bands]
+                else:
+                    bands_for_night = list(run_cfg.bands)
+
+                if not bands_for_night:
+                    log.info(
+                        f"Skipping template-night science for {night} "
+                        "(no bands configured)"
+                    )
+                    continue
+
                 log.info(f"Running science for template night {night}...")
                 if not dry_run:
                     sci_log = _get_step_log_file("science_template", night=night)
@@ -680,6 +693,7 @@ def run(
                         skip_coadds=True,
                         science_cfg=science_cfg,
                         use_fallbacks=run_cfg.use_fallbacks,
+                        bands=bands_for_night,
                         target_ra=run_cfg.ra,
                         target_dec=run_cfg.dec,
                         log_file=sci_log,
@@ -695,7 +709,9 @@ def run(
                                 error=f"Template night science failed for {night}",
                             )
                 else:
-                    log.info(f"  [DRY RUN] science.run({night})")
+                    log.info(
+                        f"  [DRY RUN] science.run({night}, bands={bands_for_night})"
+                    )
 
         # Step 1b: Build coadd templates per band
         # Force rebuild if science was re-processed (template inputs may have changed)
@@ -779,6 +795,16 @@ def run(
     # Step 3: Science per night
     if not run_cfg.skip_science:
         for night in all_nights:
+            night_bands = run_cfg.nights.get(night, {})
+            if night_bands:
+                bands_for_night = [b for b in run_cfg.bands if b in night_bands]
+            else:
+                bands_for_night = list(run_cfg.bands)
+
+            if not bands_for_night:
+                log.info(f"Skipping science for {night} (no bands configured)")
+                continue
+
             log.info(f"Running science for {night}...")
 
             if not dry_run:
@@ -791,6 +817,7 @@ def run(
                     skip_coadds=True,
                     science_cfg=science_cfg,
                     use_fallbacks=run_cfg.use_fallbacks,
+                    bands=bands_for_night,
                     target_ra=run_cfg.ra,
                     target_dec=run_cfg.dec,
                     log_file=sci_log,
@@ -808,7 +835,7 @@ def run(
                         f"  Note: {night} used fallback config: {sci_result.config_used}"
                     )
             else:
-                log.info(f"  [DRY RUN] science.run({night})")
+                log.info(f"  [DRY RUN] science.run({night}, bands={bands_for_night})")
 
     # Step 4: DIA per night per band
     if not run_cfg.skip_dia:
