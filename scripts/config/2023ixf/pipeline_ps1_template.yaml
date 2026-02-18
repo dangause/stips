@@ -43,7 +43,7 @@ bands: ["r", "i"]
 # Template configuration
 template:
   type: ps1
-  size: 0.3            # Cutout size in degrees (18 arcmin, ~6 arcmin margin over Nickel FOV)
+  size: 0.4            # Cutout size in degrees (24 arcmin; extra margin for pointing drift)
   degrade_seeing: 2.0  # Convolve PS1 to ~2 arcsec FWHM to match Nickel seeing
 
 # Science nights - SN observations from discovery through late 2023
@@ -152,8 +152,8 @@ configs:
 # Processing options
 options:
   jobs: 6
-  skip_calibs: false
-  skip_science: false
+  skip_calibs: true
+  skip_science: true
   skip_dia: false
   forced_phot: true
   forced_phot_image_type: diffim

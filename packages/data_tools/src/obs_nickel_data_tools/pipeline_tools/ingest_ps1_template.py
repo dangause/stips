@@ -160,6 +160,70 @@ def ps1_file_covers_target(ps1_fits_path, ra, dec):
         return False
 
 
+def ps1_file_meets_requested_size(ps1_fits_path, requested_size_deg, min_fraction=0.85):
+    """
+    Check that a PS1 FITS cutout is close to the requested angular size.
+
+    This guards against edge-trimmed cutouts that still contain the target
+    but leave too little template margin for DIA overlap.
+    """
+    try:
+        with fits.open(ps1_fits_path) as hdul:
+            image_hdu = next(
+                (
+                    hdu
+                    for hdu in hdul
+                    if getattr(hdu, "data", None) is not None
+                    and isinstance(hdu.data, np.ndarray)
+                    and hdu.data.ndim >= 2
+                ),
+                None,
+            )
+            if image_hdu is None:
+                log.warning(
+                    f"  No image HDU found when checking size for {ps1_fits_path}"
+                )
+                return False
+
+            wcs = WCS(image_hdu.header)
+            ny, nx = image_hdu.data.shape
+            if nx < 2 or ny < 2:
+                log.warning(f"  Invalid PS1 image shape {nx}x{ny} for size check")
+                return False
+
+            # Measure on-sky extent through the image midlines.
+            x_mid = (nx - 1) / 2.0
+            y_mid = (ny - 1) / 2.0
+
+            ra_w, dec_w = wcs.all_pix2world([0, nx - 1], [y_mid, y_mid], 0)
+            ra_h, dec_h = wcs.all_pix2world([x_mid, x_mid], [0, ny - 1], 0)
+            w0 = SkyCoord(ra=ra_w[0] * u.deg, dec=dec_w[0] * u.deg)
+            w1 = SkyCoord(ra=ra_w[1] * u.deg, dec=dec_w[1] * u.deg)
+            h0 = SkyCoord(ra=ra_h[0] * u.deg, dec=dec_h[0] * u.deg)
+            h1 = SkyCoord(ra=ra_h[1] * u.deg, dec=dec_h[1] * u.deg)
+            width_deg = w0.separation(w1).deg
+            height_deg = h0.separation(h1).deg
+
+            min_required = requested_size_deg * min_fraction
+            ok = width_deg >= min_required and height_deg >= min_required
+            log.info(
+                "  PS1 cutout angular size: %.3f x %.3f deg (requested %.3f deg, min %.3f deg)",
+                width_deg,
+                height_deg,
+                requested_size_deg,
+                min_required,
+            )
+            if not ok:
+                log.warning(
+                    "  PS1 cutout is smaller than requested; will try alternate download method"
+                )
+            return ok
+
+    except Exception as e:
+        log.warning(f"  Size check failed for {ps1_fits_path}: {e}")
+        return False
+
+
 def find_first_image_hdu(hdul):
     """
     Return the first HDU with 2D image data.
@@ -263,35 +327,9 @@ def download_ps1_cutout(
                 f"Existing PS1 file {output_file} does not cover target; re-downloading"
             )
             redownload = True
-        else:
-            # Check if the cached file is at least as large as requested
-            try:
-                with fits.open(output_file) as hdul:
-                    image_hdu = next(
-                        (
-                            h
-                            for h in hdul
-                            if getattr(h, "data", None) is not None
-                            and isinstance(h.data, np.ndarray)
-                            and h.data.ndim >= 2
-                        ),
-                        None,
-                    )
-                    if image_hdu is not None:
-                        wcs_cached = WCS(image_hdu.header)
-                        pixel_scale = (
-                            abs(wcs_cached.wcs.cdelt[0])
-                            if wcs_cached.wcs.cdelt[0] != 0
-                            else abs(wcs_cached.wcs.cd[0][0])
-                        )
-                        cached_size = max(image_hdu.data.shape) * pixel_scale
-                        if cached_size < size_deg * 0.9:  # 10% tolerance
-                            log.info(
-                                f"Cached PS1 file is {cached_size:.3f}° but {size_deg:.3f}° requested; re-downloading"
-                            )
-                            redownload = True
-            except Exception:
-                pass  # If we can't check, use the cached file
+        elif not ps1_file_meets_requested_size(output_file, size_deg):
+            log.info("Cached PS1 file is smaller than requested; re-downloading")
+            redownload = True
 
         if redownload:
             try:
@@ -441,7 +479,11 @@ def download_ps1_cutout(
                             source = None
 
                     if source and ps1_file_covers_target(output_file, ra, dec):
-                        return str(output_file)
+                        if ps1_file_meets_requested_size(output_file, size_deg):
+                            return str(output_file)
+                        log.warning(
+                            "  MAST cutout is undersized for DIA margin; trying alternate service"
+                        )
 
                     log.warning(
                         "  MAST stack cutout does not cover target; trying alternate service"
@@ -462,7 +504,11 @@ def download_ps1_cutout(
     # Method 2: Try PS1 image service (fitscut) - more reliable for cutouts
     if force_service is None or force_service == "fitscut":
         result = download_ps1_via_fitscut(ra, dec, band, size_deg, output_file)
-        if result and ps1_file_covers_target(result, ra, dec):
+        if (
+            result
+            and ps1_file_covers_target(result, ra, dec)
+            and ps1_file_meets_requested_size(result, size_deg)
+        ):
             return result
         if result:
             try:
@@ -473,7 +519,11 @@ def download_ps1_cutout(
     # Method 3: Try ps1filenames service for full stack URLs
     if force_service is None or force_service == "ps1filenames":
         result = download_ps1_via_ps1filenames(ra, dec, band, size_deg, output_file)
-        if result and ps1_file_covers_target(result, ra, dec):
+        if (
+            result
+            and ps1_file_covers_target(result, ra, dec)
+            and ps1_file_meets_requested_size(result, size_deg)
+        ):
             return result
         if result:
             try:

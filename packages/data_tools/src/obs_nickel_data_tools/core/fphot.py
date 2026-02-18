@@ -45,6 +45,85 @@ def _parse_collections(output: str) -> list[str]:
     return colls
 
 
+def _has_data_rows(output: str) -> bool:
+    """Return True when Butler tabular output includes at least one data row."""
+    for line in output.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if stripped.startswith(("No results", "-", "=", "instrument", "type", "Name")):
+            continue
+        return True
+    return False
+
+
+def _collection_has_difference_images(
+    repo: str,
+    collection: str,
+    config: Config,
+    *,
+    band: str | None,
+    log_file: Path | None,
+) -> bool:
+    """Check whether a diff run has at least one difference_image for the band."""
+    query = "instrument='Nickel'"
+    if band:
+        query += f" AND band='{band}'"
+
+    result = run_butler(
+        [
+            "query-data-ids",
+            repo,
+            "visit",
+            "--datasets",
+            "difference_image",
+            "--collections",
+            collection,
+            "--where",
+            query,
+            "--limit",
+            "1",
+        ],
+        config,
+        capture_output=True,
+        check=False,
+        log_file=log_file,
+    )
+
+    if result.returncode != 0:
+        return False
+    return _has_data_rows(result.stdout or "")
+
+
+def _select_diff_collection(
+    repo: str,
+    night: str,
+    config: Config,
+    *,
+    band: str | None,
+    log_file: Path | None,
+) -> tuple[str | None, list[str]]:
+    """Select the newest diff collection that contains datasets for this band."""
+    diff_result = run_butler(
+        ["query-collections", repo, f"Nickel/runs/{night}/diff/*/run"],
+        config,
+        capture_output=True,
+        check=False,
+        log_file=log_file,
+    )
+
+    if diff_result.returncode != 0:
+        return None, []
+
+    candidates = sorted(_parse_collections(diff_result.stdout), reverse=True)
+    for coll in candidates:
+        if _collection_has_difference_images(
+            repo, coll, config, band=band, log_file=log_file
+        ):
+            return coll, candidates
+    return None, candidates
+
+
 def run(
     night: str,
     ra: float,
@@ -171,58 +250,20 @@ def run(
 
         # Run on difference images
         if image_type in ("diffim", "both"):
-            # Find diff collection
-            diff_result = run_butler(
-                ["query-collections", repo, f"Nickel/runs/{night}/diff/*/run"],
-                config,
-                capture_output=True,
-                check=False,
-                log_file=log_file,
+            # Select a diff collection that actually contains the requested band.
+            diff_coll, diff_candidates = _select_diff_collection(
+                repo, night, config, band=band, log_file=log_file
             )
 
-            diff_coll = None
-            if diff_result.returncode == 0:
-                colls = _parse_collections(diff_result.stdout)
-                if colls:
-                    diff_coll = sorted(colls)[-1]
-
             if not diff_coll:
+                band_msg = f" for band '{band}'" if band else ""
                 err_msg = (
-                    f"No diff collection found for {night}. "
-                    f"DIA may not have produced results for this night."
+                    f"No diff collection with difference_image datasets found for "
+                    f"{night}{band_msg}. DIA may not have produced results for this "
+                    f"night/band. Candidates checked: {', '.join(diff_candidates) or 'none'}"
                 )
                 log.info(err_msg)
                 errors.append(err_msg)
-            else:
-                # Verify diff collection actually has difference_image datasets
-                verify_result = run_butler(
-                    [
-                        "query-datasets",
-                        repo,
-                        "difference_image",
-                        "--collections",
-                        diff_coll,
-                        "--limit",
-                        "1",
-                    ],
-                    config,
-                    capture_output=True,
-                    check=False,
-                    log_file=log_file,
-                )
-                verify_lines = [
-                    line
-                    for line in (verify_result.stdout or "").strip().split("\n")
-                    if line.strip()
-                ]
-                if verify_result.returncode != 0 or len(verify_lines) <= 2:
-                    err_msg = (
-                        f"Diff collection {diff_coll} has no difference_image datasets. "
-                        f"DIA may have failed for this night."
-                    )
-                    log.info(err_msg)
-                    errors.append(err_msg)
-                    diff_coll = None
 
             if diff_coll:
                 input_colls = f"{processccd_coll},{diff_coll}"
