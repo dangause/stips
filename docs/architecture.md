@@ -207,8 +207,10 @@ def run_with_stack(cmd: list[str], config: Config, **kwargs) -> subprocess.Compl
 class CollectionNames:
     def __init__(self, night: str, timestamp: str):
         self.raw_run = f"Nickel/raw/{night}/{timestamp}"
-        self.calib_chain = f"Nickel/calib/{night}"
-        self.science_run = f"Nickel/runs/{night}/processCcd/{timestamp}/run"
+        self.calib_chain = "Nickel/calib/current"
+        self.science_parent = f"Nickel/runs/{night}/processCcd/{timestamp}"  # CHAINED
+        self.science_run = f"{self.science_parent}/run"                     # Primary RUN
+        # Fallback RUNs: {science_parent}/run_fb1, run_fb2, etc.
         self.diff_run = f"Nickel/runs/{night}/diff/{timestamp}/run"
         # ...
 
@@ -216,6 +218,8 @@ def find_bad_coord_exposures(config, night, target_ra, target_dec, ...):
     """Query Butler for exposures with coordinates far from the target.
     Returns exposure IDs to exclude from processing."""
 ```
+
+Downstream modules (DIA, coadd, fphot) use the CHAINED parent (`science_parent`) rather than `science_run` to include results from both the primary config and any fallback configs.
 
 The coordinate validation catches the Nickel telescope's known issue where DEC headers can freeze at a previous pointing's value, which would otherwise crash the qgraph builder due to missing refcat coverage.
 
@@ -272,7 +276,10 @@ Nickel/
 │   ├── YYYYMMDD/                  # RUN: Certified calibs
 │   └── cp/YYYYMMDD/bias/          # RUN: Constructed calibs
 ├── runs/YYYYMMDD/
-│   ├── processCcd/timestamp/run   # RUN: Science outputs
+│   ├── processCcd/timestamp/      # CHAIN: Unified science (primary + fallbacks)
+│   │   ├── run                    # RUN: Primary config outputs
+│   │   ├── run_fb1                # RUN: Fallback 1 outputs (if used)
+│   │   └── run_fb2                # RUN: Fallback 2 outputs (if used)
 │   ├── diff/timestamp/run         # RUN: DIA outputs
 │   └── forcedPhotRaDec/.../run    # RUN: Forced phot outputs
 ├── templates/
@@ -280,6 +287,8 @@ Nickel/
 │   └── deep/tract{N}/{band}       # RUN: Nickel coadds
 └── refcats                        # CHAIN: Reference catalogs
 ```
+
+The `processCcd/timestamp/` CHAINED collection is what downstream steps (DIA, coadd, fphot) use as input. It chains together the primary RUN and any fallback RUNs, providing a unified view of all successfully processed quanta.
 
 ## Extension Points
 

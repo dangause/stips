@@ -17,7 +17,21 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from obs_nickel_data_tools.core.stack import run_with_stack
+from obs_nickel_data_tools.core.pipeline import (
+    INSTRUMENT,
+    REFCATS_CHAIN,
+    SKYMAP_NAME,
+    SKYMAPS_CHAIN,
+    butler_query_has_results,
+    generate_run_timestamp,
+    parse_butler_query_output,
+)
+from obs_nickel_data_tools.core.stack import (
+    run_butler,
+    run_butler_python,
+    run_butler_query,
+    run_pipetask,
+)
 
 if TYPE_CHECKING:
     from obs_nickel_data_tools.core.config import Config
@@ -54,12 +68,7 @@ def find_tract_for_coords(
     Returns:
         Tract ID or None if not found
     """
-    # Use butler to find tract
-    # We query for any existing data to find the tract, or compute it
-    args = [
-        "python",
-        "-c",
-        f"""
+    script = f"""
 import lsst.daf.butler as dafButler
 from lsst.geom import SpherePoint, degrees
 
@@ -68,17 +77,16 @@ skymap = butler.get('skyMap', skymap='{skymap}', collections='skymaps/nickelRing
 coord = SpherePoint({ra}, {dec}, degrees)
 tract_info = skymap.findTract(coord)
 print(tract_info.getId())
-""",
-    ]
+"""
+    output = run_butler_python(script, config)
+    if output:
+        # The last line should be the tract ID
+        for line in reversed(output.splitlines()):
+            line = line.strip()
+            if line.isdigit():
+                return int(line)
 
-    try:
-        result = run_with_stack(args, config, capture_output=True, check=False)
-        if result.returncode == 0:
-            tract_str = result.stdout.strip()
-            return int(tract_str)
-    except Exception as e:
-        log.warning(f"Failed to find tract for RA={ra}, Dec={dec}: {e}")
-
+    log.warning(f"Failed to find tract for RA={ra}, Dec={dec}")
     return None
 
 
@@ -99,58 +107,26 @@ def check_template_exists(
     """
     collection = f"templates/deep/tract{tract}/{band}"
 
-    args = [
-        "butler",
-        "query-datasets",
-        str(config.repo),
-        "template_coadd",
-        "--collections",
-        collection,
-        "--where",
-        f"band='{band}'",
-    ]
-
     try:
-        result = run_with_stack(args, config, capture_output=True, check=False)
-        if result.returncode == 0:
-            lines = [line for line in result.stdout.strip().split("\n") if line.strip()]
-            if len(lines) > 2:  # Header is 2 lines
-                return collection
+        result = run_butler_query(
+            [
+                "query-datasets",
+                str(config.repo),
+                "template_coadd",
+                "--collections",
+                collection,
+                "--where",
+                f"band='{band}'",
+            ],
+            config,
+            check=False,
+        )
+        if result.returncode == 0 and butler_query_has_results(result.stdout):
+            return collection
     except Exception:
         pass
 
     return None
-
-
-def _parse_collection_names(output: str) -> list[str]:
-    """Parse butler query-collections output to extract collection names.
-
-    Handles various output formats from butler query-collections,
-    including table headers, separators, and multi-column output.
-
-    Args:
-        output: Raw stdout from butler query-collections
-
-    Returns:
-        List of collection names found
-    """
-    collections = []
-    for line in output.strip().split("\n"):
-        line = line.strip()
-        if not line:
-            continue
-        # Skip header/separator lines
-        if line.startswith("-") or line.startswith("="):
-            continue
-        if line.lower().startswith("type") or line.lower().startswith("name"):
-            continue
-        # Extract the first column (collection name)
-        parts = line.split()
-        if parts:
-            coll = parts[0]
-            if coll.startswith("Nickel/"):
-                collections.append(coll)
-    return collections
 
 
 def find_science_collections_for_nights(
@@ -169,75 +145,59 @@ def find_science_collections_for_nights(
         List of collection names with science outputs for this band
     """
     collections = []
+    repo = str(config.repo)
 
     for night in nights:
-        # Look for processCcd collections for this night
-        args = [
-            "butler",
-            "query-collections",
-            str(config.repo),
-            f"Nickel/runs/{night}/processCcd/*",
-        ]
-
         try:
-            result = run_with_stack(args, config, capture_output=True, check=False)
+            result = run_butler_query(
+                ["query-collections", repo, f"Nickel/runs/{night}/processCcd/*"],
+                config,
+                check=False,
+            )
             if result.returncode != 0:
-                log.warning(
-                    f"  No processCcd collections found for {night}"
-                    f"{': ' + result.stderr.strip() if result.stderr else ''}"
+                log.warning(f"  No processCcd collections found for {night}")
+                continue
+
+            night_colls = parse_butler_query_output(
+                result.stdout, prefix_filter="Nickel/"
+            )
+            if not night_colls:
+                log.info(
+                    f"  No processCcd collections found for {night} "
+                    "(likely no successful science run)"
                 )
                 continue
 
-            # Parse collection names from output
-            night_colls = _parse_collection_names(result.stdout)
-            if not night_colls:
-                raw_output = result.stdout.strip()
-                if "Nickel/" in raw_output:
-                    log.warning(
-                        f"  Could not parse processCcd collections for {night}; "
-                        "unexpected query-collections output format"
-                    )
-                    log.debug(f"  Raw output: {raw_output[:500]}")
-                else:
-                    log.info(
-                        f"  No processCcd collections found for {night} "
-                        "(likely no successful science run)"
-                    )
-                continue
-
-            # Prefer /run collections (RUN type) over parent (CHAINED type)
-            # Sort so /run collections come first
-            night_colls.sort(key=lambda c: (0 if c.endswith("/run") else 1, c))
+            # Prefer the CHAINED parent collection over individual RUN
+            # collections — the CHAINED collection includes results from
+            # both the primary config and any fallback configs.
+            night_colls.sort(key=lambda c: (1 if c.endswith("/run") else 0, c))
 
             found = False
             for coll in night_colls:
                 # Verify this collection has data for the requested band
-                check_args = [
-                    "butler",
-                    "query-datasets",
-                    str(config.repo),
-                    "preliminary_visit_image",
-                    "--collections",
-                    coll,
-                    "--where",
-                    f"band='{band}'",
-                    "--limit",
-                    "1",
-                ]
-                check_result = run_with_stack(
-                    check_args, config, capture_output=True, check=False
+                check_result = run_butler_query(
+                    [
+                        "query-datasets",
+                        repo,
+                        "preliminary_visit_image",
+                        "--collections",
+                        coll,
+                        "--where",
+                        f"band='{band}'",
+                        "--limit",
+                        "1",
+                    ],
+                    config,
+                    check=False,
                 )
-                if check_result.returncode == 0:
-                    check_lines = [
-                        line
-                        for line in check_result.stdout.strip().split("\n")
-                        if line.strip()
-                    ]
-                    if len(check_lines) > 2:
-                        collections.append(coll)
-                        log.info(f"  Found {night} -> {coll}")
-                        found = True
-                        break
+                if check_result.returncode == 0 and butler_query_has_results(
+                    check_result.stdout
+                ):
+                    collections.append(coll)
+                    log.info(f"  Found {night} -> {coll}")
+                    found = True
+                    break
 
             if not found:
                 log.info(f"  Night {night} has no {band}-band data (skipping)")
@@ -324,17 +284,12 @@ def run(
         else:
             # No template data found. Check if a stale CHAINED collection
             # exists from a previous failed attempt — if so, rebase to clean it up.
-            # If the collection doesn't exist at all, no rebase needed.
             collection_name = f"templates/deep/tract{tract}/{band}"
-            check_args = [
-                "butler",
-                "query-collections",
-                str(config.repo),
-                collection_name,
-            ]
             try:
-                check_result = run_with_stack(
-                    check_args, config, capture_output=True, check=False
+                check_result = run_butler_query(
+                    ["query-collections", str(config.repo), collection_name],
+                    config,
+                    check=False,
                 )
                 if (
                     check_result.returncode == 0
@@ -366,78 +321,118 @@ def run(
         f"with {band}-band data"
     )
 
-    # Build the coadd using 30_coadds.sh
-    script_path = config.obs_nickel.parent.parent / "scripts/pipeline/30_coadds.sh"
-    if not script_path.exists():
-        # Try alternate location
-        script_path = config.obs_nickel / "../../scripts/pipeline/30_coadds.sh"
-        script_path = script_path.resolve()
+    repo = str(config.repo)
+    run_ts = generate_run_timestamp()
+    template_parent = f"templates/deep/tract{tract}/{band}"
+    template_run = f"{template_parent}/{run_ts}"
+    pipeline = config.obs_nickel / "pipelines" / "DRP.yaml"
 
-    if not script_path.exists():
-        return CoaddResult(
-            success=False,
-            band=band,
-            tract=tract,
-            error=f"Coadd script not found: {script_path}",
-        )
-
-    # Build input collection string
-    input_chain = ",".join(input_collections)
-
-    # Prepare command arguments
-    args = [
-        str(script_path),
-        "--tract",
-        str(tract),
-        "--band",
-        band,
-        "--input",
-        input_chain,
-        "--jobs",
-        str(jobs),
-    ]
-
-    if needs_rebase:
-        args.append("--rebase")
-
-    if config_files:
-        for cf in config_files:
-            args.extend(["-C", cf])
-
-    log.info(f"Running coadd build: {' '.join(args)}")
+    qg_dir = config.repo / "qgraphs"
+    qg_dir.mkdir(parents=True, exist_ok=True)
+    qg_file = qg_dir / f"template_t{tract}_{band}_{run_ts}.qg"
 
     try:
-        result = run_with_stack(args, config, check=False, capture_output=True)
+        # Register instrument (idempotent)
+        run_butler(
+            ["register-instrument", repo, INSTRUMENT],
+            config,
+            check=False,
+            log_file=log_file,
+        )
 
-        if result.returncode == 0:
-            collection = f"templates/deep/tract{tract}/{band}"
-            log.info(f"Coadd template built: {collection}")
-            return CoaddResult(
-                success=True,
-                band=band,
-                collection=collection,
-                tract=tract,
-                nights_used=nights,
+        # Handle rebase (overwrite existing template)
+        if needs_rebase:
+            log.info(f"Rebasing existing template: {template_parent}")
+            run_butler(
+                ["collection-chain", repo, template_parent, "--mode", "redefine"],
+                config,
+                check=False,
+                log_file=log_file,
             )
-        else:
-            error_msg = f"Coadd pipeline failed (exit code {result.returncode})"
-            if result.stderr:
-                # Get last few lines of stderr for the most relevant error
-                stderr_lines = result.stderr.strip().splitlines()
-                tail = "\n".join(stderr_lines[-10:])
-                error_msg += f"\n{tail}"
-            elif result.stdout:
-                stdout_lines = result.stdout.strip().splitlines()
-                tail = "\n".join(stdout_lines[-10:])
-                error_msg += f"\n{tail}"
-            log.error(error_msg)
-            return CoaddResult(
-                success=False,
-                band=band,
-                tract=tract,
-                nights_used=nights,
-                error=error_msg,
+            run_butler(
+                ["remove-collections", repo, template_parent, "--no-confirm"],
+                config,
+                check=False,
+                log_file=log_file,
             )
+
+        # Build input chain
+        input_chain = ",".join(input_collections)
+        full_input = (
+            f"{input_chain},Nickel/calib/current," f"{REFCATS_CHAIN},{SKYMAPS_CHAIN}"
+        )
+
+        data_query = (
+            f"instrument='Nickel' AND skymap='{SKYMAP_NAME}' "
+            f"AND tract={tract} AND band='{band}'"
+        )
+
+        # Build config args
+        config_args: list[str] = []
+        if config_files:
+            for cf in config_files:
+                config_args.extend(["--config-file", cf])
+
+        # Build quantum graph
+        qgraph_args = [
+            "qgraph",
+            "-b",
+            repo,
+            "-p",
+            f"{pipeline}#coadds-only",
+            "-i",
+            full_input,
+            "-o",
+            template_parent,
+            "--output-run",
+            template_run,
+            "--save-qgraph",
+            str(qg_file),
+            "-d",
+            data_query,
+        ] + config_args
+
+        run_pipetask(qgraph_args, config, log_file=log_file)
+
+        # Run coadd pipeline
+        run_pipetask(
+            [
+                "run",
+                "-b",
+                repo,
+                "-g",
+                str(qg_file),
+                "-j",
+                str(jobs),
+                "--register-dataset-types",
+            ],
+            config,
+            log_file=log_file,
+        )
+
+        # Update collection chain
+        run_butler(
+            [
+                "collection-chain",
+                repo,
+                template_parent,
+                template_run,
+                "--mode",
+                "prepend",
+            ],
+            config,
+            log_file=log_file,
+        )
+
+        collection = template_parent
+        log.info(f"Coadd template built: {collection}")
+        return CoaddResult(
+            success=True,
+            band=band,
+            collection=collection,
+            tract=tract,
+            nights_used=nights,
+        )
 
     except Exception as e:
         return CoaddResult(

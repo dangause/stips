@@ -20,7 +20,7 @@
 # Environment Configuration (self-contained)
 # =============================================================================
 env:
-  REPO: "/Users/dangause/Developer/lick/lsst/data/nickel/2023ixf_ps1_021726_repo"
+  REPO: "/Users/dangause/Developer/lick/lsst/data/nickel/2023ixf_ps1_021826_repo"
   STACK_DIR: "/Users/dangause/Developer/lick/lsst/lsst_stack"
   OBS_NICKEL: "/Users/dangause/Developer/lick/lsst/lsst_stack/stack/nickel_processing_suite/packages/obs_nickel"
   RAW_PARENT_DIR: "/Users/dangause/Developer/lick/data"
@@ -47,94 +47,30 @@ template:
   degrade_seeing: 2.0  # Convolve PS1 to ~2 arcsec FWHM to match Nickel seeing
 
 # Science nights - SN observations from discovery through late 2023
-nights:
-  20230519:
-    r: []
-    i: []
-
-  20230521:
-    r: []
-    i: []
-
-  20230523:
-    r: []
-    i: []
-
-  20230527:
-    r: []
-    i: []
-
-  20230531:
-    r: []
-    i: []
-
-  # 20230602:
-  #   r: []
-  #   i: []
-
-  # 20230608:
-  #   r: []
-  #   i: []
-
-  # 20230611:
-  #   r: []
-  #   i: []
-
-  # 20230616:
-  #   r: []
-  #   i: []
-
-  # 20230618:
-  #   r: []
-  #   i: []
-
-  # 20230625:
-  #   r: []
-  #   i: []
-
-  # 20230629:
-  #   r: []
-  #   i: []
-
-  # 20230703:
-  #   r: []
-  #   i: []
-
-  # 20230706:
-  #   r: []
-  #   i: []
-
-  # 20230709:
-  #   r: []
-  #   i: []
-
-  # 20230714:
-  #   r: []
-  #   i: []
-
-  # 20230728:
-  #   r: []
-  #   i: []
-
-  # 20230801:
-  #   r: []
-  #   i: []
-
-  # 20230817:
-  #   r: []
-  #   i: []
-
-  # 20230905:
-  #   r: []
-  #   i: []
-
-  # 20230910:
-  #   r: []
-  #   i: []
-
-  # 20231211:
-  #   r: []
-  #   i: []
+science:
+  nights:
+    - 20230519
+    - 20230521
+    - 20230523
+    - 20230527
+    - 20230531
+    - 20230602
+    - 20230608
+    - 20230611
+    - 20230616
+    - 20230618
+    - 20230625
+    - 20230629
+    - 20230703
+    - 20230706
+    - 20230709
+    - 20230714
+    - 20230728
+    - 20230801
+    - 20230817
+    - 20230905
+    - 20230910
+    - 20231211
 
 # Pipeline configuration files (paths relative to obs_nickel/configs/)
 configs:

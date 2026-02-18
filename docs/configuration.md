@@ -302,7 +302,7 @@ Available tuned configs:
 | `forced_phot` | bool | true | Run forced photometry |
 | `lightcurve` | bool | true | Extract light curve |
 | `continue_on_error` | bool | true | Continue if night fails |
-| `use_fallbacks` | bool | true | Try fallback configs |
+| `use_fallbacks` | bool | true | Try fallback calibrateImage configs on partial failure. Each fallback writes to its own RUN collection (`/run_fb1`, etc.) and uses `--skip-existing-in` to only reprocess failed quanta. |
 
 ---
 
@@ -368,7 +368,9 @@ When `use_fallbacks: true`, NPS creates JSON logs in `{REPO}/processing_log/`:
     }
   ],
   "final_status": "success",
-  "output_collection": "Nickel/runs/20230519/processCcd/20240115T103045/run"
+  "output_collection": "Nickel/runs/20230519/processCcd/20240115T103045Z/run"
+  // Note: This records the primary RUN. Downstream steps use the CHAINED parent
+  // (Nickel/runs/20230519/processCcd/20240115T103045Z) which includes fallback results.
 }
 ```
 

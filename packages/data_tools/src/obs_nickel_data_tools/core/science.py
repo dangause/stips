@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import re
 from dataclasses import dataclass, field
@@ -19,9 +18,16 @@ from obs_nickel_data_tools.core.pipeline import (
     find_bad_coord_exposures,
     night_to_day_obs,
     parse_bad_exposures,
+    parse_butler_query_output,
+    parse_quanta_summary,
+    read_log_delta,
     validate_night,
 )
-from obs_nickel_data_tools.core.stack import run_butler, run_pipetask, run_with_stack
+from obs_nickel_data_tools.core.stack import (
+    run_butler,
+    run_butler_query,
+    run_pipetask,
+)
 
 if TYPE_CHECKING:
     from obs_nickel_data_tools.core.config import Config
@@ -29,60 +35,13 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
-def _parse_quanta_summary(
-    output: str,
-    log_file: Path | None = None,
-    log_start_pos: int | None = None,
-) -> tuple[int, int]:
-    """Parse pipetask output for quanta success/failure counts.
-
-    Looks for the final "Executed N quanta successfully, M failed and 0 remain"
-    line in the pipetask output or log file.
-
-    Args:
-        output: Captured stdout/stderr from pipetask
-        log_file: Optional path to LSST log file (checked when --no-log-tty is used)
-        log_start_pos: Optional byte offset in log_file to start reading from.
-            If provided, only new log lines written after this position are parsed.
-
-    Returns:
-        Tuple of (succeeded, failed) counts. Returns (0, 0) if not found.
-    """
-    succeeded = 0
-    failed = 0
-    pattern = re.compile(
-        r"Executed (\d+) quanta successfully, (\d+) failed and (\d+) remain"
-    )
-
-    # Check captured output first
-    for line in output.splitlines():
-        m = pattern.search(line)
-        if m:
-            succeeded = int(m.group(1))
-            failed = int(m.group(2))
-
-    # If not found in captured output, check log file (LSST logs go there with --no-log-tty)
-    if succeeded == 0 and failed == 0 and log_file and log_file.exists():
-        try:
-            with open(log_file) as f:
-                if log_start_pos is not None:
-                    f.seek(log_start_pos)
-                for line in f:
-                    m = pattern.search(line)
-                    if m:
-                        succeeded = int(m.group(1))
-                        failed = int(m.group(2))
-        except OSError:
-            pass
-
-    return succeeded, failed
-
-
 def _count_matching_exposures(config: "Config", where: str) -> int | None:
     """Count exposure records matching a Butler WHERE expression.
 
     Returns None if the query fails.
     """
+    from obs_nickel_data_tools.core.stack import run_butler_python
+
     script = f"""
 from lsst.daf.butler import Butler
 
@@ -90,21 +49,12 @@ butler = Butler({str(config.repo)!r})
 rows = butler.registry.queryDimensionRecords("exposure", where={where!r})
 print(sum(1 for _ in rows))
 """
-    try:
-        result = run_with_stack(
-            ["python", "-c", script],
-            config,
-            capture_output=True,
-            check=True,
-        )
-    except Exception as e:
-        log.warning(f"Failed to count matching exposures: {e}")
+    output = run_butler_python(script, config)
+    if not output:
         return None
 
-    for line in reversed(result.stdout.splitlines()):
+    for line in reversed(output.splitlines()):
         line = line.strip()
-        if not line:
-            continue
         if line.isdigit():
             return int(line)
 
@@ -169,6 +119,8 @@ def resolve_object_filter(
     Returns:
         Exact target_name from FITS headers, or None if no match
     """
+    from obs_nickel_data_tools.core.stack import run_butler_python_json
+
     # Query all unique target names from Butler directly.
     where = "instrument='Nickel' AND exposure.observation_type='science'"
     if night:
@@ -177,8 +129,7 @@ def resolve_object_filter(
         day_obs = night_to_day_obs(night)
         where += f" AND day_obs={day_obs}"
 
-    try:
-        script = f"""
+    script = f"""
 import json
 from lsst.daf.butler import Butler
 
@@ -193,52 +144,34 @@ target_names = sorted(
 )
 print(json.dumps(target_names))
 """
-        result = run_with_stack(
-            ["python", "-c", script],
-            config,
-            capture_output=True,
-            check=True,
+    target_names = run_butler_python_json(script, config)
+    if not target_names:
+        target_names = []
+
+    # Find matches (case-insensitive substring)
+    object_lower = object_filter.lower()
+    matches = [t for t in target_names if object_lower in t.lower()]
+
+    if len(matches) == 1:
+        log.debug(f"Resolved object filter '{object_filter}' -> '{matches[0]}'")
+        return matches[0]
+    elif len(matches) > 1:
+        # Prefer exact match (case-insensitive) if available
+        exact = [t for t in matches if t.lower() == object_lower]
+        if exact:
+            log.debug(
+                f"Resolved object filter '{object_filter}' -> '{exact[0]}' (exact)"
+            )
+            return exact[0]
+        # Otherwise use the first match but warn
+        log.warning(
+            f"Multiple matches for '{object_filter}': {matches}. Using '{matches[0]}'"
         )
-
-        # Parse JSON output (skip any stack setup chatter lines).
-        target_names: list[str] = []
-        for line in result.stdout.splitlines():
-            line = line.strip()
-            if line.startswith("["):
-                try:
-                    target_names = json.loads(line)
-                    break
-                except json.JSONDecodeError:
-                    continue
-
-        # Find matches (case-insensitive substring)
-        object_lower = object_filter.lower()
-        matches = [t for t in target_names if object_lower in t.lower()]
-
-        if len(matches) == 1:
-            log.debug(f"Resolved object filter '{object_filter}' -> '{matches[0]}'")
-            return matches[0]
-        elif len(matches) > 1:
-            # Prefer exact match (case-insensitive) if available
-            exact = [t for t in matches if t.lower() == object_lower]
-            if exact:
-                log.debug(
-                    f"Resolved object filter '{object_filter}' -> '{exact[0]}' (exact)"
-                )
-                return exact[0]
-            # Otherwise use the first match but warn
-            log.warning(
-                f"Multiple matches for '{object_filter}': {matches}. Using '{matches[0]}'"
-            )
-            return matches[0]
-        else:
-            log.warning(
-                f"No target_name matches for '{object_filter}'. Available: {target_names[:10]}"
-            )
-            return None
-
-    except Exception as e:
-        log.warning(f"Failed to resolve object filter: {e}")
+        return matches[0]
+    else:
+        log.warning(
+            f"No target_name matches for '{object_filter}'. Available: {target_names[:10]}"
+        )
         return None
 
 
@@ -294,24 +227,22 @@ def run(
     if science_config is not None:
         science_cfg.calibrate_image = science_config
 
-    # Find the raw collection for this night
+    # Find the raw collection for this night (targeted query)
     try:
-        result = run_butler(
-            ["query-collections", repo],
+        result = run_butler_query(
+            ["query-collections", repo, f"Nickel/raw/{night}/*"],
             config,
-            capture_output=True,
-            log_file=log_file,
+            check=False,
         )
-        raw_run = None
-        for line in result.stdout.splitlines():
-            col = line.split()[0] if line.split() else ""
-            if col.startswith(f"Nickel/raw/{night}/"):
-                raw_run = col
+        raw_collections = parse_butler_query_output(
+            result.stdout, prefix_filter="Nickel/"
+        )
+        raw_run = raw_collections[0] if raw_collections else None
         if not raw_run:
             return ScienceResult(
                 success=False,
                 night=night,
-                science_run=cols.science_run,
+                science_run=cols.science_parent,
                 coadd_run=None,
                 error=f"No raw collection found for night {night}",
             )
@@ -319,7 +250,7 @@ def run(
         return ScienceResult(
             success=False,
             night=night,
-            science_run=cols.science_run,
+            science_run=cols.science_parent,
             coadd_run=None,
             error=f"Failed to query collections: {e}",
         )
@@ -403,7 +334,7 @@ def run(
         return ScienceResult(
             success=False,
             night=night,
-            science_run=cols.science_run,
+            science_run=cols.science_parent,
             coadd_run=None,
             error=f"No valid config files found. Tried: {science_cfg.calibrate_image}",
         )
@@ -424,7 +355,7 @@ def run(
         return ScienceResult(
             success=False,
             night=night,
-            science_run=cols.science_run,
+            science_run=cols.science_parent,
             coadd_run=None,
             error=reason,
         )
@@ -452,20 +383,29 @@ def run(
     # Create processing log for this night
     plog = processing_log.create_log(night, "science")
 
-    # Single output run - all configs write here
-    output_run = cols.science_run
+    # Primary output run — fallbacks get separate RUNs to avoid
+    # ConflictingDefinitionError (LSST enforces config consistency per RUN).
+    primary_run = cols.science_run
+    successful_runs: list[str] = []  # RUNs that produced at least one quantum
 
     # Try each config in order, using --skip-existing-in for fallbacks
     config_used: Path | None = None
     fallback_used = False
     any_success = False
-    primary_created_run = False  # Track if primary config created the output run
     cumulative_succeeded = 0  # Track total successes across all configs
 
     for i, tuned_config in enumerate(configs_to_try):
         is_fallback = i > 0
         config_label = "fallback" if is_fallback else "primary"
         log.info(f"Trying {config_label} config: {tuned_config.name}")
+
+        # Each config attempt gets its own RUN collection.
+        # Primary: .../run
+        # Fallbacks: .../run_fb1, .../run_fb2, .../run_fb3
+        if is_fallback:
+            output_run = f"{cols.science_parent}/run_fb{i}"
+        else:
+            output_run = primary_run
 
         # Each attempt gets its own qgraph (different config = different plan)
         qg_science = qg_dir / f"processCcd_{night}_{cols.run_ts}_cfg{i}.qg"
@@ -501,31 +441,21 @@ def run(
             ]
 
             # For fallback attempts, build a qgraph that excludes quanta
-            # whose outputs already exist (i.e., the ones that succeeded).
+            # whose outputs already exist in any prior successful RUN.
             # --skip-existing-in filters at graph-build time based on _metadata
-            # datasets in the output collection, so the qgraph only contains
-            # the failed quanta that need retrying with a different config.
+            # datasets, so the qgraph only contains the failed quanta that
+            # need retrying with a different config.
             #
-            # LSST-native behavior for reprocessing into an existing RUN requires:
-            #   - --extend-run: allow writing to an existing output-run
-            #   - --clobber-outputs: remove partial outputs from failed quanta
-            #     that would otherwise trigger OutputExistsError in qgraph build.
-            if is_fallback and primary_created_run:
-                qgraph_args.extend(
-                    [
-                        "--extend-run",
-                        "--clobber-outputs",
-                        "--skip-existing-in",
-                        output_run,
-                    ]
-                )
+            # Each fallback writes to its own RUN to avoid
+            # ConflictingDefinitionError (LSST enforces config consistency
+            # per task label within a single RUN collection).
+            if is_fallback and successful_runs:
+                for prior_run in successful_runs:
+                    qgraph_args.extend(["--skip-existing-in", prior_run])
+                qgraph_args.append("--clobber-outputs")
 
             # Build quantum graph
             run_pipetask(qgraph_args, config, log_file=log_file)
-
-            # If qgraph succeeded, the run collection now exists
-            if i == 0:  # primary config
-                primary_created_run = True
 
             # Build run arguments
             run_args = [
@@ -538,16 +468,6 @@ def run(
                 str(jobs),
                 "--register-dataset-types",
             ]
-
-            # Fallback run writes into the existing output RUN created by the
-            # primary attempt, so it must explicitly extend that run.
-            if is_fallback and primary_created_run:
-                run_args.extend(
-                    [
-                        "--extend-run",
-                        "--clobber-outputs",
-                    ]
-                )
 
             # Fallback qgraphs are already reduced to unresolved quanta via
             # --skip-existing-in at qgraph build time; execute directly.
@@ -569,7 +489,11 @@ def run(
 
             # Parse actual quanta counts from output (or log file if --no-log-tty)
             combined_output = (result.stdout or "") + "\n" + (result.stderr or "")
-            quanta_ok, quanta_fail = _parse_quanta_summary(
+            if not combined_output.strip():
+                combined_output = read_log_delta(
+                    log_file, log_start_pos=log_start_pos, max_chars=8000
+                )
+            quanta_ok, quanta_fail = parse_quanta_summary(
                 combined_output,
                 log_file,
                 log_start_pos=log_start_pos,
@@ -579,6 +503,7 @@ def run(
                 # Full success with this config
                 attempt.quanta_succeeded = quanta_ok or 1
                 cumulative_succeeded += quanta_ok or 1
+                successful_runs.append(output_run)
                 any_success = True
                 config_used = tuned_config
                 fallback_used = is_fallback
@@ -602,6 +527,7 @@ def run(
                 attempt.failed_exposures = processing_log.parse_pipetask_failures(
                     result.stderr or "", result.stdout or ""
                 )
+                successful_runs.append(output_run)
                 any_success = True
                 config_used = tuned_config
                 fallback_used = is_fallback
@@ -647,7 +573,9 @@ def run(
             else:
                 # Total failure - no quanta succeeded
                 attempt.error = (
-                    result.stderr[:500] if result.stderr else "Unknown error"
+                    combined_output.strip()[-500:]
+                    if combined_output.strip()
+                    else "Unknown error"
                 )
                 attempt.failed_exposures = processing_log.parse_pipetask_failures(
                     result.stderr or "", result.stdout or ""
@@ -725,7 +653,7 @@ def run(
                 break
 
     # Finalize and save processing log
-    plog.output_collection = output_run
+    plog.output_collection = primary_run
     plog.finalize()
     processing_log.save_log(plog, config)
 
@@ -743,7 +671,7 @@ def run(
         return ScienceResult(
             success=False,
             night=night,
-            science_run=cols.science_run,
+            science_run=cols.science_parent,
             coadd_run=None,
             error=last_error or "All configs failed",
             quanta_succeeded=total_succeeded,
@@ -751,13 +679,17 @@ def run(
         )
 
     try:
-        # Update collection chain to point to the output run
+        # Chain all successful RUN collections under the parent CHAINED
+        # collection so downstream consumers (DIA, fphot) see a unified view.
+        # Order matters: later runs (fallbacks) should be searched first so
+        # their outputs take precedence over partial/failed primary outputs.
+        chain_members = list(reversed(successful_runs))
         run_butler(
             [
                 "collection-chain",
                 repo,
                 cols.science_parent,
-                output_run,
+                *chain_members,
                 "--mode",
                 "redefine",
             ],
@@ -824,7 +756,7 @@ def run(
         return ScienceResult(
             success=True,
             night=night,
-            science_run=output_run,
+            science_run=cols.science_parent,
             coadd_run=coadd_run,
             config_used=str(config_used) if config_used else None,
             fallback_used=fallback_used,
@@ -836,7 +768,7 @@ def run(
         return ScienceResult(
             success=False,
             night=night,
-            science_run=output_run,
+            science_run=cols.science_parent,
             coadd_run=None,
             error=str(e),
             config_used=str(config_used) if config_used else None,

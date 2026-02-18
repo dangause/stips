@@ -448,6 +448,7 @@ log_info "Finding science processing run for observing night $NIGHT..."
 SCI_PARENT="$(butler query-collections "$REPO" 2>/dev/null | \
   awk '{print $1}' | \
   grep -E "^Nickel/runs/${NIGHT}/(processCcd|science)/" | \
+  grep -v -E '/(run|run_fb[0-9]+)$' | \
   tail -n1 || true)"
 
 if [[ -z "$SCI_PARENT" ]]; then

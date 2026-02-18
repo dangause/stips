@@ -23,7 +23,7 @@
 # Environment Configuration (self-contained)
 # =============================================================================
 env:
-  REPO: "/Users/dangause/Developer/lick/lsst/data/nickel/2023ixf_nickel_template_021726_repo"
+  REPO: "/Users/dangause/Developer/lick/lsst/data/nickel/2023ixf_nickel_template_021826_repo"
   STACK_DIR: "/Users/dangause/Developer/lick/lsst/lsst_stack"
   OBS_NICKEL: "/Users/dangause/Developer/lick/lsst/lsst_stack/stack/nickel_processing_suite/packages/obs_nickel"
   RAW_PARENT_DIR: "/Users/dangause/Developer/lick/data"
@@ -49,81 +49,33 @@ template:
   # Late-time nights when SN had faded, used to build template coadds
   # Using late 2023 observations (post-plateau phase)
   nights:
-    - "20230625"
-    - "20230629"
-    - "20230706"
-    - "20230714"
-    - "20230728"
-    - "20230801"
-    - "20230817"
-    - "20230905"
-    - "20230910"
-    - "20231211"
+    - 20230629
+    - 20230703
+    - 20230706
+    - 20230709
+    - 20230714
+    - 20230728
+    - 20230801
+    - 20230817
+    - 20230905
+    - 20230910
+    - 20231211
 
 # Science nights - SN observations from discovery through late summer 2023
 # Excluding template nights from science processing
-nights:
-  20230519:
-    b: []
-    v: []
-    r: []
-    i: []
-  20230521:
-    b: []
-    v: []
-    r: []
-    i: []
-  20230523:
-    b: []
-    v: []
-    r: []
-    i: []
-  20230527:
-    b: []
-    v: []
-    r: []
-    i: []
-  20230531:
-    b: []
-    v: []
-    r: []
-    i: []
-  20230602:
-    b: []
-    v: []
-    r: []
-    i: []
-  20230608:
-    b: []
-    v: []
-    r: []
-    i: []
-  20230616:
-    b: []
-    v: []
-    r: []
-    i: []
-  20230703:
-    b: []
-    v: []
-    r: []
-    i: []
-  20230709:
-    b: []
-    v: []
-    r: []
-    i: []
-  20230611:
-    b: []
-    v: []
-    r: []
-    i: []
-  20230618:
-    b: []
-    v: []
-    r: []
-    i: []
-
+science:
+  nights:
+    - 20230519
+    - 20230521
+    - 20230523
+    - 20230527
+    - 20230531
+    - 20230602
+    - 20230608
+    - 20230611
+    - 20230616
+    - 20230618
+    - 20230625
 
 # Pipeline configuration files (paths relative to obs_nickel/configs/)
 configs:
@@ -143,13 +95,13 @@ configs:
 # Processing options
 options:
   jobs: 6
-  skip_calibs: false
+  skip_calibs: true
   skip_science: false
   skip_dia: false
   forced_phot: true
   forced_phot_image_type: diffim
   lightcurve: true
   lightcurve_dataset_type: forced_phot_diffim_radec
-  lightcurve_min_snr: -999
+  lightcurve_min_snr: 0
   continue_on_error: true
   use_fallbacks: true

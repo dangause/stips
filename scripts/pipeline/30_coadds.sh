@@ -193,7 +193,7 @@ else
       NIGHTS_ARRAY+=("$night")
     done < <(
       butler query-datasets "$REPO" preliminary_visit_image \
-        --collections "Nickel/runs/*/processCcd/*/run" \
+        --collections "Nickel/runs/*/processCcd/*" \
         --where "instrument='Nickel' AND band='${BAND}'" \
         | awk 'NR>1 {print $0}' \
         | grep -oE '[0-9]{8}' \
@@ -217,7 +217,7 @@ else
     coll=$(butler query-collections "$REPO" \
       | awk '{print $1}' \
       | grep -E "^Nickel/runs/${night}/processCcd/" \
-      | grep -v "/run$" \
+      | grep -v -E "/(run|run_fb[0-9]+)$" \
       | tail -n1)
 
     if [[ -n "$coll" ]]; then

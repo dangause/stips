@@ -265,7 +265,8 @@ obsn-eda-butler collections --repo /path/to/repo
 obsn-eda-butler collections --repo /path/to/repo --pattern "Nickel/runs/*/diff/*"
 
 # Show dataset inventory for a collection
-obsn-eda-butler datasets --repo /path/to/repo --collection "Nickel/runs/20240625/processCcd/*/run"
+# Use the CHAINED parent to include primary + fallback results
+obsn-eda-butler datasets --repo /path/to/repo --collection "Nickel/runs/20240625/processCcd/*"
 
 # Check calibration coverage across nights
 obsn-eda-butler calibs --repo /path/to/repo --nights 20240601,20240602,20240603

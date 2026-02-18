@@ -256,13 +256,12 @@ log_info "Data query: $DATA_QUERY"
 PROCESSCCD_COLLECTION="Nickel/runs/${NIGHT}/processCcd/*"
 DIFF_COLLECTION="Nickel/runs/${NIGHT}/diff/*"
 
-# Resolve processCcd collection - look for the /run subcollection
+# Resolve processCcd collection - prefer the CHAINED parent (includes primary + fallback results)
 log_info "Looking for processCcd collections..."
-PROCESSCCD_RUN_COLLECTION="Nickel/runs/${NIGHT}/processCcd/*/run"
-RESOLVED_PROCESSCCD=$(butler query-collections "$REPO" "$PROCESSCCD_RUN_COLLECTION" 2>&1 | tail -n +3 | awk '{print $1}' | sort | tail -1)
+RESOLVED_PROCESSCCD=$(butler query-collections "$REPO" "$PROCESSCCD_COLLECTION" 2>&1 | tail -n +3 | awk '{print $1}' | grep -v -E '/(run|run_fb[0-9]+)$' | sort | tail -1)
 if [[ -z "$RESOLVED_PROCESSCCD" ]]; then
-    # Try without /run suffix as fallback
-    RESOLVED_PROCESSCCD=$(butler query-collections "$REPO" "$PROCESSCCD_COLLECTION" 2>&1 | tail -n +3 | awk '{print $1}' | sort | tail -1)
+    # Fall back to individual RUN collection
+    RESOLVED_PROCESSCCD=$(butler query-collections "$REPO" "Nickel/runs/${NIGHT}/processCcd/*/run" 2>&1 | tail -n +3 | awk '{print $1}' | sort | tail -1)
 fi
 if [[ -z "$RESOLVED_PROCESSCCD" ]]; then
     log_error "No processCcd collections found for night $NIGHT"

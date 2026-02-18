@@ -7,8 +7,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from obs_nickel_data_tools.core.pipeline import generate_run_timestamp, validate_night
-from obs_nickel_data_tools.core.stack import run_butler, run_pipetask
+from obs_nickel_data_tools.core.pipeline import (
+    butler_query_has_results,
+    generate_run_timestamp,
+    parse_butler_query_output,
+    validate_night,
+)
+from obs_nickel_data_tools.core.stack import run_butler_query, run_pipetask
 
 if TYPE_CHECKING:
     from obs_nickel_data_tools.core.config import Config
@@ -26,37 +31,6 @@ class ForcedPhotResult:
     error: str | None = None
 
 
-def _parse_collections(output: str) -> list[str]:
-    """Parse butler query-collections output to get collection names."""
-    lines = [line.strip() for line in output.strip().split("\n") if line.strip()]
-    # Skip header lines (first 2-3 lines are headers)
-    # Look for lines that look like collection paths
-    colls = []
-    for line in lines:
-        # Skip header/separator lines
-        if line.startswith("-") or line.startswith("="):
-            continue
-        if line.startswith("type") or line.startswith("Name"):
-            continue
-        # Extract first column (collection name)
-        parts = line.split()
-        if parts and parts[0].startswith("Nickel/"):
-            colls.append(parts[0])
-    return colls
-
-
-def _has_data_rows(output: str) -> bool:
-    """Return True when Butler tabular output includes at least one data row."""
-    for line in output.splitlines():
-        stripped = line.strip()
-        if not stripped:
-            continue
-        if stripped.startswith(("No results", "-", "=", "instrument", "type", "Name")):
-            continue
-        return True
-    return False
-
-
 def _collection_has_difference_images(
     repo: str,
     collection: str,
@@ -70,7 +44,7 @@ def _collection_has_difference_images(
     if band:
         query += f" AND band='{band}'"
 
-    result = run_butler(
+    result = run_butler_query(
         [
             "query-data-ids",
             repo,
@@ -85,14 +59,12 @@ def _collection_has_difference_images(
             "1",
         ],
         config,
-        capture_output=True,
         check=False,
-        log_file=log_file,
     )
 
     if result.returncode != 0:
         return False
-    return _has_data_rows(result.stdout or "")
+    return butler_query_has_results(result.stdout or "")
 
 
 def _select_diff_collection(
@@ -104,18 +76,19 @@ def _select_diff_collection(
     log_file: Path | None,
 ) -> tuple[str | None, list[str]]:
     """Select the newest diff collection that contains datasets for this band."""
-    diff_result = run_butler(
+    diff_result = run_butler_query(
         ["query-collections", repo, f"Nickel/runs/{night}/diff/*/run"],
         config,
-        capture_output=True,
         check=False,
-        log_file=log_file,
     )
 
     if diff_result.returncode != 0:
         return None, []
 
-    candidates = sorted(_parse_collections(diff_result.stdout), reverse=True)
+    candidates = sorted(
+        parse_butler_query_output(diff_result.stdout, prefix_filter="Nickel/"),
+        reverse=True,
+    )
     for coll in candidates:
         if _collection_has_difference_images(
             repo, coll, config, band=band, log_file=log_file
@@ -161,23 +134,30 @@ def run(
     errors: list[str] = []
 
     # Find processCcd collection
-    # Try patterns in order of preference: /run (current), /run_cfg* (legacy fallback)
+    # Prefer the CHAINED parent (includes primary + fallback results),
+    # fall back to individual RUN collections for compatibility.
     processccd_coll = None
     for pattern in [
+        f"Nickel/runs/{night}/processCcd/*",
         f"Nickel/runs/{night}/processCcd/*/run",
-        f"Nickel/runs/{night}/processCcd/*/run_cfg*",
+        f"Nickel/runs/{night}/processCcd/*/run_fb*",
     ]:
-        result = run_butler(
+        result = run_butler_query(
             ["query-collections", repo, pattern],
             config,
-            capture_output=True,
             check=False,
-            log_file=log_file,
         )
         if result.returncode == 0:
-            colls = _parse_collections(result.stdout)
+            colls = parse_butler_query_output(result.stdout, prefix_filter="Nickel/")
             if colls:
-                processccd_coll = sorted(colls)[-1]  # Latest
+                # Prefer CHAINED parents over individual RUNs
+                chained = [
+                    c for c in colls if not c.endswith(("/run",)) and "/run_fb" not in c
+                ]
+                if chained:
+                    processccd_coll = sorted(chained)[-1]
+                else:
+                    processccd_coll = sorted(colls)[-1]
                 break
 
     if not processccd_coll:
@@ -214,7 +194,7 @@ def run(
             result = run_pipetask(
                 [
                     "run",
-                    "--butler-config",
+                    "-b",
                     repo,
                     "--input",
                     processccd_coll,
@@ -280,7 +260,7 @@ def run(
                 result = run_pipetask(
                     [
                         "run",
-                        "--butler-config",
+                        "-b",
                         repo,
                         "--input",
                         input_colls,

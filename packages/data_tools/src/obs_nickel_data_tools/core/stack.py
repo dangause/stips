@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import json
+import logging
 import os
 import subprocess
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from obs_nickel_data_tools.core.config import Config
@@ -223,8 +225,14 @@ def run_butler(
 ) -> subprocess.CompletedProcess:
     """Run butler with the given arguments.
 
+    For mutation commands (register-instrument, collection-chain, etc.) that
+    don't need stdout parsed. Adds LSST logging flags for diagnostics.
+
+    For query commands where stdout needs to be parsed, use run_butler_query()
+    instead -- it runs butler without logging flags so stdout is clean.
+
     Args:
-        args: Arguments to pass to butler (e.g., ["query-collections", repo])
+        args: Arguments to pass to butler (e.g., ["register-instrument", repo, ...])
         config: Pipeline configuration
         capture_output: If True, capture stdout/stderr
         check: If True, raise on non-zero exit
@@ -263,6 +271,37 @@ def run_butler(
     )
 
 
+def run_butler_query(
+    args: list[str],
+    config: Config,
+    *,
+    check: bool = True,
+) -> subprocess.CompletedProcess:
+    """Run a butler query command with clean stdout (no logging flags).
+
+    Use this for query-collections, query-datasets, query-data-ids, etc.
+    where stdout needs to be parsed. Unlike run_butler(), this does NOT
+    add --no-log-tty, --long-log, or --log-level flags, so stdout
+    contains only the tabular query output.
+
+    Args:
+        args: Arguments to pass to butler (e.g., ["query-collections", repo, ...])
+        config: Pipeline configuration
+        check: If True, raise on non-zero exit
+
+    Returns:
+        CompletedProcess with return code and captured output
+    """
+    butler_args = ["butler"] + list(args)
+
+    return run_with_stack(
+        butler_args,
+        config,
+        capture_output=True,
+        check=check,
+    )
+
+
 def check_stack(config: Config) -> bool:
     """Verify the LSST stack is accessible.
 
@@ -282,3 +321,68 @@ def check_stack(config: Config) -> bool:
         return "ok" in result.stdout
     except (subprocess.CalledProcessError, FileNotFoundError):
         return False
+
+
+_log = logging.getLogger(__name__)
+
+
+def run_butler_python(
+    script: str,
+    config: Config,
+) -> str | None:
+    """Run a Python script in the LSST stack environment and return its stdout.
+
+    The script should print its result to stdout (preferably as JSON).
+    Lines from LSST stack setup chatter are filtered out.
+
+    Args:
+        script: Python script body to execute
+        config: Pipeline configuration
+
+    Returns:
+        Stripped stdout from the script, or None if execution failed.
+    """
+    try:
+        result = run_with_stack(
+            ["python", "-c", script],
+            config,
+            capture_output=True,
+            check=True,
+        )
+    except Exception as e:
+        _log.debug(f"run_butler_python failed: {e}")
+        return None
+
+    # Return stripped stdout (may contain setup chatter before the real output)
+    return result.stdout.strip() if result.stdout else None
+
+
+def run_butler_python_json(
+    script: str,
+    config: Config,
+) -> Any:
+    """Run a Python script in the LSST stack environment and parse JSON output.
+
+    Like run_butler_python() but automatically finds and parses the last
+    JSON line from the output, skipping any LSST stack setup chatter.
+
+    Args:
+        script: Python script body that prints a JSON line to stdout
+        config: Pipeline configuration
+
+    Returns:
+        Parsed JSON result, or None if no JSON found or execution failed.
+    """
+    output = run_butler_python(script, config)
+    if not output:
+        return None
+
+    # Find the JSON line (could be a list or dict) — scan from end
+    for line in reversed(output.splitlines()):
+        line = line.strip()
+        if line.startswith(("[", "{")):
+            try:
+                return json.loads(line)
+            except json.JSONDecodeError:
+                continue
+    return None

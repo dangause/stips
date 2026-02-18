@@ -1024,8 +1024,8 @@ if [[ "$FORCED_PHOT_LIGHTCURVE" == "true" ]]; then
     fi
 
     for night in "${SCIENCE_NIGHTS[@]}"; do
-      PROCESSCCD_COLL="$(butler query-collections "$REPO" "Nickel/runs/${night}/processCcd/*/run" 2>/dev/null | \
-        tail -n +3 | awk '{print $1}' | sort | tail -n 1)"
+      PROCESSCCD_COLL="$(butler query-collections "$REPO" "Nickel/runs/${night}/processCcd/*" 2>/dev/null | \
+        tail -n +3 | awk '{print $1}' | grep -v -E '/(run|run_fb[0-9]+)$' | sort | tail -n 1)"
       if [[ -n "$PROCESSCCD_COLL" ]]; then
         PROCESSCCD_COLLECTIONS+=("$PROCESSCCD_COLL")
       else
@@ -1162,8 +1162,8 @@ if [[ "$DIA_LIGHTCURVE_TASK" == "true" ]]; then
     DIFF_COLLECTIONS=()
 
     for night in "${SCIENCE_NIGHTS[@]}"; do
-      PROCESSCCD_COLL="$(butler query-collections "$REPO" "Nickel/runs/${night}/processCcd/*/run" 2>/dev/null | \
-        tail -n +3 | awk '{print $1}' | sort | tail -n 1)"
+      PROCESSCCD_COLL="$(butler query-collections "$REPO" "Nickel/runs/${night}/processCcd/*" 2>/dev/null | \
+        tail -n +3 | awk '{print $1}' | grep -v -E '/(run|run_fb[0-9]+)$' | sort | tail -n 1)"
       if [[ -n "$PROCESSCCD_COLL" ]]; then
         PROCESSCCD_COLLECTIONS+=("$PROCESSCCD_COLL")
       else

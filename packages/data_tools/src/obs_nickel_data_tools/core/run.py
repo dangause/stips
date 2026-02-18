@@ -24,14 +24,14 @@ Example YAML format:
     template:
       type: ps1           # or "coadd"
       degrade_seeing: 2.0  # optional
+      nights:             # for coadd type: template nights (SN faded)
+        - 20230625
+        - 20230629
 
-    nights:
-      20230519:
-        r: [76482094, 76482095]
-        i: [76482096]
-      20230521:
-        r: []
-        i: []
+    science:
+      nights:
+        - 20230519
+        - 20230521
 
     # Pipeline configuration files (paths relative to obs_nickel/configs/)
     configs:
@@ -72,6 +72,7 @@ import yaml
 
 if TYPE_CHECKING:
     from obs_nickel_data_tools.core.config import Config
+    from obs_nickel_data_tools.core.science import ScienceConfig
 
 log = logging.getLogger(__name__)
 
@@ -341,7 +342,7 @@ class RunConfig:
     ra: float
     dec: float
     bands: list[str]
-    nights: dict[str, dict[str, list[int]]]
+    nights: list[str] = field(default_factory=list)
 
     # Template configuration
     template_type: str = "ps1"  # "ps1" or "coadd"
@@ -387,10 +388,24 @@ class RunConfig:
         # Extract options
         options = data.get("options", {})
 
-        # Convert night keys to strings (YAML parses 20230519 as int)
-        # Normalize None values to empty dicts (happens when band lines are commented out)
-        raw_nights = data.get("nights", {})
-        nights = {str(k): (v if v is not None else {}) for k, v in raw_nights.items()}
+        # Parse science nights from science.nights (preferred) or legacy nights key.
+        # Preferred:  science: { nights: [20230519, ...] }
+        # Legacy:     nights: [20230519, ...]  or  nights: {20230519: {r: [], ...}, ...}
+        science_section = data.get("science", {})
+        raw_nights = science_section.get("nights") if science_section else None
+        if raw_nights is None:
+            raw_nights = data.get("nights", [])
+
+        if isinstance(raw_nights, list):
+            nights = [str(n) for n in raw_nights]
+        elif isinstance(raw_nights, dict):
+            # Legacy dict format: keys are nights
+            nights = [str(k) for k in raw_nights.keys()]
+            log.debug(
+                "Using legacy dict format for nights (consider migrating to list)"
+            )
+        else:
+            nights = []
 
         # Extract config file paths
         configs = data.get("configs", {})
@@ -499,6 +514,552 @@ class RunResult:
     error: str | None = None
 
 
+def _get_bands_for_night(
+    night: str,
+    run_cfg: RunConfig,
+) -> list[str]:
+    """Get the bands to process for a specific night.
+
+    Returns all top-level bands. Per-band availability is handled
+    gracefully by the pipeline (empty quantum graphs, no matching
+    exposures, etc.).
+    """
+    return list(run_cfg.bands)
+
+
+def _run_ps1_templates(
+    run_cfg: RunConfig,
+    config: Config,
+    result: RunResult,
+    dry_run: bool,
+) -> None:
+    """Ingest PS1 templates for each band."""
+    from obs_nickel_data_tools.core import ps1_template
+
+    for band in run_cfg.bands:
+        if band not in ("r", "i"):
+            log.warning(f"PS1 templates not available for band {band}, skipping")
+            continue
+
+        log.info(f"Ingesting PS1 template for {band}-band...")
+
+        if not dry_run:
+            ps1_log = _get_step_log_file("ps1_template", band=band)
+            ps1_result = ps1_template.run(
+                ra=run_cfg.ra,
+                dec=run_cfg.dec,
+                band=band,
+                config=config,
+                size=run_cfg.template_size,
+                degrade_seeing=run_cfg.template_degrade_seeing,
+                log_file=ps1_log,
+            )
+            if ps1_result.success:
+                result.template_collections[band] = ps1_result.collection
+            else:
+                log.warning(f"PS1 template failed for {band}: {ps1_result.error}")
+        else:
+            log.info(
+                f"  [DRY RUN] ps1_template.run(ra={run_cfg.ra}, dec={run_cfg.dec}, band={band})"
+            )
+            result.template_collections[band] = f"templates/ps1/{band}"
+
+
+def _run_coadd_templates(
+    run_cfg: RunConfig,
+    config: Config,
+    result: RunResult,
+    science_cfg: "ScienceConfig",
+    dry_run: bool,
+) -> RunResult | None:
+    """Build coadd templates: process template nights, then coadd per band.
+
+    Returns a RunResult early-exit if continue_on_error is False and a step fails,
+    or None to continue normally.
+    """
+    from obs_nickel_data_tools.core import calibs, coadd, science
+
+    if not run_cfg.template_nights:
+        log.error("Coadd template type requires template.nights in YAML")
+        return RunResult(
+            success=False,
+            error="Coadd template type requires template.nights configuration",
+        )
+
+    # Process template nights through calibs
+    if not run_cfg.skip_calibs:
+        for night in run_cfg.template_nights:
+            log.info(f"Running calibrations for template night {night}...")
+            if not dry_run:
+                calib_log = _get_step_log_file("calibs_template", night=night)
+                calib_result = calibs.run(
+                    night, config, jobs=run_cfg.jobs, log_file=calib_log
+                )
+                _maybe_split_log(calib_log)
+                if not calib_result.success:
+                    log.warning(
+                        f"Calibrations failed for template night {night}: {calib_result.error}"
+                    )
+                    if not run_cfg.continue_on_error:
+                        return RunResult(
+                            success=False,
+                            error=f"Template night calibrations failed for {night}",
+                        )
+            else:
+                log.info(f"  [DRY RUN] calibs.run({night})")
+
+    # Process template nights through science
+    if not run_cfg.skip_science:
+        for night in run_cfg.template_nights:
+            bands_for_night = _get_bands_for_night(night, run_cfg)
+            if not bands_for_night:
+                log.info(
+                    f"Skipping template-night science for {night} "
+                    "(no bands configured)"
+                )
+                continue
+
+            log.info(f"Running science for template night {night}...")
+            if not dry_run:
+                sci_log = _get_step_log_file("science_template", night=night)
+                sci_result = science.run(
+                    night,
+                    config,
+                    jobs=run_cfg.jobs,
+                    object_filter=run_cfg.object_name,
+                    skip_coadds=True,
+                    science_cfg=science_cfg,
+                    use_fallbacks=run_cfg.use_fallbacks,
+                    bands=bands_for_night,
+                    target_ra=run_cfg.ra,
+                    target_dec=run_cfg.dec,
+                    log_file=sci_log,
+                )
+                _maybe_split_log(sci_log)
+                if not sci_result.success:
+                    log.warning(
+                        f"Science failed for template night {night}: {sci_result.error}"
+                    )
+                    if not run_cfg.continue_on_error:
+                        return RunResult(
+                            success=False,
+                            error=f"Template night science failed for {night}",
+                        )
+            else:
+                log.info(f"  [DRY RUN] science.run({night}, bands={bands_for_night})")
+
+    # Build coadd templates per band
+    force_rebuild_templates = not run_cfg.skip_science
+    if force_rebuild_templates:
+        log.info("Science was (re-)processed — forcing template rebuild")
+
+    for band in run_cfg.bands:
+        log.info(f"Building coadd template for {band}-band...")
+
+        if not dry_run:
+            coadd_config_files = []
+            if run_cfg.coadd_configs.make_direct_warp:
+                cfg_path = (
+                    config.obs_nickel
+                    / "configs"
+                    / run_cfg.coadd_configs.make_direct_warp
+                )
+                coadd_config_files.append(f"makeDirectWarp:{cfg_path}")
+
+            coadd_log = _get_step_log_file("coadd_template", band=band)
+            coadd_result = coadd.run(
+                nights=run_cfg.template_nights,
+                band=band,
+                config=config,
+                ra=run_cfg.ra,
+                dec=run_cfg.dec,
+                jobs=run_cfg.jobs,
+                overwrite=force_rebuild_templates,
+                config_files=coadd_config_files or None,
+                log_file=coadd_log,
+            )
+            _maybe_split_log(coadd_log)
+            if coadd_result.success:
+                result.template_collections[band] = coadd_result.collection
+                log.info(f"  Coadd template for {band}: {coadd_result.collection}")
+            else:
+                log.warning(f"Coadd template failed for {band}: {coadd_result.error}")
+        else:
+            log.info(
+                f"  [DRY RUN] coadd.run(nights={run_cfg.template_nights}, band={band})"
+            )
+            result.template_collections[band] = f"templates/deep/tract0/{band}"
+
+    return None
+
+
+def _log_template_summary(run_cfg: RunConfig, result: RunResult) -> None:
+    """Log which bands have templates and which don't."""
+    built = [b for b in run_cfg.bands if b in result.template_collections]
+    failed = [b for b in run_cfg.bands if b not in result.template_collections]
+    if built:
+        log.info(f"Templates built for bands: {', '.join(built)}")
+    if failed:
+        log.warning(
+            f"No templates for bands: {', '.join(failed)} (DIA will be skipped for these)"
+        )
+
+
+def _run_calibs_step(
+    all_nights: list[str],
+    run_cfg: RunConfig,
+    config: Config,
+    result: RunResult,
+    dry_run: bool,
+) -> RunResult | None:
+    """Run calibrations for each science night.
+
+    Returns a RunResult for early exit if continue_on_error is False, else None.
+    """
+    from obs_nickel_data_tools.core import calibs
+
+    for night in all_nights:
+        log.info(f"Running calibrations for {night}...")
+
+        if not dry_run:
+            calib_log = _get_step_log_file("calibs", night=night)
+            calib_result = calibs.run(
+                night, config, jobs=run_cfg.jobs, log_file=calib_log
+            )
+            _maybe_split_log(calib_log)
+            if not calib_result.success:
+                result.failed_calibs.append(night)
+                log.warning(f"Calibrations failed for {night}: {calib_result.error}")
+                if not run_cfg.continue_on_error:
+                    result.success = False
+                    result.error = f"Calibrations failed for {night}"
+                    return result
+        else:
+            log.info(f"  [DRY RUN] calibs.run({night})")
+
+    return None
+
+
+def _run_science_step(
+    all_nights: list[str],
+    run_cfg: RunConfig,
+    config: Config,
+    result: RunResult,
+    science_cfg: "ScienceConfig",
+    dry_run: bool,
+) -> RunResult | None:
+    """Run science processing for each night.
+
+    Returns a RunResult for early exit if continue_on_error is False, else None.
+    """
+    from obs_nickel_data_tools.core import science
+
+    for night in all_nights:
+        bands_for_night = _get_bands_for_night(night, run_cfg)
+        if not bands_for_night:
+            log.info(f"Skipping science for {night} (no bands configured)")
+            continue
+
+        log.info(f"Running science for {night}...")
+
+        if not dry_run:
+            sci_log = _get_step_log_file("science", night=night)
+            sci_result = science.run(
+                night,
+                config,
+                jobs=run_cfg.jobs,
+                object_filter=run_cfg.object_name,
+                skip_coadds=True,
+                science_cfg=science_cfg,
+                use_fallbacks=run_cfg.use_fallbacks,
+                bands=bands_for_night,
+                target_ra=run_cfg.ra,
+                target_dec=run_cfg.dec,
+                log_file=sci_log,
+            )
+            _maybe_split_log(sci_log)
+            if not sci_result.success:
+                result.failed_science.append(night)
+                log.warning(f"Science failed for {night}: {sci_result.error}")
+                if not run_cfg.continue_on_error:
+                    result.success = False
+                    result.error = f"Science failed for {night}"
+                    return result
+            elif sci_result.fallback_used:
+                log.info(
+                    f"  Note: {night} used fallback config: {sci_result.config_used}"
+                )
+        else:
+            log.info(f"  [DRY RUN] science.run({night}, bands={bands_for_night})")
+
+    return None
+
+
+def _run_dia_step(
+    all_nights: list[str],
+    run_cfg: RunConfig,
+    config: Config,
+    result: RunResult,
+    dry_run: bool,
+) -> RunResult | None:
+    """Run DIA per night per band.
+
+    Returns a RunResult for early exit if continue_on_error is False, else None.
+    """
+    from obs_nickel_data_tools.core import dia
+
+    for night in all_nights:
+        bands_for_night = _get_bands_for_night(night, run_cfg)
+        if not bands_for_night:
+            log.info(f"Skipping DIA for {night} (no bands configured)")
+            continue
+
+        for band in bands_for_night:
+            template_coll = result.template_collections.get(band)
+            if template_coll is None:
+                log.warning(f"Skipping DIA for {night}/{band} (no template available)")
+                result.failed_dia.append(f"{night}/{band}")
+                continue
+
+            log.info(f"Running DIA for {night}/{band}...")
+
+            if not dry_run:
+                dia_log = _get_step_log_file("dia", night=night, band=band)
+                dia_result = dia.run(
+                    night,
+                    config,
+                    jobs=run_cfg.jobs,
+                    template=template_coll,
+                    auto_template=False,
+                    prefer_ps1=run_cfg.template_type == "ps1",
+                    band=band,
+                    object_filter=run_cfg.object_name,
+                    log_file=dia_log,
+                )
+                _maybe_split_log(dia_log)
+                if not dia_result.success:
+                    result.failed_dia.append(f"{night}/{band}")
+                    log.warning(f"DIA failed for {night}/{band}: {dia_result.error}")
+                    if not run_cfg.continue_on_error:
+                        result.success = False
+                        result.error = f"DIA failed for {night}/{band}"
+                        return result
+            else:
+                log.info(f"  [DRY RUN] dia.run({night}, band={band})")
+
+    return None
+
+
+def _run_fphot_step(
+    all_nights: list[str],
+    run_cfg: RunConfig,
+    config: Config,
+    result: RunResult,
+    dry_run: bool,
+) -> None:
+    """Run forced photometry per night per successful DIA band."""
+    from obs_nickel_data_tools.core import fphot
+
+    failed_dia_set = set(result.failed_dia)
+
+    for night in all_nights:
+        bands_for_night = _get_bands_for_night(night, run_cfg)
+        successful_bands = [
+            b for b in bands_for_night if f"{night}/{b}" not in failed_dia_set
+        ]
+
+        if not successful_bands:
+            log.info(f"Skipping forced photometry for {night} (all DIA bands failed)")
+            result.failed_fphot.append(night)
+            continue
+
+        night_fphot_colls: list[str] = []
+        night_had_failure = False
+
+        for band in successful_bands:
+            log.info(f"Running forced photometry for {night}/{band}...")
+
+            if not dry_run:
+                fphot_log = _get_step_log_file("fphot", night=night, band=band)
+                fphot_result = fphot.run(
+                    night=night,
+                    ra=run_cfg.ra,
+                    dec=run_cfg.dec,
+                    config=config,
+                    band=band,
+                    image_type=run_cfg.forced_phot_image_type,
+                    log_file=fphot_log,
+                )
+                _maybe_split_log(fphot_log)
+                if not fphot_result.success:
+                    night_had_failure = True
+                    log.warning(
+                        f"Forced phot failed for {night}/{band}: {fphot_result.error}"
+                    )
+                else:
+                    night_fphot_colls.extend(fphot_result.output_collections)
+            else:
+                log.info(
+                    f"  [DRY RUN] fphot.run({night}, band={band}, "
+                    f"image_type={run_cfg.forced_phot_image_type})"
+                )
+
+        if night_fphot_colls:
+            result.forced_phot_collections[night] = night_fphot_colls
+        if night_had_failure and not night_fphot_colls:
+            result.failed_fphot.append(night)
+
+
+def _run_lightcurve_step(
+    all_nights: list[str],
+    run_cfg: RunConfig,
+    config: Config,
+    result: RunResult,
+    dry_run: bool,
+) -> None:
+    """Extract lightcurve from forced photometry or DIA sources."""
+    from obs_nickel_data_tools.core import lightcurve
+
+    use_forced_phot = run_cfg.lightcurve_dataset_type.startswith("forced_phot")
+
+    if use_forced_phot:
+        collections_list = _discover_fphot_collections(
+            all_nights, run_cfg, config, result, dry_run
+        )
+    else:
+        collections_list = _discover_dia_collections(
+            all_nights, run_cfg, config, result, dry_run
+        )
+
+    if not collections_list:
+        source_type = "forced photometry" if use_forced_phot else "DIA"
+        log.warning(
+            f"No {source_type} collections found, skipping lightcurve extraction"
+        )
+        return
+
+    collections = ",".join(collections_list)
+    source_label = "forced phot" if use_forced_phot else "diff"
+    log.info(f"Lightcurve using {len(collections_list)} {source_label} collections")
+
+    if not dry_run:
+        lc_type = "forced_phot" if use_forced_phot else "dia_sources"
+        lc_log = _get_step_log_file("lightcurve", night=lc_type)
+        lc_result = lightcurve.run(
+            ra=run_cfg.ra,
+            dec=run_cfg.dec,
+            collections=collections,
+            config=config,
+            name=run_cfg.object_name,
+            plot=True,
+            min_snr=run_cfg.lightcurve_min_snr,
+            dataset_type=run_cfg.lightcurve_dataset_type,
+            log_file=lc_log,
+        )
+        if lc_result.success:
+            result.lightcurve_path = lc_result.csv_path
+        else:
+            log.warning(f"Lightcurve extraction failed: {lc_result.error}")
+    else:
+        log.info("  [DRY RUN] lightcurve.run()")
+
+
+def _discover_fphot_collections(
+    all_nights: list[str],
+    run_cfg: RunConfig,
+    config: Config,
+    result: RunResult,
+    dry_run: bool,
+) -> list[str]:
+    """Gather forced photometry collections for lightcurve extraction."""
+    from obs_nickel_data_tools.core.pipeline import parse_butler_query_output
+    from obs_nickel_data_tools.core.stack import run_butler_query
+
+    fphot_colls: list[str] = []
+    for night in all_nights:
+        colls = result.forced_phot_collections.get(night, [])
+        if colls:
+            fphot_colls.extend(colls)
+
+    # If no forced phot ran this session, discover from Butler
+    if not fphot_colls and not dry_run:
+        log.info("No forced phot from this run, discovering from Butler...")
+        fphot_suffix = run_cfg.forced_phot_image_type
+        for night in all_nights:
+            try:
+                check_result = run_butler_query(
+                    [
+                        "query-collections",
+                        str(config.repo),
+                        f"Nickel/runs/{night}/forcedPhotRaDec/*/{fphot_suffix}*",
+                    ],
+                    config,
+                    check=False,
+                )
+                if check_result.returncode == 0:
+                    fphot_colls.extend(
+                        parse_butler_query_output(
+                            check_result.stdout,
+                            prefix_filter="Nickel/runs/",
+                        )
+                    )
+            except Exception:
+                pass
+    elif not fphot_colls and dry_run:
+        for night in all_nights:
+            fphot_colls.append(f"Nickel/runs/{night}/forcedPhotRaDec/*/run")
+
+    return sorted(set(fphot_colls))
+
+
+def _discover_dia_collections(
+    all_nights: list[str],
+    run_cfg: RunConfig,
+    config: Config,
+    result: RunResult,
+    dry_run: bool,
+) -> list[str]:
+    """Gather DIA diff collections for lightcurve extraction."""
+    from obs_nickel_data_tools.core.pipeline import parse_butler_query_output
+    from obs_nickel_data_tools.core.stack import run_butler_query
+
+    verified: list[str] = []
+    failed_night_bands = set(result.failed_dia)
+
+    for night in all_nights:
+        bands_for_night = _get_bands_for_night(night, run_cfg)
+        has_success = any(
+            f"{night}/{b}" not in failed_night_bands for b in bands_for_night
+        )
+        if not has_success:
+            continue
+
+        if not dry_run:
+            try:
+                check_result = run_butler_query(
+                    [
+                        "query-collections",
+                        str(config.repo),
+                        f"Nickel/runs/{night}/diff/*/run",
+                    ],
+                    config,
+                    check=False,
+                )
+                if check_result.returncode == 0:
+                    verified.extend(
+                        parse_butler_query_output(
+                            check_result.stdout,
+                            prefix_filter="Nickel/runs/",
+                        )
+                    )
+            except Exception:
+                log.debug(f"Could not verify diff collection for {night}")
+        else:
+            verified.append(f"Nickel/runs/{night}/diff/*/run")
+
+    return verified
+
+
 def run(
     config_file: Path,
     config: Config,
@@ -524,21 +1085,10 @@ def run(
     Returns:
         RunResult with status and any failures
     """
-    from obs_nickel_data_tools.core import (
-        bootstrap,
-        calibs,
-        coadd,
-        dia,
-        fphot,
-        lightcurve,
-        ps1_template,
-        science,
-    )
+    from obs_nickel_data_tools.core import bootstrap
     from obs_nickel_data_tools.core.science import ScienceConfig
-    from obs_nickel_data_tools.core.stack import run_butler
 
     # Set up unified logging directory for this pipeline run
-    # All Python logs and shell script logs go under the same RUN_ID
     run_id = _generate_run_id()
     run_log_dir = _setup_run_logging(run_id, config)
     log.info(f"Logs: {run_log_dir}")
@@ -566,7 +1116,6 @@ def run(
     configs_dir = config.obs_nickel / "configs"
     science_cfg = ScienceConfig.default(config.obs_nickel)
 
-    # Override with YAML-specified configs if present
     if run_cfg.science_configs.calibrate_image:
         science_cfg.calibrate_image = (
             configs_dir / run_cfg.science_configs.calibrate_image
@@ -579,7 +1128,7 @@ def run(
         ]
 
     result = RunResult(success=True, log_dir=str(run_log_dir))
-    all_nights = list(run_cfg.nights.keys())
+    all_nights = list(run_cfg.nights)
 
     log.info(f"Pipeline run for {run_cfg.object_name}")
     log.info(f"  Target: RA={run_cfg.ra:.4f}, Dec={run_cfg.dec:.4f}")
@@ -594,508 +1143,42 @@ def run(
 
     # Step 1: Templates per band
     if run_cfg.template_type == "ps1":
-        # PS1 templates (r/i bands only)
-        for band in run_cfg.bands:
-            if band not in ("r", "i"):
-                log.warning(f"PS1 templates not available for band {band}, skipping")
-                continue
-
-            log.info(f"Ingesting PS1 template for {band}-band...")
-
-            if not dry_run:
-                ps1_log = _get_step_log_file("ps1_template", band=band)
-                ps1_result = ps1_template.run(
-                    ra=run_cfg.ra,
-                    dec=run_cfg.dec,
-                    band=band,
-                    config=config,
-                    size=run_cfg.template_size,
-                    degrade_seeing=run_cfg.template_degrade_seeing,
-                    log_file=ps1_log,
-                )
-                if ps1_result.success:
-                    result.template_collections[band] = ps1_result.collection
-                else:
-                    log.warning(f"PS1 template failed for {band}: {ps1_result.error}")
-            else:
-                log.info(
-                    f"  [DRY RUN] ps1_template.run(ra={run_cfg.ra}, dec={run_cfg.dec}, band={band})"
-                )
-                result.template_collections[band] = f"templates/ps1/{band}"
-
-        # Log template summary
-        built = [b for b in run_cfg.bands if b in result.template_collections]
-        failed = [b for b in run_cfg.bands if b not in result.template_collections]
-        if built:
-            log.info(f"Templates built for bands: {', '.join(built)}")
-        if failed:
-            log.warning(
-                f"No templates for bands: {', '.join(failed)} (DIA will be skipped for these)"
-            )
-
+        _run_ps1_templates(run_cfg, config, result, dry_run)
+        _log_template_summary(run_cfg, result)
     elif run_cfg.template_type == "coadd":
-        # Nickel coadd templates - requires processing template nights first
-        if not run_cfg.template_nights:
-            log.error("Coadd template type requires template.nights in YAML")
-            return RunResult(
-                success=False,
-                error="Coadd template type requires template.nights configuration",
-            )
-
-        # Step 1a: Process template nights through calibs and science
-        log.info("Processing template nights...")
-        template_nights_to_process = run_cfg.template_nights
-
-        if not run_cfg.skip_calibs:
-            for night in template_nights_to_process:
-                log.info(f"Running calibrations for template night {night}...")
-                if not dry_run:
-                    calib_log = _get_step_log_file("calibs_template", night=night)
-                    calib_result = calibs.run(
-                        night, config, jobs=run_cfg.jobs, log_file=calib_log
-                    )
-                    _maybe_split_log(calib_log)
-                    if not calib_result.success:
-                        log.warning(
-                            f"Calibrations failed for template night {night}: {calib_result.error}"
-                        )
-                        if not run_cfg.continue_on_error:
-                            return RunResult(
-                                success=False,
-                                error=f"Template night calibrations failed for {night}",
-                            )
-                else:
-                    log.info(f"  [DRY RUN] calibs.run({night})")
-
-        if not run_cfg.skip_science:
-            for night in template_nights_to_process:
-                night_bands = run_cfg.nights.get(night, {})
-                if night_bands:
-                    bands_for_night = [b for b in run_cfg.bands if b in night_bands]
-                else:
-                    bands_for_night = list(run_cfg.bands)
-
-                if not bands_for_night:
-                    log.info(
-                        f"Skipping template-night science for {night} "
-                        "(no bands configured)"
-                    )
-                    continue
-
-                log.info(f"Running science for template night {night}...")
-                if not dry_run:
-                    sci_log = _get_step_log_file("science_template", night=night)
-                    sci_result = science.run(
-                        night,
-                        config,
-                        jobs=run_cfg.jobs,
-                        object_filter=run_cfg.object_name,
-                        skip_coadds=True,
-                        science_cfg=science_cfg,
-                        use_fallbacks=run_cfg.use_fallbacks,
-                        bands=bands_for_night,
-                        target_ra=run_cfg.ra,
-                        target_dec=run_cfg.dec,
-                        log_file=sci_log,
-                    )
-                    _maybe_split_log(sci_log)
-                    if not sci_result.success:
-                        log.warning(
-                            f"Science failed for template night {night}: {sci_result.error}"
-                        )
-                        if not run_cfg.continue_on_error:
-                            return RunResult(
-                                success=False,
-                                error=f"Template night science failed for {night}",
-                            )
-                else:
-                    log.info(
-                        f"  [DRY RUN] science.run({night}, bands={bands_for_night})"
-                    )
-
-        # Step 1b: Build coadd templates per band
-        # Force rebuild if science was re-processed (template inputs may have changed)
-        force_rebuild_templates = not run_cfg.skip_science
-        if force_rebuild_templates:
-            log.info("Science was (re-)processed — forcing template rebuild")
-
-        for band in run_cfg.bands:
-            log.info(f"Building coadd template for {band}-band...")
-
-            if not dry_run:
-                # Build config file list for pipetask -C
-                coadd_config_files = []
-                if run_cfg.coadd_configs.make_direct_warp:
-                    cfg_path = (
-                        config.obs_nickel
-                        / "configs"
-                        / run_cfg.coadd_configs.make_direct_warp
-                    )
-                    coadd_config_files.append(f"makeDirectWarp:{cfg_path}")
-
-                coadd_log = _get_step_log_file("coadd_template", band=band)
-                coadd_result = coadd.run(
-                    nights=run_cfg.template_nights,
-                    band=band,
-                    config=config,
-                    ra=run_cfg.ra,
-                    dec=run_cfg.dec,
-                    jobs=run_cfg.jobs,
-                    overwrite=force_rebuild_templates,
-                    config_files=coadd_config_files or None,
-                    log_file=coadd_log,
-                )
-                _maybe_split_log(coadd_log)
-                if coadd_result.success:
-                    result.template_collections[band] = coadd_result.collection
-                    log.info(f"  Coadd template for {band}: {coadd_result.collection}")
-                else:
-                    log.warning(
-                        f"Coadd template failed for {band}: {coadd_result.error}"
-                    )
-            else:
-                log.info(
-                    f"  [DRY RUN] coadd.run(nights={run_cfg.template_nights}, band={band})"
-                )
-                result.template_collections[band] = f"templates/deep/tract0/{band}"
-
-        # Log template summary
-        built = [b for b in run_cfg.bands if b in result.template_collections]
-        failed = [b for b in run_cfg.bands if b not in result.template_collections]
-        if built:
-            log.info(f"Templates built for bands: {', '.join(built)}")
-        if failed:
-            log.warning(
-                f"No templates for bands: {', '.join(failed)} (DIA will be skipped for these)"
-            )
+        early_exit = _run_coadd_templates(run_cfg, config, result, science_cfg, dry_run)
+        if early_exit is not None:
+            return early_exit
+        _log_template_summary(run_cfg, result)
 
     # Step 2: Calibrations per night
     if not run_cfg.skip_calibs:
-        for night in all_nights:
-            log.info(f"Running calibrations for {night}...")
-
-            if not dry_run:
-                calib_log = _get_step_log_file("calibs", night=night)
-                calib_result = calibs.run(
-                    night, config, jobs=run_cfg.jobs, log_file=calib_log
-                )
-                _maybe_split_log(calib_log)
-                if not calib_result.success:
-                    result.failed_calibs.append(night)
-                    log.warning(
-                        f"Calibrations failed for {night}: {calib_result.error}"
-                    )
-                    if not run_cfg.continue_on_error:
-                        result.success = False
-                        result.error = f"Calibrations failed for {night}"
-                        return result
-            else:
-                log.info(f"  [DRY RUN] calibs.run({night})")
+        early_exit = _run_calibs_step(all_nights, run_cfg, config, result, dry_run)
+        if early_exit is not None:
+            return early_exit
 
     # Step 3: Science per night
     if not run_cfg.skip_science:
-        for night in all_nights:
-            night_bands = run_cfg.nights.get(night, {})
-            if night_bands:
-                bands_for_night = [b for b in run_cfg.bands if b in night_bands]
-            else:
-                bands_for_night = list(run_cfg.bands)
-
-            if not bands_for_night:
-                log.info(f"Skipping science for {night} (no bands configured)")
-                continue
-
-            log.info(f"Running science for {night}...")
-
-            if not dry_run:
-                sci_log = _get_step_log_file("science", night=night)
-                sci_result = science.run(
-                    night,
-                    config,
-                    jobs=run_cfg.jobs,
-                    object_filter=run_cfg.object_name,
-                    skip_coadds=True,
-                    science_cfg=science_cfg,
-                    use_fallbacks=run_cfg.use_fallbacks,
-                    bands=bands_for_night,
-                    target_ra=run_cfg.ra,
-                    target_dec=run_cfg.dec,
-                    log_file=sci_log,
-                )
-                _maybe_split_log(sci_log)
-                if not sci_result.success:
-                    result.failed_science.append(night)
-                    log.warning(f"Science failed for {night}: {sci_result.error}")
-                    if not run_cfg.continue_on_error:
-                        result.success = False
-                        result.error = f"Science failed for {night}"
-                        return result
-                elif sci_result.fallback_used:
-                    log.info(
-                        f"  Note: {night} used fallback config: {sci_result.config_used}"
-                    )
-            else:
-                log.info(f"  [DRY RUN] science.run({night}, bands={bands_for_night})")
+        early_exit = _run_science_step(
+            all_nights, run_cfg, config, result, science_cfg, dry_run
+        )
+        if early_exit is not None:
+            return early_exit
 
     # Step 4: DIA per night per band
     if not run_cfg.skip_dia:
-        for night in all_nights:
-            night_bands = run_cfg.nights.get(night, {})
-
-            # Determine which bands to process for this night.
-            # If the night has explicit band keys, only run those bands.
-            # If the night has no band keys (empty dict), run all top-level bands.
-            if night_bands:
-                bands_for_night = [b for b in run_cfg.bands if b in night_bands]
-            else:
-                bands_for_night = list(run_cfg.bands)
-
-            if not bands_for_night:
-                log.info(f"Skipping DIA for {night} (no bands configured)")
-                continue
-
-            for band in bands_for_night:
-                # Check if we have a template for this band
-                template_coll = result.template_collections.get(band)
-                if template_coll is None:
-                    log.warning(
-                        f"Skipping DIA for {night}/{band} (no template available)"
-                    )
-                    result.failed_dia.append(f"{night}/{band}")
-                    continue
-
-                log.info(f"Running DIA for {night}/{band}...")
-
-                if not dry_run:
-                    dia_log = _get_step_log_file("dia", night=night, band=band)
-                    dia_result = dia.run(
-                        night,
-                        config,
-                        jobs=run_cfg.jobs,
-                        template=template_coll,
-                        auto_template=False,  # We have explicit template
-                        prefer_ps1=run_cfg.template_type == "ps1",
-                        band=band,
-                        object_filter=run_cfg.object_name,
-                        log_file=dia_log,
-                    )
-                    _maybe_split_log(dia_log)
-                    if not dia_result.success:
-                        result.failed_dia.append(f"{night}/{band}")
-                        log.warning(
-                            f"DIA failed for {night}/{band}: {dia_result.error}"
-                        )
-                        if not run_cfg.continue_on_error:
-                            result.success = False
-                            result.error = f"DIA failed for {night}/{band}"
-                            return result
-                else:
-                    log.info(f"  [DRY RUN] dia.run({night}, band={band})")
+        early_exit = _run_dia_step(all_nights, run_cfg, config, result, dry_run)
+        if early_exit is not None:
+            return early_exit
 
     # Step 5: Forced photometry per night per successful DIA band
-    # Run fphot per-band so that bands with difference images get measured
-    # even when other bands failed DIA for that night.
-    failed_dia_set = set(result.failed_dia)
     if run_cfg.forced_phot:
-        for night in all_nights:
-            night_bands = run_cfg.nights.get(night, {})
-            if night_bands:
-                bands_for_night = [b for b in run_cfg.bands if b in night_bands]
-            else:
-                bands_for_night = list(run_cfg.bands)
-
-            # Find which bands succeeded DIA for this night
-            successful_bands = [
-                b for b in bands_for_night if f"{night}/{b}" not in failed_dia_set
-            ]
-
-            if not successful_bands:
-                log.info(
-                    f"Skipping forced photometry for {night} (all DIA bands failed)"
-                )
-                result.failed_fphot.append(night)
-                continue
-
-            night_fphot_colls: list[str] = []
-            night_had_failure = False
-
-            for band in successful_bands:
-                log.info(f"Running forced photometry for {night}/{band}...")
-
-                if not dry_run:
-                    fphot_log = _get_step_log_file("fphot", night=night, band=band)
-                    fphot_result = fphot.run(
-                        night=night,
-                        ra=run_cfg.ra,
-                        dec=run_cfg.dec,
-                        config=config,
-                        band=band,
-                        image_type=run_cfg.forced_phot_image_type,
-                        log_file=fphot_log,
-                    )
-                    _maybe_split_log(fphot_log)
-                    if not fphot_result.success:
-                        night_had_failure = True
-                        log.warning(
-                            f"Forced phot failed for {night}/{band}: {fphot_result.error}"
-                        )
-                    else:
-                        night_fphot_colls.extend(fphot_result.output_collections)
-                else:
-                    log.info(
-                        f"  [DRY RUN] fphot.run({night}, band={band}, "
-                        f"image_type={run_cfg.forced_phot_image_type})"
-                    )
-
-            if night_fphot_colls:
-                result.forced_phot_collections[night] = night_fphot_colls
-            if night_had_failure and not night_fphot_colls:
-                result.failed_fphot.append(night)
+        _run_fphot_step(all_nights, run_cfg, config, result, dry_run)
 
     # Step 6: Lightcurve extraction
     if run_cfg.lightcurve:
         log.info("Extracting lightcurve...")
-
-        use_forced_phot = run_cfg.lightcurve_dataset_type.startswith("forced_phot")
-
-        if use_forced_phot:
-            # Build collection list from forced photometry outputs
-            fphot_colls: list[str] = []
-            for night in all_nights:
-                colls = result.forced_phot_collections.get(night, [])
-                if colls:
-                    fphot_colls.extend(colls)
-
-            # If no forced phot ran this session (e.g. forced_phot: false),
-            # discover existing collections from the Butler
-            if not fphot_colls and not dry_run:
-                log.info("No forced phot from this run, discovering from Butler...")
-                # Determine collection suffix from image_type
-                fphot_suffix = run_cfg.forced_phot_image_type
-                for night in all_nights:
-                    try:
-                        check_result = run_butler(
-                            [
-                                "query-collections",
-                                str(config.repo),
-                                f"Nickel/runs/{night}/forcedPhotRaDec/*/{fphot_suffix}*",
-                            ],
-                            config,
-                            capture_output=True,
-                            check=False,
-                        )
-                        if check_result.returncode == 0:
-                            for line in check_result.stdout.strip().splitlines():
-                                parts = line.strip().split()
-                                if parts and parts[0].startswith("Nickel/runs/"):
-                                    fphot_colls.append(parts[0])
-                    except Exception:
-                        pass
-            elif not fphot_colls and dry_run:
-                for night in all_nights:
-                    fphot_colls.append(f"Nickel/runs/{night}/forcedPhotRaDec/*/run")
-
-            if not fphot_colls:
-                log.warning(
-                    "No forced photometry collections found, skipping lightcurve extraction"
-                )
-            else:
-                collections = ",".join(sorted(set(fphot_colls)))
-                log.info(
-                    f"Lightcurve using {len(set(fphot_colls))} forced phot collections"
-                )
-
-                if not dry_run:
-                    lc_log = _get_step_log_file("lightcurve", night="forced_phot")
-                    lc_result = lightcurve.run(
-                        ra=run_cfg.ra,
-                        dec=run_cfg.dec,
-                        collections=collections,
-                        config=config,
-                        name=run_cfg.object_name,
-                        plot=True,
-                        min_snr=run_cfg.lightcurve_min_snr,
-                        dataset_type=run_cfg.lightcurve_dataset_type,
-                        log_file=lc_log,
-                    )
-                    if lc_result.success:
-                        result.lightcurve_path = lc_result.csv_path
-                    else:
-                        log.warning(f"Lightcurve extraction failed: {lc_result.error}")
-                else:
-                    log.info("  [DRY RUN] lightcurve.run()")
-        else:
-            # Build collection list from nights that actually have diff collections
-            # in the Butler (not just nights where DIA was "attempted")
-            verified_collections: list[str] = []
-            failed_night_bands = set(result.failed_dia)
-            for night in all_nights:
-                # Skip nights where all bands failed DIA
-                night_bands = run_cfg.nights.get(night, {})
-                if night_bands:
-                    bands_for_night = [b for b in run_cfg.bands if b in night_bands]
-                else:
-                    bands_for_night = list(run_cfg.bands)
-                has_success = any(
-                    f"{night}/{b}" not in failed_night_bands for b in bands_for_night
-                )
-                if not has_success:
-                    continue
-
-                # Verify the diff collection actually exists in the Butler
-                if not dry_run:
-                    try:
-                        check_result = run_butler(
-                            [
-                                "query-collections",
-                                str(config.repo),
-                                f"Nickel/runs/{night}/diff/*/run",
-                            ],
-                            config,
-                            capture_output=True,
-                            check=False,
-                        )
-                        if check_result.returncode == 0:
-                            for line in check_result.stdout.strip().splitlines():
-                                # butler query-collections outputs "name TYPE"
-                                # e.g. "Nickel/runs/.../run RUN" — take first column only
-                                parts = line.strip().split()
-                                if parts and parts[0].startswith("Nickel/runs/"):
-                                    verified_collections.append(parts[0])
-                    except Exception:
-                        log.debug(f"Could not verify diff collection for {night}")
-                else:
-                    verified_collections.append(f"Nickel/runs/{night}/diff/*/run")
-
-            if not verified_collections:
-                log.warning(
-                    "No nights with verified DIA collections, skipping lightcurve extraction"
-                )
-            else:
-                collections = ",".join(verified_collections)
-                log.info(
-                    f"Lightcurve using {len(verified_collections)} diff collections"
-                )
-
-                if not dry_run:
-                    lc_log = _get_step_log_file("lightcurve", night="dia_sources")
-                    lc_result = lightcurve.run(
-                        ra=run_cfg.ra,
-                        dec=run_cfg.dec,
-                        collections=collections,
-                        config=config,
-                        name=run_cfg.object_name,
-                        plot=True,
-                        min_snr=run_cfg.lightcurve_min_snr,
-                        dataset_type=run_cfg.lightcurve_dataset_type,
-                        log_file=lc_log,
-                    )
-                    if lc_result.success:
-                        result.lightcurve_path = lc_result.csv_path
-                    else:
-                        log.warning(f"Lightcurve extraction failed: {lc_result.error}")
-                else:
-                    log.info("  [DRY RUN] lightcurve.run()")
+        _run_lightcurve_step(all_nights, run_cfg, config, result, dry_run)
 
     # Determine overall success
     # Use a three-tier status: SUCCESS (no failures), PARTIAL (some failures but
@@ -1112,11 +1195,7 @@ def run(
         successful_dia_pairs = sum(
             1
             for night in all_nights
-            for b in (
-                run_cfg.bands
-                if not run_cfg.nights.get(night, {})
-                else [b for b in run_cfg.bands if b in run_cfg.nights.get(night, {})]
-            )
+            for b in _get_bands_for_night(night, run_cfg)
             if f"{night}/{b}" not in set(result.failed_dia)
         )
         successful_fphot = total_nights - len(result.failed_fphot)
@@ -1162,12 +1241,7 @@ def run(
     n_science_ok = total_nights - len(result.failed_science)
     n_fphot_ok = total_nights - len(result.failed_fphot)
     total_dia_pairs = sum(
-        len(
-            run_cfg.bands
-            if not run_cfg.nights.get(night, {})
-            else [b for b in run_cfg.bands if b in run_cfg.nights.get(night, {})]
-        )
-        for night in all_nights
+        len(_get_bands_for_night(night, run_cfg)) for night in all_nights
     )
     n_dia_ok = total_dia_pairs - len(result.failed_dia)
     log.info(

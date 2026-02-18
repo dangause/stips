@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -14,53 +13,19 @@ from obs_nickel_data_tools.core.pipeline import (
     SKYMAPS_CHAIN,
     CollectionNames,
     build_exclusion_expr,
+    is_empty_qgraph,
     night_to_day_obs,
     parse_bad_exposures,
+    parse_butler_query_output,
+    parse_quanta_summary,
     validate_night,
 )
-from obs_nickel_data_tools.core.stack import run_butler, run_pipetask
+from obs_nickel_data_tools.core.stack import run_butler, run_butler_query, run_pipetask
 
 if TYPE_CHECKING:
     from obs_nickel_data_tools.core.config import Config
 
 log = logging.getLogger(__name__)
-
-
-def _parse_quanta_summary(output: str, log_file: Path | None = None) -> tuple[int, int]:
-    """Parse pipetask output for quanta success/failure counts.
-
-    Returns:
-        Tuple of (succeeded, failed) counts. Returns (0, 0) if not found.
-    """
-    succeeded = 0
-    failed = 0
-    pattern = re.compile(
-        r"Executed (\d+) quanta successfully, (\d+) failed and (\d+) remain"
-    )
-
-    for line in output.splitlines():
-        m = pattern.search(line)
-        if m:
-            succeeded = int(m.group(1))
-            failed = int(m.group(2))
-
-    if succeeded == 0 and failed == 0 and log_file and log_file.exists():
-        try:
-            with open(log_file) as f:
-                for line in f:
-                    m = pattern.search(line)
-                    if m:
-                        succeeded = int(m.group(1))
-                        failed = int(m.group(2))
-        except OSError:
-            pass
-
-    return succeeded, failed
-
-
-def _is_empty_qgraph(output: str) -> bool:
-    """Check if pipetask output indicates an empty quantum graph."""
-    return "QuantumGraph contains no quanta" in output
 
 
 @dataclass
@@ -93,18 +58,19 @@ def find_template(
     """
     repo = str(config.repo)
 
-    try:
-        result = run_butler(
-            ["query-collections", repo], config, capture_output=True, log_file=None
-        )
-    except Exception:
-        return None
-
+    # Query PS1 and coadd templates with targeted glob patterns
     candidates = []
-    for line in result.stdout.splitlines():
-        col = line.split()[0] if line.split() else ""
-        if col.startswith("templates/") or col.startswith("coadds/"):
-            candidates.append(col)
+    for pattern in ["templates/ps1/*", "templates/deep/*"]:
+        try:
+            result = run_butler_query(
+                ["query-collections", repo, pattern], config, check=False
+            )
+            if result.returncode == 0:
+                candidates.extend(
+                    parse_butler_query_output(result.stdout, prefix_filter="templates/")
+                )
+        except Exception:
+            pass
 
     if not candidates:
         return None
@@ -180,18 +146,27 @@ def run(
             error="No template specified. Use --template or --auto-template",
         )
 
-    # Find science collection
+    # Find science collection (targeted query instead of fetching all collections)
+    # Prefer the CHAINED parent over individual RUN collections, since the
+    # CHAINED parent includes results from both primary and fallback configs.
     try:
-        result = run_butler(
-            ["query-collections", repo], config, capture_output=True, log_file=log_file
+        result = run_butler_query(
+            ["query-collections", repo, f"Nickel/runs/{night}/processCcd/*"],
+            config,
+            check=False,
         )
-        sci_parent = None
-        for line in result.stdout.splitlines():
-            col = line.split()[0] if line.split() else ""
-            if col.startswith(f"Nickel/runs/{night}/processCcd/") or col.startswith(
-                f"Nickel/runs/{night}/science/"
-            ):
-                sci_parent = col
+        sci_collections = parse_butler_query_output(
+            result.stdout, prefix_filter="Nickel/"
+        )
+        # Prefer CHAINED parents (no /run or /run_fb suffix) over individual RUNs
+        chained = [
+            c for c in sci_collections if not c.endswith("/run") and "/run_fb" not in c
+        ]
+        sci_parent = (
+            sorted(chained)[-1]
+            if chained
+            else sci_collections[-1] if sci_collections else None
+        )
 
         if not sci_parent:
             return DIAResult(
@@ -246,16 +221,18 @@ def run(
         qg_dir.mkdir(parents=True, exist_ok=True)
         qg_file = qg_dir / f"diff_{night}_{cols.run_ts}.qg"
 
-        # Find raw collection (optional for DIA)
+        # Find raw collection (optional for DIA, targeted query)
         raw_run = ""
-        result = run_butler(
-            ["query-collections", repo], config, capture_output=True, log_file=log_file
+        raw_result = run_butler_query(
+            ["query-collections", repo, f"Nickel/raw/{night}/*"],
+            config,
+            check=False,
         )
-        for line in result.stdout.splitlines():
-            col = line.split()[0] if line.split() else ""
-            if col.startswith(f"Nickel/raw/{night}/"):
-                raw_run = col
-                break
+        raw_collections = parse_butler_query_output(
+            raw_result.stdout, prefix_filter="Nickel/"
+        )
+        if raw_collections:
+            raw_run = raw_collections[0]
 
         input_collections = f"{sci_parent},{cols.calib_chain},{REFCATS_CHAIN},{SKYMAPS_CHAIN},{template_collection}"
         if raw_run:
@@ -296,7 +273,7 @@ def run(
 
         # Check for empty quantum graph (no matching data for this night/band)
         combined_qg_output = (qg_result.stdout or "") + (qg_result.stderr or "")
-        if _is_empty_qgraph(combined_qg_output):
+        if is_empty_qgraph(combined_qg_output):
             log.warning(
                 f"Empty quantum graph for {night}/{band or 'all'} — "
                 f"no matching science data found for DIA"
@@ -339,7 +316,7 @@ def run(
 
         # Parse quanta counts to handle partial success
         combined_output = (dia_result.stdout or "") + (dia_result.stderr or "")
-        quanta_ok, quanta_fail = _parse_quanta_summary(combined_output, log_file)
+        quanta_ok, quanta_fail = parse_quanta_summary(combined_output, log_file)
 
         if dia_result.returncode != 0 and quanta_ok == 0:
             return DIAResult(
@@ -374,7 +351,7 @@ def run(
         diff_count = 0
         src_count = 0
         try:
-            result = run_butler(
+            result = run_butler_query(
                 [
                     "query-datasets",
                     repo,
@@ -385,15 +362,14 @@ def run(
                     f"instrument='Nickel' AND day_obs={day_obs}",
                 ],
                 config,
-                capture_output=True,
-                log_file=log_file,
+                check=False,
             )
-            diff_count = max(0, len(result.stdout.splitlines()) - 2)
+            diff_count = len(parse_butler_query_output(result.stdout))
         except Exception:
             pass
 
         try:
-            result = run_butler(
+            result = run_butler_query(
                 [
                     "query-datasets",
                     repo,
@@ -404,10 +380,9 @@ def run(
                     f"instrument='Nickel' AND day_obs={day_obs}",
                 ],
                 config,
-                capture_output=True,
-                log_file=log_file,
+                check=False,
             )
-            src_count = max(0, len(result.stdout.splitlines()) - 2)
+            src_count = len(parse_butler_query_output(result.stdout))
         except Exception:
             pass
 
