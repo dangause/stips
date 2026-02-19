@@ -12,6 +12,7 @@ from obs_nickel_data_tools.core.pipeline import (
     SKYMAPS_CHAIN,
     butler_query_has_results,
     generate_run_timestamp,
+    night_to_day_obs,
     parse_butler_query_output,
     validate_night,
 )
@@ -107,6 +108,7 @@ def run(
     *,
     band: str | None = None,
     image_type: str = "diffim",
+    jobs: int = 1,
     log_file: Path | None = None,
 ) -> ForcedPhotResult:
     """Run forced photometry at specified coordinates.
@@ -136,31 +138,25 @@ def run(
     errors: list[str] = []
 
     # Find processCcd collection
-    # Prefer the CHAINED parent (includes primary + fallback results),
-    # fall back to individual RUN collections for compatibility.
+    # Prefer the CHAINED parent (includes primary + fallback results)
+    # over individual RUN collections.
     processccd_coll = None
-    for pattern in [
-        f"Nickel/runs/{night}/processCcd/*",
-        f"Nickel/runs/{night}/processCcd/*/run",
-        f"Nickel/runs/{night}/processCcd/*/run_fb*",
-    ]:
-        result = run_butler_query(
-            ["query-collections", repo, pattern],
-            config,
-            check=False,
-        )
-        if result.returncode == 0:
-            colls = parse_butler_query_output(result.stdout, prefix_filter="Nickel/")
-            if colls:
-                # Prefer CHAINED parents over individual RUNs
-                chained = [
-                    c for c in colls if not c.endswith(("/run",)) and "/run_fb" not in c
-                ]
-                if chained:
-                    processccd_coll = sorted(chained)[-1]
-                else:
-                    processccd_coll = sorted(colls)[-1]
-                break
+    result = run_butler_query(
+        ["query-collections", repo, f"Nickel/runs/{night}/processCcd/*"],
+        config,
+        check=False,
+    )
+    if result.returncode == 0:
+        colls = parse_butler_query_output(result.stdout, prefix_filter="Nickel/")
+        if colls:
+            # Prefer CHAINED parents over individual RUNs
+            chained = [
+                c for c in colls if not c.endswith(("/run",)) and "/run_fb" not in c
+            ]
+            if chained:
+                processccd_coll = sorted(chained)[-1]
+            else:
+                processccd_coll = sorted(colls)[-1]
 
     if not processccd_coll:
         return ForcedPhotResult(
@@ -172,7 +168,8 @@ def run(
     log.info(f"Using processCcd collection: {processccd_coll}")
 
     # Build data query
-    data_query = "instrument='Nickel'"
+    day_obs = night_to_day_obs(night)
+    data_query = f"instrument='Nickel' AND day_obs={day_obs}"
     if band:
         data_query += f" AND band='{band}'"
 
@@ -206,6 +203,8 @@ def run(
                     output_coll,
                     "--output-run",
                     output_run,
+                    "-j",
+                    str(jobs),
                     "--register-dataset-types",
                     "--pipeline",
                     f"{obs_nickel}/pipelines/ForcedPhotRaDec.yaml#visit-image",
@@ -272,6 +271,8 @@ def run(
                         output_coll,
                         "--output-run",
                         output_run,
+                        "-j",
+                        str(jobs),
                         "--register-dataset-types",
                         "--pipeline",
                         f"{obs_nickel}/pipelines/ForcedPhotRaDec.yaml#diffim",

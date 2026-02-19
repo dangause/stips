@@ -70,7 +70,7 @@ science:
     - 20230817
     - 20230905
     - 20230910
-    - 20231211
+    # 20231211 removed: not a 2023ixf night (telescope observed other targets)
 
 # Pipeline configuration files (paths relative to obs_nickel/configs/)
 configs:
@@ -88,7 +88,7 @@ configs:
 # Processing options
 options:
   jobs: 6
-  skip_calibs: true
+  skip_calibs: false
   skip_science: false
   skip_dia: false
   forced_phot: true

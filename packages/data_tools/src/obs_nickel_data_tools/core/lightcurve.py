@@ -113,6 +113,15 @@ def run(
     try:
         result = run_with_stack(args, config, capture_output=True, check=False)
 
+        # Write captured output to log file if provided
+        if log_file:
+            log_file.parent.mkdir(parents=True, exist_ok=True)
+            with open(log_file, "w") as f:
+                if result.stdout:
+                    f.write(result.stdout)
+                if result.stderr:
+                    f.write(result.stderr)
+
         if result.returncode == 0:
             # Parse output to get detection count
             n_detections = 0

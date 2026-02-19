@@ -757,6 +757,11 @@ def _run_science_step(
     from obs_nickel_data_tools.core import science
 
     for night in all_nights:
+        if night in result.failed_calibs:
+            log.info(f"Skipping science for {night} (calibrations failed)")
+            result.failed_science.append(night)
+            continue
+
         bands_for_night = _get_bands_for_night(night, run_cfg)
         if not bands_for_night:
             log.info(f"Skipping science for {night} (no bands configured)")
@@ -902,6 +907,7 @@ def _run_fphot_step(
                     config=config,
                     band=band,
                     image_type=run_cfg.forced_phot_image_type,
+                    jobs=run_cfg.jobs,
                     log_file=fphot_log,
                 )
                 _maybe_split_log(fphot_log)

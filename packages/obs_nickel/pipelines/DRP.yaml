@@ -169,7 +169,7 @@ tasks:
     config:
       connections.visitSummaries: preliminary_visit_summary
       connections.goodVisits: deep_coadd_visit_selection
-      maxPsfFwhm: 4.0         # Nickel seeing typically 1.5-3.5 arcsec
+      maxPsfFwhm: 3.0         # Nickel seeing typically 1.5-3.0 arcsec; reject outliers
       nVisitsMax: -1
 
   selectTemplateCoaddVisits:
@@ -177,12 +177,11 @@ tasks:
     config:
       connections.visitSummaries: preliminary_visit_summary
       connections.goodVisits: template_coadd_visit_selection
-      # Use all available visits for template building. Nickel data is sparse
-      # (few visits per band per patch), so the default qMax=0.33 (best 33%)
-      # would discard most input data.
-      # Must be strictly < 1 for BestSeeingQuantileSelectVisitsTask.
-      # 0.9999 is effectively "use all visits" for realistic Nickel visit counts.
-      qMax: 0.9999
+      # Keep the best 50% of visits by seeing for template building.
+      # Previously qMax=0.9999 accepted all visits, allowing warps with
+      # poor WCS (from relaxed fallback configs) into the template coadd.
+      # 0.5 balances quality vs data volume for Nickel's sparse visit counts.
+      qMax: 0.5
       nVisitsMin: 1
 
   assembleDeepCoadd:
