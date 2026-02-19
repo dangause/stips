@@ -47,6 +47,12 @@ def night_to_date_range(night: str) -> tuple[str, str]:
     """Convert observing night to certification date range.
 
     Returns ISO format dates for butler certify-calibrations.
+    Uses a 30-day window (±15 days) so Butler can find calibrations
+    from nearby nights when a specific band's flat is missing on a
+    given night.  When multiple certified calibrations overlap a
+    science exposure's date, Butler picks the most-recently-prepended
+    entry in the calib chain, so the same-night calibration is still
+    preferred.
 
     Args:
         night: Observing night (YYYYMMDD)
@@ -54,12 +60,13 @@ def night_to_date_range(night: str) -> tuple[str, str]:
     Returns:
         Tuple of (begin_date, end_date) in ISO format
     """
-    dt = datetime.strptime(night, "%Y%m%d").replace(tzinfo=timezone.utc)
     from datetime import timedelta
 
-    end_dt = dt + timedelta(days=2)
+    dt = datetime.strptime(night, "%Y%m%d").replace(tzinfo=timezone.utc)
+    begin_dt = dt - timedelta(days=15)
+    end_dt = dt + timedelta(days=15)
     return (
-        dt.strftime("%Y-%m-%dT%H:%M:%S"),
+        begin_dt.strftime("%Y-%m-%dT%H:%M:%S"),
         end_dt.strftime("%Y-%m-%dT%H:%M:%S"),
     )
 

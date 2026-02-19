@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -17,6 +18,8 @@ from obs_nickel_data_tools.core.stack import run_butler, run_pipetask
 
 if TYPE_CHECKING:
     from obs_nickel_data_tools.core.config import Config
+
+log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -143,152 +146,180 @@ def run(
         # Build bias
         qg_bias = config.repo / "qgraphs" / f"cp_bias_{night}_{cols.run_ts}.qg"
         qg_bias.parent.mkdir(parents=True, exist_ok=True)
+        bias_ok = False
 
-        run_pipetask(
-            [
-                "qgraph",
-                "-b",
-                repo,
-                "-p",
-                str(config.cp_pipe_dir / "pipelines/_ingredients/cpBias.yaml"),
-                "-i",
-                f"{cols.curated_chain},{cols.raw_run}",
-                "-o",
-                cols.cp_bias,
-                "--output-run",
-                cols.cp_bias_run,
-                "--save-qgraph",
-                str(qg_bias),
-                "-d",
-                "instrument='Nickel' AND exposure.observation_type='bias'",
-            ],
-            config,
-            log_file=log_file,
-        )
+        try:
+            run_pipetask(
+                [
+                    "qgraph",
+                    "-b",
+                    repo,
+                    "-p",
+                    str(config.cp_pipe_dir / "pipelines/_ingredients/cpBias.yaml"),
+                    "-i",
+                    f"{cols.curated_chain},{cols.raw_run}",
+                    "-o",
+                    cols.cp_bias,
+                    "--output-run",
+                    cols.cp_bias_run,
+                    "--save-qgraph",
+                    str(qg_bias),
+                    "-d",
+                    "instrument='Nickel' AND exposure.observation_type='bias'",
+                ],
+                config,
+                log_file=log_file,
+            )
 
-        run_pipetask(
-            [
-                "run",
-                "-b",
-                repo,
-                "-g",
-                str(qg_bias),
-                "-j",
-                str(jobs),
-                "--register-dataset-types",
-            ],
-            config,
-            log_file=log_file,
-        )
+            result = run_pipetask(
+                [
+                    "run",
+                    "-b",
+                    repo,
+                    "-g",
+                    str(qg_bias),
+                    "-j",
+                    str(jobs),
+                    "--register-dataset-types",
+                ],
+                config,
+                check=False,
+                log_file=log_file,
+            )
+            if result.returncode != 0:
+                log.warning(
+                    f"Bias pipeline had partial failures for {night} "
+                    f"(exit code {result.returncode}). "
+                    "Certifying successfully-built products."
+                )
+            bias_ok = True
+        except Exception as e:
+            log.warning(f"Bias qgraph/setup failed for {night}: {e}")
 
-        run_butler(
-            [
-                "collection-chain",
-                repo,
-                cols.cp_bias,
-                cols.cp_bias_run,
-                "--mode",
-                "redefine",
-            ],
-            config,
-            log_file=log_file,
-        )
+        if bias_ok:
+            run_butler(
+                [
+                    "collection-chain",
+                    repo,
+                    cols.cp_bias,
+                    cols.cp_bias_run,
+                    "--mode",
+                    "redefine",
+                ],
+                config,
+                log_file=log_file,
+            )
 
-        # Certify bias (check=False to handle already-certified case)
-        begin_iso, end_iso = night_to_date_range(night)
-        run_butler(
-            [
-                "certify-calibrations",
-                repo,
-                cols.cp_bias,
-                cols.calib_out,
-                "bias",
-                "--begin-date",
-                begin_iso,
-                "--end-date",
-                end_iso,
-            ],
-            config,
-            check=False,  # May already exist from previous run
-            log_file=log_file,
-        )
+            # Certify bias (check=False to handle already-certified case)
+            begin_iso, end_iso = night_to_date_range(night)
+            run_butler(
+                [
+                    "certify-calibrations",
+                    repo,
+                    cols.cp_bias,
+                    cols.calib_out,
+                    "bias",
+                    "--begin-date",
+                    begin_iso,
+                    "--end-date",
+                    end_iso,
+                ],
+                config,
+                check=False,
+                log_file=log_file,
+            )
+        else:
+            begin_iso, end_iso = night_to_date_range(night)
 
-        # Build flat
+        # Build flat (continue even if bias had issues — certify what succeeds)
         qg_flat = config.repo / "qgraphs" / f"cp_flat_{night}_{cols.run_ts}.qg"
+        flat_ok = False
 
-        run_pipetask(
-            [
-                "qgraph",
-                "-b",
-                repo,
-                "-p",
-                str(config.cp_pipe_dir / "pipelines/_ingredients/cpFlat.yaml"),
-                "-i",
-                f"{cols.curated_chain},{cols.raw_run},{cols.calib_out},{cols.cp_bias_run}",
-                "-o",
-                cols.cp_flat,
-                "--output-run",
-                cols.cp_flat_run,
-                "--save-qgraph",
-                str(qg_flat),
-                "-d",
-                "instrument='Nickel' AND exposure.observation_type='flat'",
-                "-c",
-                "cpFlatIsr:doDark=False",
-                "-c",
-                "cpFlatIsr:doOverscan=True",
-            ],
-            config,
-            log_file=log_file,
-        )
+        try:
+            run_pipetask(
+                [
+                    "qgraph",
+                    "-b",
+                    repo,
+                    "-p",
+                    str(config.cp_pipe_dir / "pipelines/_ingredients/cpFlat.yaml"),
+                    "-i",
+                    f"{cols.curated_chain},{cols.raw_run},{cols.calib_out},{cols.cp_bias_run}",
+                    "-o",
+                    cols.cp_flat,
+                    "--output-run",
+                    cols.cp_flat_run,
+                    "--save-qgraph",
+                    str(qg_flat),
+                    "-d",
+                    "instrument='Nickel' AND exposure.observation_type='flat'",
+                    "-c",
+                    "cpFlatIsr:doDark=False",
+                    "-c",
+                    "cpFlatIsr:doOverscan=True",
+                ],
+                config,
+                log_file=log_file,
+            )
 
-        run_pipetask(
-            [
-                "run",
-                "-b",
-                repo,
-                "-g",
-                str(qg_flat),
-                "-j",
-                str(jobs),
-                "--register-dataset-types",
-            ],
-            config,
-            log_file=log_file,
-        )
+            result = run_pipetask(
+                [
+                    "run",
+                    "-b",
+                    repo,
+                    "-g",
+                    str(qg_flat),
+                    "-j",
+                    str(jobs),
+                    "--register-dataset-types",
+                ],
+                config,
+                check=False,
+                log_file=log_file,
+            )
+            if result.returncode != 0:
+                log.warning(
+                    f"Flat pipeline had partial failures for {night} "
+                    f"(exit code {result.returncode}). "
+                    "Certifying successfully-built products."
+                )
+            flat_ok = True
+        except Exception as e:
+            log.warning(f"Flat qgraph/setup failed for {night}: {e}")
 
-        run_butler(
-            [
-                "collection-chain",
-                repo,
-                cols.cp_flat,
-                cols.cp_flat_run,
-                "--mode",
-                "redefine",
-            ],
-            config,
-            log_file=log_file,
-        )
+        if flat_ok:
+            run_butler(
+                [
+                    "collection-chain",
+                    repo,
+                    cols.cp_flat,
+                    cols.cp_flat_run,
+                    "--mode",
+                    "redefine",
+                ],
+                config,
+                log_file=log_file,
+            )
 
-        # Certify flat
-        run_butler(
-            [
-                "certify-calibrations",
-                repo,
-                cols.cp_flat,
-                cols.calib_out,
-                "flat",
-                "--begin-date",
-                begin_iso,
-                "--end-date",
-                end_iso,
-            ],
-            config,
-            check=False,  # May already exist
-            log_file=log_file,
-        )
+            # Certify flat
+            run_butler(
+                [
+                    "certify-calibrations",
+                    repo,
+                    cols.cp_flat,
+                    cols.calib_out,
+                    "flat",
+                    "--begin-date",
+                    begin_iso,
+                    "--end-date",
+                    end_iso,
+                ],
+                config,
+                check=False,
+                log_file=log_file,
+            )
 
-        # Update unified calib chain
+        # Always update unified calib chain (certify what we have)
         run_butler(
             [
                 "collection-chain",
@@ -303,6 +334,17 @@ def run(
             check=False,
             log_file=log_file,
         )
+
+        if not bias_ok and not flat_ok:
+            return CalibsResult(
+                success=False,
+                night=night,
+                raw_run=cols.raw_run,
+                calib_chain=cols.calib_chain,
+                cp_bias=cols.cp_bias,
+                cp_flat=cols.cp_flat,
+                error=f"Both bias and flat pipelines failed for {night}",
+            )
 
         return CalibsResult(
             success=True,
