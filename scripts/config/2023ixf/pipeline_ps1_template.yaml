@@ -90,6 +90,7 @@ options:
   jobs: 6
   skip_calibs: false
   skip_science: false
+  rebuild_templates: false
   skip_dia: false
   forced_phot: true
   forced_phot_image_type: diffim

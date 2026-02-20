@@ -35,14 +35,40 @@ class BootstrapResult:
 def needs_bootstrap(config: Config) -> bool:
     """Check if the repository needs bootstrapping.
 
+    Returns True if the repo doesn't exist, or if critical infrastructure
+    (skymaps, refcats) is missing — e.g. after a botched clean operation.
+
     Args:
         config: Pipeline configuration
 
     Returns:
-        True if the repository doesn't exist or isn't initialized
+        True if the repository needs (re-)bootstrapping
     """
     butler_yaml = config.repo / "butler.yaml"
-    return not butler_yaml.exists()
+    if not butler_yaml.exists():
+        return True
+
+    # Repo exists — verify critical collections are present.
+    # A clean bug could remove skymaps/refcats while leaving butler.yaml.
+    from obs_nickel_data_tools.core.stack import run_butler_query
+
+    for collection in ("skymaps", "refcats"):
+        try:
+            result = run_butler_query(
+                ["query-collections", str(config.repo), collection],
+                config,
+                check=False,
+            )
+            if result.returncode != 0 or collection not in result.stdout:
+                log.warning(
+                    f"Collection '{collection}' missing from repo — "
+                    f"bootstrap needed"
+                )
+                return True
+        except Exception:
+            return True
+
+    return False
 
 
 def find_bootstrap_script(config: Config) -> Path | None:
@@ -104,6 +130,9 @@ def run(
         result.refcats_ingested = True
         result.skymap_registered = True
         return result
+
+    # The bootstrap script is idempotent — safe to re-run on a repo
+    # that exists but has missing infrastructure (skymaps, refcats).
 
     log.info(f"Bootstrapping repository: {config.repo}")
 

@@ -29,6 +29,7 @@ from obs_nickel_data_tools.core.pipeline import (
 from obs_nickel_data_tools.core.stack import (
     run_butler,
     run_butler_python,
+    run_butler_python_json,
     run_butler_query,
     run_pipetask,
 )
@@ -123,8 +124,8 @@ def check_template_exists(
         )
         if result.returncode == 0 and butler_query_has_results(result.stdout):
             return collection
-    except Exception:
-        pass
+    except Exception as e:
+        log.debug(f"Failed to check template existence for {collection}: {e}")
 
     return None
 
@@ -213,6 +214,80 @@ def find_science_collections_for_nights(
             log.warning(f"Failed to find collection for {night}: {e}")
 
     return collections
+
+
+def find_degenerate_wcs_visits(
+    band: str,
+    input_collections: list[str],
+    config: "Config",
+) -> list[int]:
+    """Find visits whose WCS is degenerate (too few astrometric matches).
+
+    A degenerate WCS fit (<=3 astrometric matches for a 6-parameter affine
+    transformation) has 0 degrees of freedom, producing near-zero residuals.
+    This passes LSST's quality check (distMean < maxMeanDistanceArcsec)
+    but the WCS can be wildly incorrect, causing sheared warps in the coadd.
+
+    Detected via the visit_summary: degenerate fits have astromOffsetMean
+    and astromOffsetStd on the order of ~1e-11 arcsec (floating-point
+    residuals from the zero-DOF fit), while well-constrained WCS solutions
+    produce values >= ~0.002 arcsec.  A threshold of 1e-6 arcsec safely
+    separates the two populations with >3 orders of magnitude margin.
+
+    Args:
+        band: Filter band
+        input_collections: Collections containing science outputs
+        config: Pipeline configuration
+
+    Returns:
+        List of visit IDs with degenerate WCS to exclude from coaddition.
+    """
+    # Threshold in arcsec: degenerate fits produce ~1e-11, real fits produce >= ~0.002
+    DEGEN_THRESHOLD = 1e-6
+
+    script = f"""
+import json
+import sys
+import lsst.daf.butler as dafButler
+
+butler = dafButler.Butler({str(config.repo)!r})
+collections = {input_collections!r}
+threshold = {DEGEN_THRESHOLD}
+
+bad_visits = set()
+for coll in collections:
+    try:
+        refs = list(butler.registry.queryDatasets(
+            'preliminary_visit_summary',
+            collections=[coll],
+            where="band='{band}'"
+        ))
+        for ref in refs:
+            visit_id = ref.dataId['visit']
+            summary = butler.get(ref)
+            tbl = summary.asAstropy()
+            for row in tbl:
+                mean = float(row['astromOffsetMean'])
+                std = float(row['astromOffsetStd'])
+                if mean < threshold and std < threshold:
+                    bad_visits.add(visit_id)
+    except Exception as e:
+        print(f"WARNING: WCS check failed for {{coll}}: {{e}}", file=sys.stderr)
+
+print(json.dumps(sorted(bad_visits)))
+"""
+    result = run_butler_python_json(script, config)
+    if isinstance(result, list):
+        if result:
+            log.info(
+                f"WCS quality check found {len(result)} degenerate visits "
+                f"(astromOffset < {DEGEN_THRESHOLD} arcsec): {result}"
+            )
+        else:
+            log.info("WCS quality check: all visits OK")
+        return result
+    log.warning("WCS quality check script failed — no visits excluded")
+    return []
 
 
 def run(
@@ -306,8 +381,8 @@ def run(
                         f"Stale collection {collection_name} exists without data, will rebase"
                     )
                     needs_rebase = True
-            except Exception:
-                pass
+            except Exception as e:
+                log.debug(f"Failed to check stale collection {collection_name}: {e}")
 
     # Find science collections for the template nights
     log.info("Finding science collections for template nights...")
@@ -327,6 +402,17 @@ def run(
         f"Found {len(input_collections)} of {len(nights)} template nights "
         f"with {band}-band data"
     )
+
+    # Filter out visits with degenerate WCS solutions.
+    # A degenerate WCS (<=3 astrometric matches) has 0 degrees of freedom
+    # and always produces 0 residual, passing LSST's quality check but
+    # producing wildly incorrect WCS that causes sheared warps.
+    bad_wcs_visits = find_degenerate_wcs_visits(band, input_collections, config)
+    if bad_wcs_visits:
+        log.warning(
+            f"Excluding {len(bad_wcs_visits)} visits with degenerate WCS "
+            f"(0 astrometric residual = too few matches): {bad_wcs_visits}"
+        )
 
     repo = str(config.repo)
     run_ts = generate_run_timestamp()
@@ -373,6 +459,11 @@ def run(
             f"instrument='Nickel' AND skymap='{SKYMAP_NAME}' "
             f"AND tract={tract} AND band='{band}'"
         )
+
+        # Exclude visits with degenerate WCS from the coadd
+        if bad_wcs_visits:
+            visit_csv = ", ".join(str(v) for v in bad_wcs_visits)
+            data_query += f" AND visit NOT IN ({visit_csv})"
 
         # Build config args
         config_args: list[str] = []

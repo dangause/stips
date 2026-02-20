@@ -500,9 +500,18 @@ def run(
             )
 
             if result.returncode == 0:
-                # Full success with this config
-                attempt.quanta_succeeded = quanta_ok or 1
-                cumulative_succeeded += quanta_ok or 1
+                # Full success with this config.
+                # If quanta_ok is 0 but returncode is 0, parsing likely failed
+                # (pipetask wouldn't exit 0 with no work). Log and assume at
+                # least 1 so downstream counters stay positive.
+                effective_ok = quanta_ok if quanta_ok > 0 else 1
+                if quanta_ok == 0:
+                    log.debug(
+                        "Quanta summary not found in output (returncode=0); "
+                        "assuming 1 succeeded"
+                    )
+                attempt.quanta_succeeded = effective_ok
+                cumulative_succeeded += effective_ok
                 successful_runs.append(output_run)
                 any_success = True
                 config_used = tuned_config
@@ -551,7 +560,7 @@ def run(
                         plog.add_attempt(attempt)
                         break
                 else:
-                    cumulative_succeeded = quanta_ok
+                    cumulative_succeeded += quanta_ok
                     log.warning(
                         f"Partial success with primary config: {tuned_config.name} "
                         f"({quanta_ok} quanta succeeded, {quanta_fail} failed)"
@@ -580,7 +589,7 @@ def run(
                 attempt.failed_exposures = processing_log.parse_pipetask_failures(
                     result.stderr or "", result.stdout or ""
                 )
-                attempt.quanta_failed = quanta_fail or 1
+                attempt.quanta_failed = quanta_fail if quanta_fail > 0 else 1
                 plog.add_attempt(attempt)
 
                 log.error(

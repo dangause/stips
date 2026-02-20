@@ -29,14 +29,20 @@ def _collections_stdout(*collections: str) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _data_ids_stdout(has_rows: bool) -> str:
+def _datasets_stdout(has_rows: bool) -> str:
+    """Mimic butler query-datasets output.
+
+    query-datasets returns a table with 'type' as the first column,
+    which parse_butler_query_output correctly skips as a header.
+    An empty result returns a blank line (no rows after headers).
+    """
     if not has_rows:
-        return "No results. Try --help for more information.\n"
+        return "type run id band instrument physical_filter\n---- --- -- ---- ---------- ---------------\n"
     return "\n".join(
         [
-            "instrument  visit   band day_obs  physical_filter",
-            "---------- -------- ---- -------- ---------------",
-            "    Nickel 85628092    r 20230520               R",
+            "type run id band instrument physical_filter",
+            "---- --- -- ---- ---------- ---------------",
+            "difference_image Nickel/runs/20230519/diff/20260218T175707Z/run 85628092 r Nickel R",
         ]
     )
 
@@ -47,7 +53,7 @@ def test_select_diff_collection_prefers_matching_band(fphot_module, monkeypatch)
     r_run = f"Nickel/runs/{night}/diff/20260218T175707Z/run"
     i_run = f"Nickel/runs/{night}/diff/20260218T175815Z/run"
 
-    def fake_run_butler(args, *_args, **_kwargs):
+    def fake_run_butler_query(args, *_args, **_kwargs):
         cmd = args[0]
         if cmd == "query-collections":
             return SimpleNamespace(
@@ -55,7 +61,7 @@ def test_select_diff_collection_prefers_matching_band(fphot_module, monkeypatch)
                 stdout=_collections_stdout(r_run, i_run),
                 stderr="",
             )
-        if cmd == "query-data-ids":
+        if cmd == "query-datasets":
             coll = args[args.index("--collections") + 1]
             where = args[args.index("--where") + 1]
             has_rows = (coll == r_run and "band='r'" in where) or (
@@ -63,15 +69,15 @@ def test_select_diff_collection_prefers_matching_band(fphot_module, monkeypatch)
             )
             return SimpleNamespace(
                 returncode=0,
-                stdout=_data_ids_stdout(has_rows),
+                stdout=_datasets_stdout(has_rows),
                 stderr="",
             )
         raise AssertionError(f"Unexpected command: {args}")
 
-    monkeypatch.setattr(fphot_module, "run_butler", fake_run_butler)
+    monkeypatch.setattr(fphot_module, "run_butler_query", fake_run_butler_query)
 
     selected, candidates = fphot_module._select_diff_collection(
-        repo, night, config=object(), band="r", log_file=None
+        repo, night, config=object(), band="r"
     )
     assert candidates == [i_run, r_run]
     assert selected == r_run
@@ -85,7 +91,7 @@ def test_select_diff_collection_uses_latest_when_band_unspecified(
     r_run = f"Nickel/runs/{night}/diff/20260218T175707Z/run"
     i_run = f"Nickel/runs/{night}/diff/20260218T175815Z/run"
 
-    def fake_run_butler(args, *_args, **_kwargs):
+    def fake_run_butler_query(args, *_args, **_kwargs):
         cmd = args[0]
         if cmd == "query-collections":
             return SimpleNamespace(
@@ -93,19 +99,19 @@ def test_select_diff_collection_uses_latest_when_band_unspecified(
                 stdout=_collections_stdout(r_run, i_run),
                 stderr="",
             )
-        if cmd == "query-data-ids":
+        if cmd == "query-datasets":
             # Both runs have data when no band constraint is applied.
             return SimpleNamespace(
                 returncode=0,
-                stdout=_data_ids_stdout(True),
+                stdout=_datasets_stdout(True),
                 stderr="",
             )
         raise AssertionError(f"Unexpected command: {args}")
 
-    monkeypatch.setattr(fphot_module, "run_butler", fake_run_butler)
+    monkeypatch.setattr(fphot_module, "run_butler_query", fake_run_butler_query)
 
     selected, candidates = fphot_module._select_diff_collection(
-        repo, night, config=object(), band=None, log_file=None
+        repo, night, config=object(), band=None
     )
     assert candidates == [i_run, r_run]
     assert selected == i_run

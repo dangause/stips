@@ -110,57 +110,8 @@ tasks:
       connections.maskedStreaks: difference_streaks
       # Task tuning lives in configs/dia/detectAndMeasure.py
 
-      # Detection configuration
-      # Lower threshold for transients (3-sigma)
-      # NOTE: Most detection/measurement config may have changed in recent LSST stack
-      # Using minimal config - relying on task defaults
-      # detection.thresholdValue: 3.0
-      # detection.thresholdType: "stdev"
-      # detection.minPixels: 5
-
-      # Enable dipole detection (for moving objects, cosmic rays)
-      # NOTE: doMeasurement parameter removed in recent LSST stack versions
-      # doMeasurement: true
-
-      # Sky sources for false positive estimation
-      # NOTE: doSkySources config may have changed in recent LSST stack versions
-      # doSkySources: true
-      # skySources.avoidMask: ["DETECTED", "DETECTED_NEGATIVE", "BAD", "SAT", "NO_DATA"]
-
-      # Measurement configuration
-      # Include both positive and negative detections
-      # NOTE: measurement plugin config may have changed in recent LSST stack versions
-      # measurement.plugins.names: [
-      #   "base_PsfFlux",
-      #   "base_CircularApertureFlux",
-      #   "base_GaussianFlux",
-      #   "base_SkyCoord",
-      #   "base_PixelFlags",
-      #   "base_SdssShape",
-      #   "ext_shapeHSM_HsmSourceMoments",
-      # ]
-
-      # PSF flux measurement (primary for point sources)
-      # NOTE: measurement plugin config may have changed in recent LSST stack versions
-      # measurement.plugins["base_PsfFlux"].doMeasure: true
-
-      # Aperture flux in multiple radii
-      # NOTE: measurement slots config may have changed in recent LSST stack versions
-      # measurement.slots.apFlux: "base_CircularApertureFlux_12_0"
-
       # ID generator
       idGenerator.release_id: parameters.release_id
-
-      # Enable writeExposure to save difference image with detections
-      # NOTE: doWriteSubtractedExp parameter may have been removed/renamed in recent LSST stack versions
-      # doWriteSubtractedExp: true
-
-  # ==========================
-  # Stage 5: DIA Source Consolidation
-  # ==========================
-  # NOTE: In lsst-scipipe-12.0.0 (v29.2.0), the source transformation tasks have changed
-  # detectAndMeasureDiaSource outputs SourceCatalog, which can be used directly
-  # Skipping transformation/consolidation for now - use dia_source_unfiltered directly
 
 # ==========================
 # Pipeline Subsets
@@ -175,16 +126,6 @@ subsets:
     description: >
       Complete DIA pipeline using preliminary_visit_image from processCcd:
       template warping, image subtraction, and source detection.
-
-  # Quick DIA (skip reprocessing if visit_image already exists)
-  dia-quick:
-    subset:
-      - rewarpTemplate
-      - subtractImages
-      - detectAndMeasureDiaSource
-    description: >
-      Quick DIA pipeline assuming visit_image already exists.
-      Suitable for re-running with different templates.
 
   # Subtraction only (for testing)
   dia-subtract-only:
@@ -234,9 +175,3 @@ subsets:
       - plotDiaLightcurveCombined
     description: >
       Generate per-band DIA lightcurves and a combined multi-band plot.
-
-# ==========================
-# Processing Steps
-# ==========================
-# NOTE: Steps section removed - not needed in recent LSST stack versions
-# Subsets are defined above and used via pipeline#subset syntax

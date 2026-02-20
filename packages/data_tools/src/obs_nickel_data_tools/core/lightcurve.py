@@ -149,10 +149,7 @@ def run(
         else:
             error_msg = result.stderr or result.stdout or "Unknown error"
             # Check for "no detections" which is a common case
-            if (
-                "No detections found" in error_msg
-                or "No detections found" in result.stdout
-            ):
+            if "No detections found" in error_msg:
                 return LightcurveResult(
                     success=False,
                     n_detections=0,

@@ -69,8 +69,8 @@ def find_template(
                 candidates.extend(
                     parse_butler_query_output(result.stdout, prefix_filter="templates/")
                 )
-        except Exception:
-            pass
+        except Exception as e:
+            log.debug(f"Failed to query template pattern {pattern}: {e}")
 
     if not candidates:
         return None

@@ -425,8 +425,14 @@ def main():
                 mag = np.nan
                 mag_err = np.nan
 
-            # Extract metadata - use visit MJD from visit record
+            # Extract metadata - use visit MJD from visit record.
+            # Skip sources where MJD couldn't be determined (invalid timestamps
+            # would produce scientifically unusable lightcurve points).
             mjd = visit_mjd
+            if np.isnan(mjd):
+                if args.verbose:
+                    print(f"    Source {j}: skipped (no valid MJD for visit)")
+                continue
 
             try:
                 band = ref.dataId["band"]

@@ -19,43 +19,10 @@ def _find_stack_loader(stack_dir: Path) -> Path:
         loader = stack_dir / name
         if loader.exists():
             return loader
-    raise FileNotFoundError(f"No loadLSST script found in {stack_dir}")
-
-
-def build_stack_env(config: Config) -> dict[str, str]:
-    """Build environment variables needed for LSST stack commands.
-
-    This sets up PYTHONPATH and other vars needed to run pipetask/butler
-    without fully sourcing the stack (which requires bash).
-
-    Args:
-        config: Pipeline configuration
-
-    Returns:
-        Environment dict with stack paths configured
-    """
-    env = os.environ.copy()
-
-    # Add obs_nickel to PYTHONPATH
-    obs_nickel_python = config.obs_nickel / "python"
-    existing_pythonpath = env.get("PYTHONPATH", "")
-    if existing_pythonpath:
-        env["PYTHONPATH"] = f"{obs_nickel_python}:{existing_pythonpath}"
-    else:
-        env["PYTHONPATH"] = str(obs_nickel_python)
-
-    # Set standard env vars
-    env["REPO"] = str(config.repo)
-    env["STACK_DIR"] = str(config.stack_dir)
-    env["OBS_NICKEL"] = str(config.obs_nickel)
-    env["RAW_PARENT_DIR"] = str(config.raw_parent_dir)
-
-    if config.cp_pipe_dir:
-        env["CP_PIPE_DIR"] = str(config.cp_pipe_dir)
-    if config.refcat_repo:
-        env["REFCAT_REPO"] = str(config.refcat_repo)
-
-    return env
+    raise FileNotFoundError(
+        f"No loadLSST script found in {stack_dir}. "
+        f"Check that STACK_DIR points to a valid LSST stack installation."
+    )
 
 
 def run_with_stack(

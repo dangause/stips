@@ -40,7 +40,6 @@ def _collection_has_difference_images(
     config: Config,
     *,
     band: str | None,
-    log_file: Path | None,
 ) -> bool:
     """Check whether a diff run has at least one difference_image for the band."""
     query = "instrument='Nickel'"
@@ -49,10 +48,8 @@ def _collection_has_difference_images(
 
     result = run_butler_query(
         [
-            "query-data-ids",
+            "query-datasets",
             repo,
-            "visit",
-            "--datasets",
             "difference_image",
             "--collections",
             collection,
@@ -76,7 +73,6 @@ def _select_diff_collection(
     config: Config,
     *,
     band: str | None,
-    log_file: Path | None,
 ) -> tuple[str | None, list[str]]:
     """Select the newest diff collection that contains datasets for this band."""
     diff_result = run_butler_query(
@@ -93,9 +89,7 @@ def _select_diff_collection(
         reverse=True,
     )
     for coll in candidates:
-        if _collection_has_difference_images(
-            repo, coll, config, band=band, log_file=log_file
-        ):
+        if _collection_has_difference_images(repo, coll, config, band=band):
             return coll, candidates
     return None, candidates
 
@@ -235,7 +229,7 @@ def run(
         if image_type in ("diffim", "both"):
             # Select a diff collection that actually contains the requested band.
             diff_coll, diff_candidates = _select_diff_collection(
-                repo, night, config, band=band, log_file=log_file
+                repo, night, config, band=band
             )
 
             if not diff_coll:
@@ -245,7 +239,7 @@ def run(
                     f"{night}{band_msg}. DIA may not have produced results for this "
                     f"night/band. Candidates checked: {', '.join(diff_candidates) or 'none'}"
                 )
-                log.info(err_msg)
+                log.warning(err_msg)
                 errors.append(err_msg)
 
             if diff_coll:

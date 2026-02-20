@@ -14,7 +14,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from obs_nickel_data_tools.core.stack import run_butler
+from obs_nickel_data_tools.core.stack import run_butler, run_butler_query
 
 if TYPE_CHECKING:
     from obs_nickel_data_tools.core.config import Config
@@ -40,8 +40,10 @@ CALIB_PATTERNS = [
 # Patterns that are always preserved (never touched by clean)
 PRESERVED_PATTERNS = [
     "Nickel/raw/*",
-    "refcats",
+    "refcats/*",
     "skymaps/*",
+    "skymaps",
+    "Nickel/calib/current",
 ]
 
 
@@ -54,6 +56,19 @@ class CleanResult:
     errors: list[str] = field(default_factory=list)
 
 
+def _is_preserved(name: str) -> bool:
+    """Check if a collection name should never be deleted."""
+    import fnmatch
+
+    for pattern in PRESERVED_PATTERNS:
+        if fnmatch.fnmatch(name, pattern):
+            return True
+    # Also protect the top-level infrastructure names
+    if name in ("skymaps", "refcats"):
+        return True
+    return False
+
+
 def _query_collections(
     config: Config,
     patterns: list[str],
@@ -62,16 +77,18 @@ def _query_collections(
 
     Returns a dict mapping collection name -> collection type
     (e.g., "RUN", "CHAINED", "CALIBRATION").
+
+    Uses run_butler_query() (not run_butler()) to keep stdout clean
+    of LSST log messages that would corrupt the table parsing.
     """
     repo = str(config.repo)
     collections: dict[str, str] = {}
 
     for pattern in patterns:
         try:
-            result = run_butler(
+            result = run_butler_query(
                 ["query-collections", repo, pattern],
                 config,
-                capture_output=True,
                 check=False,
             )
             if result.returncode == 0:
@@ -89,8 +106,8 @@ def _query_collections(
                         continue
                     col = parts[0]
                     col_type = parts[-1]  # Type is the last column
-                    # Never touch raw collections
-                    if col.startswith("Nickel/raw/"):
+                    # Never touch preserved collections
+                    if _is_preserved(col):
                         continue
                     collections[col] = col_type
         except Exception as e:
