@@ -41,10 +41,14 @@ dec: 54.316389
 bands: ["r", "i"]
 
 # Template configuration
+# NOTE: PS1 native seeing is ~1", Nickel typical seeing is 1.5-3".
+# Don't pre-degrade PS1 - let the AL kernel handle PSF matching during subtraction.
+# The subtractImages_ps1.py config uses mode=convolveTemplate to convolve PS1 to match Nickel.
 template:
   type: ps1
   size: 0.4            # Cutout size in degrees (24 arcmin; extra margin for pointing drift)
-  degrade_seeing: 4.0  # Convolve PS1 to ~4 arcsec FWHM to match Nickel seeing (was 2.0, insufficient)
+  # degrade_seeing removed - over-degrading to 4" made template PSF (6.4") larger than science (2"),
+  # which breaks convolveTemplate mode. Let AL kernel handle PSF matching instead.
 
 # Science nights - SN observations from discovery through late 2023
 science:
@@ -81,7 +85,7 @@ configs:
       - calibrateImage/tuned_configs/sparse_relaxed.py
     colorterms: apply_colorterms.py
   dia:
-    subtract_images: dia/subtractImages.py
+    subtract_images: dia/subtractImages_ps1.py  # Optimized for PS1→Nickel PSF matching
     detect_and_measure: dia/detectAndMeasure.py
 
 # Processing options
@@ -89,12 +93,18 @@ options:
   jobs: 6
   skip_calibs: true    # Already done, skip to save time
   skip_science: true   # Already done, skip to save time
-  rebuild_templates: false   # Force rebuild with new degrade_seeing=4.0
-  skip_dia: true
+  rebuild_templates: true    # Rebuild templates without PSF degradation
+  skip_dia: false  # Re-run DIA with improved PSF matching
   forced_phot: false
   forced_phot_image_type: diffim
-  lightcurve: true
-  lightcurve_dataset_type: forced_phot_diffim_radec
-  lightcurve_min_snr: 0
   continue_on_error: true
   use_fallbacks: true
+
+# Lightcurve configuration
+lightcurve:
+  enabled: true
+  dataset_type: forced_phot_diffim_radec
+  min_snr: 0
+  y_axis: apparent_mag
+  x_axis: days_since_explosion
+  explosion_mjd: 60082.75       # 2023-05-19 (~discovery date)

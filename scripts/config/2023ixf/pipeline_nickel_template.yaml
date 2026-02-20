@@ -107,8 +107,14 @@ options:
   skip_dia: true
   forced_phot: false
   forced_phot_image_type: diffim
-  lightcurve: true
-  lightcurve_dataset_type: forced_phot_diffim_radec
-  lightcurve_min_snr: 0
   continue_on_error: true
   use_fallbacks: true
+
+# Lightcurve configuration
+lightcurve:
+  enabled: true
+  dataset_type: forced_phot_diffim_radec
+  min_snr: 0
+  y_axis: apparent_mag
+  x_axis: days_since_explosion
+  explosion_mjd: 60082.75       # 2023-05-19 (~discovery date)
