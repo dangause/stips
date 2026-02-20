@@ -114,6 +114,12 @@ def parse_args():
         default=None,
         help="Distance modulus (required when --y-axis=absolute_mag)",
     )
+    parser.add_argument(
+        "--max-mag-err",
+        type=float,
+        default=None,
+        help="Maximum magnitude error for plot filtering (points with larger errors are excluded from plot)",
+    )
 
     args = parser.parse_args()
 
@@ -684,10 +690,20 @@ def main():
 
     # Generate plots if requested
     if args.plot:
+        # Filter for plotting only (CSV keeps all data)
+        plot_df = df
+        if args.max_mag_err is not None:
+            before = len(plot_df)
+            plot_df = plot_df[plot_df["mag_err"] <= args.max_mag_err]
+            print(
+                f"Plot filter: mag_err <= {args.max_mag_err} "
+                f"({before - len(plot_df)} points excluded, {len(plot_df)} remaining)"
+            )
+
         # Use custom name if provided, otherwise use object name or coordinates
         plot_title = args.name or args.object or f"RA={ra_deg:.4f}, Dec={dec_deg:.4f}"
         plot_light_curves(
-            df, output_path, plot_title, y_axis=args.y_axis, x_axis=args.x_axis
+            plot_df, output_path, plot_title, y_axis=args.y_axis, x_axis=args.x_axis
         )
 
 

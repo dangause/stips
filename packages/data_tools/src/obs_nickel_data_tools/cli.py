@@ -888,6 +888,12 @@ def fphot(
     default=None,
     help="Distance modulus (required with --y-axis=absolute_mag)",
 )
+@click.option(
+    "--max-mag-err",
+    type=float,
+    default=None,
+    help="Maximum magnitude error for plot filtering",
+)
 @click.pass_context
 def lightcurve(
     ctx: click.Context,
@@ -905,6 +911,7 @@ def lightcurve(
     x_axis: str,
     explosion_mjd: float | None,
     distance_modulus: float | None,
+    max_mag_err: float | None,
 ) -> None:
     """Extract lightcurve from DIA source catalogs or forced photometry.
 
@@ -939,6 +946,7 @@ def lightcurve(
     lc_config = LightcurveConfig(
         dataset_type=dataset_type,
         min_snr=min_snr,
+        max_mag_err=max_mag_err,
         radius=radius,
         band=band,
         y_axis=y_axis,

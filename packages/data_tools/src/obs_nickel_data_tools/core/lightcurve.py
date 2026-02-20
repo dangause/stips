@@ -21,6 +21,7 @@ class LightcurveConfig:
     # Data selection
     dataset_type: str = "dia_source_unfiltered"
     min_snr: float = 3.0
+    max_mag_err: float | None = None
     radius: float = 1.0
     band: str | None = None
 
@@ -77,6 +78,9 @@ class LightcurveConfig:
                 opts.get("lightcurve_dataset_type", "dia_source_unfiltered"),
             ),
             min_snr=float(lc.get("min_snr", opts.get("lightcurve_min_snr", 3.0))),
+            max_mag_err=(
+                float(lc["max_mag_err"]) if lc.get("max_mag_err") is not None else None
+            ),
             radius=float(lc.get("radius", 1.0)),
             band=lc.get("band"),
             y_axis=lc.get("y_axis", "apparent_mag"),
@@ -200,6 +204,8 @@ def run(
             args.extend(["--explosion-mjd", str(lc_config.explosion_mjd)])
         if lc_config.distance_modulus is not None:
             args.extend(["--distance-modulus", str(lc_config.distance_modulus)])
+        if lc_config.max_mag_err is not None:
+            args.extend(["--max-mag-err", str(lc_config.max_mag_err)])
 
     if plot:
         args.append("--plot")

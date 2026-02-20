@@ -104,7 +104,8 @@ options:
 lightcurve:
   enabled: true
   dataset_type: forced_phot_diffim_radec
-  min_snr: 0
+  min_snr: 2
+  max_mag_err: 1.0
   y_axis: apparent_mag
   x_axis: days_since_explosion
   explosion_mjd: 60082.75       # 2023-05-19 (~discovery date)
