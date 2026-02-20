@@ -1,7 +1,7 @@
 """YAML-driven pipeline orchestrator.
 
 This module reads a YAML configuration file and orchestrates the full pipeline:
-calibs → science → DIA → forced photometry → lightcurve.
+calibs → science → DIA → forced photometry → lightcurve → period analysis.
 
 Example YAML format:
     # Environment configuration (choose one approach):
@@ -55,6 +55,11 @@ Example YAML format:
       lightcurve_dataset_type: dia_source_unfiltered  # or forced_phot_diffim_radec
       lightcurve_min_snr: 3.0
       use_fallbacks: true    # Try fallback configs on failure
+      pipeline_type: supernova   # or "variable" for variable star campaigns
+      period_search: false       # Enable Lomb-Scargle period search
+      period_min: 0.1            # Minimum search period (days)
+      period_max: 100.0          # Maximum search period (days)
+      period_samples: 10000      # Frequency grid density
 """
 
 from __future__ import annotations
@@ -365,8 +370,16 @@ class RunConfig:
     lightcurve: bool = True
     lightcurve_dataset_type: str = "dia_source_unfiltered"
     lightcurve_min_snr: float = 3.0
+    rebuild_templates: bool = False
     continue_on_error: bool = True
     use_fallbacks: bool = True
+
+    # Variable star options
+    pipeline_type: str = "supernova"  # "supernova" or "variable"
+    period_search: bool = False
+    period_min: float = 0.1
+    period_max: float = 100.0
+    period_samples: int = 10_000
 
     # Environment profile (optional - embedded in YAML instead of -p flag)
     profile: str | None = None
@@ -430,6 +443,15 @@ class RunConfig:
             make_direct_warp=coadd_cfg_data.get("make_direct_warp"),
         )
 
+        # Apply pipeline_type defaults
+        pipeline_type = options.get("pipeline_type", "supernova")
+
+        # Variable star default: forced phot on both visit + diffim
+        if pipeline_type == "variable" and "forced_phot_image_type" not in options:
+            default_fphot_type = "both"
+        else:
+            default_fphot_type = "diffim"
+
         return cls(
             object_name=data.get("object", ""),
             ra=data["ra"],
@@ -448,14 +470,22 @@ class RunConfig:
             skip_science=options.get("skip_science", False),
             skip_dia=options.get("skip_dia", False),
             forced_phot=options.get("forced_phot", True),
-            forced_phot_image_type=options.get("forced_phot_image_type", "diffim"),
+            forced_phot_image_type=options.get(
+                "forced_phot_image_type", default_fphot_type
+            ),
             lightcurve=options.get("lightcurve", True),
             lightcurve_dataset_type=options.get(
                 "lightcurve_dataset_type", "dia_source_unfiltered"
             ),
             lightcurve_min_snr=float(options.get("lightcurve_min_snr", 3.0)),
+            rebuild_templates=options.get("rebuild_templates", False),
             continue_on_error=options.get("continue_on_error", True),
             use_fallbacks=options.get("use_fallbacks", True),
+            pipeline_type=pipeline_type,
+            period_search=options.get("period_search", False),
+            period_min=float(options.get("period_min", 0.1)),
+            period_max=float(options.get("period_max", 100.0)),
+            period_samples=int(options.get("period_samples", 10_000)),
             profile=data.get("profile"),
         )
 
@@ -510,6 +540,7 @@ class RunResult:
     template_collections: dict[str, str] = field(default_factory=dict)
     forced_phot_collections: dict[str, list[str]] = field(default_factory=dict)
     lightcurve_path: str | None = None
+    period_result_path: str | None = None
     log_dir: str | None = None
     error: str | None = None
 
@@ -552,6 +583,7 @@ def _run_ps1_templates(
                 config=config,
                 size=run_cfg.template_size,
                 degrade_seeing=run_cfg.template_degrade_seeing,
+                overwrite=run_cfg.rebuild_templates,
                 log_file=ps1_log,
             )
             if ps1_result.success:
@@ -610,6 +642,7 @@ def _run_coadd_templates(
                 log.info(f"  [DRY RUN] calibs.run({night})")
 
     # Process template nights through science
+    template_science_ran = False
     if not run_cfg.skip_science:
         for night in run_cfg.template_nights:
             bands_for_night = _get_bands_for_night(night, run_cfg)
@@ -637,6 +670,7 @@ def _run_coadd_templates(
                     log_file=sci_log,
                 )
                 _maybe_split_log(sci_log)
+                template_science_ran = True
                 if not sci_result.success:
                     result.failed_science.append(f"template:{night}")
                     log.warning(
@@ -648,12 +682,15 @@ def _run_coadd_templates(
                             error=f"Template night science failed for {night}",
                         )
             else:
+                template_science_ran = True
                 log.info(f"  [DRY RUN] science.run({night}, bands={bands_for_night})")
 
     # Build coadd templates per band
-    force_rebuild_templates = not run_cfg.skip_science
-    if force_rebuild_templates:
+    force_rebuild_templates = template_science_ran or run_cfg.rebuild_templates
+    if force_rebuild_templates and template_science_ran:
         log.info("Science was (re-)processed — forcing template rebuild")
+    elif force_rebuild_templates:
+        log.info("rebuild_templates=true — forcing template rebuild")
 
     for band in run_cfg.bands:
         log.info(f"Building coadd template for {band}-band...")
@@ -816,6 +853,13 @@ def _run_dia_step(
     from obs_nickel_data_tools.core import dia
 
     for night in all_nights:
+        if night in result.failed_science:
+            log.info(f"Skipping DIA for {night} (science processing failed)")
+            bands_for_night = _get_bands_for_night(night, run_cfg)
+            for band in bands_for_night:
+                result.failed_dia.append(f"{night}/{band}")
+            continue
+
         bands_for_night = _get_bands_for_night(night, run_cfg)
         if not bands_for_night:
             log.info(f"Skipping DIA for {night} (no bands configured)")
@@ -926,7 +970,7 @@ def _run_fphot_step(
 
         if night_fphot_colls:
             result.forced_phot_collections[night] = night_fphot_colls
-        if night_had_failure and not night_fphot_colls:
+        if night_had_failure:
             result.failed_fphot.append(night)
 
 
@@ -984,6 +1028,37 @@ def _run_lightcurve_step(
         log.info("  [DRY RUN] lightcurve.run()")
 
 
+def _run_period_step(
+    run_cfg: RunConfig,
+    result: RunResult,
+    dry_run: bool,
+) -> None:
+    """Run period analysis on extracted lightcurve."""
+    if not result.lightcurve_path:
+        log.warning("No lightcurve available, skipping period search")
+        return
+
+    if not dry_run:
+        from obs_nickel_data_tools.core import period
+
+        period_log = _get_step_log_file("period")
+        period_result = period.run(
+            csv_path=Path(result.lightcurve_path),
+            period_min=run_cfg.period_min,
+            period_max=run_cfg.period_max,
+            n_samples=run_cfg.period_samples,
+            output_dir=Path(result.lightcurve_path).parent / "period_analysis",
+            log_file=period_log,
+        )
+        result.period_result_path = str(period_result.output_dir)
+        log.info(
+            f"  Best period: {period_result.best_period:.6f} d "
+            f"(FAP={period_result.fap:.2e})"
+        )
+    else:
+        log.info("  [DRY RUN] period.run()")
+
+
 def _discover_fphot_collections(
     all_nights: list[str],
     run_cfg: RunConfig,
@@ -1028,8 +1103,10 @@ def _discover_fphot_collections(
                                 prefix_filter="Nickel/runs/",
                             )
                         )
-                except Exception:
-                    pass
+                except Exception as e:
+                    log.debug(
+                        f"Failed to discover fphot collections for {night}/{fphot_suffix}: {e}"
+                    )
     elif not fphot_colls and dry_run:
         for night in all_nights:
             fphot_colls.append(f"Nickel/runs/{night}/forcedPhotRaDec/*/run")
@@ -1101,6 +1178,7 @@ def run(
     4. DIA per night per band
     5. Forced photometry per night
     6. Lightcurve extraction
+    7. Period analysis (variable stars, if period_search=true)
 
     Args:
         config_file: Path to YAML configuration file
@@ -1173,6 +1251,7 @@ def run(
     elif run_cfg.template_type == "coadd":
         early_exit = _run_coadd_templates(run_cfg, config, result, science_cfg, dry_run)
         if early_exit is not None:
+            log.error(f"Coadd template build failed: {early_exit.error}")
             return early_exit
         _log_template_summary(run_cfg, result)
 
@@ -1205,11 +1284,19 @@ def run(
         log.info("Extracting lightcurve...")
         _run_lightcurve_step(all_nights, run_cfg, config, result, dry_run)
 
+    # Step 7: Period analysis (variable stars only)
+    if run_cfg.period_search:
+        log.info("Running period analysis...")
+        _run_period_step(run_cfg, result, dry_run)
+
     # Determine overall success
     # Use a three-tier status: SUCCESS (no failures), PARTIAL (some failures but
     # usable results like lightcurves or successful nights), FAILED (nothing worked)
     has_failures = bool(
-        result.failed_calibs or result.failed_science or result.failed_dia
+        result.failed_calibs
+        or result.failed_science
+        or result.failed_dia
+        or result.failed_fphot
     )
     has_successes = False
 
@@ -1230,6 +1317,7 @@ def run(
             or successful_dia_pairs > 0
             or successful_fphot > 0
             or result.lightcurve_path is not None
+            or result.period_result_path is not None
         )
 
         if has_successes:
@@ -1244,6 +1332,8 @@ def run(
             failures.append(f"science: {result.failed_science}")
         if result.failed_dia:
             failures.append(f"dia: {result.failed_dia}")
+        if result.failed_fphot:
+            failures.append(f"fphot: {result.failed_fphot}")
         result.error = "; ".join(failures)
 
     # Post-process: split any remaining unsplit logs by exposure
@@ -1275,6 +1365,8 @@ def run(
     )
     if result.lightcurve_path:
         log.info(f"  Lightcurve: {result.lightcurve_path}")
+    if result.period_result_path:
+        log.info(f"  Period analysis: {result.period_result_path}")
 
     summary_file = run_log_dir / "summary.txt"
     with open(summary_file, "w") as f:
@@ -1298,5 +1390,7 @@ def run(
             f.write(f"Templates: {result.template_collections}\n")
         if result.lightcurve_path:
             f.write(f"Lightcurve: {result.lightcurve_path}\n")
+        if result.period_result_path:
+            f.write(f"Period analysis: {result.period_result_path}\n")
 
     return result
