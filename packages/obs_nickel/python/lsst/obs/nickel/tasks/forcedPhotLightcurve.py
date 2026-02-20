@@ -3,6 +3,17 @@
 This task consolidates per-visit forced photometry measurements into a single
 lightcurve table and generates plots. It works with outputs from either
 ForcedPhotRaDecTask (visit images) or ForcedPhotDiffimRaDecTask (difference images).
+
+WARNING: Photometric Calibration Issue (difference images only)
+----------------------------------------------------------------
+When used with difference image forced photometry, the hardcoded zeroPoint
+(31.4) assumes flux is in nanojansky, but diffim forced photometry produces
+instrumental flux (ADU). This results in magnitudes ~10-11 mag fainter than
+correct values.
+
+For scientifically accurate magnitudes from difference images, use the
+extract_lightcurve.py tool instead, which fetches photoCalib from the
+science exposure and applies proper ADU → nJy → AB magnitude calibration.
 """
 
 from __future__ import annotations

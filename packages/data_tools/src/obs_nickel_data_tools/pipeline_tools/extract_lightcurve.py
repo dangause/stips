@@ -214,6 +214,61 @@ def plot_light_curves(df: pd.DataFrame, output_path: Path, target_name: str):
     print()
 
 
+def get_photocalib_for_visit(
+    butler: Butler, visit: int, band: str, photocalib_cache: dict
+) -> tuple:
+    """Fetch photoCalib for a visit, with caching.
+
+    The photoCalib is stored in initial_photoCalib_detector (from the Nickel
+    DRP calibrateImage task), not in calexp. This function queries processCcd
+    collections to find the calibration for the given visit.
+
+    Parameters:
+        butler: Butler instance
+        visit: Visit ID to fetch calibration for
+        band: Band name (for cache key)
+        photocalib_cache: Dictionary cache for photoCalib objects
+
+    Returns:
+        (photoCalib, instFluxToNanojansky_factor) or (None, None) if not available.
+        The factor converts 1 ADU to nJy, allowing flux_nJy = flux_adu * factor.
+    """
+    cache_key = (visit, band)
+    if cache_key in photocalib_cache:
+        return photocalib_cache[cache_key]
+
+    # Check if we've already cached the processCcd collections
+    if "_processccd_collections" not in photocalib_cache:
+        try:
+            photocalib_cache["_processccd_collections"] = list(
+                butler.registry.queryCollections("Nickel/runs/*/processCcd/*")
+            )
+        except Exception:
+            photocalib_cache["_processccd_collections"] = []
+
+    processccd_collections = photocalib_cache["_processccd_collections"]
+    if not processccd_collections:
+        photocalib_cache[cache_key] = (None, None)
+        return None, None
+
+    try:
+        # The Nickel DRP produces initial_photoCalib_detector from calibrateImage,
+        # not calexp.photoCalib. This is the photometric calibration we need.
+        photocalib = butler.get(
+            "initial_photoCalib_detector",
+            dataId={"instrument": "Nickel", "visit": visit, "detector": 0},
+            collections=processccd_collections,
+        )
+        # Get the calibration factor (converts 1 ADU to nJy)
+        factor = photocalib.instFluxToNanojansky(1.0)
+        photocalib_cache[cache_key] = (photocalib, factor)
+        return photocalib, factor
+    except Exception:
+        # photoCalib not available for this visit
+        photocalib_cache[cache_key] = (None, None)
+        return None, None
+
+
 def main():
     args = parse_args()
 
@@ -234,6 +289,9 @@ def main():
     # Open Butler
     # Note: wildcards must be resolved before passing to Butler constructor
     butler = Butler(args.repo)
+
+    # Cache for photoCalib objects (keyed by visit, band)
+    photocalib_cache = {}
 
     # Resolve collection wildcards
     # The --collection argument may be comma-separated (from the orchestrator)
@@ -416,15 +474,6 @@ def main():
                     print(f"    Source {j}: S/N={snr:.1f} < {args.min_snr} (skipped)")
                 continue
 
-            # Convert flux to magnitude (LSST zeropoint: 31.4)
-            zp = 31.4
-            if flux > 0:
-                mag = -2.5 * np.log10(flux) + zp
-                mag_err = 2.5 / np.log(10) * flux_err / flux
-            else:
-                mag = np.nan
-                mag_err = np.nan
-
             # Extract metadata - use visit MJD from visit record.
             # Skip sources where MJD couldn't be determined (invalid timestamps
             # would produce scientifically unusable lightcurve points).
@@ -444,6 +493,38 @@ def main():
             except KeyError:
                 visit = -1
 
+            # Convert instrumental flux to calibrated units using photoCalib.
+            # DIA source catalogs contain instrumental flux (ADU). We need to:
+            # 1. Fetch the science exposure's photoCalib (converts ADU → nJy)
+            # 2. Convert nJy to AB magnitude using ZP=31.4
+            # For difference images, negative flux is meaningful (template brighter
+            # than science), so we report flux_nJy for all detections but mag only
+            # when flux is positive.
+            flux_nJy = np.nan
+            flux_nJy_err = np.nan
+            mag = np.nan
+            mag_err = np.nan
+
+            photocalib, calib_factor = get_photocalib_for_visit(
+                butler, visit, band, photocalib_cache
+            )
+
+            if photocalib is not None and calib_factor is not None:
+                # Convert instrumental flux to nanojansky
+                flux_nJy = flux * calib_factor
+                flux_nJy_err = flux_err * calib_factor
+
+                # Convert nJy to AB magnitude (ZP=31.4 for nJy)
+                # Only valid for positive flux; negative flux has no magnitude
+                if flux_nJy > 0:
+                    mag = -2.5 * np.log10(flux_nJy) + 31.4
+                    mag_err = 2.5 / np.log(10) * flux_nJy_err / flux_nJy
+            else:
+                # No photoCalib available - report instrumental flux only
+                if args.verbose:
+                    print(f"    Source {j}: no photoCalib for visit {visit}")
+                # Keep flux_nJy and mag as NaN
+
             # Get source coordinates - use the already-parsed cat_coords to get degrees
             # This avoids the radians vs degrees confusion
             src_idx = np.where(matches)[0][j]
@@ -457,9 +538,11 @@ def main():
                     "visit": visit,
                     "ra": src_ra,
                     "dec": src_dec,
-                    "flux": flux,
-                    "flux_err": flux_err,
-                    "mag": mag,
+                    "flux": flux,  # Instrumental flux (ADU)
+                    "flux_err": flux_err,  # Instrumental flux error (ADU)
+                    "flux_nJy": flux_nJy,  # Calibrated flux (nanojansky)
+                    "flux_nJy_err": flux_nJy_err,  # Calibrated flux error (nanojansky)
+                    "mag": mag,  # AB magnitude (from calibrated flux)
                     "mag_err": mag_err,
                     "snr": snr,
                     "separation_arcsec": sep[matches][j].arcsec,
@@ -467,8 +550,9 @@ def main():
             )
 
             if args.verbose:
+                mag_str = f"{mag:.2f}±{mag_err:.2f}" if np.isfinite(mag) else "N/A"
                 print(
-                    f"    Source {j}: S/N={snr:.1f}, mag={mag:.2f}±{mag_err:.2f}, "
+                    f"    Source {j}: S/N={snr:.1f}, flux_nJy={flux_nJy:.1f}, mag={mag_str}, "
                     f'sep={sep[matches][j].arcsec:.2f}"'
                 )
 
@@ -484,16 +568,33 @@ def main():
     print(f"Total detections: {len(df)}")
     print(f"Bands: {sorted(df['band'].unique())}")
     print(f"MJD range: {df['mjd'].min():.3f} - {df['mjd'].max():.3f}")
-    print(f"Magnitude range: {df['mag'].min():.2f} - {df['mag'].max():.2f}")
+
+    # Report calibration statistics
+    n_calibrated = df["flux_nJy"].notna().sum()
+    n_with_mag = df["mag"].notna().sum()
+    print(f"Calibrated flux (nJy): {n_calibrated}/{len(df)} detections")
+    print(f"Valid magnitudes: {n_with_mag}/{len(df)} (negative flux → NaN mag)")
+
+    # Report magnitude range only for valid magnitudes
+    valid_mags = df["mag"].dropna()
+    if len(valid_mags) > 0:
+        print(f"Magnitude range: {valid_mags.min():.2f} - {valid_mags.max():.2f}")
     print()
 
     # Per-band statistics
     for band in sorted(df["band"].unique()):
         band_data = df[df["band"] == band]
-        print(
-            f"  {band}-band: {len(band_data)} detections, "
-            f"<mag>={band_data['mag'].mean():.2f}±{band_data['mag'].std():.2f}"
-        )
+        valid_band_mags = band_data["mag"].dropna()
+        if len(valid_band_mags) > 0:
+            print(
+                f"  {band}-band: {len(band_data)} detections, "
+                f"<mag>={valid_band_mags.mean():.2f}±{valid_band_mags.std():.2f}"
+            )
+        else:
+            print(
+                f"  {band}-band: {len(band_data)} detections, "
+                f"<flux_nJy>={band_data['flux_nJy'].mean():.1f} (all negative flux)"
+            )
 
     # Write output
     output_path = Path(args.output)

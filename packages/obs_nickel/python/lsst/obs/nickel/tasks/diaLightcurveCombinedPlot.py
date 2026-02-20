@@ -3,6 +3,17 @@
 The per-band ``DiaLightcurvePlotTask`` produces one table and plot per band.
 This task reads those per-band tables and combines them onto a single
 multi-band figure, matching the style used by ``ForcedPhotLightcurveTask``.
+
+WARNING: Photometric Calibration Issue
+---------------------------------------
+When falling back to flux-to-magnitude conversion (no 'mag' column), the
+hardcoded zeroPoint (31.4) assumes flux is in nanojansky, but DIA sources
+contain instrumental flux (ADU). This results in magnitudes ~10-11 mag
+fainter than correct values.
+
+For scientifically accurate magnitudes, use the extract_lightcurve.py tool
+instead, which fetches photoCalib from the science exposure and applies
+proper ADU → nJy → AB magnitude calibration.
 """
 
 from __future__ import annotations

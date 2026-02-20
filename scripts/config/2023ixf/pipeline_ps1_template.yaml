@@ -44,7 +44,7 @@ bands: ["r", "i"]
 template:
   type: ps1
   size: 0.4            # Cutout size in degrees (24 arcmin; extra margin for pointing drift)
-  degrade_seeing: 2.0  # Convolve PS1 to ~2 arcsec FWHM to match Nickel seeing
+  degrade_seeing: 4.0  # Convolve PS1 to ~4 arcsec FWHM to match Nickel seeing (was 2.0, insufficient)
 
 # Science nights - SN observations from discovery through late 2023
 science:
@@ -70,7 +70,6 @@ science:
     - 20230817
     - 20230905
     - 20230910
-    # 20231211 removed: not a 2023ixf night (telescope observed other targets)
 
 # Pipeline configuration files (paths relative to obs_nickel/configs/)
 configs:
@@ -88,11 +87,11 @@ configs:
 # Processing options
 options:
   jobs: 6
-  skip_calibs: false
-  skip_science: false
-  rebuild_templates: false
-  skip_dia: false
-  forced_phot: true
+  skip_calibs: true    # Already done, skip to save time
+  skip_science: true   # Already done, skip to save time
+  rebuild_templates: false   # Force rebuild with new degrade_seeing=4.0
+  skip_dia: true
+  forced_phot: false
   forced_phot_image_type: diffim
   lightcurve: true
   lightcurve_dataset_type: forced_phot_diffim_radec

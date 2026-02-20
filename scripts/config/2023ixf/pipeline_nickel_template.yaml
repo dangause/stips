@@ -43,26 +43,27 @@ dec: 54.316389
 # Bands to process
 bands: ["b", "v", "r", "i"]
 
-# Template configuration - use Nickel coadds from faded SN epochs
+# Template configuration - use Nickel coadds from late SN epochs
 template:
   type: coadd
-  # Late-time nights when SN had faded, used to build template coadds
-  # Using late 2023 observations (post-plateau phase)
+  # Late-time nights for template building. SN 2023ixf plateau ended ~day 82 (Aug 9).
+  # WARNING: Mid-plateau nights (20230728/20230801) still have significant SN flux (V~12-13).
+  # Templates will contain SN flux - lightcurve shows RELATIVE brightness, not absolute.
+  #   - 20230728 (day 70): V~12-13, mid-plateau (included for coverage)
+  #   - 20230801 (day 74): V~12-13, mid-plateau (included for coverage)
+  #   - 20230817 (day 90): V~14-15, just past plateau (ISR bug - may fail)
+  #   - 20230905 (day 109): V~16-17, radioactive tail
+  #   - 20230910 (day 114): V~16-17, radioactive tail
   nights:
-    - 20230629
-    - 20230703
-    - 20230706
-    - 20230709
-    - 20230714
     - 20230728
     - 20230801
     - 20230817
     - 20230905
     - 20230910
-    # 20231211 removed: not a 2023ixf night (telescope observed other targets)
 
-# Science nights - SN observations from discovery through late summer 2023
-# Excluding template nights from science processing
+# Science nights - SN observations from discovery through plateau
+# Includes early bright epochs (20230519-20230625) plus plateau nights (20230629-20230801)
+# These span days 0-74, covering rise and plateau phases
 science:
   nights:
     - 20230519
@@ -76,6 +77,11 @@ science:
     - 20230616
     - 20230618
     - 20230625
+    - 20230629
+    - 20230703
+    - 20230706
+    - 20230709
+    - 20230714
 
 # Pipeline configuration files (paths relative to obs_nickel/configs/)
 configs:
@@ -95,11 +101,11 @@ configs:
 # Processing options
 options:
   jobs: 6
-  skip_calibs: false
-  skip_science: false
-  rebuild_templates: true
-  skip_dia: false
-  forced_phot: true
+  skip_calibs: true    # Calibs already built for all nights
+  skip_science: true  # Need to process newly added science nights (20230629-20230801)
+  rebuild_templates: false  # Rebuild with only 3 late-time nights
+  skip_dia: true
+  forced_phot: false
   forced_phot_image_type: diffim
   lightcurve: true
   lightcurve_dataset_type: forced_phot_diffim_radec

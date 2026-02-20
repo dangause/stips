@@ -3,6 +3,18 @@
 The per-band task (ForcedPhotDiffimLightcurveBandTask) produces one table and
 plot per band. The combined task (ForcedPhotDiffimLightcurveCombinedTask) reads
 those per-band tables and combines them onto a single multi-band figure.
+
+WARNING: Photometric Calibration Issue
+---------------------------------------
+The zeroPoint config (default 31.4) assumes flux is in nanojansky, but
+difference image forced photometry produces instrumental flux (ADU). This
+results in magnitudes ~10-11 mag fainter than correct values.
+
+For scientifically accurate magnitudes, use the extract_lightcurve.py tool
+instead, which fetches photoCalib from the science exposure and applies
+proper ADU → nJy → AB magnitude calibration.
+
+TODO: Refactor these tasks to fetch and apply photoCalib from the Butler.
 """
 
 from __future__ import annotations
