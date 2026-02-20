@@ -13,6 +13,90 @@ if TYPE_CHECKING:
 
 
 @dataclass
+class LightcurveConfig:
+    """Configuration for lightcurve extraction and plotting."""
+
+    enabled: bool = True
+
+    # Data selection
+    dataset_type: str = "dia_source_unfiltered"
+    min_snr: float = 3.0
+    radius: float = 1.0
+    band: str | None = None
+
+    # Y-axis display
+    y_axis: str = "apparent_mag"  # apparent_mag | absolute_mag | flux_nJy | flux_adu
+    distance_modulus: float | None = None
+
+    # X-axis display
+    x_axis: str = "mjd"  # mjd | days_since_explosion
+    explosion_mjd: float | None = None
+
+    _VALID_Y_AXES = ("apparent_mag", "absolute_mag", "flux_nJy", "flux_adu")
+    _VALID_X_AXES = ("mjd", "days_since_explosion")
+
+    def validate(self):
+        """Raise ValueError if config is inconsistent."""
+        if self.y_axis not in self._VALID_Y_AXES:
+            raise ValueError(
+                f"Invalid y_axis '{self.y_axis}', must be one of: {self._VALID_Y_AXES}"
+            )
+        if self.x_axis not in self._VALID_X_AXES:
+            raise ValueError(
+                f"Invalid x_axis '{self.x_axis}', must be one of: {self._VALID_X_AXES}"
+            )
+        if self.y_axis == "absolute_mag" and self.distance_modulus is None:
+            raise ValueError(
+                "y_axis='absolute_mag' requires distance_modulus to be set"
+            )
+        if self.x_axis == "days_since_explosion" and self.explosion_mjd is None:
+            raise ValueError(
+                "x_axis='days_since_explosion' requires explosion_mjd to be set"
+            )
+
+    @classmethod
+    def from_yaml(
+        cls, lc_section: dict | None, options: dict | None = None
+    ) -> "LightcurveConfig":
+        """Parse from YAML lightcurve: section with fallback to options: block.
+
+        Args:
+            lc_section: The 'lightcurve:' top-level YAML dict (may be None).
+            options: The 'options:' YAML dict for backwards compat (may be None).
+
+        Returns:
+            Validated LightcurveConfig instance.
+        """
+        lc = lc_section or {}
+        opts = options or {}
+
+        config = cls(
+            enabled=lc.get("enabled", opts.get("lightcurve", True)),
+            dataset_type=lc.get(
+                "dataset_type",
+                opts.get("lightcurve_dataset_type", "dia_source_unfiltered"),
+            ),
+            min_snr=float(lc.get("min_snr", opts.get("lightcurve_min_snr", 3.0))),
+            radius=float(lc.get("radius", 1.0)),
+            band=lc.get("band"),
+            y_axis=lc.get("y_axis", "apparent_mag"),
+            distance_modulus=(
+                float(lc["distance_modulus"])
+                if lc.get("distance_modulus") is not None
+                else None
+            ),
+            x_axis=lc.get("x_axis", "mjd"),
+            explosion_mjd=(
+                float(lc["explosion_mjd"])
+                if lc.get("explosion_mjd") is not None
+                else None
+            ),
+        )
+        config.validate()
+        return config
+
+
+@dataclass
 class LightcurveResult:
     """Result of lightcurve extraction."""
 
@@ -37,6 +121,7 @@ def run(
     plot: bool = True,
     dataset_type: str = "dia_source_unfiltered",
     log_file: Path | None = None,
+    lc_config: LightcurveConfig | None = None,
 ) -> LightcurveResult:
     """Extract lightcurve from DIA source catalogs or forced photometry.
 
@@ -106,6 +191,15 @@ def run(
 
     if dataset_type != "dia_source_unfiltered":
         args.extend(["--dataset-type", dataset_type])
+
+    # Display configuration (new lightcurve config options)
+    if lc_config:
+        args.extend(["--y-axis", lc_config.y_axis])
+        args.extend(["--x-axis", lc_config.x_axis])
+        if lc_config.explosion_mjd is not None:
+            args.extend(["--explosion-mjd", str(lc_config.explosion_mjd)])
+        if lc_config.distance_modulus is not None:
+            args.extend(["--distance-modulus", str(lc_config.distance_modulus)])
 
     if plot:
         args.append("--plot")
