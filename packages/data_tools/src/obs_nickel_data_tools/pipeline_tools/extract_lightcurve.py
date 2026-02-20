@@ -144,22 +144,28 @@ def resolve_object_name(object_name: str) -> coord.SkyCoord:
         sys.exit(1)
 
 
-def _clamp_ylim(ax, df: pd.DataFrame):
-    """Clamp y-axis limits to magnitude range with 15% padding.
+def _clamp_ylim(ax, df: pd.DataFrame, y_col: str = "mag"):
+    """Clamp y-axis limits to value range with 15% padding.
 
     Prevents extreme error bars from stretching the axes.
     Uses the same approach as the forced photometry lightcurve tasks.
     """
-    finite_mags = df["mag"][np.isfinite(df["mag"])]
-    if len(finite_mags) == 0:
+    finite_vals = df[y_col][np.isfinite(df[y_col])]
+    if len(finite_vals) == 0:
         return
-    mag_min, mag_max = finite_mags.min(), finite_mags.max()
-    pad = 0.15 * (mag_max - mag_min) if mag_max > mag_min else 0.5
+    val_min, val_max = finite_vals.min(), finite_vals.max()
+    pad = 0.15 * (val_max - val_min) if val_max > val_min else 0.5
     # Axes are inverted (brighter = lower mag = higher on plot)
-    ax.set_ylim(mag_max + pad, mag_min - pad)
+    ax.set_ylim(val_max + pad, val_min - pad)
 
 
-def plot_light_curves(df: pd.DataFrame, output_path: Path, target_name: str):
+def plot_light_curves(
+    df: pd.DataFrame,
+    output_path: Path,
+    target_name: str,
+    y_axis: str = "apparent_mag",
+    x_axis: str = "mjd",
+):
     """Generate a single multi-band light curve plot with publication styling."""
     try:
         from lsst.obs.nickel.plotting import (
@@ -175,6 +181,31 @@ def plot_light_curves(df: pd.DataFrame, output_path: Path, target_name: str):
     except ImportError:
         _has_plotting = False
 
+    # Determine which columns to plot based on display config
+    if y_axis == "absolute_mag":
+        y_col, y_err_col = "abs_mag", "abs_mag_err"
+        ylabel = "Absolute Magnitude"
+        invert_y = True
+    elif y_axis == "flux_nJy":
+        y_col, y_err_col = "flux_nJy", "flux_nJy_err"
+        ylabel = "Flux (nJy)"
+        invert_y = False
+    elif y_axis == "flux_adu":
+        y_col, y_err_col = "flux", "flux_err"
+        ylabel = "Flux (ADU)"
+        invert_y = False
+    else:  # apparent_mag (default)
+        y_col, y_err_col = "mag", "mag_err"
+        ylabel = "Apparent Magnitude (AB)"
+        invert_y = True
+
+    if x_axis == "days_since_explosion" and "days_since_explosion" in df.columns:
+        x_col = "days_since_explosion"
+        xlabel = "Days Since Explosion"
+    else:
+        x_col = "mjd"
+        xlabel = "Modified Julian Date (MJD)"
+
     print("\n=== GENERATING PLOT ===")
 
     if _has_plotting:
@@ -187,19 +218,20 @@ def plot_light_curves(df: pd.DataFrame, output_path: Path, target_name: str):
             band_data = df[df["band"] == band]
             plot_lightcurve_band(
                 ax,
-                band_data["mjd"].values,
-                band_data["mag"].values,
-                band_data["mag_err"].values,
+                band_data[x_col].values,
+                band_data[y_col].values,
+                band_data[y_err_col].values,
                 band,
                 count=len(band_data),
             )
 
-        format_lightcurve_axes(ax, invert_y=True)
+        format_lightcurve_axes(ax, ylabel=ylabel, xlabel=xlabel, invert_y=invert_y)
         set_title(ax, target_name)
         ax.legend(loc="best")
 
-        # Clamp ylim to magnitude range (ignoring extreme error bars)
-        _clamp_ylim(ax, df)
+        # Clamp ylim for magnitude modes only
+        if invert_y:
+            _clamp_ylim(ax, df, y_col=y_col)
 
     else:
         # Fallback: basic styling when obs_nickel.plotting is unavailable
@@ -216,9 +248,9 @@ def plot_light_curves(df: pd.DataFrame, output_path: Path, target_name: str):
         for band in bands:
             band_data = df[df["band"] == band]
             ax.errorbar(
-                band_data["mjd"],
-                band_data["mag"],
-                yerr=band_data["mag_err"],
+                band_data[x_col],
+                band_data[y_col],
+                yerr=band_data[y_err_col],
                 fmt="o",
                 color=band_colors.get(band, "black"),
                 label=f"{band.upper()}-band (N={len(band_data)})",
@@ -227,15 +259,17 @@ def plot_light_curves(df: pd.DataFrame, output_path: Path, target_name: str):
                 alpha=0.8,
             )
 
-        ax.set_xlabel("Modified Julian Date (MJD)")
-        ax.set_ylabel("Apparent Magnitude (mag)")
+        ax.set_xlabel(xlabel)
+        ax.set_ylabel(ylabel)
         ax.set_title(target_name)
-        ax.invert_yaxis()
+        if invert_y:
+            ax.invert_yaxis()
         ax.grid(True, alpha=0.3, linestyle="--")
         ax.legend(loc="best")
 
-        # Clamp ylim to magnitude range (ignoring extreme error bars)
-        _clamp_ylim(ax, df)
+        # Clamp ylim for magnitude modes only
+        if invert_y:
+            _clamp_ylim(ax, df, y_col=y_col)
 
     plot_filename = output_path.parent / f"{output_path.stem}.png"
     fig.tight_layout()
@@ -596,10 +630,24 @@ def main():
     df = pd.DataFrame(all_detections)
     df = df.sort_values("mjd")
 
+    # Add days_since_explosion column if explosion_mjd is provided
+    if args.explosion_mjd is not None:
+        df["days_since_explosion"] = df["mjd"] - args.explosion_mjd
+
+    # Add absolute magnitude column if distance_modulus is provided
+    if args.distance_modulus is not None:
+        df["abs_mag"] = df["mag"] - args.distance_modulus
+        df["abs_mag_err"] = df["mag_err"]  # Error propagation: same error
+
     print("\n=== LIGHT CURVE SUMMARY ===")
     print(f"Total detections: {len(df)}")
     print(f"Bands: {sorted(df['band'].unique())}")
     print(f"MJD range: {df['mjd'].min():.3f} - {df['mjd'].max():.3f}")
+    if "days_since_explosion" in df.columns:
+        print(
+            f"Days since explosion: {df['days_since_explosion'].min():.1f} - "
+            f"{df['days_since_explosion'].max():.1f}"
+        )
 
     # Report calibration statistics
     n_calibrated = df["flux_nJy"].notna().sum()
@@ -638,7 +686,9 @@ def main():
     if args.plot:
         # Use custom name if provided, otherwise use object name or coordinates
         plot_title = args.name or args.object or f"RA={ra_deg:.4f}, Dec={dec_deg:.4f}"
-        plot_light_curves(df, output_path, plot_title)
+        plot_light_curves(
+            df, output_path, plot_title, y_axis=args.y_axis, x_axis=args.x_axis
+        )
 
 
 if __name__ == "__main__":
