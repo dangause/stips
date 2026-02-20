@@ -90,12 +90,44 @@ def parse_args():
         "--name",
         help="Custom name for plot title (if not specified, uses object name or coordinates)",
     )
+    parser.add_argument(
+        "--y-axis",
+        default="apparent_mag",
+        choices=["apparent_mag", "absolute_mag", "flux_nJy", "flux_adu"],
+        help="Y-axis display mode (default: apparent_mag)",
+    )
+    parser.add_argument(
+        "--x-axis",
+        default="mjd",
+        choices=["mjd", "days_since_explosion"],
+        help="X-axis display mode (default: mjd)",
+    )
+    parser.add_argument(
+        "--explosion-mjd",
+        type=float,
+        default=None,
+        help="Explosion MJD (required when --x-axis=days_since_explosion)",
+    )
+    parser.add_argument(
+        "--distance-modulus",
+        type=float,
+        default=None,
+        help="Distance modulus (required when --y-axis=absolute_mag)",
+    )
 
     args = parser.parse_args()
 
     # Validate position args
     if args.ra is not None and args.dec is None:
         parser.error("--dec required when using --ra")
+
+    # Validate display mode dependencies
+    if args.x_axis == "days_since_explosion" and args.explosion_mjd is None:
+        parser.error(
+            "--explosion-mjd required when using --x-axis=days_since_explosion"
+        )
+    if args.y_axis == "absolute_mag" and args.distance_modulus is None:
+        parser.error("--distance-modulus required when using --y-axis=absolute_mag")
 
     return args
 
