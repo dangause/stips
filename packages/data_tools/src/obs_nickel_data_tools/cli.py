@@ -864,6 +864,30 @@ def fphot(
     default="dia_source_unfiltered",
     help="Dataset type to query (default: dia_source_unfiltered). Use 'forced_phot_diffim_radec' for forced phot.",
 )
+@click.option(
+    "--y-axis",
+    type=click.Choice(["apparent_mag", "absolute_mag", "flux_nJy", "flux_adu"]),
+    default="apparent_mag",
+    help="Y-axis display mode (default: apparent_mag)",
+)
+@click.option(
+    "--x-axis",
+    type=click.Choice(["mjd", "days_since_explosion"]),
+    default="mjd",
+    help="X-axis display mode (default: mjd)",
+)
+@click.option(
+    "--explosion-mjd",
+    type=float,
+    default=None,
+    help="Explosion MJD (required with --x-axis=days_since_explosion)",
+)
+@click.option(
+    "--distance-modulus",
+    type=float,
+    default=None,
+    help="Distance modulus (required with --y-axis=absolute_mag)",
+)
 @click.pass_context
 def lightcurve(
     ctx: click.Context,
@@ -877,6 +901,10 @@ def lightcurve(
     output: Path | None,
     plot: bool,
     dataset_type: str,
+    y_axis: str,
+    x_axis: str,
+    explosion_mjd: float | None,
+    distance_modulus: float | None,
 ) -> None:
     """Extract lightcurve from DIA source catalogs or forced photometry.
 
@@ -893,11 +921,31 @@ def lightcurve(
             --collections "Nickel/runs/20230519/forcedPhotRaDec/*/run" \\
             --dataset-type forced_phot_diffim_radec --name "SN 2023ixf"
     """
+    # Validate dependent options
+    if x_axis == "days_since_explosion" and explosion_mjd is None:
+        raise click.UsageError(
+            "--explosion-mjd required with --x-axis=days_since_explosion"
+        )
+    if y_axis == "absolute_mag" and distance_modulus is None:
+        raise click.UsageError("--distance-modulus required with --y-axis=absolute_mag")
+
     config = _load_config(ctx)
 
     _print_info(f"Extracting lightcurve at RA={ra:.4f}, Dec={dec:.4f}...")
 
     from obs_nickel_data_tools.core import lightcurve as lc_module
+    from obs_nickel_data_tools.core.lightcurve import LightcurveConfig
+
+    lc_config = LightcurveConfig(
+        dataset_type=dataset_type,
+        min_snr=min_snr,
+        radius=radius,
+        band=band,
+        y_axis=y_axis,
+        x_axis=x_axis,
+        explosion_mjd=explosion_mjd,
+        distance_modulus=distance_modulus,
+    )
 
     result = lc_module.run(
         ra=ra,
@@ -911,6 +959,7 @@ def lightcurve(
         output=output,
         plot=plot,
         dataset_type=dataset_type,
+        lc_config=lc_config,
     )
 
     if result.success:
