@@ -77,6 +77,7 @@ import yaml
 
 if TYPE_CHECKING:
     from obs_nickel_data_tools.core.config import Config
+    from obs_nickel_data_tools.core.lightcurve import LightcurveConfig
     from obs_nickel_data_tools.core.science import ScienceConfig
 
 log = logging.getLogger(__name__)
@@ -367,9 +368,11 @@ class RunConfig:
     skip_dia: bool = False
     forced_phot: bool = True
     forced_phot_image_type: str = "diffim"  # visit, diffim, or both
-    lightcurve: bool = True
-    lightcurve_dataset_type: str = "dia_source_unfiltered"
-    lightcurve_min_snr: float = 3.0
+    lc_config: "LightcurveConfig" = field(
+        default_factory=lambda: __import__(
+            "obs_nickel_data_tools.core.lightcurve", fromlist=["LightcurveConfig"]
+        ).LightcurveConfig()
+    )
     rebuild_templates: bool = False
     continue_on_error: bool = True
     use_fallbacks: bool = True
@@ -387,6 +390,8 @@ class RunConfig:
     @classmethod
     def from_yaml(cls, path: Path) -> RunConfig:
         """Load configuration from YAML file."""
+        from obs_nickel_data_tools.core.lightcurve import LightcurveConfig
+
         with open(path) as f:
             data = yaml.safe_load(f)
 
@@ -473,11 +478,7 @@ class RunConfig:
             forced_phot_image_type=options.get(
                 "forced_phot_image_type", default_fphot_type
             ),
-            lightcurve=options.get("lightcurve", True),
-            lightcurve_dataset_type=options.get(
-                "lightcurve_dataset_type", "dia_source_unfiltered"
-            ),
-            lightcurve_min_snr=float(options.get("lightcurve_min_snr", 3.0)),
+            lc_config=LightcurveConfig.from_yaml(data.get("lightcurve"), options),
             rebuild_templates=options.get("rebuild_templates", False),
             continue_on_error=options.get("continue_on_error", True),
             use_fallbacks=options.get("use_fallbacks", True),
@@ -984,7 +985,7 @@ def _run_lightcurve_step(
     """Extract lightcurve from forced photometry or DIA sources."""
     from obs_nickel_data_tools.core import lightcurve
 
-    use_forced_phot = run_cfg.lightcurve_dataset_type.startswith("forced_phot")
+    use_forced_phot = run_cfg.lc_config.dataset_type.startswith("forced_phot")
 
     if use_forced_phot:
         collections_list = _discover_fphot_collections(
@@ -1016,9 +1017,10 @@ def _run_lightcurve_step(
             config=config,
             name=run_cfg.object_name,
             plot=True,
-            min_snr=run_cfg.lightcurve_min_snr,
-            dataset_type=run_cfg.lightcurve_dataset_type,
+            min_snr=run_cfg.lc_config.min_snr,
+            dataset_type=run_cfg.lc_config.dataset_type,
             log_file=lc_log,
+            lc_config=run_cfg.lc_config,
         )
         if lc_result.success:
             result.lightcurve_path = lc_result.csv_path
@@ -1280,7 +1282,7 @@ def run(
         _run_fphot_step(all_nights, run_cfg, config, result, dry_run)
 
     # Step 6: Lightcurve extraction
-    if run_cfg.lightcurve:
+    if run_cfg.lc_config.enabled:
         log.info("Extracting lightcurve...")
         _run_lightcurve_step(all_nights, run_cfg, config, result, dry_run)
 
