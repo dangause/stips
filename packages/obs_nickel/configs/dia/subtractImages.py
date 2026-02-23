@@ -1,161 +1,77 @@
+# ruff: noqa: F821
 """
 Configuration overrides for subtractImages task (Alard-Lupton PSF matching).
 
-This config optimizes image subtraction for Nickel telescope characteristics:
+Optimized for Nickel telescope characteristics:
 - Typical seeing: 1.5-2.5 arcsec
 - Pixel scale: 0.37 arcsec/pixel
-- Field of view: ~6 arcmin
+- Field of view: ~6 arcmin (2048x2048 pixels)
+- Sparse fields: typically 3-12 usable kernel stars
+
+IMPORTANT: LSST's config hierarchy for makeKernel is:
+  config.makeKernel.*              -> MakeKernelConfig (NOT used at runtime for PsfMatch fields)
+  config.makeKernel.kernel["AL"].* -> PsfMatchConfigAL (USED at runtime when kernel.name="AL")
+  config.makeKernel.kernel["DF"].* -> PsfMatchConfigDF (USED at runtime when kernel.name="DF")
+
+PsfMatchTask.__init__ sets self.kConfig = self.config.kernel.active, so ALL PsfMatchConfig-
+inherited fields (spatialKernelOrder, sizeCellX, kernelBasisSet, etc.) MUST be set on the
+kernel["AL"] or kernel["DF"] sub-config to take effect.  Settings on config.makeKernel.* for
+these fields are silently ignored at runtime.
 """
 
 # ==========================================
-# Kernel Configuration
+# Kernel Selection: AL with delta-function basis
 # ==========================================
+# Use the Alard-Lupton framework but with delta-function basis functions.
+# This is the most stable approach for Nickel's sparse fields:
+# - AL framework handles kernel fitting, clipping, background
+# - Delta-function basis is numerically stable with few stars
+# - Non-spatial (constant) kernel avoids underconstrained spatial fits
+#
+# kernelBasisSet controls which basis functions makeKernelBasisList() creates:
+#   "alard-lupton"   -> sum-of-Gaussians (27 params with 3 Gaussians)
+#   "delta-function" -> one delta-function per kernel pixel (~21 params for 21x21)
+#
+# kernel.name selects the config CLASS (AL or DF), which provides defaults and
+# additional parameters. We keep kernel.name="AL" (default) and override the
+# basis set to delta-function within it.
 
-# Spatial variation: polynomial order for kernel spatial variation
-# Higher order allows kernel to vary more across field
-# 2 = good balance for 6 arcmin field
-# NOTE: spatialOrder parameter removed in recent LSST stack versions
-# config.makeKernel.spatialOrder = 2
-
-# Kernel size in pixels
-# Larger kernel handles PSF mismatches better but slower
-# For Nickel: seeing ~1.5-2.5" / 0.37"/pix = 4-7 pixels FWHM
-# Kernel should be ~3x FWHM for good sampling
-config.makeKernel.kernelSize = 21
-# Collapse to a single, non-spatial kernel to tolerate sparse stars and small overlap
-config.makeKernel.spatialKernelOrder = 0
-config.makeKernel.spatialBgOrder = 0
-config.makeKernel.iterateSingleKernel = True
-# Keep kernel size fixed (do not scale by FWHM) so the small number of stars does not drive
-# an oversized basis that becomes ill-conditioned.
-config.makeKernel.scaleByFwhm = False
-
-# SELECT the delta-function (DF) kernel basis for robustness with very few kernel stars.
-# CRITICAL: kernel.name selects which kernel type to use, NOT kernelBasisSet
-# AL (Alard-Lupton) = 27 parameters with 3 Gaussians - requires many stars
-# DF (Delta-Function) = ~21 parameters (kernel size) - works with sparse fields
-config.makeKernel.kernel.name = "DF"
-# Use a single huge cell (whole image) and accept at least one star
-# Ensure a single cell across the warped template so we don't require per-cell stars
-config.makeKernel.sizeCellX = 2048
-config.makeKernel.sizeCellY = 2048
-config.makeKernel.nStarPerCell = 1
-# Match kernel-specific settings to the global single-cell, zero-order model so we do not fall back to the
-# default AL/DF grids that expect many stars per cell.
+# -- Active kernel config (THESE SETTINGS TAKE EFFECT) --
+config.makeKernel.kernel["AL"].kernelBasisSet = "delta-function"
+config.makeKernel.kernel["AL"].kernelSize = 21
+config.makeKernel.kernel["AL"].scaleByFwhm = False
 config.makeKernel.kernel["AL"].spatialKernelOrder = 0
 config.makeKernel.kernel["AL"].spatialBgOrder = 0
 config.makeKernel.kernel["AL"].sizeCellX = 2048
 config.makeKernel.kernel["AL"].sizeCellY = 2048
 config.makeKernel.kernel["AL"].nStarPerCell = 1
+config.makeKernel.kernel["AL"].iterateSingleKernel = True
+config.makeKernel.kernel["AL"].fitForBackground = True
+config.makeKernel.kernel["AL"].maxConditionNumber = 1e7
+config.makeKernel.kernel["AL"].conditionNumberType = "SVD"
+
+# Also configure DF sub-config consistently (in case kernel.name is switched)
+config.makeKernel.kernel["DF"].kernelSize = 21
+config.makeKernel.kernel["DF"].scaleByFwhm = False
 config.makeKernel.kernel["DF"].spatialKernelOrder = 0
 config.makeKernel.kernel["DF"].spatialBgOrder = 0
 config.makeKernel.kernel["DF"].sizeCellX = 2048
 config.makeKernel.kernel["DF"].sizeCellY = 2048
 config.makeKernel.kernel["DF"].nStarPerCell = 1
-# Loosen kernel-source detection to admit more candidates
+config.makeKernel.kernel["DF"].iterateSingleKernel = True
+config.makeKernel.kernel["DF"].fitForBackground = True
+
+# ==========================================
+# Kernel Source Detection (on MakeKernelConfig - these DO take effect)
+# ==========================================
+# selectDetection is specific to MakeKernelConfig, not PsfMatchConfig,
+# so setting it on config.makeKernel.* is correct.
+config.allowKernelSourceDetection = True
 config.makeKernel.selectDetection.thresholdValue = 1.5
 config.makeKernel.selectDetection.nSigmaForKernel = 1.5
 config.makeKernel.selectDetection.minPixels = 3
 
-# Allow more aggressive PSF matching for large mismatches (PS1 vs Nickel seeing)
-config.makeKernel.maxConditionNumber = 1e7  # Increased from default 5e6
-config.makeKernel.conditionNumberType = "SVD"
-
-# Note: minKernelSources not available in this LSST stack version
-# Sparse field handling is done via nStarPerCell = 1 settings above
-
-# Spatial kernel type
-# NOTE: kernelSizeType parameter removed in recent LSST stack versions
-# config.makeKernel.kernelSizeType = "square"
-
-# Kernel basis function
-# NOTE: kernelBasisSet parameter removed in recent LSST stack versions
-# config.makeKernel.kernelBasisSet = "alard-lupton"
-
-# Regularization for kernel solution
-# Lower = more aggressive fitting, higher = more conservative
-# NOTE: regularizationType and lambdaValue parameters removed in recent LSST stack versions
-# config.makeKernel.regularizationType = "tikhonov"
-# config.makeKernel.lambdaValue = 0.1
-
 # ==========================================
 # Background Configuration
 # ==========================================
-
-# Subtract backgrounds before differencing
-# Critical for accurate photometry
 config.doSubtractBackground = True
-
-# Background bin size in pixels
-# Smaller = more detailed background model
-# For 6 arcmin field, 128 pixels = ~47 arcsec bins
-# NOTE: makeKernelBasisList config structure changed in recent LSST stack versions
-# config.makeKernel.makeKernelBasisList.backgroundBinSize = 128
-
-# Use polynomial background subtraction
-# NOTE: makeKernelBasisList config structure changed in recent LSST stack versions
-# config.makeKernel.makeKernelBasisList.doBackgroundModelSubtraction = True
-
-# ==========================================
-# Source Selection for Kernel
-# ==========================================
-
-# Allow automatic detection of kernel sources
-# Will find bright, isolated stars for PSF matching
-config.allowKernelSourceDetection = True
-
-# Detection configuration for kernel sources
-# Want moderately bright, isolated stars (50-sigma)
-# NOTE: detection config moved/removed from subtractImages in recent LSST stack versions
-# config.detection.thresholdValue = 50.0
-# config.detection.thresholdType = "pixel_stdev"
-# config.detection.minPixels = 5
-
-# Don't include too many faint sources
-# NOTE: detection config moved/removed from subtractImages in recent LSST stack versions
-# config.detection.thresholdPolarity = "positive"
-
-# Grow footprints slightly to capture full PSF
-# NOTE: detection config moved/removed from subtractImages in recent LSST stack versions
-# config.detection.nSigmaToGrow = 2.5
-
-# ==========================================
-# PSF Matching
-# ==========================================
-
-# Selecttion criteria for PSF matching stars
-# Reject sources near edges, saturated, cosmic rays
-# NOTE: selectMeasurement config moved/removed from subtractImages in recent LSST stack versions
-# config.selectMeasurement.doFlags = True
-# config.selectMeasurement.flags.bad = [
-#     "base_PixelFlags_flag_edge",
-#     "base_PixelFlags_flag_saturated",
-#     "base_PixelFlags_flag_cr",
-#     "base_PixelFlags_flag_bad",
-#     "base_PixelFlags_flag_suspect",
-# ]
-
-# S/N cut for kernel stars
-# Want high S/N for good PSF estimates
-# NOTE: selectMeasurement config moved/removed from subtractImages in recent LSST stack versions
-# config.selectMeasurement.doSignalToNoise = True
-# config.selectMeasurement.signalToNoise.minimum = 50.0
-# config.selectMeasurement.signalToNoise.fluxField = "base_PsfFlux_instFlux"
-# config.selectMeasurement.signalToNoise.errField = "base_PsfFlux_instFluxErr"
-
-# ==========================================
-# Quality Assurance
-# ==========================================
-
-# Write QA plots
-# NOTE: doWriteMatchedExp parameter removed in recent LSST stack versions
-# config.doWriteMatchedExp = True
-
-# Bad pixel handling
-# NOTE: badMaskPlanes config may have moved in recent LSST stack versions
-# config.badMaskPlanes = ["NO_DATA", "BAD", "SAT"]
-
-# Don't mask detections in science image
-# NOTE: doMaskDetection parameter may have moved in recent LSST stack versions
-# config.doMaskDetection = False
-# ruff: noqa: F821
