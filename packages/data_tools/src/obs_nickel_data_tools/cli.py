@@ -147,6 +147,115 @@ def _load_config(
         sys.exit(1)
 
 
+def _load_lightcurve_config(
+    ctx: click.Context,
+    repo: Path | None = None,
+    stack_dir: Path | None = None,
+) -> cfg_module.Config:
+    """Load configuration for lightcurve command with CLI overrides.
+
+    This allows running lightcurve without any .env file by providing
+    --repo and optionally --stack-dir on the command line.
+
+    Args:
+        ctx: Click context
+        repo: Butler repository path (required if no .env)
+        stack_dir: LSST stack directory (auto-detected if not provided)
+
+    Returns:
+        Config object with CLI overrides applied
+    """
+    import os
+    from dataclasses import replace
+
+    # Try to load config from env/profile first
+    env_file = ctx.obj.get("env_file")
+    config = None
+
+    # Try loading from env file or environment
+    try:
+        config = cfg_module.load(env_file=env_file)
+    except ValueError:
+        # Config loading failed - we'll build from CLI options
+        pass
+
+    if config is not None:
+        # Have a base config, apply CLI overrides
+        if repo is not None:
+            config = replace(config, repo=repo)
+        if stack_dir is not None:
+            config = replace(config, stack_dir=stack_dir)
+        return config
+
+    # No config from env - must have --repo at minimum
+    if repo is None:
+        _print_error(
+            "No configuration found. Either:\n"
+            "  1. Provide --repo (and optionally --stack-dir)\n"
+            "  2. Use -p PROFILE to load from .env.PROFILE\n"
+            "  3. Set REPO, STACK_DIR, OBS_NICKEL in environment"
+        )
+        sys.exit(1)
+
+    # Auto-detect stack_dir if not provided
+    if stack_dir is None:
+        # Check environment
+        if "STACK_DIR" in os.environ:
+            stack_dir = Path(os.environ["STACK_DIR"])
+        else:
+            # Try common locations
+            candidates = [
+                Path.home() / "lsst_stack",
+                Path("/opt/lsst/software/stack"),
+                Path.cwd().parent.parent,  # If running from within stack
+            ]
+            for candidate in candidates:
+                if (candidate / "loadLSST.zsh").exists() or (
+                    candidate / "loadLSST.bash"
+                ).exists():
+                    stack_dir = candidate
+                    break
+
+        if stack_dir is None:
+            _print_error(
+                "Could not auto-detect LSST stack. Provide --stack-dir or set STACK_DIR"
+            )
+            sys.exit(1)
+
+    # Auto-detect obs_nickel
+    obs_nickel = None
+    if "OBS_NICKEL" in os.environ:
+        obs_nickel = Path(os.environ["OBS_NICKEL"])
+    else:
+        # Check if we're in the nickel_processing_suite directory
+        cwd = Path.cwd()
+        candidates = [
+            cwd / "packages" / "obs_nickel",
+            cwd.parent / "packages" / "obs_nickel",
+            cwd,  # If cwd is obs_nickel itself
+        ]
+        for candidate in candidates:
+            if (candidate / "pipelines").exists():
+                obs_nickel = candidate
+                break
+
+    if obs_nickel is None:
+        _print_error(
+            "Could not auto-detect obs_nickel package. Set OBS_NICKEL in environment"
+        )
+        sys.exit(1)
+
+    # Use a dummy RAW_PARENT_DIR since lightcurve doesn't need it
+    raw_parent_dir = Path(os.environ.get("RAW_PARENT_DIR", "/tmp"))
+
+    return cfg_module.Config(
+        repo=repo,
+        stack_dir=stack_dir,
+        obs_nickel=obs_nickel,
+        raw_parent_dir=raw_parent_dir,
+    )
+
+
 # =============================================================================
 # env - Show configuration
 # =============================================================================
@@ -414,52 +523,191 @@ def dia(
 
 
 @cli.command()
-@click.argument("night")
+@click.argument(
+    "config_or_nights",
+    nargs=-1,
+)
 @click.option("--overwrite", is_flag=True, help="Re-download existing files")
+@click.option(
+    "--missing-only",
+    is_flag=True,
+    help="Only download nights with no FITS files in raw directory",
+)
 @click.pass_context
-def download(ctx: click.Context, night: str, overwrite: bool) -> None:
-    """Download a night from the Lick archive.
+def download(
+    ctx: click.Context,
+    config_or_nights: tuple[str, ...],
+    overwrite: bool,
+    missing_only: bool,
+) -> None:
+    """Download nights from the Lick archive.
 
-    NIGHT is the observing date in YYYYMMDD format.
+    Can be invoked with a pipeline YAML config (downloads all nights from config)
+    or with explicit night dates.
 
     \b
-    Example:
-        nickel download 20240625
+    Examples:
+        # Download all nights from a pipeline config
+        nickel download scripts/config/2023ixf/pipeline_ps1_template.yaml
+
+        # Download only missing nights from config
+        nickel download scripts/config/2023ixf/pipeline_ps1_template.yaml --missing-only
+
+        # Download specific nights (requires -p profile or --env-file)
+        nickel -p 2023ixf download 20240625
+        nickel -p 2023ixf download 20240416 20240429 20240516
     """
-    config = _load_config(ctx)
-
-    _print_info(f"Downloading {night} from Lick archive...")
-
-    # Use existing fetch_archive_night module
-    # Build args for the existing main()
-    import sys
-
+    from obs_nickel_data_tools.core import run as run_module
     from obs_nickel_data_tools.pipeline_tools import fetch_archive_night
 
-    old_argv = sys.argv
-    sys.argv = [
-        "obsn-archive-fetch-night",
-        "--night",
-        night,
-        "--raw-root",
-        str(config.raw_parent_dir),
-    ]
-    if config.lick_archive_dir:
-        sys.argv.extend(["--client-path", str(config.lick_archive_dir)])
-    if overwrite:
-        sys.argv.append("--overwrite")
+    if not config_or_nights:
+        _print_error("Must provide either a config file or night dates")
+        sys.exit(1)
 
-    try:
-        result = fetch_archive_night.main()
-        sys.argv = old_argv
-        if result == 0:
-            _print_success(f"✓ Downloaded {night}")
-        else:
-            sys.exit(result)
-    except SystemExit as e:
-        sys.argv = old_argv
-        if e.code != 0:
-            sys.exit(e.code)
+    # Check if first argument is a YAML config file
+    first_arg = config_or_nights[0]
+    config_file = None
+    nights: list[str] = []
+
+    if first_arg.endswith(".yaml") or first_arg.endswith(".yml"):
+        config_path = Path(first_arg)
+        if not config_path.exists():
+            _print_error(f"Config file not found: {first_arg}")
+            sys.exit(1)
+        config_file = config_path
+
+        # Extract env from YAML
+        yaml_env = run_module.get_env_from_yaml(config_file)
+        if yaml_env:
+            _print_info(f"Using environment from: {config_file}")
+
+        # Load the full YAML to get nights
+        import yaml
+
+        with open(config_file) as f:
+            yaml_config = yaml.safe_load(f)
+
+        # Collect all nights from science and template sections
+        science_nights = yaml_config.get("science", {}).get("nights", [])
+        template_config = yaml_config.get("template", {})
+        template_nights = (
+            template_config.get("nights", [])
+            if template_config.get("type") == "coadd"
+            else []
+        )
+
+        all_nights = set(str(n) for n in science_nights + template_nights)
+        nights = sorted(all_nights)
+
+        if not nights:
+            _print_error("No nights found in config file")
+            sys.exit(1)
+
+        _print_info(f"Found {len(nights)} nights in config")
+
+        # Any additional arguments after config are extra nights to include
+        if len(config_or_nights) > 1:
+            extra = list(config_or_nights[1:])
+            nights = sorted(set(nights) | set(extra))
+            _print_info(f"Including {len(extra)} additional nights from command line")
+
+        # Load config with inline env
+        config = _load_config(ctx, inline_env=yaml_env, prefer_inline=True)
+    else:
+        # All arguments are night dates
+        nights = list(config_or_nights)
+        config = _load_config(ctx)
+
+    # Filter to missing-only if requested
+    if missing_only:
+        missing = []
+        for night in nights:
+            raw_dir = config.raw_parent_dir / night / "raw"
+            if not raw_dir.exists():
+                missing.append(night)
+            else:
+                fits_count = len(
+                    list(raw_dir.glob("*.fits")) + list(raw_dir.glob("*.fits.gz"))
+                )
+                if fits_count == 0:
+                    missing.append(night)
+        skipped = len(nights) - len(missing)
+        if skipped > 0:
+            _print_info(f"Skipping {skipped} nights that already have data")
+        nights = missing
+
+    if not nights:
+        _print_success("All nights already have data, nothing to download")
+        return
+
+    _print_info(f"Downloading {len(nights)} nights...")
+
+    failed = []
+    not_in_archive = []
+    succeeded = []
+
+    for night in nights:
+        _print_info(f"Downloading {night} from Lick archive...")
+
+        # Use existing fetch_archive_night module
+        old_argv = sys.argv
+        sys.argv = [
+            "obsn-archive-fetch-night",
+            "--night",
+            night,
+            "--raw-root",
+            str(config.raw_parent_dir),
+        ]
+        if config.lick_archive_dir:
+            sys.argv.extend(["--client-path", str(config.lick_archive_dir)])
+        if overwrite:
+            sys.argv.append("--overwrite")
+
+        try:
+            result = fetch_archive_night.main()
+            sys.argv = old_argv
+            if result == 0:
+                _print_success(f"✓ Downloaded {night}")
+                succeeded.append(night)
+            elif result == 2:
+                # No data in archive for this night
+                click.secho(f"⚠ {night}: not found in archive", fg="yellow")
+                not_in_archive.append(night)
+            else:
+                _print_error(f"Failed to download {night}")
+                failed.append(night)
+        except SystemExit as e:
+            sys.argv = old_argv
+            if e.code == 0:
+                _print_success(f"✓ Downloaded {night}")
+                succeeded.append(night)
+            elif e.code == 2:
+                click.secho(f"⚠ {night}: not found in archive", fg="yellow")
+                not_in_archive.append(night)
+            else:
+                _print_error(f"Failed to download {night}")
+                failed.append(night)
+
+    # Summary
+    click.echo("")
+    if succeeded:
+        _print_success(f"Downloaded: {len(succeeded)} nights")
+    if not_in_archive:
+        click.secho(
+            f"Not in archive: {len(not_in_archive)} nights ({', '.join(not_in_archive)})",
+            fg="yellow",
+        )
+    if failed:
+        _print_error(f"Failed: {len(failed)} nights ({', '.join(failed)})")
+        sys.exit(1)
+
+    if not_in_archive and not succeeded:
+        click.secho(
+            "\nNone of the requested nights are in the Lick archive. "
+            "The data may not have been uploaded yet, or the dates may be incorrect.",
+            fg="yellow",
+        )
+        sys.exit(2)
 
 
 # =============================================================================
@@ -850,6 +1098,16 @@ def fphot(
     "--collections", required=True, help="Comma-separated DIA collections to query"
 )
 @click.option(
+    "--repo",
+    type=click.Path(exists=True, path_type=Path),
+    help="Butler repository path",
+)
+@click.option(
+    "--stack-dir",
+    type=click.Path(exists=True, path_type=Path),
+    help="LSST stack directory (default: auto-detect or $STACK_DIR)",
+)
+@click.option(
     "--radius", type=float, default=1.0, help="Match radius in arcsec (default: 1.0)"
 )
 @click.option(
@@ -900,6 +1158,8 @@ def lightcurve(
     ra: float,
     dec: float,
     collections: str,
+    repo: Path | None,
+    stack_dir: Path | None,
     radius: float,
     min_snr: float,
     band: str | None,
@@ -919,13 +1179,22 @@ def lightcurve(
     and generates a lightcurve CSV and optional plot.
 
     \b
-    Example (DIA sources):
-        nickel lightcurve --ra 210.91 --dec 54.32 \\
+    Example (standalone - no .env needed):
+        nickel lightcurve \\
+            --repo /path/to/butler_repo \\
+            --ra 210.91 --dec 54.32 \\
+            --collections "Nickel/runs/*/diff/*/run" \\
+            --name "SN 2023ixf"
+
+    \b
+    Example (with profile):
+        nickel -p 2023ixf lightcurve --ra 210.91 --dec 54.32 \\
             --collections "Nickel/runs/20230519/diff/*/run" --name "SN 2023ixf"
 
+    \b
     Example (forced photometry):
-        nickel lightcurve --ra 210.91 --dec 54.32 \\
-            --collections "Nickel/runs/20230519/forcedPhotRaDec/*/run" \\
+        nickel lightcurve --repo /path/to/repo --ra 210.91 --dec 54.32 \\
+            --collections "Nickel/runs/*/forcedPhotRaDec/*/run" \\
             --dataset-type forced_phot_diffim_radec --name "SN 2023ixf"
     """
     # Validate dependent options
@@ -936,7 +1205,8 @@ def lightcurve(
     if y_axis == "absolute_mag" and distance_modulus is None:
         raise click.UsageError("--distance-modulus required with --y-axis=absolute_mag")
 
-    config = _load_config(ctx)
+    # Build config from CLI options, falling back to env/profile
+    config = _load_lightcurve_config(ctx, repo=repo, stack_dir=stack_dir)
 
     _print_info(f"Extracting lightcurve at RA={ra:.4f}, Dec={dec:.4f}...")
 

@@ -384,32 +384,61 @@ nickel lightcurve --ra RA --dec DEC --collections COLLECTIONS [OPTIONS]
 
 | Option | Description |
 |--------|-------------|
+| `--repo PATH` | Butler repository path (overrides profile/env) |
 | `--radius FLOAT` | Match radius in arcsec (default: 1.0) |
 | `--min-snr FLOAT` | Minimum S/N filter (default: 3.0) |
+| `--max-mag-err FLOAT` | Maximum magnitude error for plot filtering |
 | `-b, --band TEXT` | Restrict to single band |
 | `--name TEXT` | Target name for plot title |
 | `-o, --output PATH` | Output CSV file |
 | `--plot/--no-plot` | Generate plot (default: yes) |
 | `--dataset-type TEXT` | Dataset type to query (default: dia_source_unfiltered) |
+| `--y-axis CHOICE` | Y-axis display: `apparent_mag`, `absolute_mag`, `flux_nJy`, `flux_adu` (default: apparent_mag) |
+| `--x-axis CHOICE` | X-axis display: `mjd`, `days_since_explosion` (default: mjd) |
+| `--explosion-mjd FLOAT` | Explosion MJD (required with `--x-axis=days_since_explosion`) |
+| `--distance-modulus FLOAT` | Distance modulus (required with `--y-axis=absolute_mag`) |
 
 **Examples:**
 
 ```bash
-# From DIA sources
-nickel lightcurve --ra 210.91 --dec 54.32 \
+# Using --repo to specify Butler repository directly
+nickel -p 2023ixf lightcurve \
+    --repo /path/to/butler_repo \
+    --ra 210.91 --dec 54.32 \
+    --collections "Nickel/runs/*/diff/*/run" \
+    --dataset-type dia_source_unfiltered \
+    --name "SN 2023ixf"
+
+# From DIA sources (using profile for repo)
+nickel -p 2023ixf lightcurve --ra 210.91 --dec 54.32 \
     --collections "Nickel/runs/*/diff/*/run" \
     --name "SN 2023ixf"
 
-# From forced photometry (recommended)
-nickel lightcurve --ra 210.91 --dec 54.32 \
+# From forced photometry (recommended for faint/variable sources)
+nickel -p 2023ixf lightcurve --ra 210.91 --dec 54.32 \
     --collections "Nickel/runs/*/forcedPhotRaDec/*/run" \
     --dataset-type forced_phot_diffim_radec \
     --name "SN 2023ixf"
 
-# Single band with custom output
-nickel lightcurve --ra 210.91 --dec 54.32 \
+# Days since explosion with error filtering
+nickel -p 2023ixf lightcurve --ra 210.91 --dec 54.32 \
     --collections "Nickel/runs/*/forcedPhotRaDec/*/run" \
-    --band r --output my_lightcurve.csv
+    --dataset-type forced_phot_diffim_radec \
+    --name "SN 2023ixf" \
+    --x-axis days_since_explosion --explosion-mjd 60082.75 \
+    --min-snr 2 --max-mag-err 1.0
+
+# Absolute magnitude (requires distance modulus)
+nickel -p 2023ixf lightcurve --ra 210.91 --dec 54.32 \
+    --collections "Nickel/runs/*/forcedPhotRaDec/*/run" \
+    --dataset-type forced_phot_diffim_radec \
+    --y-axis absolute_mag --distance-modulus 29.05
+
+# Flux mode (linear scale, no axis inversion)
+nickel -p 2023ixf lightcurve --ra 210.91 --dec 54.32 \
+    --collections "Nickel/runs/*/forcedPhotRaDec/*/run" \
+    --dataset-type forced_phot_diffim_radec \
+    --y-axis flux_nJy
 ```
 
 ---

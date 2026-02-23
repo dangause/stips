@@ -13,14 +13,16 @@
 #   5. Run forced photometry at SN coordinates
 #   6. Extract combined lightcurve
 #
-# Note: Nickel templates are built from late 2022 observations when the SN had faded.
+# Note: Nickel templates are built from late 2021/2022 observations when the SN had faded.
 # This provides better PSF matching than PS1 templates.
+#
+# SN 2020wnt is a Type Ic-BL supernova in an anonymous host galaxy.
 
 # =============================================================================
 # Environment Configuration (self-contained)
 # =============================================================================
 env:
-  REPO: "/Users/dangause/Developer/lick/lsst/data/nickel/2020wnt_nickel_template_repo"
+  REPO: "/Users/dangause/Developer/lick/lsst/data/nickel/2020wnt_nickel_template_022226_repo"
   STACK_DIR: "/Users/dangause/Developer/lick/lsst/lsst_stack"
   OBS_NICKEL: "/Users/dangause/Developer/lick/lsst/lsst_stack/stack/nickel_processing_suite/packages/obs_nickel"
   RAW_PARENT_DIR: "/Users/dangause/Developer/lick/data"
@@ -31,13 +33,13 @@ env:
   LICK_ARCHIVE_INSTR: "NICKEL_DIR"
 
 # Target information
-# SN 2020wnt in NGC 5792
+# SN 2020wnt
 # Coordinates from TNS/Transient Name Server
 object: "2020wnt"
 ra: 56.66
 dec: 43.23
 
-# Bands to process (only r/i have data in the science nights)
+# Bands to process
 bands: ["v", "r", "i"]
 
 # Template configuration - use Nickel coadds from faded SN epochs
@@ -61,6 +63,7 @@ template:
     - 20220212
 
 # Science nights - SN observations during bright phase
+# Template nights excluded from science to avoid self-subtraction
 science:
   nights:
     - 20201207
@@ -92,13 +95,14 @@ science:
     - 20211030
     - 20211111
 
-
 # Pipeline configuration files (paths relative to obs_nickel/configs/)
 configs:
   science:
-    calibrate_image: calibrateImage/tuned_configs/2023ixf_relaxed.py
+    calibrate_image: calibrateImage/tuned_configs/dense_strict.py
     calibrate_image_fallbacks:
-      - calibrateImage/tuned_configs/2023ixf_relaxed_psfex_sparse.py
+      - calibrateImage/tuned_configs/dense_relaxed.py
+      - calibrateImage/tuned_configs/sparse_strict.py
+      - calibrateImage/tuned_configs/sparse_relaxed.py
     colorterms: apply_colorterms.py
   coadd:
     make_direct_warp: coadds/makeDirectWarp_relaxed.py
@@ -108,14 +112,22 @@ configs:
 
 # Processing options
 options:
-  jobs: 8
+  jobs: 6
   skip_calibs: false
   skip_science: false
+  rebuild_templates: true
   skip_dia: false
   forced_phot: true
   forced_phot_image_type: diffim
-  lightcurve: true
-  lightcurve_dataset_type: forced_phot_diffim_radec
-  lightcurve_min_snr: -999
   continue_on_error: true
   use_fallbacks: true
+
+# Lightcurve configuration
+lightcurve:
+  enabled: true
+  dataset_type: forced_phot_diffim_radec
+  min_snr: 1
+  max_mag_err: 1.0
+  y_axis: apparent_mag
+  x_axis: days_since_explosion
+  explosion_mjd: 59180.0        # 2020-11-27 (~discovery date)

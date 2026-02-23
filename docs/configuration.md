@@ -162,9 +162,21 @@ options:
   skip_science: false      # Skip science processing
   skip_dia: false          # Skip difference imaging
   forced_phot: true        # Run forced photometry at RA/Dec
-  lightcurve: true         # Extract combined light curve
   continue_on_error: true  # Continue if one night fails
   use_fallbacks: true      # Try fallback configs on failure
+
+# =============================================================================
+# Lightcurve Configuration
+# =============================================================================
+lightcurve:
+  enabled: true                       # Extract combined light curve
+  dataset_type: forced_phot_diffim_radec  # Butler dataset type to query
+  min_snr: 1                          # Minimum S/N for detections
+  max_mag_err: 1.0                    # Maximum magnitude error for plot filtering
+  y_axis: apparent_mag                # apparent_mag, absolute_mag, flux_nJy, or flux_adu
+  x_axis: days_since_explosion        # mjd or days_since_explosion
+  explosion_mjd: 60082.75             # Required if x_axis = days_since_explosion
+  # distance_modulus: 29.05           # Required if y_axis = absolute_mag
 ```
 
 ### Section Reference
@@ -300,9 +312,25 @@ Available tuned configs:
 | `skip_science` | bool | false | Skip science processing |
 | `skip_dia` | bool | false | Skip difference imaging |
 | `forced_phot` | bool | true | Run forced photometry |
-| `lightcurve` | bool | true | Extract light curve |
 | `continue_on_error` | bool | true | Continue if night fails |
 | `use_fallbacks` | bool | true | Try fallback calibrateImage configs on partial failure. Each fallback writes to its own RUN collection (`/run_fb1`, etc.) and uses `--skip-existing-in` to only reprocess failed quanta. |
+
+#### `lightcurve` Section
+
+Controls light curve extraction and display. This is a top-level section (not inside `options:`).
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `enabled` | bool | true | Extract combined light curve |
+| `dataset_type` | string | `dia_source_unfiltered` | Butler dataset type to query |
+| `min_snr` | float | 3.0 | Minimum S/N for detections |
+| `max_mag_err` | float | None | Maximum magnitude error for plot filtering (CSV keeps all data) |
+| `y_axis` | string | `apparent_mag` | Y-axis display: `apparent_mag`, `absolute_mag`, `flux_nJy`, `flux_adu` |
+| `x_axis` | string | `mjd` | X-axis display: `mjd` or `days_since_explosion` |
+| `explosion_mjd` | float | None | Explosion epoch in MJD (required when `x_axis = days_since_explosion`) |
+| `distance_modulus` | float | None | Distance modulus (required when `y_axis = absolute_mag`) |
+
+**Note:** The `max_mag_err` filter only affects the plot — the CSV output always contains all data points for science use.
 
 ---
 

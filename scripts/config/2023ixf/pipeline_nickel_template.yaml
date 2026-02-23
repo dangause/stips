@@ -23,7 +23,7 @@
 # Environment Configuration (self-contained)
 # =============================================================================
 env:
-  REPO: "/Users/dangause/Developer/lick/lsst/data/nickel/2023ixf_nickel_template_021826_repo"
+  REPO: "/Users/dangause/Developer/lick/lsst/data/nickel/2023ixf_nickel_template_022226b_repo"
   STACK_DIR: "/Users/dangause/Developer/lick/lsst/lsst_stack"
   OBS_NICKEL: "/Users/dangause/Developer/lick/lsst/lsst_stack/stack/nickel_processing_suite/packages/obs_nickel"
   RAW_PARENT_DIR: "/Users/dangause/Developer/lick/data"
@@ -43,30 +43,36 @@ dec: 54.316389
 # Bands to process
 bands: ["b", "v", "r", "i"]
 
-# Template configuration - use Nickel coadds from late SN epochs
+# Template configuration - use Nickel coadds from late 2023 epochs
+# NOTE: Ideal templates would use late 2024 data (SN fully faded), but that data
+# is still proprietary. Using late 2023 instead - SN is fainter but not gone.
+# Moved 3 latest science nights to template to ensure sufficient coverage.
 template:
   type: coadd
-  # Late-time nights for template building. SN 2023ixf plateau ended ~day 82 (Aug 9).
-  # WARNING: Mid-plateau nights (20230728/20230801) still have significant SN flux (V~12-13).
-  # Templates will contain SN flux - lightcurve shows RELATIVE brightness, not absolute.
-  #   - 20230728 (day 70): V~12-13, mid-plateau (included for coverage)
-  #   - 20230801 (day 74): V~12-13, mid-plateau (included for coverage)
-  #   - 20230817 (day 90): V~14-15, just past plateau (ISR bug - may fail)
-  #   - 20230905 (day 109): V~16-17, radioactive tail
-  #   - 20230910 (day 114): V~16-17, radioactive tail
+  # Late 2023 nights for template building. SN 2023ixf plateau ended ~day 82.
+  # These are post-plateau but SN still has some flux - templates will have SN contamination.
+  # When 2024 data becomes available, switch to 20240808/20240812/20240816 for cleaner templates.
   nights:
-    - 20230728
-    - 20230801
-    - 20230817
-    - 20230905
-    - 20230910
+    - 20230728   # Day 70: late plateau, V~14-15 (SN still bright, but needed for coverage)
+    - 20230801   # Day 74: late plateau
+    - 20230817   # Day 90: end of plateau / start of decline
+    - 20230905   # Day 109: V~16-17, radioactive tail
+    - 20230910   # Day 114: V~16-17, radioactive tail
+    - 20231211   # Day 206: V~18+, late nebular phase (WARNING: all bad coords, excluded automatically)
+  # FUTURE: Use these when 2024 data becomes public (SN fully faded, V>20)
+  # nights:
+  #   - 20240808   # Day 447: SN fully faded
+  #   - 20240812   # Day 451: SN fully faded
+  #   - 20240816   # Day 455: SN fully faded
 
-# Science nights - SN observations from discovery through plateau
-# Includes early bright epochs (20230519-20230625) plus plateau nights (20230629-20230801)
-# These span days 0-74, covering rise and plateau phases
+# Science nights - SN observations from discovery through 2024
+# 16 public science nights (2023) + 8 proprietary nights (2024, commented out)
+# Template nights excluded from science to avoid self-subtraction
+# Moved 20230728, 20230801, 20230817 to template to ensure coadd coverage
 science:
   nights:
-    - 20230519
+    # Early bright epochs (days 0-37, May-June 2023)
+    - 20230519   # Discovery epoch (day 0)
     - 20230521
     - 20230523
     - 20230527
@@ -77,11 +83,22 @@ science:
     - 20230616
     - 20230618
     - 20230625
+    # Plateau phase (days 41-56, late June - July 2023)
     - 20230629
     - 20230703
     - 20230706
     - 20230709
     - 20230714
+    # 2024 observations - PROPRIETARY, not yet in archive
+    # Uncomment when data becomes public or available locally
+    # - 20240416   # Day 333
+    # - 20240429   # Day 346
+    # - 20240516   # Day 363
+    # - 20240521   # Day 368
+    # - 20240526   # Day 373
+    # - 20240616   # Day 394
+    # - 20240715   # Day 423
+    # - 20240719   # Day 427
 
 # Pipeline configuration files (paths relative to obs_nickel/configs/)
 configs:
@@ -101,11 +118,11 @@ configs:
 # Processing options
 options:
   jobs: 6
-  skip_calibs: true    # Calibs already built for all nights
-  skip_science: true  # Need to process newly added science nights (20230629-20230801)
-  rebuild_templates: false  # Rebuild with only 3 late-time nights
-  skip_dia: true
-  forced_phot: false
+  skip_calibs: false
+  skip_science: false
+  rebuild_templates: true
+  skip_dia: false
+  forced_phot: true
   forced_phot_image_type: diffim
   continue_on_error: true
   use_fallbacks: true
@@ -114,7 +131,7 @@ options:
 lightcurve:
   enabled: true
   dataset_type: forced_phot_diffim_radec
-  min_snr: 2
+  min_snr: 1
   max_mag_err: 1.0
   y_axis: apparent_mag
   x_axis: days_since_explosion

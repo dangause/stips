@@ -29,8 +29,12 @@ config.makeKernel.iterateSingleKernel = True
 # Keep kernel size fixed (do not scale by FWHM) so the small number of stars does not drive
 # an oversized basis that becomes ill-conditioned.
 config.makeKernel.scaleByFwhm = False
-# Prefer the delta-function (DF) kernel basis for robustness with very few kernel stars.
-config.makeKernel.kernelBasisSet = "delta-function"
+
+# SELECT the delta-function (DF) kernel basis for robustness with very few kernel stars.
+# CRITICAL: kernel.name selects which kernel type to use, NOT kernelBasisSet
+# AL (Alard-Lupton) = 27 parameters with 3 Gaussians - requires many stars
+# DF (Delta-Function) = ~21 parameters (kernel size) - works with sparse fields
+config.makeKernel.kernel.name = "DF"
 # Use a single huge cell (whole image) and accept at least one star
 # Ensure a single cell across the warped template so we don't require per-cell stars
 config.makeKernel.sizeCellX = 2048

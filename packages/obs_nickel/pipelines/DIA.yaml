@@ -2,11 +2,16 @@
 #
 # This pipeline performs image subtraction for transient/variable source detection
 # using deep coadd templates. It includes:
-#   1. Visit image reprocessing with calibrated metadata
-#   2. Template warping to match science image geometry
-#   3. PSF-matched image subtraction (Alard-Lupton)
-#   4. Difference source detection and measurement
-#   5. Source consolidation and catalog building
+#   1. Template warping to match science image geometry
+#   2. PSF-matched image subtraction (Alard-Lupton)
+#   3. Difference source detection and measurement
+#   4. Source consolidation and catalog building
+#
+# NOTE: The Nickel DRP's calibrateImage task bakes photometric calibration
+# into preliminary_visit_image pixels (BUNIT=nJy, PhotoCalib=1.0 identity).
+# Difference images inherit this nJy scale, so DIA source / forced phot
+# fluxes are already in nJy and must NOT be multiplied by
+# initial_photoCalib_detector again (that would double-calibrate).
 #
 # Usage:
 #   pipetask run -b $REPO \
@@ -28,36 +33,13 @@ parameters:
 
 tasks:
   # ==========================
-  # Stage 1: Visit Reprocessing
-  # ==========================
-  # Reprocess visit images with proper visit-level metadata
-  # This ensures consistent WCS and photometric calibration
-  reprocessVisitImage:
-    class: lsst.drp.tasks.reprocess_visit_image.ReprocessVisitImageTask
-    config:
-      # Input connections
-      connections.exposures: post_isr_image
-      connections.background_1: preliminary_visit_image_background
-      connections.visit_summary: preliminary_visit_summary
-
-      # Output connections
-      connections.exposure: visit_image
-
-      # Don't remove initial photo calib - we want to keep it
-      remove_initial_photo_calib: false
-
-      # ID generator for source IDs
-      id_generator.release_id: parameters.release_id
-
-  # ==========================
-  # Stage 2: Template Warping
+  # Stage 1: Template Warping
   # ==========================
   # Warp deep coadd template to match science visit geometry
   rewarpTemplate:
     class: lsst.ip.diffim.getTemplate.GetTemplateTask
     config:
-      # Get bounding box and WCS from preliminary_visit_image (from processCcd)
-      # Using preliminary_visit_image instead of visit_image to avoid needing reprocessVisitImage
+      # Get bounding box and WCS from preliminary_visit_image
       connections.bbox: preliminary_visit_image.bbox
       connections.wcs: preliminary_visit_image.wcs
 
@@ -72,13 +54,13 @@ tasks:
       warp.warpingKernelName: "lanczos4"
 
   # ==========================
-  # Stage 3: Image Subtraction
+  # Stage 2: Image Subtraction
   # ==========================
   # Subtract template from science using Alard-Lupton PSF matching
   subtractImages:
     class: lsst.ip.diffim.subtractImages.AlardLuptonSubtractTask
     config:
-      # Input connections - use preliminary_visit_image instead of visit_image
+      # Input connections
       connections.science: preliminary_visit_image
       connections.sources: single_visit_star_footprints  # From calibrateImage (in processCcd)
       connections.template: template_detector
@@ -91,13 +73,13 @@ tasks:
       # Task tuning lives in configs/dia/subtractImages.py
 
   # ==========================
-  # Stage 4: DIA Source Detection
+  # Stage 3: DIA Source Detection
   # ==========================
   # Detect and measure sources in difference images
   detectAndMeasureDiaSource:
     class: lsst.ip.diffim.detectAndMeasure.DetectAndMeasureTask
     config:
-      # Input connections - use preliminary_visit_image instead of visit_image
+      # Input connections
       connections.science: preliminary_visit_image
       connections.matchedTemplate: template_matched
       connections.difference: difference_image_predetection
@@ -124,8 +106,8 @@ subsets:
       - subtractImages
       - detectAndMeasureDiaSource
     description: >
-      Complete DIA pipeline using preliminary_visit_image from processCcd:
-      template warping, image subtraction, and source detection.
+      Complete DIA pipeline: template warping, image subtraction, and source detection.
+      Uses preliminary_visit_image (PhotoCalib=1.0); calibration applied in lightcurve extraction.
 
   # Subtraction only (for testing)
   dia-subtract-only:

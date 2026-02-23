@@ -565,37 +565,56 @@ def main():
             except KeyError:
                 visit = -1
 
-            # Convert instrumental flux to calibrated units using photoCalib.
-            # DIA source catalogs contain instrumental flux (ADU). We need to:
-            # 1. Fetch the science exposure's photoCalib (converts ADU → nJy)
-            # 2. Convert nJy to AB magnitude using ZP=31.4
-            # For difference images, negative flux is meaningful (template brighter
-            # than science), so we report flux_nJy for all detections but mag only
-            # when flux is positive.
+            # Convert flux to calibrated nJy units.
+            #
+            # IMPORTANT: The Nickel DRP's calibrateImage task bakes the
+            # photometric calibration into preliminary_visit_image pixels
+            # (BUNIT=nJy, PhotoCalib=1.0 identity). DIA difference images
+            # inherit this nJy scale, so forced photometry / DIA source
+            # fluxes measured on difference images are ALREADY in nJy.
+            #
+            # We must NOT multiply by initial_photoCalib_detector again —
+            # that factor was already applied to the pixel values by
+            # calibrateImage. Doing so would double-calibrate.
+            #
+            # For non-DIA dataset types (measured on uncalibrated images),
+            # the initial_photoCalib_detector conversion is still needed.
             flux_nJy = np.nan
             flux_nJy_err = np.nan
             mag = np.nan
             mag_err = np.nan
 
-            photocalib, calib_factor = get_photocalib_for_visit(
-                butler, visit, band, photocalib_cache
-            )
+            _DIFFIM_DATASET_TYPES = {
+                "forced_phot_diffim_radec",
+                "dia_source_unfiltered",
+                "dia_source",
+                "forced_diff",
+                "forced_diff_radec",
+            }
+            is_diffim = args.dataset_type in _DIFFIM_DATASET_TYPES
 
-            if photocalib is not None and calib_factor is not None:
-                # Convert instrumental flux to nanojansky
-                flux_nJy = flux * calib_factor
-                flux_nJy_err = flux_err * calib_factor
+            if is_diffim:
+                # Flux is already in nJy — use directly
+                flux_nJy = flux
+                flux_nJy_err = flux_err
+            else:
+                # Flux is in instrumental ADU — apply photoCalib
+                photocalib, calib_factor = get_photocalib_for_visit(
+                    butler, visit, band, photocalib_cache
+                )
+                if photocalib is not None and calib_factor is not None:
+                    flux_nJy = flux * calib_factor
+                    flux_nJy_err = flux_err * calib_factor
+                else:
+                    if args.verbose:
+                        print(f"    Source {j}: no photoCalib for visit {visit}")
 
+            if np.isfinite(flux_nJy):
                 # Convert nJy to AB magnitude (ZP=31.4 for nJy)
                 # Only valid for positive flux; negative flux has no magnitude
                 if flux_nJy > 0:
                     mag = -2.5 * np.log10(flux_nJy) + 31.4
                     mag_err = 2.5 / np.log(10) * flux_nJy_err / flux_nJy
-            else:
-                # No photoCalib available - report instrumental flux only
-                if args.verbose:
-                    print(f"    Source {j}: no photoCalib for visit {visit}")
-                # Keep flux_nJy and mag as NaN
 
             # Get source coordinates - use the already-parsed cat_coords to get degrees
             # This avoids the radians vs degrees confusion

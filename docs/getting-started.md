@@ -98,7 +98,14 @@ nights:
 options:
   jobs: 8
   forced_phot: true
-  lightcurve: true
+
+# Lightcurve extraction
+lightcurve:
+  enabled: true
+  dataset_type: forced_phot_diffim_radec
+  min_snr: 1
+  y_axis: apparent_mag
+  x_axis: mjd
 ```
 
 Then run:
@@ -150,7 +157,8 @@ nickel fphot 20240101 --ra 123.456 --dec 45.678
 nickel lightcurve --ra 123.456 --dec 45.678 \
     --collections "Nickel/runs/*/forcedPhotRaDec/*/run" \
     --dataset-type forced_phot_diffim_radec \
-    --name "My Target"
+    --name "My Target" \
+    --y-axis apparent_mag --x-axis mjd
 ```
 
 ## Output Files

@@ -354,6 +354,7 @@ class RunConfig:
     template_type: str = "ps1"  # "ps1" or "coadd"
     template_degrade_seeing: float | None = None
     template_size: float = 0.3  # PS1 cutout size in degrees (default: 0.3)
+    template_unity_photocalib: bool = False  # Force PhotoCalib=1.0 for PS1 templates
     template_nights: list[str] = field(default_factory=list)
 
     # Pipeline config files
@@ -400,6 +401,7 @@ class RunConfig:
         template_type = template.get("type", "ps1")
         template_degrade_seeing = template.get("degrade_seeing")
         template_size = float(template.get("size", 0.3))
+        template_unity_photocalib = template.get("unity_photocalib", False)
         # Convert template nights to strings (YAML parses 20230519 as int)
         template_nights = [str(n) for n in template.get("nights", [])]
 
@@ -466,6 +468,7 @@ class RunConfig:
             template_type=template_type,
             template_degrade_seeing=template_degrade_seeing,
             template_size=template_size,
+            template_unity_photocalib=template_unity_photocalib,
             template_nights=template_nights,
             science_configs=science_configs,
             dia_configs=dia_configs,
@@ -584,6 +587,7 @@ def _run_ps1_templates(
                 config=config,
                 size=run_cfg.template_size,
                 degrade_seeing=run_cfg.template_degrade_seeing,
+                unity_photocalib=run_cfg.template_unity_photocalib,
                 overwrite=run_cfg.rebuild_templates,
                 log_file=ps1_log,
             )

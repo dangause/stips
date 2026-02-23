@@ -20,7 +20,7 @@
 # Environment Configuration (self-contained)
 # =============================================================================
 env:
-  REPO: "/Users/dangause/Developer/lick/lsst/data/nickel/2023ixf_ps1_021826_repo"
+  REPO: "/Users/dangause/Developer/lick/lsst/data/nickel/2023ixf_ps1_022226_repo"
   STACK_DIR: "/Users/dangause/Developer/lick/lsst/lsst_stack"
   OBS_NICKEL: "/Users/dangause/Developer/lick/lsst/lsst_stack/stack/nickel_processing_suite/packages/obs_nickel"
   RAW_PARENT_DIR: "/Users/dangause/Developer/lick/data"
@@ -47,13 +47,13 @@ bands: ["r", "i"]
 template:
   type: ps1
   size: 0.4            # Cutout size in degrees (24 arcmin; extra margin for pointing drift)
-  # degrade_seeing removed - over-degrading to 4" made template PSF (6.4") larger than science (2"),
-  # which breaks convolveTemplate mode. Let AL kernel handle PSF matching instead.
 
-# Science nights - SN observations from discovery through late 2023
+# Science nights - SN observations from discovery through 2024
+# 22 public nights (2023) + 11 proprietary nights (2024, commented out)
 science:
   nights:
-    - 20230519
+    # 2023 observations (22 nights) - public, available in archive
+    - 20230519   # Discovery epoch
     - 20230521
     - 20230523
     - 20230527
@@ -74,6 +74,20 @@ science:
     - 20230817
     - 20230905
     - 20230910
+    - 20231211   # Late 2023
+    # 2024 observations (11 nights) - PROPRIETARY, not yet in archive
+    # Uncomment when data becomes public or available locally
+    # - 20240416
+    # - 20240429
+    # - 20240516
+    # - 20240521
+    # - 20240526
+    # - 20240616
+    # - 20240715
+    # - 20240719
+    # - 20240808
+    # - 20240812
+    # - 20240816
 
 # Pipeline configuration files (paths relative to obs_nickel/configs/)
 configs:
@@ -85,17 +99,17 @@ configs:
       - calibrateImage/tuned_configs/sparse_relaxed.py
     colorterms: apply_colorterms.py
   dia:
-    subtract_images: dia/subtractImages_ps1.py  # Optimized for PS1→Nickel PSF matching
+    subtract_images: dia/subtractImages_ps1.py  # Optimized for PS1->Nickel PSF matching
     detect_and_measure: dia/detectAndMeasure.py
 
 # Processing options
 options:
   jobs: 6
-  skip_calibs: true    # Already done, skip to save time
-  skip_science: true   # Already done, skip to save time
-  rebuild_templates: true    # Rebuild templates without PSF degradation
-  skip_dia: false  # Re-run DIA with improved PSF matching
-  forced_phot: false
+  skip_calibs: false
+  skip_science: false
+  rebuild_templates: false   # PS1 templates don't need rebuild
+  skip_dia: false
+  forced_phot: true
   forced_phot_image_type: diffim
   continue_on_error: true
   use_fallbacks: true
@@ -104,7 +118,7 @@ options:
 lightcurve:
   enabled: true
   dataset_type: forced_phot_diffim_radec
-  min_snr: 2
+  min_snr: 1
   max_mag_err: 1.0
   y_axis: apparent_mag
   x_axis: days_since_explosion

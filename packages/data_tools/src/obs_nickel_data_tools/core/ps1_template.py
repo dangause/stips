@@ -37,6 +37,7 @@ def run(
     size: float = 0.2,
     output_dir: Path | None = None,
     degrade_seeing: float | None = None,
+    unity_photocalib: bool = False,
     overwrite: bool = False,
     log_file: Path | None = None,
 ) -> PS1TemplateResult:
@@ -55,6 +56,7 @@ def run(
         size: Cutout size in degrees (default: 0.2)
         output_dir: Directory for downloaded FITS files
         degrade_seeing: Convolve to this FWHM in arcsec (e.g., 2.0)
+        unity_photocalib: Force PhotoCalib=1.0 (for flux calibration consistency)
         overwrite: Replace existing template if present
         log_file: Optional path to write LSST pipeline logs
 
@@ -101,6 +103,9 @@ def run(
 
     if degrade_seeing is not None:
         args.extend(["--degrade-seeing", str(degrade_seeing)])
+
+    if unity_photocalib:
+        args.append("--unity-photocalib")
 
     if overwrite:
         args.append("--overwrite")

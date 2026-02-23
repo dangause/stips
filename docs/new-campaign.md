@@ -150,9 +150,18 @@ options:
   skip_science: false      # Set true if science already processed
   skip_dia: false          # Set true if DIA already done
   forced_phot: true        # Run forced photometry at coordinates
-  lightcurve: true         # Extract combined light curve
   continue_on_error: true  # Continue if one night fails
   use_fallbacks: true      # Try fallback configs on astrometry failure
+
+# Lightcurve extraction and display
+lightcurve:
+  enabled: true
+  dataset_type: forced_phot_diffim_radec
+  min_snr: 1
+  max_mag_err: 1.0              # Filter noisy points from plot (CSV keeps all)
+  y_axis: apparent_mag          # apparent_mag, absolute_mag, flux_nJy, flux_adu
+  x_axis: days_since_explosion  # mjd or days_since_explosion
+  explosion_mjd: 60000.0        # Required for days_since_explosion
 ```
 
 ### Pipeline Configs (Optional)
@@ -351,9 +360,17 @@ configs:
 options:
   jobs: 8
   forced_phot: true
-  lightcurve: true
   continue_on_error: true
   use_fallbacks: true
+
+lightcurve:
+  enabled: true
+  dataset_type: forced_phot_diffim_radec
+  min_snr: 1
+  max_mag_err: 1.0
+  y_axis: apparent_mag
+  x_axis: days_since_explosion
+  explosion_mjd: 60300.0       # Update to your target's explosion date
 ```
 
 ## Troubleshooting
