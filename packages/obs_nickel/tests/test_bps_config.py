@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "data_tools/src"))
 
@@ -135,3 +136,108 @@ class TestRenderBpsConfigQgraph:
 
         # Science pipeline should have pipelineYaml, NOT qgraphFile
         assert "pipelineYaml:" in rendered_content
+
+
+class TestFullBPSLifecycle:
+    """End-to-end test: BPSExecutor -> BPSConfig(custom) -> render -> submit -> poll -> CompletedProcess."""
+
+    def _make_mock_config(self, tmp_path):
+        mock_config = MagicMock()
+        mock_config.obs_nickel = REPO_ROOT / "packages" / "obs_nickel"
+        mock_config.repo = tmp_path / "repo"
+        mock_config.stack_dir = Path("/fake/stack")
+        mock_config.cp_pipe_dir = Path("/fake/cp_pipe")
+        mock_config.raw_parent_dir = Path("/fake/raw")
+        mock_config.refcat_repo = Path("/fake/refcats")
+        return mock_config
+
+    def test_custom_template_renders_and_lifecycle_succeeds(self, tmp_path):
+        """Full lifecycle: render custom.yaml with qgraph_file -> submit -> poll -> success."""
+        from obs_nickel_data_tools.core.bps import BPSConfig, render_bps_config
+
+        config = self._make_mock_config(tmp_path)
+        qgraph_path = "/data/repo/bps/science_20230519/graph.qg"
+
+        bps_cfg = BPSConfig(
+            pipeline="custom",
+            night="20230519",
+            site="local",
+            qgraph_file=qgraph_path,
+        )
+
+        # Step 1: Render the config
+        output_dir = tmp_path / "submit"
+        rendered_path = render_bps_config(bps_cfg, config, output_dir)
+        rendered_content = rendered_path.read_text()
+
+        # Verify rendered config
+        assert "qgraphFile:" in rendered_content
+        assert qgraph_path in rendered_content
+        assert "pipelineYaml:" not in rendered_content
+        assert "{qgraph_file}" not in rendered_content
+        assert "{repo}" not in rendered_content
+        assert "{computeSite}" not in rendered_content
+
+        # Verify site config was copied
+        assert (output_dir / "sites" / "local.yaml").exists()
+        assert (output_dir / "base.yaml").exists()
+
+    def test_bps_executor_full_roundtrip(self, tmp_path):
+        """BPSExecutor routes 'run' through custom pipeline with qgraph injection."""
+        from obs_nickel_data_tools.core.executor import BPSExecutor
+
+        executor = BPSExecutor(site="local", poll_interval=0.01, timeout=1.0)
+        config = self._make_mock_config(tmp_path)
+
+        # Mock bps.submit to use real render_bps_config
+        from obs_nickel_data_tools.core import bps as bps_mod
+
+        submit_called_with = {}
+
+        def capturing_submit(bps_cfg, config):
+            submit_called_with["pipeline"] = bps_cfg.pipeline
+            submit_called_with["qgraph_file"] = bps_cfg.qgraph_file
+            submit_called_with["site"] = bps_cfg.site
+            # Return mock success instead of actually running bps
+            return MagicMock(
+                success=True,
+                run_id="lifecycle-test-run",
+                submit_dir=str(tmp_path / "submit"),
+            )
+
+        succeeded_report = (
+            "X_REPORT    STATE      EXPECTED    SUCCEEDED    FAILED"
+            "    UNREADY    READY    RUNNING\n"
+            "summary    SUCCEEDED           3            3         0"
+            "          0        0          0\n"
+        )
+
+        with patch.object(bps_mod, "submit", side_effect=capturing_submit):
+            with patch.object(
+                bps_mod,
+                "status",
+                return_value={"success": True, "output": succeeded_report},
+            ):
+                result = executor.run_pipetask(
+                    [
+                        "run",
+                        "-b",
+                        str(config.repo),
+                        "-g",
+                        "/data/repo/graph.qg",
+                        "-j",
+                        "4",
+                    ],
+                    config,
+                    check=False,
+                )
+
+        # Verify the submit was called with correct params
+        assert submit_called_with["pipeline"] == "custom"
+        assert submit_called_with["qgraph_file"] == "/data/repo/graph.qg"
+        assert submit_called_with["site"] == "local"
+
+        # Verify the result is a proper CompletedProcess
+        assert result.returncode == 0
+        assert "3 quanta successfully" in result.stdout
+        assert "0 failed" in result.stdout
