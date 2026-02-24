@@ -31,7 +31,7 @@ if TYPE_CHECKING:
 VALID_PIPELINES = ("calibs", "science", "dia", "fphot", "custom")
 
 # Valid site names
-VALID_SITES = ("slurm", "htcondor", "local")
+VALID_SITES = ("slurm", "htcondor", "local", "docker-slurm")
 
 
 @dataclass

@@ -241,3 +241,31 @@ class TestFullBPSLifecycle:
         assert result.returncode == 0
         assert "3 quanta successfully" in result.stdout
         assert "0 failed" in result.stdout
+
+
+class TestDockerSlurmSiteConfig:
+    def test_docker_slurm_yaml_exists(self):
+        """docker-slurm.yaml site config must exist."""
+        bps_dir = REPO_ROOT / "bps" / "sites"
+        assert (bps_dir / "docker-slurm.yaml").exists()
+
+    def test_docker_slurm_is_valid_site(self):
+        """'docker-slurm' must be accepted as a valid BPS site."""
+        from obs_nickel_data_tools.core.bps import BPSConfig
+
+        cfg = BPSConfig(pipeline="science", night="20230519", site="docker-slurm")
+        assert cfg.site == "docker-slurm"
+
+    def test_docker_slurm_uses_parsl_slurm(self):
+        """docker-slurm.yaml must use Parsl with SlurmProvider."""
+        bps_dir = REPO_ROOT / "bps" / "sites"
+        content = (bps_dir / "docker-slurm.yaml").read_text()
+        assert "lsst.ctrl.bps.parsl.ParslService" in content
+        assert "lsst.ctrl.bps.parsl.sites.Slurm" in content
+
+    def test_docker_slurm_conservative_resources(self):
+        """docker-slurm.yaml should have conservative memory (4GB, not 128GB)."""
+        bps_dir = REPO_ROOT / "bps" / "sites"
+        content = (bps_dir / "docker-slurm.yaml").read_text()
+        # Should reference 4 cores — conservative for Docker
+        assert "cores_per_node: 4" in content

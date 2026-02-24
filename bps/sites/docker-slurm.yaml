@@ -1,0 +1,82 @@
+# Nickel Processing Suite - Docker Slurm Site Configuration
+#
+# BPS configuration for the Docker Compose Slurm test environment.
+# Conservative resources for containerized single-node cluster.
+#
+# Usage:
+#   nickel run config.yaml --site docker-slurm
+#   nickel bps submit calibs 20230519 --site docker-slurm
+
+includeConfigs:
+  - ../base.yaml
+
+# =============================================================================
+# WMS Backend Selection
+# =============================================================================
+wmsServiceClass: lsst.ctrl.bps.parsl.ParslService
+computeSite: docker-slurm
+
+# =============================================================================
+# Parsl Configuration
+# =============================================================================
+parsl:
+  log_level: DEBUG
+  retries: 2
+
+# =============================================================================
+# Docker Slurm Site Definition
+# =============================================================================
+site:
+  docker-slurm:
+    class: lsst.ctrl.bps.parsl.sites.Slurm
+
+    # Conservative: single node, 4 cores (Docker container limits)
+    nodes: 1
+    cores_per_node: 4
+    mem_per_node: 4              # GB
+
+    # Short walltime for testing
+    walltime: "00:30:00"         # 30 minutes
+
+    # Slurm scheduler options for Docker cluster
+    scheduler_options: |
+      #SBATCH --partition=normal
+      #SBATCH --export=ALL
+
+    # Conservative parallelism for Docker
+    max_blocks: 2
+    min_blocks: 0
+    init_blocks: 1
+    parallelism: 1.0
+
+    # Worker initialization
+    worker_init: |
+      # Source LSST stack (pre-installed in container)
+      source /opt/lsst/software/stack/loadLSST.bash
+      setup lsst_distrib
+
+      # Setup obs_nickel (mounted into container)
+      if [[ -d "/shared/obs_nickel" ]]; then
+          setup -r /shared/obs_nickel obs_nickel
+      fi
+
+      # Export environment
+      export REPO=/shared/repo
+      export OBS_NICKEL=/shared/obs_nickel
+
+# =============================================================================
+# Reduced Resources for Docker Testing
+# =============================================================================
+requestMemory: 2048              # 2 GB
+requestCpus: 1
+numberOfRetries: 1               # Fail fast
+memoryMultiplier: 1.5
+
+pipetask:
+  calibrateImage:
+    requestMemory: 4096
+    requestCpus: 1
+
+  subtractImages:
+    requestMemory: 4096
+    requestCpus: 1
