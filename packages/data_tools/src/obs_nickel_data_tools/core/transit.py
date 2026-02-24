@@ -252,3 +252,44 @@ def _phase_fold_transit(
             "flux_err": norm_err[mask],
         }
     return result
+
+
+def _make_transit_model(
+    period: float, duration_hours: float, depth: float, n_points: int = 1000
+) -> dict[str, np.ndarray]:
+    """Generate a trapezoidal transit model for plot overlay.
+
+    Parameters
+    ----------
+    period : float
+        Orbital period in days.
+    duration_hours : float
+        Total transit duration in hours.
+    depth : float
+        Fractional transit depth.
+    n_points : int
+        Number of model phase points.
+
+    Returns
+    -------
+    dict with 'phase' and 'model_flux' arrays.
+    """
+    phase = np.linspace(-0.5, 0.5, n_points)
+    model_flux = np.ones_like(phase)
+
+    # Transit half-duration in phase units
+    half_dur_phase = (duration_hours / 24.0) / period / 2.0
+    # Ingress/egress = 10% of total duration
+    ingress_phase = half_dur_phase * 0.1
+
+    for i, p in enumerate(phase):
+        abs_p = abs(p)
+        if abs_p < half_dur_phase - ingress_phase:
+            # Full transit depth
+            model_flux[i] = 1.0 - depth
+        elif abs_p < half_dur_phase:
+            # Ingress/egress ramp
+            frac = (half_dur_phase - abs_p) / ingress_phase
+            model_flux[i] = 1.0 - depth * frac
+
+    return {"phase": phase, "model_flux": model_flux}
