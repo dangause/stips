@@ -419,3 +419,52 @@ class TestDispatchConcurrent:
 
         _dispatch_concurrent(tracking_fn, [1, 2, 3], max_workers=1)
         assert len(order) == 3
+
+
+class TestIntegration:
+    def test_executor_protocol_compliance(self):
+        """Both executors satisfy the PipetaskExecutor protocol."""
+        from obs_nickel_data_tools.core.executor import (
+            BPSExecutor,
+            LocalExecutor,
+            PipetaskExecutor,
+        )
+
+        assert isinstance(LocalExecutor(), PipetaskExecutor)
+        assert isinstance(BPSExecutor(site="local"), PipetaskExecutor)
+
+    def test_local_executor_is_default(self):
+        """When no executor param, stage modules default to None."""
+        import inspect
+
+        from obs_nickel_data_tools.core import calibs, dia, fphot, science
+
+        for mod in [calibs, science, dia, fphot]:
+            sig = inspect.signature(mod.run)
+            param = sig.parameters["executor"]
+            assert (
+                param.default is None
+            ), f"{mod.__name__}.run executor default should be None"
+
+    def test_create_executor_roundtrip(self):
+        """RunConfig -> executor -> can be called."""
+        from obs_nickel_data_tools.core.executor import BPSExecutor, LocalExecutor
+        from obs_nickel_data_tools.core.run import RunConfig, _create_executor
+
+        # Local
+        local_cfg = RunConfig(object_name="test", ra=100, dec=10, bands=["r"])
+        local_exec = _create_executor(local_cfg)
+        assert isinstance(local_exec, LocalExecutor)
+
+        # BPS
+        bps_cfg = RunConfig(
+            object_name="test",
+            ra=100,
+            dec=10,
+            bands=["r"],
+            execution="bps",
+            site="slurm",
+        )
+        bps_exec = _create_executor(bps_cfg)
+        assert isinstance(bps_exec, BPSExecutor)
+        assert bps_exec.site == "slurm"
