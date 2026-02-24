@@ -414,3 +414,84 @@ class TestOutputGeneration:
         out_dir = tmp_path / "out3"
         transit_mod._save_results(result, out_dir)
         assert (out_dir / "phase_folded_transit.png").exists()
+
+
+# ---------------------------------------------------------------------------
+# TestRun
+# ---------------------------------------------------------------------------
+
+
+class TestRun:
+    def test_run_end_to_end(self, tmp_path, sample_transit_csv):
+        import json as json_mod
+
+        csv_path, true_period, true_depth, _ = sample_transit_csv
+        out_dir = tmp_path / "transit_analysis"
+        result = transit_mod.run(
+            csv_path,
+            period_min=1.0,
+            period_max=10.0,
+            duration_min=1.0,
+            duration_max=5.0,
+            n_samples=10_000,
+            output_dir=out_dir,
+        )
+
+        # Period within 5%
+        assert abs(result.best_period - true_period) / true_period < 0.05
+
+        # Positive depth
+        assert result.depth > 0
+
+        # All 3 output files present
+        assert (out_dir / "transit_results.json").exists()
+        assert (out_dir / "bls_periodogram.png").exists()
+        assert (out_dir / "phase_folded_transit.png").exists()
+
+        # Phase data for both bands
+        assert "r" in result.phase_folded
+        assert "i" in result.phase_folded
+
+        # Transit model populated
+        assert "phase" in result.transit_model
+        assert "model_flux" in result.transit_model
+
+        # JSON readable
+        data = json_mod.loads((out_dir / "transit_results.json").read_text())
+        assert "best_period" in data
+        assert "depth" in data
+        assert "transit_snr" in data
+
+    def test_run_with_few_points(self, tmp_path):
+
+        rows = [
+            {
+                "mjd": 60000.0 + i * 3.0,
+                "band": "r",
+                "visit": 1000 + i,
+                "ra": 0.0,
+                "dec": 0.0,
+                "flux": 10000.0 + 50.0 * i,
+                "flux_err": 20.0,
+                "mag": 18.0,
+                "mag_err": 0.1,
+                "snr": 500.0,
+                "separation_arcsec": 0.0,
+            }
+            for i in range(5)
+        ]
+        csv_path = tmp_path / "tiny.csv"
+        pd.DataFrame(rows).to_csv(csv_path, index=False)
+
+        out_dir = tmp_path / "tiny_out"
+        result = transit_mod.run(
+            csv_path,
+            period_min=1.0,
+            period_max=10.0,
+            duration_min=1.0,
+            duration_max=5.0,
+            n_samples=1_000,
+            output_dir=out_dir,
+        )
+        assert isinstance(result, transit_mod.TransitResult)
+        assert (out_dir / "transit_results.json").exists()
