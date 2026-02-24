@@ -1,75 +1,65 @@
 # ruff: noqa: F821
 """
-Configuration overrides for subtractImages task (Alard-Lupton PSF matching).
+Configuration overrides for subtractImages task (Nickel-to-Nickel DIA).
 
 Optimized for Nickel telescope characteristics:
 - Typical seeing: 1.5-2.5 arcsec
 - Pixel scale: 0.37 arcsec/pixel
 - Field of view: ~6 arcmin (2048x2048 pixels)
-- Sparse fields: typically 3-12 usable kernel stars
+- Typically 20-50 kernel candidate stars per visit
 
-IMPORTANT: LSST's config hierarchy for makeKernel is:
-  config.makeKernel.*              -> MakeKernelConfig (NOT used at runtime for PsfMatch fields)
-  config.makeKernel.kernel["AL"].* -> PsfMatchConfigAL (USED at runtime when kernel.name="AL")
-  config.makeKernel.kernel["DF"].* -> PsfMatchConfigDF (USED at runtime when kernel.name="DF")
+Uses the AL (Alard-Lupton) kernel with default 3-Gaussian basis set.
+The alard-lupton basis has ~27 basis functions, which is well-constrained
+with multiple kernel stars averaging out individual bad candidates.
 
-PsfMatchTask.__init__ sets self.kConfig = self.config.kernel.active, so ALL PsfMatchConfig-
-inherited fields (spatialKernelOrder, sizeCellX, kernelBasisSet, etc.) MUST be set on the
-kernel["AL"] or kernel["DF"] sub-config to take effect.  Settings on config.makeKernel.* for
-these fields are silently ignored at runtime.
+nStarPerCell = 50: Critical for robust kernel fitting. With nStarPerCell=1
+(previous setting), a single bad candidate produces a negative kernel sum that
+inverts the entire subtraction. With 20-50 candidates available per visit,
+using many stars produces stable kernel sums and clean difference images.
+
+IMPORTANT: LSST's config hierarchy for makeKernel:
+  config.makeKernel.*              -> MakeKernelConfig fields
+  config.makeKernel.kernel.name    -> ChoiceField on MakeKernelConfig (selects active kernel)
+  config.makeKernel.kernel["AL"].* -> PsfMatchConfigAL (active when kernel.name="AL")
+  config.makeKernel.kernel["DF"].* -> PsfMatchConfigDF (active when kernel.name="DF")
+
+PsfMatchTask.__init__ reads self.config.kernel.active, so PsfMatchConfig-inherited fields
+(spatialKernelOrder, sizeCellX, kernelSize, etc.) MUST be set on kernel["AL"] or kernel["DF"].
 """
 
 # ==========================================
-# Kernel Selection: AL with delta-function basis
+# Kernel: AL with alard-lupton basis (default)
 # ==========================================
-# Use the Alard-Lupton framework but with delta-function basis functions.
-# This is the most stable approach for Nickel's sparse fields:
-# - AL framework handles kernel fitting, clipping, background
-# - Delta-function basis is numerically stable with few stars
-# - Non-spatial (constant) kernel avoids underconstrained spatial fits
-#
-# kernelBasisSet controls which basis functions makeKernelBasisList() creates:
-#   "alard-lupton"   -> sum-of-Gaussians (27 params with 3 Gaussians)
-#   "delta-function" -> one delta-function per kernel pixel (~21 params for 21x21)
-#
-# kernel.name selects the config CLASS (AL or DF), which provides defaults and
-# additional parameters. We keep kernel.name="AL" (default) and override the
-# basis set to delta-function within it.
+# kernel.name defaults to "AL" — no override needed.
+# kernelBasisSet defaults to "alard-lupton" (3 Gaussians) — no override needed.
 
-# -- Active kernel config (THESE SETTINGS TAKE EFFECT) --
-config.makeKernel.kernel["AL"].kernelBasisSet = "delta-function"
+# Nickel-specific overrides for sparse fields:
 config.makeKernel.kernel["AL"].kernelSize = 21
 config.makeKernel.kernel["AL"].scaleByFwhm = False
-config.makeKernel.kernel["AL"].spatialKernelOrder = 0
-config.makeKernel.kernel["AL"].spatialBgOrder = 0
-config.makeKernel.kernel["AL"].sizeCellX = 2048
+config.makeKernel.kernel["AL"].spatialKernelOrder = 0  # Non-spatial: too few stars
+config.makeKernel.kernel["AL"].spatialBgOrder = 0  # Non-spatial background
+config.makeKernel.kernel["AL"].sizeCellX = 2048  # Single cell = entire image
 config.makeKernel.kernel["AL"].sizeCellY = 2048
-config.makeKernel.kernel["AL"].nStarPerCell = 1
-config.makeKernel.kernel["AL"].iterateSingleKernel = True
-config.makeKernel.kernel["AL"].fitForBackground = True
-config.makeKernel.kernel["AL"].maxConditionNumber = 1e7
-config.makeKernel.kernel["AL"].conditionNumberType = "SVD"
-
-# Also configure DF sub-config consistently (in case kernel.name is switched)
-config.makeKernel.kernel["DF"].kernelSize = 21
-config.makeKernel.kernel["DF"].scaleByFwhm = False
-config.makeKernel.kernel["DF"].spatialKernelOrder = 0
-config.makeKernel.kernel["DF"].spatialBgOrder = 0
-config.makeKernel.kernel["DF"].sizeCellX = 2048
-config.makeKernel.kernel["DF"].sizeCellY = 2048
-config.makeKernel.kernel["DF"].nStarPerCell = 1
-config.makeKernel.kernel["DF"].iterateSingleKernel = True
-config.makeKernel.kernel["DF"].fitForBackground = True
+config.makeKernel.kernel["AL"].nStarPerCell = 50  # Use many stars for robust kernel
 
 # ==========================================
-# Kernel Source Detection (on MakeKernelConfig - these DO take effect)
+# Kernel Source Detection
 # ==========================================
-# selectDetection is specific to MakeKernelConfig, not PsfMatchConfig,
-# so setting it on config.makeKernel.* is correct.
 config.allowKernelSourceDetection = True
 config.makeKernel.selectDetection.thresholdValue = 1.5
 config.makeKernel.selectDetection.nSigmaForKernel = 1.5
 config.makeKernel.selectDetection.minPixels = 3
+
+# ==========================================
+# Condition Number / Kernel Sum Quality
+# ==========================================
+# Reject kernel candidates with poor condition numbers
+config.makeKernel.checkConditionNumber = True
+config.makeKernel.maxConditionNumber = 1e5
+
+# Reject kernel candidates with anomalous flux scaling
+config.makeKernel.kernelSumClipping = True
+config.makeKernel.maxKsumSigma = 3.0
 
 # ==========================================
 # Background Configuration

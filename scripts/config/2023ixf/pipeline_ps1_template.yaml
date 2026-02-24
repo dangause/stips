@@ -33,9 +33,10 @@ env:
 # Target information
 # SN 2023ixf in M101 (Pinwheel Galaxy)
 # Coordinates from TNS/Transient Name Server
+# RA = 14:03:38.580, Dec = +54:18:42.10
 object: "2023ixf"
-ra: 210.910833
-dec: 54.316389
+ra: 210.910750
+dec: 54.311694
 
 # Bands to process (PS1 templates only support r/i)
 bands: ["r", "i"]

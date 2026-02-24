@@ -32,9 +32,10 @@ env:
 # Target information
 # SN 2020wnt
 # Coordinates from TNS/Transient Name Server
+# RA = 03:46:37.950, Dec = +43:13:45.30
 object: "2020wnt"
-ra: 56.66
-dec: 43.23
+ra: 56.658125
+dec: 43.229250
 
 # Bands to process (PS1 templates only support r/i)
 bands: ["r", "i"]

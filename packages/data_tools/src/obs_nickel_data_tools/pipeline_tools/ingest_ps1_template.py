@@ -816,6 +816,39 @@ def convert_ps1_to_lsst_exposure(
         bad_mask = ~np.isfinite(ps1_data)
         ps1_data = np.nan_to_num(ps1_data, nan=0.0, posinf=0.0, neginf=0.0)
 
+        # Compute the nJy-per-ADU calibration factor from the PS1 zeropoint.
+        if force_unity_photoCalib:
+            calibration_mean = 1.0
+            log.info("PhotoCalib forced to unity (no flux conversion)")
+        else:
+            calibration_mean = zeropoint_to_calibration_mean(ps1_zp)
+            log.info(
+                f"PhotoCalib from PS1 zeropoint: {calibration_mean:.3e} nJy/ADU "
+                f"(zp={ps1_zp:.3f})"
+            )
+
+        # Pre-calibrate pixel values to nanojansky.
+        #
+        # The LSST DIA subtractImages task does NOT normalize flux scales
+        # before kernel fitting — the PSF-matching kernel absorbs any
+        # template-to-science flux ratio.  When the template is stored in
+        # raw ADU (PhotoCalib ≈ 363 nJy/ADU) but science PVIs are already
+        # in nJy (PhotoCalib = 1.0), the kernel must absorb a ~363× scale
+        # factor on top of the PSF shape change.  This causes numerical
+        # instability (high condition numbers, unreliable kernel sums) and
+        # systematically biased difference-image photometry.
+        #
+        # Fix: multiply pixel values by calibration_mean here so the
+        # template is stored in nJy, matching science PVIs.  PhotoCalib is
+        # then set to 1.0 (identity).  The DIA kernel only needs to handle
+        # PSF matching (kernel_sum ≈ 1.0).
+        if calibration_mean != 1.0:
+            log.info(
+                f"Pre-calibrating template pixels to nJy "
+                f"(multiplying by {calibration_mean:.3e})"
+            )
+            ps1_data = ps1_data * calibration_mean
+
         # Create LSST MaskedImage
         masked_image = afwImage.MaskedImageF(ps1_data.shape[1], ps1_data.shape[0])
         masked_image.image.array[:, :] = ps1_data.astype(np.float32)
@@ -823,7 +856,7 @@ def convert_ps1_to_lsst_exposure(
         # Set mask for zero/bad pixels
         masked_image.mask.array[bad_mask] = masked_image.mask.getPlaneBitMask("BAD")
 
-        # Set variance (improved estimate from image statistics)
+        # Set variance (improved estimate from image statistics, in nJy² units)
         good_pixels = ps1_data[~bad_mask]
         if len(good_pixels) > 100:
             # Use median absolute deviation for robust variance estimate
@@ -843,17 +876,8 @@ def convert_ps1_to_lsst_exposure(
         exposure = afwImage.ExposureF(masked_image)
         exposure.setWcs(lsst_wcs)
 
-        # Calibrate using PS1 zeropoint (convert DN to nJy). Allow a unity override for debugging.
-        if force_unity_photoCalib:
-            calibration_mean = 1.0
-            log.info("PhotoCalib forced to unity")
-        else:
-            calibration_mean = zeropoint_to_calibration_mean(ps1_zp)
-            log.info(
-                f"PhotoCalib from PS1 zeropoint: {calibration_mean:.3e} nJy/ADU "
-                f"(zp={ps1_zp:.3f})"
-            )
-        exposure.setPhotoCalib(PhotoCalib(calibration_mean))
+        # Set PhotoCalib to identity — pixels are already in nJy.
+        exposure.setPhotoCalib(PhotoCalib(1.0))
 
         # Set filter
         filter_label = afwImage.FilterLabel(band=nickel_band)
@@ -898,7 +922,10 @@ def convert_ps1_to_lsst_exposure(
 
         log.info(f"Created LSST Exposure: {exposure.getBBox()}")
         log.info(f"  WCS: {lsst_wcs.getPixelOrigin()}")
-        log.info(f"  PhotoCalib mean: {calibration_mean:.2e}")
+        log.info("  Pixels: nJy (pre-calibrated, PhotoCalib=1.0)")
+        log.info(
+            f"  Original ZP={ps1_zp:.3f} → calibration={calibration_mean:.3e} nJy/ADU"
+        )
         log.info(f"  Masked pixels: {np.sum(bad_mask)} / {bad_mask.size}")
 
         return exposure
