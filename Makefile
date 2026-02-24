@@ -34,21 +34,19 @@ define setup_stack
 $(load_envs); \
 if [ -f "$${STACK_DIR}/loadLSST.zsh" ]; then \
 	source "$${STACK_DIR}/loadLSST.zsh"; \
-	setup lsst_distrib; \
-	if [[ -d "$${OBS_NICKEL}/ups" ]]; then eups declare -r "$${OBS_NICKEL}" obs_nickel -t current 2>/dev/null || true; fi; \
-	setup obs_nickel; \
-	if [[ -d "$${TESTDATA_NICKEL_DIR}/ups" ]]; then eups declare -r "$${TESTDATA_NICKEL_DIR}" testdata_nickel -t current 2>/dev/null || true; fi; \
-	setup testdata_nickel; \
 elif [ -f "$${STACK_DIR}/loadLSST.bash" ]; then \
 	source "$${STACK_DIR}/loadLSST.bash"; \
-	setup lsst_distrib; \
-	if [[ -d "$${OBS_NICKEL}/ups" ]]; then eups declare -r "$${OBS_NICKEL}" obs_nickel -t current 2>/dev/null || true; fi; \
-	setup obs_nickel; \
-	if [[ -d "$${TESTDATA_NICKEL_DIR}/ups" ]]; then eups declare -r "$${TESTDATA_NICKEL_DIR}" testdata_nickel -t current 2>/dev/null || true; fi; \
-	setup testdata_nickel; \
 else \
-	echo "Warning: LSST stack not found at $${STACK_DIR}"; \
-fi;
+	echo "Error: LSST stack not found at $${STACK_DIR}" >&2; exit 1; \
+fi; \
+setup lsst_distrib; \
+_setup_local() { [[ -d "$$1/ups" ]] && { eups declare -r "$$1" "$$2" -t current 2>/dev/null || true; setup "$$2" 2>/dev/null || setup -r "$$1" "$$2"; }; }; \
+OBS_NICKEL_LOCAL="$${REPO_ROOT}/packages/obs_nickel"; \
+OBS_NICKEL_DATA_LOCAL="$${REPO_ROOT}/packages/obs_nickel_data"; \
+_setup_local "$$OBS_NICKEL_LOCAL" obs_nickel; \
+_setup_local "$$OBS_NICKEL_DATA_LOCAL" obs_nickel_data; \
+_setup_local "$${TESTDATA_NICKEL_DIR}" testdata_nickel; \
+export PYTHONPATH="$${OBS_NICKEL_LOCAL}/python:$${OBS_NICKEL_DATA_LOCAL}/python:$${PYTHONPATH:-}";
 endef
 
 .PHONY: setup-dev
@@ -112,18 +110,42 @@ ifndef NIGHT
 endif
 	$(SHELL) -lc '$(setup_stack) ./scripts/pipeline/45_forced_photometry.sh --night $(NIGHT) $(if $(BAND),--band $(BAND),) $(FORCED_PHOT_ARGS)'
 
+.PHONY: forced-phot-radec
+forced-phot-radec: ## Forced photometry at RA/Dec. NIGHT=YYYYMMDD RA=deg DEC=deg [IMAGE_TYPE=both|visit|diffim]
+ifndef NIGHT
+	$(error NIGHT is required, e.g. NIGHT=20201207)
+endif
+ifndef RA
+	$(error RA is required in degrees, e.g. RA=185.7285)
+endif
+ifndef DEC
+	$(error DEC is required in degrees, e.g. DEC=15.8225)
+endif
+	$(SHELL) -lc '$(setup_stack) ./scripts/pipeline/46_forced_photometry_radec.sh --night $(NIGHT) --ra $(RA) --dec $(DEC) $(if $(IMAGE_TYPE),--image-type $(IMAGE_TYPE),) $(if $(BAND),--band $(BAND),) $(FORCED_PHOT_RADEC_ARGS)'
+
+.PHONY: forced-phot-radec-file
+forced-phot-radec-file: ## Forced photometry from coordinate file. NIGHT=YYYYMMDD COORDS_FILE=targets.csv
+ifndef NIGHT
+	$(error NIGHT is required, e.g. NIGHT=20201207)
+endif
+ifndef COORDS_FILE
+	$(error COORDS_FILE is required, e.g. COORDS_FILE=targets.csv)
+endif
+	$(SHELL) -lc '$(setup_stack) ./scripts/pipeline/46_forced_photometry_radec.sh --night $(NIGHT) --coords-file $(COORDS_FILE) $(if $(IMAGE_TYPE),--image-type $(IMAGE_TYPE),) $(if $(BAND),--band $(BAND),) $(FORCED_PHOT_RADEC_ARGS)'
+
 .PHONY: refcat-cones
 refcat-cones: ## Generate cones.csv + htm7_list.txt via nickel-refcats (pass ARGS="--ras ... --decs ...")
 	$(SHELL) -lc 'cd $(PWD) && $(setup_stack) \
 		PYTHONPATH=$${PYTHONPATH}:$${PWD}/packages/refcats/src python -u -m nickel_refcats cones $(ARGS)'
 
 .PHONY: declare-eups
-declare-eups: ## Declare obs_nickel and testdata_nickel in the current stack (uses STACK_DIR and env files)
+declare-eups: ## Declare obs_nickel, obs_nickel_data, and testdata_nickel in the current stack (uses STACK_DIR and env files)
 	$(SHELL) -lc '$(envsource) \
 	  if [ -f "$${STACK_DIR}/loadLSST.zsh" ]; then source "$${STACK_DIR}/loadLSST.zsh"; \
 	  elif [ -f "$${STACK_DIR}/loadLSST.bash" ]; then source "$${STACK_DIR}/loadLSST.bash"; \
 	  else echo "STACK_DIR loader not found (loadLSST)"; exit 1; fi; \
 	  cd "$(PWD)/packages/obs_nickel" && eups declare obs_nickel git -r . -t current || true; \
+	  cd "$(PWD)/packages/obs_nickel_data" && eups declare obs_nickel_data git -r . -t current || true; \
 	  cd "$(PWD)/packages/testdata" && eups declare testdata_nickel git -r . -t current 2>/dev/null || true'
 
 .PHONY: batch
@@ -174,6 +196,55 @@ env-info: ## Show which env file(s) will be loaded and key paths
 		printf "REPO_ROOT=%s\nSTACK_DIR=%s\nREPO=%s\nOBS_NICKEL=%s\nCP_PIPE_DIR=%s\nLSST_CONDA_ENV_NAME=%s\n" \
 			"$${REPO_ROOT:-<unset>}" "$${STACK_DIR:-<unset>}" "$${REPO:-<unset>}" "$${OBS_NICKEL:-<unset>}" "$${CP_PIPE_DIR:-<unset>}" "$${LSST_CONDA_ENV_NAME:-<unset>}"; \
 	'
+
+# =============================================================================
+# Docker targets
+# =============================================================================
+
+DOCKER_REGISTRY ?= ghcr.io
+DOCKER_IMAGE ?= $(DOCKER_REGISTRY)/lick-observatory/nps
+DOCKER_TAG ?= latest
+LSST_TAG ?= v30_0_3
+
+.PHONY: docker-build
+docker-build: ## Build Docker image locally
+	docker build -t $(DOCKER_IMAGE):$(DOCKER_TAG) \
+		--build-arg LSST_TAG=$(LSST_TAG) \
+		-f docker/Dockerfile .
+
+.PHONY: docker-build-dev
+docker-build-dev: ## Build Docker image for development (with source mounts)
+	docker build -t nps:dev \
+		--build-arg LSST_TAG=$(LSST_TAG) \
+		-f docker/Dockerfile .
+
+.PHONY: docker-push
+docker-push: ## Push Docker image to registry
+	docker push $(DOCKER_IMAGE):$(DOCKER_TAG)
+
+.PHONY: docker-run
+docker-run: ## Run NPS container interactively
+ifndef REPO
+	$(error REPO is required for docker-run)
+endif
+	docker run --rm -it \
+		-v $(REPO):/data/repo \
+		-v $(RAW_PARENT_DIR):/data/raw \
+		-v $(REFCAT_REPO):/data/refcats:ro \
+		$(DOCKER_IMAGE):$(DOCKER_TAG) \
+		$(CMD)
+
+.PHONY: docker-compose-up
+docker-compose-up: ## Start services via docker-compose
+	docker-compose -f docker/docker-compose.yml up -d
+
+.PHONY: docker-compose-down
+docker-compose-down: ## Stop services via docker-compose
+	docker-compose -f docker/docker-compose.yml down
+
+.PHONY: singularity-build
+singularity-build: docker-build ## Build Singularity image from Docker
+	singularity build nps.sif docker-daemon://$(DOCKER_IMAGE):$(DOCKER_TAG)
 
 .PHONY: help
 help: ## Show this help message

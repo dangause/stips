@@ -3,8 +3,9 @@
 This directory now contains only the obs package assets (camera model, configs,
 pipelines, EUPS metadata, and Python code under `python/lsst/obs/nickel`).
 Everything else (pipeline runners, archive helpers, data manifests) lives
-alongside it in the monorepo. Use the repo root as `OBS_NICKEL` for scripts;
-the legacy top-level symlinks remain for compatibility.
+alongside it in the monorepo. Scripts resolve `OBS_NICKEL` via
+`scripts/utilities/repo_paths.sh`, so it can point at the repo root or
+`packages/obs_nickel`.
 
 Install editable from the repo root:
 
@@ -12,5 +13,4 @@ Install editable from the repo root:
 python -m pip install -e packages/obs_nickel
 ```
 
-EUPS users can still `eups declare -r /path/to/repo obs_nickel -t current`
-because `ups/` is symlinked at the top level.
+EUPS users can still `eups declare -r /path/to/nickel_processing_suite/packages/obs_nickel obs_nickel -t current`.

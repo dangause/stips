@@ -160,6 +160,70 @@ def ps1_file_covers_target(ps1_fits_path, ra, dec):
         return False
 
 
+def ps1_file_meets_requested_size(ps1_fits_path, requested_size_deg, min_fraction=0.85):
+    """
+    Check that a PS1 FITS cutout is close to the requested angular size.
+
+    This guards against edge-trimmed cutouts that still contain the target
+    but leave too little template margin for DIA overlap.
+    """
+    try:
+        with fits.open(ps1_fits_path) as hdul:
+            image_hdu = next(
+                (
+                    hdu
+                    for hdu in hdul
+                    if getattr(hdu, "data", None) is not None
+                    and isinstance(hdu.data, np.ndarray)
+                    and hdu.data.ndim >= 2
+                ),
+                None,
+            )
+            if image_hdu is None:
+                log.warning(
+                    f"  No image HDU found when checking size for {ps1_fits_path}"
+                )
+                return False
+
+            wcs = WCS(image_hdu.header)
+            ny, nx = image_hdu.data.shape
+            if nx < 2 or ny < 2:
+                log.warning(f"  Invalid PS1 image shape {nx}x{ny} for size check")
+                return False
+
+            # Measure on-sky extent through the image midlines.
+            x_mid = (nx - 1) / 2.0
+            y_mid = (ny - 1) / 2.0
+
+            ra_w, dec_w = wcs.all_pix2world([0, nx - 1], [y_mid, y_mid], 0)
+            ra_h, dec_h = wcs.all_pix2world([x_mid, x_mid], [0, ny - 1], 0)
+            w0 = SkyCoord(ra=ra_w[0] * u.deg, dec=dec_w[0] * u.deg)
+            w1 = SkyCoord(ra=ra_w[1] * u.deg, dec=dec_w[1] * u.deg)
+            h0 = SkyCoord(ra=ra_h[0] * u.deg, dec=dec_h[0] * u.deg)
+            h1 = SkyCoord(ra=ra_h[1] * u.deg, dec=dec_h[1] * u.deg)
+            width_deg = w0.separation(w1).deg
+            height_deg = h0.separation(h1).deg
+
+            min_required = requested_size_deg * min_fraction
+            ok = width_deg >= min_required and height_deg >= min_required
+            log.info(
+                "  PS1 cutout angular size: %.3f x %.3f deg (requested %.3f deg, min %.3f deg)",
+                width_deg,
+                height_deg,
+                requested_size_deg,
+                min_required,
+            )
+            if not ok:
+                log.warning(
+                    "  PS1 cutout is smaller than requested; will try alternate download method"
+                )
+            return ok
+
+    except Exception as e:
+        log.warning(f"  Size check failed for {ps1_fits_path}: {e}")
+        return False
+
+
 def find_first_image_hdu(hdul):
     """
     Return the first HDU with 2D image data.
@@ -255,18 +319,26 @@ def download_ps1_cutout(
     output_path.mkdir(parents=True, exist_ok=True)
     output_file = output_path / f"ps1_{band}_ra{ra:.4f}_dec{dec:.4f}.fits"
 
-    # Check if file already exists
+    # Check if file already exists and is large enough
     if output_file.exists() and output_file.stat().st_size > 10000:
-        if ps1_file_covers_target(output_file, ra, dec):
+        redownload = False
+        if not ps1_file_covers_target(output_file, ra, dec):
+            log.warning(
+                f"Existing PS1 file {output_file} does not cover target; re-downloading"
+            )
+            redownload = True
+        elif not ps1_file_meets_requested_size(output_file, size_deg):
+            log.info("Cached PS1 file is smaller than requested; re-downloading")
+            redownload = True
+
+        if redownload:
+            try:
+                output_file.unlink()
+            except Exception as e:
+                log.warning(f"  Could not remove stale PS1 file: {e}")
+        else:
             log.info(f"Using existing file: {output_file}")
             return str(output_file)
-        log.warning(
-            f"Existing PS1 file {output_file} does not cover target; re-downloading"
-        )
-        try:
-            output_file.unlink()
-        except Exception as e:
-            log.warning(f"  Could not remove stale PS1 file: {e}")
 
     # Method 1: Try PS1 via MAST (cloud-first stack + cutout)
     if force_service is None or force_service == "mast":
@@ -407,7 +479,11 @@ def download_ps1_cutout(
                             source = None
 
                     if source and ps1_file_covers_target(output_file, ra, dec):
-                        return str(output_file)
+                        if ps1_file_meets_requested_size(output_file, size_deg):
+                            return str(output_file)
+                        log.warning(
+                            "  MAST cutout is undersized for DIA margin; trying alternate service"
+                        )
 
                     log.warning(
                         "  MAST stack cutout does not cover target; trying alternate service"
@@ -428,7 +504,11 @@ def download_ps1_cutout(
     # Method 2: Try PS1 image service (fitscut) - more reliable for cutouts
     if force_service is None or force_service == "fitscut":
         result = download_ps1_via_fitscut(ra, dec, band, size_deg, output_file)
-        if result and ps1_file_covers_target(result, ra, dec):
+        if (
+            result
+            and ps1_file_covers_target(result, ra, dec)
+            and ps1_file_meets_requested_size(result, size_deg)
+        ):
             return result
         if result:
             try:
@@ -439,7 +519,11 @@ def download_ps1_cutout(
     # Method 3: Try ps1filenames service for full stack URLs
     if force_service is None or force_service == "ps1filenames":
         result = download_ps1_via_ps1filenames(ra, dec, band, size_deg, output_file)
-        if result and ps1_file_covers_target(result, ra, dec):
+        if (
+            result
+            and ps1_file_covers_target(result, ra, dec)
+            and ps1_file_meets_requested_size(result, size_deg)
+        ):
             return result
         if result:
             try:
@@ -732,6 +816,39 @@ def convert_ps1_to_lsst_exposure(
         bad_mask = ~np.isfinite(ps1_data)
         ps1_data = np.nan_to_num(ps1_data, nan=0.0, posinf=0.0, neginf=0.0)
 
+        # Compute the nJy-per-ADU calibration factor from the PS1 zeropoint.
+        if force_unity_photoCalib:
+            calibration_mean = 1.0
+            log.info("PhotoCalib forced to unity (no flux conversion)")
+        else:
+            calibration_mean = zeropoint_to_calibration_mean(ps1_zp)
+            log.info(
+                f"PhotoCalib from PS1 zeropoint: {calibration_mean:.3e} nJy/ADU "
+                f"(zp={ps1_zp:.3f})"
+            )
+
+        # Pre-calibrate pixel values to nanojansky.
+        #
+        # The LSST DIA subtractImages task does NOT normalize flux scales
+        # before kernel fitting — the PSF-matching kernel absorbs any
+        # template-to-science flux ratio.  When the template is stored in
+        # raw ADU (PhotoCalib ≈ 363 nJy/ADU) but science PVIs are already
+        # in nJy (PhotoCalib = 1.0), the kernel must absorb a ~363× scale
+        # factor on top of the PSF shape change.  This causes numerical
+        # instability (high condition numbers, unreliable kernel sums) and
+        # systematically biased difference-image photometry.
+        #
+        # Fix: multiply pixel values by calibration_mean here so the
+        # template is stored in nJy, matching science PVIs.  PhotoCalib is
+        # then set to 1.0 (identity).  The DIA kernel only needs to handle
+        # PSF matching (kernel_sum ≈ 1.0).
+        if calibration_mean != 1.0:
+            log.info(
+                f"Pre-calibrating template pixels to nJy "
+                f"(multiplying by {calibration_mean:.3e})"
+            )
+            ps1_data = ps1_data * calibration_mean
+
         # Create LSST MaskedImage
         masked_image = afwImage.MaskedImageF(ps1_data.shape[1], ps1_data.shape[0])
         masked_image.image.array[:, :] = ps1_data.astype(np.float32)
@@ -739,7 +856,7 @@ def convert_ps1_to_lsst_exposure(
         # Set mask for zero/bad pixels
         masked_image.mask.array[bad_mask] = masked_image.mask.getPlaneBitMask("BAD")
 
-        # Set variance (improved estimate from image statistics)
+        # Set variance (improved estimate from image statistics, in nJy² units)
         good_pixels = ps1_data[~bad_mask]
         if len(good_pixels) > 100:
             # Use median absolute deviation for robust variance estimate
@@ -759,17 +876,8 @@ def convert_ps1_to_lsst_exposure(
         exposure = afwImage.ExposureF(masked_image)
         exposure.setWcs(lsst_wcs)
 
-        # Calibrate using PS1 zeropoint (convert DN to nJy). Allow a unity override for debugging.
-        if force_unity_photoCalib:
-            calibration_mean = 1.0
-            log.info("PhotoCalib forced to unity")
-        else:
-            calibration_mean = zeropoint_to_calibration_mean(ps1_zp)
-            log.info(
-                f"PhotoCalib from PS1 zeropoint: {calibration_mean:.3e} nJy/ADU "
-                f"(zp={ps1_zp:.3f})"
-            )
-        exposure.setPhotoCalib(PhotoCalib(calibration_mean))
+        # Set PhotoCalib to identity — pixels are already in nJy.
+        exposure.setPhotoCalib(PhotoCalib(1.0))
 
         # Set filter
         filter_label = afwImage.FilterLabel(band=nickel_band)
@@ -814,7 +922,10 @@ def convert_ps1_to_lsst_exposure(
 
         log.info(f"Created LSST Exposure: {exposure.getBBox()}")
         log.info(f"  WCS: {lsst_wcs.getPixelOrigin()}")
-        log.info(f"  PhotoCalib mean: {calibration_mean:.2e}")
+        log.info("  Pixels: nJy (pre-calibrated, PhotoCalib=1.0)")
+        log.info(
+            f"  Original ZP={ps1_zp:.3f} → calibration={calibration_mean:.3e} nJy/ADU"
+        )
         log.info(f"  Masked pixels: {np.sum(bad_mask)} / {bad_mask.size}")
 
         return exposure

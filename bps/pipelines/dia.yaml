@@ -1,0 +1,88 @@
+# Nickel Processing Suite - Difference Imaging BPS Pipeline
+#
+# Perform image subtraction for transient detection.
+#
+# Usage:
+#   nickel bps submit dia 20230519 --site slurm --band r
+#   nickel bps submit dia 20230519 --site slurm --band r --template templates/ps1/r
+#
+# Variables:
+#   {night}               - Observing night (YYYYMMDD)
+#   {band}                - Filter band (r, B, V, etc.)
+#   {template_collection} - Template collection to use
+#   {repo}                - Butler repository path
+#   {obs_nickel}          - Path to obs_nickel package
+
+# Inherit site-specific settings
+includeConfigs:
+  - ../sites/{computeSite}.yaml
+
+# =============================================================================
+# Payload Configuration
+# =============================================================================
+payload:
+  payloadName: nickel-dia-{night}-{band}
+  butlerConfig: "{repo}"
+
+  # Input collections (comma-separated, no spaces)
+  inCollection: "Nickel/runs/{night}/processCcd/*,Nickel/calib/current,refcats,skymaps/nickelRings,{template_collection}"
+
+  # Output collection
+  output: "Nickel/runs/{night}/diff/{band}"
+  outputRun: "Nickel/runs/{night}/diff/{band}/{timestamp}/run"
+
+  # Data query - processed science frames for specific band
+  dataQuery: "instrument='Nickel' AND exposure.observation_type='science' AND band='{band}'"
+
+# =============================================================================
+# Pipeline Definition
+# =============================================================================
+pipelineYaml: "{obs_nickel}/pipelines/DIA.yaml#dia-full"
+
+# =============================================================================
+# Resource Configuration (DIA is memory-intensive)
+# =============================================================================
+# Override base defaults for DIA
+requestMemory: 8192              # 8 GB base for DIA tasks
+requestMemoryMax: 49152          # 48 GB max (DIA can be very hungry)
+
+# =============================================================================
+# Task-Specific Settings
+# =============================================================================
+pipetask:
+  # Warp template to match science image
+  rewarpTemplate:
+    requestMemory: 8192
+    requestCpus: 1
+    # Warping is straightforward, rarely fails
+
+  # PSF-matched image subtraction (most memory-intensive)
+  subtractImages:
+    requestMemory: 16384         # 16 GB
+    requestCpus: 2
+    # AL subtraction can require substantial memory
+    memoryMultiplier: 1.5
+    numberOfRetries: 4
+    requestMemoryMax: 49152      # 48 GB max
+
+  # Detect and measure sources in difference image
+  detectAndMeasureDiaSource:
+    requestMemory: 8192
+    requestCpus: 1
+    memoryMultiplier: 2.0
+    numberOfRetries: 3
+
+  # Reprocess visit image (if needed)
+  reprocessVisitImage:
+    requestMemory: 8192
+    requestCpus: 1
+
+# =============================================================================
+# Clustering Configuration
+# =============================================================================
+cluster:
+  # DIA tasks grouped by visit for parallel processing
+  dia_cluster:
+    pipetasks: rewarpTemplate, subtractImages, detectAndMeasureDiaSource
+    dimensions: visit, detector
+    clusterAlgorithm: lsst.ctrl.bps.quantum_clustering_funcs.dimension_clustering

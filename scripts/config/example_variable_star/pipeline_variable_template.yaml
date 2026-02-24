@@ -1,0 +1,105 @@
+# Example pipeline configuration for a variable star campaign
+#
+# Usage:
+#   nickel run scripts/config/example_variable_star/pipeline_variable_template.yaml
+#   nickel run scripts/config/example_variable_star/pipeline_variable_template.yaml --dry-run
+#
+# This is a TEMPLATE - copy and customize for your target:
+#   1. Replace object/ra/dec with your variable star coordinates
+#   2. Set template nights spanning multiple variability cycles
+#   3. Set science nights for your observing campaign
+#   4. Adjust period_min/period_max to your expected range
+#   5. Update env paths to match your system
+#
+# Pipeline steps:
+#   0. Bootstrap repository (automatic if needed)
+#   1. Build coadd templates from many epochs (median -> mean flux reference)
+#   2. Run calibrations per night
+#   3. Run science processing per night
+#   4. Run DIA per night per band (measures deviation from mean flux)
+#   5. Run forced photometry at variable star coordinates (visit + diffim)
+#   6. Extract combined multi-band lightcurve
+#   7. Run Lomb-Scargle period search and phase folding
+
+# =============================================================================
+# Environment Configuration (update paths for your system)
+# =============================================================================
+env:
+  REPO: "/path/to/butler/repo"
+  STACK_DIR: "/path/to/lsst_stack"
+  OBS_NICKEL: "/path/to/nickel_processing_suite/packages/obs_nickel"
+  RAW_PARENT_DIR: "/path/to/raw/data"
+  REFCAT_REPO: "/path/to/refcats"
+
+# Target information
+# Replace with your variable star coordinates
+object: "V0678-Oph"
+ra: 257.123
+dec: -18.456
+
+# Bands to process (Nickel supports b, v, r, i)
+bands: ["b", "v", "r", "i"]
+
+# Template configuration - use Nickel coadds from many epochs
+# Choose nights spanning multiple variability cycles so the median
+# stack approximates the star's mean brightness.
+template:
+  type: coadd
+  nights:
+    - 20230601
+    - 20230615
+    - 20230620
+    - 20230701
+    - 20230715
+    - 20230801
+
+# Science nights - your observing campaign
+science:
+  nights:
+    - 20230701
+    - 20230705
+    - 20230710
+    - 20230715
+    - 20230720
+
+# Pipeline configuration files (paths relative to obs_nickel/configs/)
+configs:
+  science:
+    calibrate_image: calibrateImage/tuned_configs/dense_strict.py
+    calibrate_image_fallbacks:
+      - calibrateImage/tuned_configs/dense_relaxed.py
+      - calibrateImage/tuned_configs/sparse_strict.py
+      - calibrateImage/tuned_configs/sparse_relaxed.py
+    colorterms: apply_colorterms.py
+  coadd:
+    make_direct_warp: coadds/makeDirectWarp_relaxed.py
+  dia:
+    subtract_images: dia/subtractImages.py
+    # Use sensitive detection for variable star source catalogs (optional).
+    # Standard detectAndMeasure.py (3.0 sigma) also works fine since
+    # forced photometry at known coordinates is threshold-independent.
+    detect_and_measure: dia/detectAndMeasure_sensitive.py
+
+# Processing options
+options:
+  jobs: 6
+  skip_calibs: false
+  skip_science: false
+  rebuild_templates: false
+  skip_dia: false
+  continue_on_error: true
+  use_fallbacks: true
+
+  # Variable star specific options
+  pipeline_type: variable
+  forced_phot: true
+  forced_phot_image_type: both    # Measure on both visit images AND difference images
+  lightcurve: true
+  lightcurve_dataset_type: forced_phot_diffim_radec
+  lightcurve_min_snr: 0           # Keep all detections for period search
+
+  # Period search configuration
+  period_search: true
+  period_min: 0.1                 # Minimum search period (days)
+  period_max: 100.0               # Maximum search period (days)
+  period_samples: 10000           # Frequency grid resolution

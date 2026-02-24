@@ -1,0 +1,4 @@
+# EUPS table file for obs_nickel_data
+# Curated calibration data for the Nickel telescope
+
+envPrepend(PYTHONPATH, ${PRODUCT_DIR}/python)

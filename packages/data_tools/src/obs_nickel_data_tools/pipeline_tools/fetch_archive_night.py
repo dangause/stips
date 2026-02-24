@@ -202,7 +202,12 @@ def main() -> int:
         errors,
         raw_dir,
     )
-    return 0 if errors == 0 else 1
+    if errors > 0:
+        return 1  # Hard failure
+    if downloaded == 0 and skipped == 0:
+        logging.warning("No files found in archive for this night")
+        return 2  # No data available
+    return 0
 
 
 if __name__ == "__main__":

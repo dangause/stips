@@ -18,6 +18,7 @@ readme = "README.md"
 
 [project.scripts]
 obsn-defects-from-flats = "defects_tools.defects.make_defects_from_flats:main"
+obsn-defects-to-ecsv = "defects_tools.defects.export_to_obs_data:main"
 
 [tool.setuptools.packages.find]
-where = ["defects_tools"]
+where = ["."]

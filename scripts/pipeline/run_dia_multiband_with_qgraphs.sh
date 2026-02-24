@@ -184,7 +184,8 @@ fi
 ########################################
 # Setup logging and RUN_ID
 ########################################
-export RUN_ID="dia_multiband_qg_$(date -u +%Y%m%d_%H%M%S)_$$"
+# Create custom RUN_ID for entire pipeline execution (uses helper from logging.sh)
+set_run_id "dia_multiband_qg_$(date -u +%Y%m%d_%H%M%S)_$$"
 setup_logging "other" "" "" "" "run_dia_multiband_qg"
 exec > >(tee -a "$LOG_FILE") 2>&1
 
