@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# 10_calibs.sh — Nickel nightly calibrations (bias/flat/defects) with stable run names
+# 10_calibs.sh — Nickel nightly calibrations (bias/flat) with stable run names
+# Defects are provided by the obs_nickel_data package via write-curated-calibrations
 # Usage: 10_calibs.sh --night YYYYMMDD
 
 # set -euo pipefail
@@ -51,8 +52,6 @@ CP_RUN_FLAT="Nickel/cp/${NIGHT}/flat/${RUN_TS}"
 CP_RUN_BIAS_RUN="${CP_RUN_BIAS}/run"
 CP_RUN_FLAT_RUN="${CP_RUN_FLAT}/run"
 
-DEFECTS_RUN="Nickel/calib/defects/${RUN_TS}"
-
 CURATED_RUN="Nickel/calib/curated/${RUN_TS}"
 CURATED_CHAIN="Nickel/calib/curated"     # stable alias
 
@@ -77,6 +76,7 @@ cd "$STACK_DIR"
 source loadLSST.zsh
 setup lsst_distrib
 setup obs_nickel || true
+setup obs_nickel_data || true
 
 ########## INGEST RAWS ##########
 butler register-instrument "$REPO" "$INSTRUMENT" >/dev/null 2>&1 || true
@@ -199,31 +199,6 @@ butler collection-chain "$REPO" "$CP_RUN_FLAT" "$CP_RUN_FLAT_RUN" --mode redefin
 butler query-collections "$REPO" | awk '{print $1}' | grep -qx "$CP_RUN_FLAT" \
   || { echo "ERROR: flat chained collection still missing: $CP_RUN_FLAT"; exit 2; }
 
-########## DEFECTS (from flats; use the child RUN for deterministic reads) ##########
-echo "[defects] from $CP_RUN_FLAT_RUN -> $DEFECTS_RUN"
-# Use explicit LSST Python to avoid picking up system/homebrew Python
-CONDA_ENV="${LSST_CONDA_ENV_NAME:-lsst-scipipe-12.0.0}"
-/opt/anaconda3/envs/${CONDA_ENV}/bin/python "$REPO_ROOT"/scripts/python/defects_tools/defects/make_defects_from_flats.py \
-  --repo "$REPO" \
-  --collection "$CP_RUN_FLAT_RUN" \
-  --invert-manual-y \
-  --manual-box 255 0 2 1024 \
-  --manual-box 783 0 2 977 \
-  --manual-box 1000 0 25 1024 \
-  --manual-box 45 120 6 9 \
-  --manual-box 980 200 12 8 \
-  --register \
-  --ingest \
-  --defects-run "$DEFECTS_RUN" \
-  --plot
-
-# Point the current-defects chain if the defects run exists
-if butler query-collections "$REPO" | awk '{print $1}' | grep -qx "$DEFECTS_RUN"; then
-  butler collection-chain "$REPO" Nickel/calib/defects/current "$DEFECTS_RUN" --mode redefine
-else
-  echo "[defects] WARNING: defects run not found ($DEFECTS_RUN); skipping chain update."
-fi
-
 ########## CERTIFY NIGHTLY FLATS (bias already certified) ##########
 HAS_FLAT=0
 if butler query-collections "$REPO" | awk '{print $1}' | grep -qx "$CALIB_OUT"; then
@@ -244,16 +219,9 @@ else
 fi
 
 ########## UNIFIED CALIB CHAIN FOR SCIENCE ##########
-# Build the chain with defects if available, otherwise without
-NEW_CHAIN_MEMBERS=("$CALIB_OUT")
-if butler query-collections "$REPO" | awk '{print $1}' | grep -qx "Nickel/calib/defects/current"; then
-  echo "[calib-chain] will prepend: [$CALIB_OUT, Nickel/calib/defects/current, $CURATED_CHAIN]"
-  NEW_CHAIN_MEMBERS+=("Nickel/calib/defects/current")
-else
-  echo "[calib-chain] WARNING: Nickel/calib/defects/current not found; building chain without defects"
-  echo "[calib-chain] will prepend: [$CALIB_OUT, $CURATED_CHAIN]"
-fi
-NEW_CHAIN_MEMBERS+=("$CURATED_CHAIN")
+# Defects are now included in curated calibrations via obs_nickel_data
+NEW_CHAIN_MEMBERS=("$CALIB_OUT" "$CURATED_CHAIN")
+echo "[calib-chain] will prepend: [$CALIB_OUT, $CURATED_CHAIN]"
 
 # Prepend the new nightly calibs while keeping older nights in the chain so
 # processCcd can find the right bias/flat for each day_obs.
@@ -271,7 +239,6 @@ log_info "CP_RUN_BIAS: $CP_RUN_BIAS"
 log_info "CP_RUN_BIAS_RUN: $CP_RUN_BIAS_RUN"
 log_info "CP_RUN_FLAT: $CP_RUN_FLAT"
 log_info "CP_RUN_FLAT_RUN: $CP_RUN_FLAT_RUN"
-log_info "DEFECTS_RUN: $DEFECTS_RUN"
 log_info "CALIB_OUT: $CALIB_OUT"
 log_info "CALIB_CHAIN: $CALIB_CHAIN"
 

@@ -1,0 +1,86 @@
+# Nickel Processing Suite - Calibrations BPS Pipeline
+#
+# Build nightly calibration products (bias, flat, defects).
+#
+# Usage:
+#   nickel bps submit calibs 20230519 --site slurm
+#
+# Variables:
+#   {night}        - Observing night (YYYYMMDD)
+#   {repo}         - Butler repository path
+#   {cp_pipe_dir}  - Path to cp_pipe package
+
+# Inherit site-specific settings
+# The actual site is determined by --site flag
+includeConfigs:
+  - ../sites/{computeSite}.yaml
+
+# =============================================================================
+# Payload Configuration
+# =============================================================================
+payload:
+  payloadName: nickel-calibs-{night}
+  butlerConfig: "{repo}"
+
+  # Input collections for calibration (comma-separated, no spaces)
+  inCollection: "Nickel/raw/{night}/*,Nickel/calib/curated"
+
+  # Output collection
+  output: "Nickel/calib/{night}"
+  outputRun: "Nickel/calib/{night}/{timestamp}"
+
+  # Data query - select bias and flat frames only
+  dataQuery: "instrument='Nickel' AND exposure.observation_type IN ('bias', 'flat')"
+
+# =============================================================================
+# Pipeline Definition
+# =============================================================================
+# Use cp_pipe calibration pipelines
+pipelineYaml: "{cp_pipe_dir}/pipelines/_ingredients/cpBias.yaml"
+
+# =============================================================================
+# Task-Specific Settings
+# =============================================================================
+pipetask:
+  # ISR for bias frames
+  cpBiasIsr:
+    requestMemory: 2048
+    requestCpus: 1
+
+  # Combine bias frames
+  cpBias:
+    requestMemory: 4096
+    requestCpus: 1
+
+  # ISR for flat frames (needs bias-corrected)
+  cpFlatIsr:
+    requestMemory: 4096
+    requestCpus: 1
+
+  # Combine flat frames
+  cpFlat:
+    requestMemory: 8192
+    requestCpus: 2
+
+  # Defect detection
+  cpDefects:
+    requestMemory: 4096
+    requestCpus: 1
+
+# =============================================================================
+# Clustering Configuration
+# =============================================================================
+# Group quanta for efficient execution
+
+cluster:
+  # All bias frames processed together
+  bias_cluster:
+    pipetasks: cpBiasIsr, cpBias
+    dimensions: instrument
+    clusterAlgorithm: lsst.ctrl.bps.quantum_clustering_funcs.dimension_clustering
+
+  # Flat frames grouped by filter
+  flat_cluster:
+    pipetasks: cpFlatIsr, cpFlat
+    dimensions: instrument, physical_filter
+    clusterAlgorithm: lsst.ctrl.bps.quantum_clustering_funcs.dimension_clustering

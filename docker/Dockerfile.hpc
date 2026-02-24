@@ -1,0 +1,80 @@
+# Nickel Processing Suite - HPC Testing Image
+#
+# This image is identical to the standard NPS image but configured for
+# testing HPC-like parallel execution using Parsl (the same backend that
+# BPS uses on real Slurm/HTCondor clusters).
+#
+# Build:
+#   docker build -t nps:hpc -f docker/Dockerfile.hpc .
+#
+# Run interactively:
+#   docker run --rm -it \
+#     -v /path/to/repo:/data/repo \
+#     -v /path/to/raw:/data/raw \
+#     -v /path/to/refcats:/data/refcats:ro \
+#     nps:hpc bash
+#
+# Test BPS parallel execution (simulates HPC):
+#   nickel bps submit science 20230519 --site local
+#
+# How it works:
+# - BPS uses Parsl for workflow execution
+# - On real HPC: Parsl submits jobs to Slurm/HTCondor
+# - With --site local: Parsl uses ThreadPoolExecutor for parallel execution
+# - Both use the same quantum graph, same task dependencies, same parallelism
+# - The only difference is worker placement (cluster nodes vs local cores)
+
+# =============================================================================
+# Base: Standard NPS Image
+# =============================================================================
+ARG LSST_TAG=v30_0_3
+FROM ghcr.io/lsst/scipipe:al9-${LSST_TAG}
+
+LABEL org.opencontainers.image.description="NPS configured for HPC-like parallel testing"
+
+USER root
+
+# =============================================================================
+# Install NPS Packages
+# =============================================================================
+WORKDIR /opt/nps
+
+COPY packages/data_tools/ packages/data_tools/
+COPY packages/obs_nickel/ packages/obs_nickel/
+COPY packages/obs_nickel_data/ packages/obs_nickel_data/
+COPY scripts/ /opt/nps/scripts/
+COPY bps/ /opt/nps/bps/
+
+RUN source /opt/lsst/software/stack/loadLSST.bash && \
+    setup lsst_distrib && \
+    cd /opt/nps && \
+    pip install --no-deps -e packages/data_tools && \
+    pip install --no-deps -e packages/obs_nickel && \
+    chmod +x /opt/nps/scripts/pipeline/*.sh 2>/dev/null || true
+
+# =============================================================================
+# Entrypoint
+# =============================================================================
+COPY docker/entrypoint.sh /opt/nps/docker/entrypoint.sh
+RUN chmod +x /opt/nps/docker/entrypoint.sh
+
+# Create data directories
+RUN mkdir -p /data/repo /data/raw /data/refcats /data/outputs /config
+
+# Environment
+ENV NPS_ROOT=/opt/nps
+ENV OBS_NICKEL=/opt/nps/packages/obs_nickel
+ENV OBS_NICKEL_DATA=/opt/nps/packages/obs_nickel_data
+ENV STACK_DIR=/opt/lsst/software/stack
+ENV REPO=/data/repo
+ENV RAW_PARENT_DIR=/data/raw
+ENV REFCAT_REPO=/data/refcats
+
+# Configure Parsl for more aggressive parallelism (HPC-like)
+ENV PARSL_CORES=8
+ENV PARSL_MEMORY_PER_WORKER=4096
+
+WORKDIR /data
+
+ENTRYPOINT ["/opt/nps/docker/entrypoint.sh"]
+CMD ["bash"]

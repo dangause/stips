@@ -1,0 +1,54 @@
+graph LR
+  %% Inputs
+  LickArchive["Lick archive raws"] --> Download["nickel download - pipeline_tools/fetch_archive_night.py"]
+  Download --> RawDir["RAW_PARENT_DIR/night/raw"]
+
+  Refcats["REFCAT_REPO (MONSTER refcats)"] --> Bootstrap
+  CuratedCalibs["obs_nickel_data defects"] --> Bootstrap
+
+  Bootstrap["bootstrap - core/bootstrap.py + scripts/pipeline/00_bootstrap_repo.sh"] --> Repo["Butler repo initialized - butler.yaml"]
+  Bootstrap --> RefcatChain["refcats chain"]
+  Bootstrap --> Skymap["skymaps/nickelRings chain"]
+
+  %% Calibs
+  RawDir --> Calibs["nickel calibs - core/calibs.py"]
+  Calibs --> RawColl["Nickel/raw/YYYYMMDD/TS"]
+  Calibs --> Curated["Nickel/calib/curated"]
+  Calibs --> Bias["Nickel/cp/YYYYMMDD/bias/TS"]
+  Calibs --> Flat["Nickel/cp/YYYYMMDD/flat/TS"]
+  Calibs --> CalibChain["Nickel/calib/current"]
+
+  %% Science
+  RawColl --> Science["nickel science - core/science.py"]
+  CalibChain --> Science
+  Science --> ProcCcd["Nickel/runs/YYYYMMDD/processCcd/TS/run"]
+  Science --> Coadd["Nickel/runs/YYYYMMDD/coadd/TS/run"]
+
+  %% Templates
+  PS1["PS1 MAST"] --> PS1Ingest["nickel ps1-template - core/ps1_template.py"]
+  PS1Ingest --> PS1Coll["templates/ps1/band"]
+  Coadd --> CoaddTemplates["templates/deep (coadd templates)"]
+
+  %% DIA
+  ProcCcd --> DIA["nickel dia - core/dia.py"]
+  PS1Coll --> DIA
+  CoaddTemplates --> DIA
+  DIA --> Diff["Nickel/runs/YYYYMMDD/diff/TS/run"]
+  DIA --> DiaSrc["dia_source_unfiltered"]
+
+  %% Forced photometry + lightcurves
+  ProcCcd --> Fphot["nickel fphot - core/fphot.py"]
+  Diff --> Fphot
+  Fphot --> FphotColl["Nickel/runs/YYYYMMDD/forcedPhotRaDec/TS/..."]
+
+  Diff --> Lightcurve["nickel lightcurve - core/lightcurve.py"]
+  FphotColl --> Lightcurve
+  Lightcurve --> Outputs["CSV + PNG in repo/lightcurves"]
+
+  %% Orchestrator
+  Orchestrator["nickel run CONFIG.yaml - core/run.py"] --> Bootstrap
+  Orchestrator --> Calibs
+  Orchestrator --> Science
+  Orchestrator --> DIA
+  Orchestrator --> Fphot
+  Orchestrator --> Lightcurve

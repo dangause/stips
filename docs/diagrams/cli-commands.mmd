@@ -1,0 +1,75 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#4a90d9'}}}%%
+
+flowchart LR
+    subgraph CLI["nickel CLI"]
+        direction TB
+
+        subgraph Config["Configuration"]
+            env["env<br/>Show config & validate"]
+            bootstrap["bootstrap [CONFIG.yaml]<br/>Initialize repository"]
+        end
+
+        subgraph DataAccess["Data Access"]
+            download["download NIGHT<br/>Fetch from Lick archive"]
+            ps1template["ps1-template<br/>Download PS1 template"]
+        end
+
+        subgraph Processing["Pipeline Processing"]
+            calibs["calibs NIGHT<br/>Build bias & flats"]
+            science["science NIGHT<br/>ISR, WCS, photometry"]
+            dia["dia NIGHT<br/>Difference imaging"]
+            fphot["fphot NIGHT<br/>Forced photometry"]
+            lightcurve["lightcurve<br/>Extract light curve"]
+        end
+
+        subgraph Orchestration["Orchestration"]
+            run["run CONFIG.yaml<br/>Full pipeline from YAML"]
+        end
+
+        subgraph BPSGroup["bps (HPC)"]
+            submit["submit PIPELINE NIGHT<br/>Submit to cluster"]
+            status["status RUN_ID<br/>Check job status"]
+            cancel["cancel RUN_ID<br/>Cancel running job"]
+            list["list<br/>Show recent runs"]
+        end
+    end
+
+    subgraph Options["Global Options"]
+        profile["-p, --profile<br/>Load .env.{profile}"]
+        envfile["--env-file<br/>Explicit env file"]
+    end
+
+    subgraph Workflow["Typical Workflow"]
+        direction TB
+        W1["1. nickel env"] --> W2["2. nickel bootstrap"]
+        W2 --> W3["3. nickel calibs 20230519"]
+        W3 --> W4["4. nickel science 20230519"]
+        W4 --> W5["5. nickel ps1-template --ra ... --dec ... --band r"]
+        W5 --> W6["6. nickel dia 20230519 --auto"]
+        W6 --> W7["7. nickel fphot 20230519 --ra ... --dec ..."]
+        W7 --> W8["8. nickel lightcurve --collections ..."]
+    end
+
+    subgraph QuickWorkflow["Or: One Command"]
+        Q1["nickel run pipeline.yaml"]
+    end
+
+    Options --> CLI
+    Workflow -.-> QuickWorkflow
+
+    %% Styling
+    classDef configStyle fill:#f5f5f5,stroke:#999
+    classDef dataStyle fill:#e8f4f8,stroke:#4a90d9
+    classDef procStyle fill:#d4edda,stroke:#28a745
+    classDef orchStyle fill:#fff3cd,stroke:#856404
+    classDef bpsStyle fill:#f8d7da,stroke:#721c24
+    classDef optStyle fill:#e2d5f1,stroke:#6f42c1
+    classDef workflowStyle fill:#d1ecf1,stroke:#0c5460
+
+    class env,bootstrap configStyle
+    class download,ps1template dataStyle
+    class calibs,science,dia,fphot,lightcurve procStyle
+    class run orchStyle
+    class submit,status,cancel,list bpsStyle
+    class profile,envfile optStyle
+    class W1,W2,W3,W4,W5,W6,W7,W8,Q1 workflowStyle

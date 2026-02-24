@@ -43,6 +43,7 @@ TRACT=""
 BAND=""
 JOBS="${JOBS:-8}"
 PIPELINE_MODE="standalone"  # standalone (DIA.yaml) or integrated (DRP.yaml#difference-imaging)
+RUN_ANALYSIS=false
 FORCE_REPROCESS=false
 BAD_SUB_THRESH=""
 CONFIG_OVERRIDES=()
@@ -77,6 +78,7 @@ Optional:
   --bad-file FILE           File with exposure IDs to exclude
   -j, --jobs N              Number of parallel jobs (default: ${JOBS})
   --pipeline MODE           Pipeline mode: standalone (DIA.yaml) or integrated (DRP.yaml)
+  --analysis                Run DIA diagnostic analysis tasks (standalone mode uses dia-full-with-analysis)
   --force-reprocess         Force reprocessing of visit images (slower)
   --bad-sub-threshold NUM   Override badSubtractionRatioThreshold (default task value is 0.2)
   --subtract-config FILE    Extra subtractImages config override (applied after base config)
@@ -126,6 +128,7 @@ while [[ $# -gt 0 ]]; do
     --bad-file)           BAD_EXPOSURES_FILE="${2:-}"; shift 2;;
     -j|--jobs)            JOBS="${2:-}"; shift 2;;
     --pipeline)           PIPELINE_MODE="${2:-}"; shift 2;;
+    --analysis)           RUN_ANALYSIS=true; shift 1;;
     --force-reprocess)    FORCE_REPROCESS=true; shift 1;;
     --bad-sub-threshold)  BAD_SUB_THRESH="${2:-}"; shift 2;;
     --subtract-config)    DIA_SUBTRACT_CFG_OVERRIDE="${2:-}"; shift 2;;
@@ -196,6 +199,9 @@ export RUBIN_EUPS_PATH="${RUBIN_EUPS_PATH:-}"
 if [[ "$PIPELINE_MODE" == "standalone" ]]; then
   PIPE="$OBS_NICKEL/pipelines/DIA.yaml"
   SUBSET="#dia-full"
+  if [[ "$RUN_ANALYSIS" == "true" ]]; then
+    SUBSET="#dia-full-with-analysis"
+  fi
 else
   PIPE="$OBS_NICKEL/pipelines/DRP.yaml"
   SUBSET="#difference-imaging"
@@ -235,6 +241,7 @@ log_section "Difference Imaging Pipeline"
 log_info "Night: $NIGHT"
 log_info "Band: ${BAND:-all}"
 log_info "Pipeline mode: $PIPELINE_MODE ($PIPE$SUBSET)"
+log_info "DIA analysis: $RUN_ANALYSIS"
 log_info "RUN_TS: $RUN_TS"
 log_info "subtractImages config: $DIA_SUBTRACT_CFG"
 if [[ -n "$DIA_SUBTRACT_CFG_OVERRIDE" ]]; then
@@ -248,6 +255,7 @@ set +u  # Temporarily disable unbound variable check for conda activation
 source loadLSST.zsh
 setup lsst_distrib
 setup obs_nickel || true
+setup obs_nickel_data || true
 set -u  # Re-enable unbound variable check
 butler register-instrument "$REPO" "$INSTRUMENT" >/dev/null 2>&1 || true
 
@@ -440,6 +448,7 @@ log_info "Finding science processing run for observing night $NIGHT..."
 SCI_PARENT="$(butler query-collections "$REPO" 2>/dev/null | \
   awk '{print $1}' | \
   grep -E "^Nickel/runs/${NIGHT}/(processCcd|science)/" | \
+  grep -v -E '/(run|run_fb[0-9]+)$' | \
   tail -n1 || true)"
 
 if [[ -z "$SCI_PARENT" ]]; then

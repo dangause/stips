@@ -28,6 +28,7 @@ INPUT_COLLECTIONS=""
 OUTPUT_COLLECTION=""
 JOBS="${JOBS:-8}"
 REBASE=false
+CONFIG_FILES=()
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -40,6 +41,7 @@ while [[ $# -gt 0 ]]; do
     -o|--output)       OUTPUT_COLLECTION="${2:-}"; shift 2;;
     -j|--jobs)         JOBS="${2:-}"; shift 2;;
     --rebase)          REBASE=true; shift;;
+    -C|--config-file)  CONFIG_FILES+=("${2:-}"); shift 2;;
     -h|--help)
       cat <<USAGE
 Usage: $0 --tract TRACT --band BAND [options]
@@ -57,6 +59,7 @@ Optional:
   -i, --input COLLECTIONS   Input collections (default: auto-discover from nights)
   -o, --output COLLECTION   Output collection (default: templates/deep/{tract}/{band})
   -j, --jobs N              Number of parallel jobs (default: ${JOBS})
+  -C, --config-file FILE    Config override file for pipetask (e.g., makeDirectWarp:path/to/config.py)
   --rebase                  Rebase/replace output collection if it exists (overwrite chain; clears existing template collections/runs)
 
 Examples:
@@ -129,11 +132,13 @@ _SAVED_PATCH="$PATCH"
 _SAVED_INPUT_COLLECTIONS="$INPUT_COLLECTIONS"
 _SAVED_OUTPUT_COLLECTION="$OUTPUT_COLLECTION"
 _SAVED_JOBS="$JOBS"
+_SAVED_CONFIG_FILES=("${CONFIG_FILES[@]}")
 
 cd "$STACK_DIR"
 source loadLSST.zsh
 setup lsst_distrib
 setup obs_nickel || true
+setup obs_nickel_data || true
 butler register-instrument "$REPO" "$INSTRUMENT" >/dev/null 2>&1 || true
 
 # Restore variables
@@ -145,6 +150,7 @@ PATCH="$_SAVED_PATCH"
 INPUT_COLLECTIONS="$_SAVED_INPUT_COLLECTIONS"
 OUTPUT_COLLECTION="$_SAVED_OUTPUT_COLLECTION"
 JOBS="$_SAVED_JOBS"
+CONFIG_FILES=("${_SAVED_CONFIG_FILES[@]}")
 
 # Validate files
 [[ -s "$PIPE" ]] || { echo "ERROR: Pipeline not found: $PIPE"; exit 2; }
@@ -154,8 +160,8 @@ if [[ "$REBASE" == "true" ]]; then
   echo "[rebase] Removing existing template collections/runs for ${TEMPLATE_PARENT}"
   # Best-effort cleanup; tolerate failures if nothing to remove
   butler collection-chain "$REPO" "$TEMPLATE_PARENT" --mode redefine 2>/dev/null || true
-  butler remove-collections "$REPO" "$TEMPLATE_PARENT" 2>/dev/null || true
-  butler remove-runs "$REPO" ${TEMPLATE_PARENT}/* 2>/dev/null || true
+  butler remove-collections "$REPO" "$TEMPLATE_PARENT" --no-confirm 2>/dev/null || true
+  butler remove-runs "$REPO" ${TEMPLATE_PARENT}/* --no-confirm 2>/dev/null || true
   rm -rf "$REPO/$TEMPLATE_PARENT"
 fi
 
@@ -187,7 +193,7 @@ else
       NIGHTS_ARRAY+=("$night")
     done < <(
       butler query-datasets "$REPO" preliminary_visit_image \
-        --collections "Nickel/runs/*/processCcd/*/run" \
+        --collections "Nickel/runs/*/processCcd/*" \
         --where "instrument='Nickel' AND band='${BAND}'" \
         | awk 'NR>1 {print $0}' \
         | grep -oE '[0-9]{8}' \
@@ -211,7 +217,7 @@ else
     coll=$(butler query-collections "$REPO" \
       | awk '{print $1}' \
       | grep -E "^Nickel/runs/${night}/processCcd/" \
-      | grep -v "/run$" \
+      | grep -v -E "/(run|run_fb[0-9]+)$" \
       | tail -n1)
 
     if [[ -n "$coll" ]]; then
@@ -249,6 +255,12 @@ if [[ "$REBASE" == "true" ]]; then
   QGRAPH_REBASE+=(--rebase)
 fi
 
+# Build config file arguments
+CONFIG_ARGS=()
+for cf in "${CONFIG_FILES[@]}"; do
+  CONFIG_ARGS+=(-C "$cf")
+done
+
 if ! pipetask qgraph \
   -b "$REPO" \
   -p "$PIPE#coadds-only" \
@@ -258,6 +270,7 @@ if ! pipetask qgraph \
   --save-qgraph "$QG_FILE" \
   --qgraph-dot "$QG_DOT" \
   "${QGRAPH_REBASE[@]}" \
+  "${CONFIG_ARGS[@]}" \
   -d "$DATA_ID_QUERY"; then
   echo "[ERROR] Quantum graph generation failed"
   exit 2

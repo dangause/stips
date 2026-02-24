@@ -1,0 +1,197 @@
+# DIA detector/visit QA plots and metrics for Nickel using analysis_tools.
+
+description: |
+  Diagnostic DIA plots and metrics for Nickel visits/detectors.
+  Uses analysis_tools tasks and diffim spatial metrics to visualize DIA quality.
+
+tasks:
+  makeDiaSpatialMetrics:
+    class: lsst.ip.diffim.SpatiallySampledMetricsTask
+    config:
+      connections.science: preliminary_visit_image
+      connections.matchedTemplate: template_matched
+      connections.template: template_detector
+      connections.difference: difference_image
+      connections.diaSources: dia_source_unfiltered
+      connections.psfMatchingKernel: difference_kernel
+      connections.spatiallySampledMetrics: difference_image_metrics
+      metricsMaskPlanes:
+        - BAD
+        - CR
+        - DETECTED
+        - DETECTED_NEGATIVE
+        - EDGE
+        - INTRP
+        - NO_DATA
+        - SAT
+        - SUSPECT
+        - UNMASKEDNAN
+
+  analyzeImageDifferenceMetrics:
+    class: lsst.analysis.tools.tasks.TaskMetadataAnalysisTask
+    config:
+      connections.inputName: subtractImages_metadata
+      connections.outputName: diffimMetadata
+      connections.storageClass: TaskMetadata
+      raiseNoWorkFoundOnIncompleteMetadata: true
+      inputDimensions: ["instrument", "visit", "detector"]
+      atools.diffimMetadataMetric: TaskMetadataMetricTool
+      atools.diffimMetadataMetric.taskName: subtractImages
+      atools.diffimMetadataMetric.metrics:
+        sciencePsfSize: pixel
+        templatePsfSize: pixel
+        scaleScienceVarianceFactor: ""
+        scaleTemplateVarianceFactor: ""
+        differenceFootprintRatioMean: ""
+        differenceFootprintRatioStdev: ""
+        differenceFootprintSkyRatioMean: ""
+        differenceFootprintSkyRatioStdev: ""
+        spatialConditionNum: ""
+        spatialKernelSum: ""
+        templateCoveragePercent: percent
+      atools.diffimMetadataMetric.subTaskNames:
+        spatialConditionNum: makeKernel
+        spatialKernelSum: makeKernel
+      python: |
+        from lsst.analysis.tools.atools import TaskMetadataMetricTool
+
+  analyzeDiaSourceDetectionMetrics:
+    class: lsst.analysis.tools.tasks.TaskMetadataAnalysisTask
+    config:
+      connections.inputName: detectAndMeasureDiaSource_metadata
+      connections.outputName: detectAndMeasureDiaSource_metadata
+      connections.storageClass: TaskMetadata
+      raiseNoWorkFoundOnIncompleteMetadata: true
+      inputDimensions: ["instrument", "visit", "detector"]
+      atools.diffimMetadataMetric: TaskMetadataMetricTool
+      atools.diffimMetadataMetric.taskName: detectAndMeasureDiaSource
+      atools.diffimMetadataMetric.metrics:
+        nGoodPixels: ct
+        nBadPixels: ct
+        nPixelsDetectedPositive: ct
+        nPixelsDetectedNegative: ct
+        nBadPixelsDetectedPositive: ct
+        nBadPixelsDetectedNegative: ct
+        nUnmergedDiaSources: ct
+        nMergedDiaSources: ct
+        residualFootprintRatioMean: ""
+        residualFootprintRatioStdev: ""
+      python: |
+        from lsst.analysis.tools.atools import TaskMetadataMetricTool
+
+  analyzeDiaSpatialPlots:
+    class: lsst.analysis.tools.tasks.DiffimDetectorVisitSpatiallySampledPlotsTask
+    config:
+      connections.outputName: diffimPlots
+      connections.data: difference_image_metrics
+      atools.dipoleQuiver: DiffimSpatialMetricsQuiverPlot
+      atools.dipoleQuiver.angleName: dipole_direction
+      atools.dipoleQuiver.lengthName: dipole_separation
+      atools.dipoleQuiver.produce.plot.qKeySize: 0.1
+      atools.dipoleQuiver.produce.plot.qKeyLabel: "0.1 arcsec Avg Dipole length"
+      atools.kernelQuiver: DiffimSpatialMetricsQuiverPlot
+      atools.kernelQuiver.angleName: psfMatchingKernel_direction
+      atools.kernelQuiver.lengthName: psfMatchingKernel_length
+      atools.kernelQuiver.produce.plot.qKeySize: 0.1
+      atools.kernelQuiver.produce.plot.qKeyLabel: "0.1 arcsec Kernel offset direction"
+      atools.diaFlagHistogram: DiffimSpatialMetricsHistPlot
+      atools.interpolatedDipoleDensity: DiffimSpatialMetricsInterpolatePlot
+      atools.interpolatedDipoleDensity.metricNames:
+        - dipole_density
+        - dipole_direction
+        - dipole_separation
+      atools.interpolatedDipoleDensity.produce.plot.metricNames:
+        - dipole_density
+        - dipole_direction
+        - dipole_separation
+      atools.interpolatedDipoleDensity.produce.plot.zAxisLabels:
+        - Number/degree^2
+        - rad
+        - pixels
+      atools.interpolatedBasicMetrics: DiffimSpatialMetricsInterpolatePlot
+      atools.interpolatedBasicMetrics.metricNames:
+        - template_value
+        - science_value
+        - diffim_value
+        - source_density
+        - science_psfSize
+        - template_psfSize
+        - detected_mask_fraction
+        - detected_negative_mask_fraction
+      atools.interpolatedBasicMetrics.produce.plot.metricNames:
+        - template_value
+        - science_value
+        - diffim_value
+        - source_density
+        - science_psfSize
+        - template_psfSize
+        - detected_mask_fraction
+        - detected_negative_mask_fraction
+      atools.interpolatedBasicMetrics.produce.plot.zAxisLabels:
+        - nJy
+        - nJy
+        - nJy
+        - Number/degree^2
+        - pixels
+        - pixels
+        - px_frac
+        - px_frac
+      atools.interpolatedMaskFractionMetrics: DiffimSpatialMetricsInterpolatePlot
+      atools.interpolatedMaskFractionMetrics.metricNames:
+        - bad_mask_fraction
+        - inexact_psf_mask_fraction
+        - intrp_mask_fraction
+        - sat_mask_fraction
+        - sat_template_mask_fraction
+        - streak_mask_fraction
+        - suspect_mask_fraction
+        - unmaskednan_mask_fraction
+        - not_deblended_mask_fraction
+        - no_data_mask_fraction
+        - rejected_mask_fraction
+        - sensor_edge_mask_fraction
+      atools.interpolatedMaskFractionMetrics.produce.plot.metricNames:
+        - bad_mask_fraction
+        - inexact_psf_mask_fraction
+        - intrp_mask_fraction
+        - sat_mask_fraction
+        - sat_template_mask_fraction
+        - streak_mask_fraction
+        - suspect_mask_fraction
+        - unmaskednan_mask_fraction
+        - not_deblended_mask_fraction
+        - no_data_mask_fraction
+        - rejected_mask_fraction
+        - sensor_edge_mask_fraction
+      python: |
+        from lsst.analysis.tools.atools import DiffimSpatialMetricsHistPlot, DiffimSpatialMetricsInterpolatePlot
+        from lsst.analysis.tools.atools import DiffimSpatialMetricsQuiverPlot
+
+  analyzeDiaKernelVisitPlot:
+    class: lsst.analysis.tools.tasks.MakeDiffimKernelQuiverPlotVisitTask
+    config:
+      connections.spatiallySampledMetrics: difference_image_metrics
+      connections.visit_summary: preliminary_visit_summary
+
+  analyzeDiaSources:
+    class: lsst.analysis.tools.tasks.DiaSourceDetectorVisitAnalysisTask
+    config:
+      connections.data: dia_source_unfiltered
+      connections.outputName: dia_source_unfiltered
+      atools.numDiaSources: NumDiaSourcesSelectionMetric
+      atools.numDiaSources.metricName: numDiaSources
+      atools.numDiaSources.process.calculateActions.countingAction.vectorKey: id
+      atools.simpleDiaPlot: SimpleDiaPlot
+      atools.simpleDiaPlot.process.buildActions.ras: ConvertUnits
+      atools.simpleDiaPlot.process.buildActions.ras.buildAction: LoadVector
+      atools.simpleDiaPlot.process.buildActions.ras.buildAction.vectorKey: coord_ra
+      atools.simpleDiaPlot.process.buildActions.ras.inUnit: radian
+      atools.simpleDiaPlot.process.buildActions.ras.outUnit: degree
+      atools.simpleDiaPlot.process.buildActions.decs: ConvertUnits
+      atools.simpleDiaPlot.process.buildActions.decs.buildAction: LoadVector
+      atools.simpleDiaPlot.process.buildActions.decs.buildAction.vectorKey: coord_dec
+      atools.simpleDiaPlot.process.buildActions.decs.inUnit: radian
+      atools.simpleDiaPlot.process.buildActions.decs.outUnit: degree
+      python: |
+        from lsst.analysis.tools.atools import SimpleDiaPlot, NumDiaSourcesSelectionMetric
+        from lsst.analysis.tools.actions.vector import ConvertUnits, LoadVector

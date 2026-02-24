@@ -3,12 +3,11 @@
 Python CLIs for data access, exploration, and pipeline support for Nickel telescope workflows.
 
 This package provides:
+- **`nickel` CLI**: Unified command-line interface for all pipeline operations
 - **Archive tools**: Download and query Lick Observatory archive data
 - **EDA tools**: Explore archive and Butler repository contents
 - **Pipeline tools**: DIA quality assessment, light curve extraction
 - **Skymap utilities**: Skymap generation and configuration
-
-These tools were formerly in `obs-nickel-archive-tools` and scripts under `scripts/python/`. Legacy wrapper scripts remain for compatibility.
 
 ## Installation
 
@@ -24,7 +23,205 @@ Or install directly:
 python -m pip install -e packages/data_tools
 ```
 
-## CLI Tools
+## The `nickel` CLI
+
+The primary interface for processing Nickel telescope data. Uses profile-based configuration for multi-repository workflows.
+
+### Basic Usage
+
+```bash
+# Show configuration and validate paths
+nickel env
+
+# Run nightly calibrations
+nickel calibs 20240625
+
+# Process science frames
+nickel science 20240625
+
+# Run difference imaging
+nickel dia 20240625 --auto
+```
+
+### Profile-Based Configuration
+
+Use profiles to work with different Butler repositories (e.g., different science campaigns):
+
+```bash
+# Uses .env.2023ixf for configuration
+nickel -p 2023ixf env
+nickel -p 2023ixf calibs 20230519
+nickel -p 2023ixf dia 20230519 --band r --auto
+
+# Uses .env.2020wnt for a different campaign
+nickel -p 2020wnt calibs 20201207
+```
+
+Profiles look for `.env.{profile}` or `.env.{profile}.ps1` files in the current directory.
+
+### Available Commands
+
+| Command | Description |
+|---------|-------------|
+| `nickel env` | Show configuration and validate paths |
+| `nickel bootstrap` | Initialize Butler repo, refcats, skymap |
+| `nickel download NIGHT` | Fetch data from Lick archive |
+| `nickel calibs NIGHT` | Run nightly calibrations (bias, flat) |
+| `nickel science NIGHT` | Process science frames (ISR, WCS, photometry) |
+| `nickel dia NIGHT` | Run difference imaging analysis |
+| `nickel ps1-template` | Download and ingest PS1 template for DIA |
+| `nickel fphot NIGHT` | Run forced photometry at RA/Dec |
+| `nickel lightcurve` | Extract lightcurve from DIA/forced phot sources |
+| `nickel run CONFIG.yaml` | Run full pipeline from YAML config |
+
+### Command Details
+
+#### `nickel bootstrap`
+
+Initialize a new Butler repository:
+
+```bash
+nickel bootstrap
+nickel -p 2023ixf bootstrap
+```
+
+Creates the Butler repo, registers the instrument, ingests reference catalogs, and sets up the skymap.
+
+#### `nickel calibs`
+
+Run nightly calibrations:
+
+```bash
+nickel calibs 20240625
+nickel calibs 20240625 --jobs 8
+```
+
+#### `nickel science`
+
+Process science images:
+
+```bash
+nickel science 20240625
+nickel science 20240625 --object 2020wnt --skip-coadds
+nickel science 20240625 --bad 12345,12346
+```
+
+Options:
+- `--object`: Filter by OBJECT header value
+- `--bad`: Exclude specific exposure IDs
+- `--skip-coadds`: Skip coadd generation
+- `--jobs`: Parallel jobs (default: 8)
+
+#### `nickel dia`
+
+Run difference imaging:
+
+```bash
+nickel dia 20240625 --auto                          # Auto-discover template
+nickel dia 20240625 --template templates/deep/r     # Use specific template
+nickel dia 20240625 --auto --prefer-ps1 --band r    # Prefer PS1, single band
+```
+
+Options:
+- `--auto`: Auto-discover template collection
+- `--template`: Specify template collection
+- `--prefer-ps1`: Prefer PS1 templates over internal (with --auto)
+- `--band`: Filter by band (b/v/r/i)
+- `--object`: Filter by OBJECT header
+
+#### `nickel ps1-template`
+
+Download and ingest PS1 template for difference imaging:
+
+```bash
+nickel ps1-template --ra 210.91 --dec 54.32 --band r
+nickel ps1-template --ra 210.91 --dec 54.32 --band i --degrade-seeing 2.0
+```
+
+PS1 templates are only available for r and i bands.
+
+Options:
+- `--ra`, `--dec`: Target coordinates (required)
+- `--band`: Nickel band, r or i (required)
+- `--degrade-seeing`: Convolve to this FWHM in arcsec
+- `--overwrite`: Replace existing template
+
+#### `nickel fphot`
+
+Run forced photometry at specified RA/Dec:
+
+```bash
+nickel fphot 20230519 --ra 210.91 --dec 54.32
+nickel fphot 20230519 --ra 210.91 --dec 54.32 --band r --image-type both
+```
+
+Options:
+- `--ra`, `--dec`: Target coordinates (required)
+- `--band`: Filter by band
+- `--image-type`: `visit`, `diffim`, or `both` (default: diffim)
+
+#### `nickel lightcurve`
+
+Extract lightcurve from DIA source catalogs or forced photometry:
+
+```bash
+# From DIA sources
+nickel lightcurve --ra 210.91 --dec 54.32 \
+    --collections "Nickel/runs/20230519/diff/*/run" \
+    --name "SN 2023ixf"
+
+# From forced photometry
+nickel lightcurve --ra 210.91 --dec 54.32 \
+    --collections "Nickel/runs/20230519/forcedPhotRaDec/*/run" \
+    --dataset-type forced_phot_diffim_radec \
+    --name "SN 2023ixf"
+```
+
+Options:
+- `--collections`: DIA/fphot collections to query (required)
+- `--radius`: Match radius in arcsec (default: 1.0)
+- `--min-snr`: Minimum S/N filter (default: 3.0)
+- `--dataset-type`: Dataset type (default: dia_source_unfiltered)
+- `--name`: Target name for plot title
+- `--output`: Output CSV file path
+- `--plot/--no-plot`: Generate plot (default: yes)
+
+Output files are saved to `{repo}/lightcurves/` by default.
+
+#### `nickel run`
+
+Run a full pipeline from YAML configuration:
+
+```bash
+nickel run scripts/config/2023ixf/pipeline.yaml
+nickel run pipeline.yaml --dry-run
+```
+
+Example YAML format:
+```yaml
+object: "2023ixf"
+ra: 210.910833
+dec: 54.316389
+bands: ["r", "i"]
+
+template:
+  type: ps1
+  degrade_seeing: 2.0
+
+nights:
+  20230519:
+    r: []
+    i: []
+
+options:
+  jobs: 8
+  forced_phot: true
+  lightcurve: true
+```
+
+## Standalone CLI Tools
+
+In addition to the unified `nickel` CLI, individual tools are available for specific tasks:
 
 ### Archive Tools
 
@@ -54,33 +251,7 @@ uv run obsn-eda-archive nights --start 20200101 --end 20201231 --format table
 uv run obsn-eda-archive nights --start 20200101 --end 20201231 --format csv --output nights.csv
 ```
 
-**Note**: The archive index only provides filenames and dates. Detailed metadata (filter, exposure time, target name) requires downloading files and inspecting FITS headers. Use `obsn-archive-fetch-night` to download data for detailed analysis.
-
-**Output formats**: `table` (rich terminal), `json`, `csv`, `tsv`
-
-**Example output** (summary):
-```
-Archive Summary Statistics
-  Total exposures: 1,331
-  Observing nights: 14
-  Night range: 20201201 to 20201230
-
-Note
-  Archive metadata (filter, exptime, object, etc.) is not indexed.
-  For detailed analysis, download files and inspect FITS headers.
-  Use 'nights' command to see per-night file counts.
-```
-
-**Example output** (nights):
-```
-┏━━━━━━━━━━┳━━━━━━━━━━━━┓
-┃ Night    ┃ File_Count ┃
-┡━━━━━━━━━━╇━━━━━━━━━━━━┩
-│ 20201201 │ 182        │
-│ 20201202 │ 44         │
-│ 20201204 │ 129        │
-└──────────┴────────────┘
-```
+**Note**: The archive index only provides filenames and dates. Detailed metadata (filter, exposure time, target name) requires downloading files and inspecting FITS headers.
 
 ### EDA Tools - Butler Repository Inspection
 
@@ -94,49 +265,17 @@ obsn-eda-butler collections --repo /path/to/repo
 obsn-eda-butler collections --repo /path/to/repo --pattern "Nickel/runs/*/diff/*"
 
 # Show dataset inventory for a collection
-obsn-eda-butler datasets --repo /path/to/repo --collection "Nickel/runs/20240625/processCcd/*/run"
+# Use the CHAINED parent to include primary + fallback results
+obsn-eda-butler datasets --repo /path/to/repo --collection "Nickel/runs/20240625/processCcd/*"
 
 # Check calibration coverage across nights
 obsn-eda-butler calibs --repo /path/to/repo --nights 20240601,20240602,20240603
 
 # Show template availability by tract and band
 obsn-eda-butler templates --repo /path/to/repo
-obsn-eda-butler templates --repo /path/to/repo --band r --format csv
 ```
 
-**Environment**: Set `$REPO` to avoid repeating `--repo` argument
-
-**Example output** (collections):
-```
-Butler Collections
-  Repository: /data/nickel/butler
-
-Raw Collections (12)
-  [RUN] Nickel/raw/20240625/20240626T123456Z
-  [RUN] Nickel/raw/20240626/20240627T123456Z
-  ...
-
-Calibrations Collections (8)
-  [CHAIN] Nickel/calib/current
-  [RUN] Nickel/calib/20240625
-  [RUN] Nickel/cp/20240625/bias/20240626T123456Z/run
-  ...
-
-Templates Collections (4)
-  [RUN] templates/deep/tract071/r/20240701T123456Z
-  ...
-```
-
-**Example output** (calibs):
-```
-Calibration Coverage by Night
-┏━━━━━━━━━━┳━━━━━━━┳━━━━━━━┳━━━━━━━┳━━━━━━━━━┓
-┃ Night    ┃ Bias  ┃ Flat  ┃ Dark  ┃ Defects ┃
-┡━━━━━━━━━━╇━━━━━━━╇━━━━━━━╇━━━━━━━╇━━━━━━━━━┩
-│ 20240625 │ 10    │ 15    │ ✗     │ ✓       │
-│ 20240626 │ 12    │ 18    │ ✗     │ ✓       │
-└──────────┴───────┴───────┴───────┴─────────┘
-```
+**Environment**: Set `$REPO` to avoid repeating `--repo` argument.
 
 ### DIA Tools
 
@@ -162,16 +301,32 @@ obsn-skymap-make --repo /path/to/repo --collection "Nickel/raw/*"
 
 ## Environment Variables
 
-### Archive Tools
+### Pipeline Configuration
+
+The `nickel` CLI uses a `.env` file for configuration. Create one from the example:
+
+```bash
+cp .env.example .env
+```
+
+Required variables:
+- `REPO` - Butler repository path
+- `STACK_DIR` - LSST stack installation directory
+- `OBS_NICKEL` - Path to obs_nickel package
+- `RAW_PARENT_DIR` - Root directory for raw data
+
+Optional variables:
+- `REFCAT_REPO` - Reference catalog repository
+- `CP_PIPE_DIR` - Calibration products directory
+- `LICK_ARCHIVE_DIR` - Lick archive client path
+- `LICK_ARCHIVE_URL` - Archive API URL (default: https://archive.ucolick.org/archive)
+
+### Archive Tools (Standalone)
 
 - `RAW_PARENT_DIR` - Root directory for raw data storage
-- `LICK_ARCHIVE_URL` - Archive API base URL (default: https://archive.ucolick.org/archive)
+- `LICK_ARCHIVE_URL` - Archive API base URL
 - `LICK_ARCHIVE_DIR` - Path to lick_searchable_archive client library
 - `LICK_ARCHIVE_INSTR` - Instrument filter (default: NICKEL_DIR)
-
-### Butler Tools
-
-- `REPO` - Butler repository path (used by EDA butler commands)
 
 ## Dependencies
 
@@ -180,6 +335,8 @@ Core dependencies (automatically installed):
 - `astropy` - Astronomy utilities
 - `rich` - Terminal formatting and tables
 - `matplotlib` - Plotting and visualization
+- `click` - CLI framework
+- `pyyaml` - YAML configuration parsing
 
 LSST Stack dependencies (must be available in environment):
 - `lsst.daf.butler` - Butler data repository access
@@ -193,18 +350,22 @@ The package uses a standard setuptools layout:
 packages/data_tools/
 ├── src/
 │   └── obs_nickel_data_tools/
-│       ├── pipeline_tools/      # Archive download, PS1 ingest
-│       ├── skymap/              # Skymap utilities
-│       └── eda/                 # Exploratory data analysis
-│           ├── archive_query.py # Archive exploration
-│           ├── butler_inspect.py # Butler repo inspection
-│           └── formatters.py    # Output formatting utilities
+│       ├── cli.py                # Main nickel CLI
+│       ├── core/                 # Core pipeline modules
+│       │   ├── config.py         # Configuration loading
+│       │   ├── stack.py          # LSST stack execution
+│       │   ├── calibs.py         # Calibration pipeline
+│       │   ├── science.py        # Science processing
+│       │   ├── dia.py            # Difference imaging
+│       │   ├── ps1_template.py   # PS1 template ingestion
+│       │   ├── fphot.py          # Forced photometry
+│       │   ├── lightcurve.py     # Lightcurve extraction
+│       │   └── run.py            # YAML pipeline runner
+│       ├── pipeline_tools/       # Archive download, PS1 ingest
+│       ├── skymap/               # Skymap utilities
+│       └── eda/                  # Exploratory data analysis
 ├── pyproject.toml
 └── README.md
 ```
 
 All CLI entry points are defined in `pyproject.toml` under `[project.scripts]`.
-
-## Legacy Notes
-
-The original scripts under `scripts/python/pipeline_tools/` and `scripts/python/skymap/` have been removed. Use the `obsn-*` CLI entrypoints (or `python -m obs_nickel_data_tools...`) instead; the pipeline scripts in this repo now call the entrypoints directly.

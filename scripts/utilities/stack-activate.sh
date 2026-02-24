@@ -52,6 +52,13 @@ setup lsst_distrib
 eups declare -r "$OBS_NICKEL" obs_nickel -t current 2>/dev/null || true
 setup obs_nickel
 
+# Declare + setup obs_nickel_data (curated calibrations)
+OBS_NICKEL_DATA_DIR="${REPO_ROOT}/packages/obs_nickel_data"
+if [ -d "$OBS_NICKEL_DATA_DIR" ]; then
+  eups declare -r "$OBS_NICKEL_DATA_DIR" obs_nickel_data -t current 2>/dev/null || true
+  setup obs_nickel_data
+fi
+
 # ---------- testdata_nickel ----------
 # Prefer already-installed product; then optional local declare; otherwise skip.
 if [ "${SETUP_TESTDATA:-1}" -eq 1 ]; then
@@ -76,4 +83,4 @@ else
 fi
 
 
-echo "LSST env active. obs_nickel is set up."
+echo "LSST env active. obs_nickel and obs_nickel_data are set up."

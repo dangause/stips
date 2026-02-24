@@ -114,6 +114,13 @@ setup lsst_distrib
 eups declare -r "$OBS_NICKEL" obs_nickel -t current 2>/dev/null || true
 setup obs_nickel
 
+# Declare + setup obs_nickel_data (curated calibrations)
+OBS_NICKEL_DATA_DIR="${REPO_ROOT}/packages/obs_nickel_data"
+if [[ -d "$OBS_NICKEL_DATA_DIR" ]]; then
+  eups declare -r "$OBS_NICKEL_DATA_DIR" obs_nickel_data -t current 2>/dev/null || true
+  setup obs_nickel_data
+fi
+
 # Ensure workspace packages are available in PYTHONPATH
 # This allows tests to import obs_nickel_data_tools, etc.
 WORKSPACE_ROOT="$REPO_ROOT"

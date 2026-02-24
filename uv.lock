@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = ">=3.12"
 resolution-markers = [
     "python_full_version >= '3.14'",
@@ -11,6 +11,7 @@ members = [
     "lick-searchable-archive",
     "obs-nickel",
     "obs-nickel-colorterms",
+    "obs-nickel-data",
     "obs-nickel-data-tools",
     "obs-nickel-defects",
     "obs-nickel-refcats",
@@ -1949,23 +1950,32 @@ version = "0.1.0"
 source = { editable = "packages/colorterms" }
 
 [[package]]
+name = "obs-nickel-data"
+version = "0.1.0"
+source = { editable = "packages/obs_nickel_data" }
+
+[[package]]
 name = "obs-nickel-data-tools"
 version = "0.1.0"
 source = { editable = "packages/data_tools" }
 dependencies = [
     { name = "astropy" },
+    { name = "click" },
     { name = "matplotlib" },
     { name = "numpy" },
     { name = "pandas" },
+    { name = "pyyaml" },
     { name = "rich" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "astropy" },
+    { name = "click", specifier = ">=8.0.0" },
     { name = "matplotlib", specifier = ">=3.5.0" },
     { name = "numpy" },
     { name = "pandas" },
+    { name = "pyyaml", specifier = ">=6.0" },
     { name = "rich", specifier = ">=13.0.0" },
 ]
 

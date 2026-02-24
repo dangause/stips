@@ -1,0 +1,101 @@
+# Nickel Processing Suite - HTCondor Site Configuration
+#
+# BPS configuration for HTCondor-based clusters.
+#
+# Usage:
+#   nickel bps submit calibs 20230519 --site htcondor
+
+includeConfigs:
+  - ../base.yaml
+
+# =============================================================================
+# WMS Backend Selection
+# =============================================================================
+wmsServiceClass: lsst.ctrl.bps.htcondor.HTCondorService
+computeSite: htcondor
+
+# =============================================================================
+# HTCondor Configuration
+# =============================================================================
+
+# Accounting (customize for your site)
+accounting_group: lsst.nickel
+accounting_user: "{operator}"
+
+# Resource requirements (defaults, override per-task below)
+requestMemory: 4096
+requestDisk: 10240000           # 10 GB scratch
+
+# HTCondor ClassAd requirements
+# Customize based on your pool configuration
+requirements: |
+  (Machine != "headnode") && (SlotType == "Partitionable")
+
+# Assume shared filesystem (common on HTCondor pools)
+bpsUseShared: true
+
+# File transfer settings
+# If not using shared filesystem, uncomment these:
+# transfer_input_files: ""
+# should_transfer_files: YES
+# when_to_transfer_output: ON_EXIT
+
+# =============================================================================
+# Job Environment
+# =============================================================================
+
+# Environment variables passed to jobs
+environment: |
+  STACK_DIR={stack_dir}
+  OBS_NICKEL={obs_nickel}
+  REPO={repo}
+  RAW_PARENT_DIR={raw_parent_dir}
+  REFCAT_REPO={refcat_repo}
+
+# Executable wrapper script
+preScript: |
+  #!/bin/bash
+  set -e
+
+  # Source LSST stack
+  source ${STACK_DIR}/loadLSST.bash
+  setup lsst_distrib
+
+  # Setup obs_nickel
+  if [[ -d "${OBS_NICKEL}" ]]; then
+      setup -r ${OBS_NICKEL} obs_nickel 2>/dev/null || true
+  fi
+
+# =============================================================================
+# Job Policies
+# =============================================================================
+
+# Hold jobs that exceed memory (don't evict)
+periodic_hold: (JobStatus == 2) && ((MemoryUsage > RequestMemory * 2) || (ResidentSetSize > RequestMemory * 1024 * 2))
+periodic_hold_reason: "Job exceeded memory limit"
+
+# Release held jobs to retry
+periodic_release: (HoldReasonCode == 3) && (NumJobStarts < 3)
+
+# Remove jobs after too many failures
+periodic_remove: (NumJobStarts > 5)
+
+# =============================================================================
+# Task-Specific Resource Overrides
+# =============================================================================
+pipetask:
+  isr:
+    requestMemory: 4096
+    requestCpus: 1
+
+  calibrateImage:
+    requestMemory: 8192
+    requestCpus: 2
+
+  subtractImages:
+    requestMemory: 16384
+    requestCpus: 2
+
+  detectAndMeasureDiaSource:
+    requestMemory: 8192
+    requestCpus: 1

@@ -138,7 +138,7 @@ ENV_FILE="${ENV_FILE:-.env}"
 EXTRA_ENV="${EXTRA_ENV:-}"
 
 if [[ ! -f "$ENV_FILE" ]]; then
-  echo "ERROR: $ENV_FILE not found. Run from obs_nickel root or set ENV_FILE."; exit 2;
+  echo "ERROR: $ENV_FILE not found. Run from the repo root (nickel_processing_suite) or set ENV_FILE."; exit 2;
 fi
 
 set -a
@@ -184,6 +184,7 @@ set +u
 source loadLSST.zsh
 setup lsst_distrib
 setup obs_nickel
+setup obs_nickel_data || true
 set -u
 
 cd "$REPO_ROOT"

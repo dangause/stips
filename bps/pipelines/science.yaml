@@ -1,0 +1,74 @@
+# Nickel Processing Suite - Science Processing BPS Pipeline
+#
+# Process science frames: ISR, WCS fitting, photometric calibration.
+#
+# Usage:
+#   nickel bps submit science 20230519 --site slurm
+#   nickel bps submit science 20230519 --site slurm --object 2023ixf
+#
+# Variables:
+#   {night}        - Observing night (YYYYMMDD)
+#   {repo}         - Butler repository path
+#   {obs_nickel}   - Path to obs_nickel package
+#   {object}       - Optional object name filter
+
+# Inherit site-specific settings
+includeConfigs:
+  - ../sites/{computeSite}.yaml
+
+# =============================================================================
+# Payload Configuration
+# =============================================================================
+payload:
+  payloadName: nickel-science-{night}
+  butlerConfig: "{repo}"
+
+  # Input collections (comma-separated, no spaces)
+  inCollection: "Nickel/raw/{night}/*,Nickel/calib/current,refcats"
+
+  # Output collection
+  output: "Nickel/runs/{night}/processCcd"
+  outputRun: "Nickel/runs/{night}/processCcd/{timestamp}/run"
+
+  # Data query - science frames only
+  # Object filter is optional (empty string if not specified)
+  dataQuery: "instrument='Nickel' AND exposure.observation_type='science'{object_filter}"
+
+# =============================================================================
+# Pipeline Definition
+# =============================================================================
+pipelineYaml: "{obs_nickel}/pipelines/ProcessCcd.yaml#processCcd"
+
+# =============================================================================
+# Task-Specific Settings
+# =============================================================================
+pipetask:
+  # Instrument Signature Removal
+  isr:
+    requestMemory: 4096
+    requestCpus: 1
+    # ISR is fast, rarely fails
+
+  # Characterize image (PSF modeling, background)
+  characterizeImage:
+    requestMemory: 6144
+    requestCpus: 1
+
+  # Calibrate (WCS + photometry)
+  calibrateImage:
+    requestMemory: 8192
+    requestCpus: 2
+    # Astrometry can be memory-hungry for dense fields
+    memoryMultiplier: 2.0
+    numberOfRetries: 3
+    requestMemoryMax: 24576   # 24 GB max
+
+# =============================================================================
+# Clustering Configuration
+# =============================================================================
+cluster:
+  # Group by visit for parallel processing
+  visit_cluster:
+    pipetasks: isr, characterizeImage, calibrateImage
+    dimensions: visit, detector
+    clusterAlgorithm: lsst.ctrl.bps.quantum_clustering_funcs.dimension_clustering

@@ -12,12 +12,17 @@ dependencies = [
     "astropy",
     "numpy",
     "pandas",
+    "pyyaml>=6.0",
     "rich>=13.0.0",
     "matplotlib>=3.5.0",
+    "click>=8.0.0",
 ]
 readme = "README.md"
 
 [project.scripts]
+# Main CLI
+nickel = "obs_nickel_data_tools.cli:main"
+
 # Archive tools
 obsn-archive-fetch-night = "obs_nickel_data_tools.pipeline_tools.fetch_archive_night:main"
 obsn-archive-nights = "obs_nickel_data_tools.pipeline_tools.generate_nights_list:main"

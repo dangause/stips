@@ -1,11 +1,11 @@
 REPO="/Users/dangause/Developer/lick/lsst/data/nickel/062424"
 RUN="Nickel/raw/all"
 CALIB_CHAIN="Nickel/calib/current"
-PIPE="/Users/dangause/Developer/lick/lsst/lsst_stack/stack/obs_nickel/pipelines/ProcessCcd.yaml"
+PIPE="/Users/dangause/Developer/lick/lsst/lsst_stack/stack/nickel_processing_suite/packages/obs_nickel/pipelines/ProcessCcd.yaml"
 BAD="1032,1051,1052"
 TS=$(date -u +%Y%m%dT%H%M%SZ)
 
-export PYTHONPATH="/Users/dangause/Developer/lick/lsst/lsst_stack/stack/obs_nickel:${PYTHONPATH}"
+export PYTHONPATH="/Users/dangause/Developer/lick/lsst/lsst_stack/stack/nickel_processing_suite/packages/obs_nickel:${PYTHONPATH}"
 
 pipetask run \
   -b "$REPO" \

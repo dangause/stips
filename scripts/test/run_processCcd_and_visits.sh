@@ -1,6 +1,6 @@
 STACK_DIR="/Users/dangause/Developer/lick/lsst/lsst_stack"
 REPO="/Users/dangause/Developer/lick/lsst/data/nickel/062424"
-OBS="${HOME}/Developer/lick/lsst/lsst_stack/stack/obs_nickel"
+OBS="${HOME}/Developer/lick/lsst/lsst_stack/stack/nickel_processing_suite/packages/obs_nickel"
 CALIB="Nickel/calib/current"
 REFCATS="refcats"
 RAW_IN="Nickel/raw/all"
@@ -16,7 +16,7 @@ echo "=== Nickel pipeline starting @ $TS ==="
 
 cd "$STACK_DIR"
 source loadLSST.zsh
-setup lsst_distrib; setup obs_nickel; setup testdata_nickel
+setup lsst_distrib; setup obs_nickel; setup obs_nickel_data; setup testdata_nickel
 
 cd "$OBS"
 

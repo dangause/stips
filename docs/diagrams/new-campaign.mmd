@@ -1,0 +1,69 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#4a90d9'}}}%%
+
+flowchart TD
+    subgraph Prep["1. Preparation"]
+        direction TB
+        P1["Identify Target<br/>(RA, Dec, name)"]
+        P2["Gather Observation Nights<br/>(check Lick archive)"]
+        P3["Determine Template Strategy<br/>(PS1 or late-time coadd)"]
+        P4["Choose Bands<br/>(B, V, R, I)"]
+    end
+
+    subgraph Config["2. Create Configuration"]
+        direction TB
+        C1["Create directory<br/>scripts/config/{target}/"]
+        C2["Create pipeline YAML<br/>pipeline_ps1_template.yaml<br/>or pipeline_nickel_template.yaml"]
+        C3["Fill in env section<br/>(REPO, STACK_DIR, etc.)"]
+        C4["Add target info<br/>(object, ra, dec, bands)"]
+        C5["Add nights with bands<br/>(YYYYMMDD: r: [], i: [])"]
+        C6["Configure options<br/>(jobs, fallbacks, etc.)"]
+    end
+
+    subgraph Data["3. Acquire Data"]
+        direction TB
+        D1["Download from Lick archive<br/>nickel download YYYYMMDD"]
+        D2["Verify raw data exists<br/>ls RAW_PARENT_DIR/YYYYMMDD/raw/"]
+        D3["Check for calibration frames<br/>(bias, flat exposures)"]
+    end
+
+    subgraph Run["4. Run Pipeline"]
+        direction TB
+        R1["Execute pipeline<br/>nickel run pipeline.yaml"]
+        R2["Monitor progress<br/>(stdout/logs)"]
+        R3["Check processing logs<br/>{repo}/processing_log/"]
+        R4["Handle failures<br/>(check logs, adjust configs)"]
+    end
+
+    subgraph Validate["5. Validate Results"]
+        direction TB
+        V1["Inspect light curve CSV<br/>{repo}/lightcurves/"]
+        V2["Check light curve plots"]
+        V3["Compare against known values<br/>(other surveys, published data)"]
+        V4["Verify photometric calibration"]
+    end
+
+    subgraph Iterate["6. Iterate & Refine"]
+        direction TB
+        I1["Add more nights"]
+        I2["Adjust bad exposure list"]
+        I3["Try different template"]
+        I4["Tune pipeline configs"]
+    end
+
+    Prep --> Config --> Data --> Run --> Validate --> Iterate
+    Iterate -.-> Config
+
+    %% Styling
+    classDef prepStyle fill:#e8f4f8,stroke:#4a90d9
+    classDef configStyle fill:#d4edda,stroke:#28a745
+    classDef dataStyle fill:#fff3cd,stroke:#856404
+    classDef runStyle fill:#cce5ff,stroke:#0056b3
+    classDef valStyle fill:#f8d7da,stroke:#721c24
+    classDef iterStyle fill:#e2d5f1,stroke:#6f42c1
+
+    class P1,P2,P3,P4 prepStyle
+    class C1,C2,C3,C4,C5,C6 configStyle
+    class D1,D2,D3 dataStyle
+    class R1,R2,R3,R4 runStyle
+    class V1,V2,V3,V4 valStyle
+    class I1,I2,I3,I4 iterStyle
