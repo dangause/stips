@@ -114,6 +114,7 @@ configs:
 # Processing options
 options:
   jobs: 6
+  concurrent_nights: 2       # Process up to 2 nights in parallel (coadd templates use more memory)
   skip_calibs: false
   skip_science: false
   rebuild_templates: true
