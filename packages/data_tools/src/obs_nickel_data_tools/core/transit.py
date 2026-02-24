@@ -391,3 +391,107 @@ def _save_results(result: TransitResult, output_dir: Path) -> None:
     )
 
     result.output_dir = output_dir
+
+
+# ---------------------------------------------------------------------------
+# Public entry point
+# ---------------------------------------------------------------------------
+
+
+def run(
+    csv_path: Path,
+    *,
+    period_min: float = 0.3,
+    period_max: float = 30.0,
+    duration_min: float = 0.5,
+    duration_max: float = 6.0,
+    n_samples: int = 10_000,
+    output_dir: Path | None = None,
+    log_file: Path | None = None,
+) -> TransitResult:
+    """Run a full BLS transit search on a lightcurve CSV.
+
+    Reads the lightcurve, runs a Box Least Squares transit search,
+    phase-folds at the best period centered on mid-transit, and writes
+    bls_periodogram.png, phase_folded_transit.png, and transit_results.json.
+
+    Parameters
+    ----------
+    csv_path : Path
+        Path to the lightcurve CSV produced by extract_lightcurve.py.
+    period_min : float
+        Minimum search period in days (default: 0.3).
+    period_max : float
+        Maximum search period in days (default: 30.0).
+    duration_min : float
+        Minimum transit duration in hours (default: 0.5).
+    duration_max : float
+        Maximum transit duration in hours (default: 6.0).
+    n_samples : int
+        Number of period grid points (default: 10 000).
+    output_dir : Path or None
+        Where to save results. Defaults to csv_path.parent/transit_analysis.
+    log_file : Path or None
+        Optional path to append a file handler for this run's log messages.
+
+    Returns
+    -------
+    TransitResult
+        Complete result including phase-folded data and output_dir.
+    """
+    csv_path = Path(csv_path)
+    if output_dir is None:
+        output_dir = csv_path.parent / "transit_analysis"
+    else:
+        output_dir = Path(output_dir)
+
+    if log_file is not None:
+        log_file = Path(log_file)
+        log_file.parent.mkdir(parents=True, exist_ok=True)
+        fh = logging.FileHandler(log_file, mode="a")
+        fh.setLevel(logging.DEBUG)
+        log.addHandler(fh)
+
+    log.info("Reading lightcurve from %s", csv_path)
+    df = _read_lightcurve(csv_path)
+    log.info("Loaded %d rows across bands: %s", len(df), sorted(df["band"].unique()))
+
+    log.info(
+        "Running BLS (period_min=%.2f d, period_max=%.2f d, "
+        "duration=%.1f-%.1f h, n_samples=%d)",
+        period_min,
+        period_max,
+        duration_min,
+        duration_max,
+        n_samples,
+    )
+    result = _run_bls(
+        df,
+        period_min=period_min,
+        period_max=period_max,
+        duration_min=duration_min,
+        duration_max=duration_max,
+        n_samples=n_samples,
+    )
+    log.info(
+        "Best period = %.4f d, depth = %.4f%%, duration = %.2f h, SNR = %.1f",
+        result.best_period,
+        result.depth * 100,
+        result.duration,
+        result.transit_snr,
+    )
+
+    log.info("Phase-folding at P = %.4f d, T0 = %.4f", result.best_period, result.t0)
+    result.phase_folded = _phase_fold_transit(df, result.best_period, result.t0)
+
+    log.info("Generating transit model")
+    result.transit_model = _make_transit_model(
+        result.best_period,
+        result.duration,
+        result.depth,
+    )
+
+    log.info("Saving results to %s", output_dir)
+    _save_results(result, output_dir)
+
+    return result
