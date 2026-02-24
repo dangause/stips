@@ -1260,11 +1260,25 @@ def lightcurve(
 @cli.command("run")
 @click.argument("config_file", type=click.Path(exists=True, path_type=Path))
 @click.option("--dry-run", is_flag=True, help="Print commands without executing")
+@click.option(
+    "--site",
+    type=click.Choice(["local", "slurm", "htcondor"]),
+    default=None,
+    help="Execution site (implies BPS execution)",
+)
+@click.option(
+    "--concurrent",
+    type=int,
+    default=None,
+    help="Max nights to process in parallel",
+)
 @click.pass_context
 def run_pipeline(
     ctx: click.Context,
     config_file: Path,
     dry_run: bool,
+    site: str | None,
+    concurrent: int | None,
 ) -> None:
     """Run full pipeline from YAML configuration file.
 
@@ -1331,6 +1345,8 @@ def run_pipeline(
         config_file=config_file,
         config=config,
         dry_run=dry_run,
+        site_override=site,
+        concurrent_override=concurrent,
     )
 
     if result.success:

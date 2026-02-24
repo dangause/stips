@@ -1622,6 +1622,8 @@ def run(
     config: Config,
     *,
     dry_run: bool = False,
+    site_override: str | None = None,
+    concurrent_override: int | None = None,
 ) -> RunResult:
     """Run full pipeline from YAML configuration.
 
@@ -1639,6 +1641,8 @@ def run(
         config_file: Path to YAML configuration file
         config: Pipeline configuration
         dry_run: Print commands without executing
+        site_override: Override execution site (implies BPS execution)
+        concurrent_override: Override concurrent_nights value
 
     Returns:
         RunResult with status and any failures
@@ -1669,6 +1673,13 @@ def run(
 
     # Load run configuration
     run_cfg = RunConfig.from_yaml(config_file)
+
+    # Apply CLI overrides
+    if site_override:
+        run_cfg.execution = "bps"
+        run_cfg.site = site_override
+    if concurrent_override is not None:
+        run_cfg.concurrent_nights = concurrent_override
 
     executor = _create_executor(run_cfg)
     log.info(f"Execution: {run_cfg.execution} (site={run_cfg.site})")
