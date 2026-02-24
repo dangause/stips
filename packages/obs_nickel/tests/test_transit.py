@@ -125,3 +125,40 @@ class TestReadLightcurve:
         pd.DataFrame({"mjd": [1], "band": ["r"]}).to_csv(bad_csv, index=False)
         with pytest.raises(ValueError, match="missing required columns"):
             transit_mod._read_lightcurve(bad_csv)
+
+
+# ---------------------------------------------------------------------------
+# TestNormalization
+# ---------------------------------------------------------------------------
+
+
+class TestNormalization:
+    def test_normalize_to_baseline_produces_fractional_flux(self, sample_transit_csv):
+        csv_path, *_ = sample_transit_csv
+        df = transit_mod._read_lightcurve(csv_path)
+        norm_flux, flux_err = transit_mod._normalize_to_baseline(df)
+        # Out-of-transit points should be near 1.0
+        # Median of fractional flux should be close to 1.0
+        assert abs(np.median(norm_flux) - 1.0) < 0.01
+
+    def test_normalize_preserves_transit_dip(self, sample_transit_csv):
+        csv_path, _, true_depth, _ = sample_transit_csv
+        df = transit_mod._read_lightcurve(csv_path)
+        norm_flux, _ = transit_mod._normalize_to_baseline(df)
+        # Some points should be significantly below 1.0 (in-transit)
+        min_flux = norm_flux.min()
+        assert (
+            min_flux < 1.0 - true_depth / 2
+        ), f"Min normalized flux {min_flux:.4f} not low enough for {true_depth*100}% depth"
+
+    def test_normalize_per_band_independence(self, sample_transit_csv):
+        csv_path, *_ = sample_transit_csv
+        df = transit_mod._read_lightcurve(csv_path)
+        norm_flux, _ = transit_mod._normalize_to_baseline(df)
+        # Per-band median should each be near 1.0
+        for band in df["band"].unique():
+            mask = (df["band"] == band).to_numpy()
+            band_median = np.median(norm_flux[mask])
+            assert (
+                abs(band_median - 1.0) < 0.02
+            ), f"Band {band} median {band_median:.4f} not near 1.0"
