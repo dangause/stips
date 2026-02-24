@@ -194,3 +194,138 @@ class TestTranslateBpsResult:
         result = _translate_bps_to_completed_process(status)
         assert "5 quanta successfully" in result.stdout
         assert "2 failed" in result.stdout
+
+
+class TestBPSExecutor:
+    def test_qgraph_runs_locally(self):
+        """QGraph generation always runs via local pipetask."""
+        from obs_nickel_data_tools.core.executor import BPSExecutor
+
+        executor = BPSExecutor(site="local")
+        mock_config = MagicMock()
+        expected = subprocess.CompletedProcess(
+            args=["pipetask"], returncode=0, stdout=""
+        )
+
+        with patch(
+            "obs_nickel_data_tools.core.executor.run_pipetask",
+            return_value=expected,
+        ):
+            result = executor.run_pipetask(
+                ["qgraph", "-b", "/repo", "-p", "DRP.yaml"],
+                mock_config,
+                capture_output=True,
+            )
+
+        assert result.returncode == 0
+
+    def test_run_submits_to_bps(self):
+        """Pipeline execution routes through BPS submit + poll."""
+        from obs_nickel_data_tools.core.executor import BPSExecutor
+
+        executor = BPSExecutor(site="local", poll_interval=0.01, timeout=1.0)
+        mock_config = MagicMock()
+        mock_config.repo = Path("/repo")
+        mock_config.obs_nickel = Path("/obs_nickel")
+
+        mock_bps_result = MagicMock()
+        mock_bps_result.success = True
+        mock_bps_result.run_id = "test-run-123"
+        mock_bps_result.submit_dir = "/repo/bps/submit"
+
+        succeeded_report = (
+            "X_REPORT    STATE      EXPECTED    SUCCEEDED    FAILED"
+            "    UNREADY    READY    RUNNING\n"
+            "---------  ---------  ----------  -----------  --------"
+            "  ---------  -------  ---------\n"
+            "summary    SUCCEEDED           4            4         0"
+            "          0        0          0\n"
+        )
+        mock_status = {"success": True, "output": succeeded_report}
+
+        with patch("obs_nickel_data_tools.core.executor.bps") as mock_bps_mod:
+            mock_bps_mod.submit.return_value = mock_bps_result
+            mock_bps_mod.status.return_value = mock_status
+            mock_bps_mod.BPSConfig = MagicMock()
+            mock_bps_mod.render_bps_config = MagicMock(
+                return_value=Path("/rendered.yaml")
+            )
+
+            result = executor.run_pipetask(
+                ["run", "-b", "/repo", "-g", "/path/to/graph.qg", "-j", "4"],
+                mock_config,
+                capture_output=True,
+                check=False,
+            )
+
+        assert result.returncode == 0
+        assert "4 quanta successfully" in result.stdout
+
+    def test_run_returns_failure_on_bps_submit_error(self):
+        """If BPS submit fails, return non-zero CompletedProcess."""
+        from obs_nickel_data_tools.core.executor import BPSExecutor
+
+        executor = BPSExecutor(site="local")
+        mock_config = MagicMock()
+        mock_config.repo = Path("/repo")
+        mock_config.obs_nickel = Path("/obs_nickel")
+
+        mock_bps_result = MagicMock()
+        mock_bps_result.success = False
+        mock_bps_result.error = "Config render failed"
+
+        with patch("obs_nickel_data_tools.core.executor.bps") as mock_bps_mod:
+            mock_bps_mod.submit.return_value = mock_bps_result
+            mock_bps_mod.BPSConfig = MagicMock()
+            mock_bps_mod.render_bps_config = MagicMock(
+                return_value=Path("/rendered.yaml")
+            )
+
+            result = executor.run_pipetask(
+                ["run", "-b", "/repo", "-g", "/graph.qg"],
+                mock_config,
+                check=False,
+            )
+
+        assert result.returncode == 1
+
+    def test_timeout_returns_failure(self):
+        """If polling exceeds timeout, return failure."""
+        from obs_nickel_data_tools.core.executor import BPSExecutor
+
+        executor = BPSExecutor(site="local", poll_interval=0.01, timeout=0.05)
+        mock_config = MagicMock()
+        mock_config.repo = Path("/repo")
+        mock_config.obs_nickel = Path("/obs_nickel")
+
+        mock_bps_result = MagicMock()
+        mock_bps_result.success = True
+        mock_bps_result.run_id = "stuck-run"
+        mock_bps_result.submit_dir = "/submit"
+
+        running_report = (
+            "X_REPORT    STATE    EXPECTED    SUCCEEDED    FAILED"
+            "    UNREADY    READY    RUNNING\n"
+            "summary    RUNNING          4            0         0"
+            "          0        2          2\n"
+        )
+        mock_status = {"success": True, "output": running_report}
+
+        with patch("obs_nickel_data_tools.core.executor.bps") as mock_bps_mod:
+            mock_bps_mod.submit.return_value = mock_bps_result
+            mock_bps_mod.status.return_value = mock_status
+            mock_bps_mod.BPSConfig = MagicMock()
+            mock_bps_mod.render_bps_config = MagicMock(
+                return_value=Path("/rendered.yaml")
+            )
+
+            result = executor.run_pipetask(
+                ["run", "-b", "/repo", "-g", "/graph.qg"],
+                mock_config,
+                check=False,
+            )
+
+        assert result.returncode == 1
+        assert (
+            "timeout" in result.stderr.lower() or "timed out" in result.stderr.lower()
+        )

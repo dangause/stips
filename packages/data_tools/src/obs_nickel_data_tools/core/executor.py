@@ -10,14 +10,19 @@ preserving all existing stage-level logic (fallbacks, validation, etc.).
 
 from __future__ import annotations
 
+import logging
 import subprocess
+import time
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
+from obs_nickel_data_tools.core import bps
 from obs_nickel_data_tools.core.stack import run_pipetask
 
 if TYPE_CHECKING:
 
     from obs_nickel_data_tools.core.config import Config
+
+log = logging.getLogger(__name__)
 
 
 @runtime_checkable
@@ -172,3 +177,127 @@ def _translate_bps_to_completed_process(
         stdout=stdout,
         stderr="",
     )
+
+
+class BPSExecutor:
+    """Execute pipetask commands via BPS batch submission.
+
+    QGraph generation ("qgraph" subcommand) always runs locally since it's
+    fast and stage modules need to inspect the graph (e.g., empty qgraph check).
+
+    Pipeline execution ("run" subcommand) is routed through BPS:
+    1. Parse pipetask args to extract the pre-built qgraph file
+    2. Build a BPSConfig and render the BPS YAML
+    3. Submit via bps.submit()
+    4. Poll via bps.status() until completion
+    5. Translate BPS result to CompletedProcess for stage module compatibility
+
+    Args:
+        site: Compute site ("local", "slurm", "htcondor")
+        poll_interval: Initial seconds between status checks (grows with backoff)
+        timeout: Maximum seconds to wait for a single BPS job
+    """
+
+    def __init__(
+        self,
+        site: str = "local",
+        poll_interval: float = 5.0,
+        timeout: float = 7200.0,
+    ):
+        self.site = site
+        self.poll_interval = poll_interval
+        self.timeout = timeout
+
+    def run_pipetask(
+        self,
+        args: list[str],
+        config: Config,
+        **kwargs,
+    ) -> subprocess.CompletedProcess:
+        subcommand = args[0] if args else ""
+
+        if subcommand == "qgraph":
+            # QGraph generation runs locally (fast, needed for validation)
+            return run_pipetask(args, config, **kwargs)
+
+        if subcommand != "run":
+            # Unknown subcommand — fall back to local execution
+            return run_pipetask(args, config, **kwargs)
+
+        return self._submit_and_poll(args, config, **kwargs)
+
+    def _submit_and_poll(
+        self,
+        args: list[str],
+        config: Config,
+        **kwargs,
+    ) -> subprocess.CompletedProcess:
+        """Submit a pipeline run to BPS and poll until completion."""
+        parsed = _parse_pipetask_args(args)
+        qgraph_file = parsed.get("qgraph_file")
+
+        if not qgraph_file:
+            log.warning("No qgraph file in args, falling back to local execution")
+            return run_pipetask(args, config, **kwargs)
+
+        # Build BPSConfig for submission
+        bps_cfg = bps.BPSConfig(
+            pipeline="custom",  # Will use pre-built qgraph, not pipeline YAML
+            night="00000000",  # Placeholder — qgraph has the actual data query
+            site=self.site,
+        )
+
+        # Submit to BPS
+        log.info(f"  Submitting to BPS (site={self.site}, qgraph={qgraph_file})")
+        bps_result = bps.submit(bps_cfg, config)
+
+        if not bps_result.success:
+            log.error(f"  BPS submit failed: {bps_result.error}")
+            return subprocess.CompletedProcess(
+                args=["bps", "submit"],
+                returncode=1,
+                stdout="",
+                stderr=bps_result.error or "BPS submission failed",
+            )
+
+        # Poll until completion
+        run_id = bps_result.run_id
+        log.info(f"  BPS job submitted: run_id={run_id}")
+
+        interval = self.poll_interval
+        max_interval = 60.0
+        start = time.monotonic()
+
+        while time.monotonic() - start < self.timeout:
+            status_result = bps.status(run_id, config)
+            raw_output = status_result.get("output", "")
+            parsed_status = _parse_bps_report(raw_output)
+            state = parsed_status["state"]
+
+            if state in ("SUCCEEDED", "FAILED", "DELETED"):
+                log.info(
+                    f"  BPS job {state}: {parsed_status['succeeded']} ok, "
+                    f"{parsed_status['failed']} failed"
+                )
+                if bps_result.submit_dir:
+                    log_file = kwargs.get("log_file")
+                    if log_file:
+                        with open(log_file, "a") as f:
+                            f.write(
+                                f"\nBPS job completed: run_id={run_id}, "
+                                f"state={state}, "
+                                f"logs at: {bps_result.submit_dir}/logging/\n"
+                            )
+                return _translate_bps_to_completed_process(parsed_status)
+
+            time.sleep(interval)
+            interval = min(interval * 1.5, max_interval)
+
+        # Timeout
+        log.warning(f"  BPS job timed out after {self.timeout}s (run_id={run_id})")
+        return subprocess.CompletedProcess(
+            args=["bps", "submit"],
+            returncode=1,
+            stdout="",
+            stderr=f"BPS job timed out after {self.timeout}s (run_id={run_id})",
+        )
