@@ -26,7 +26,6 @@ from obs_nickel_data_tools.core.pipeline import (
 from obs_nickel_data_tools.core.stack import (
     run_butler,
     run_butler_query,
-    run_pipetask,
 )
 
 if TYPE_CHECKING:
@@ -191,6 +190,7 @@ def run(
     target_ra: float | None = None,
     target_dec: float | None = None,
     log_file: Path | None = None,
+    executor=None,
 ) -> ScienceResult:
     """Run science processing for a night.
 
@@ -217,6 +217,11 @@ def run(
     Returns:
         ScienceResult with collection names and status
     """
+    from obs_nickel_data_tools.core.executor import LocalExecutor
+
+    if executor is None:
+        executor = LocalExecutor()
+
     night = validate_night(night)
     cols = CollectionNames(night)
     repo = str(config.repo)
@@ -455,7 +460,7 @@ def run(
                 qgraph_args.append("--clobber-outputs")
 
             # Build quantum graph
-            run_pipetask(qgraph_args, config, log_file=log_file)
+            executor.run_pipetask(qgraph_args, config, log_file=log_file)
 
             # Build run arguments
             run_args = [
@@ -479,7 +484,7 @@ def run(
                     pass
 
             # Run science processing
-            result = run_pipetask(
+            result = executor.run_pipetask(
                 run_args,
                 config,
                 capture_output=True,
@@ -711,7 +716,7 @@ def run(
             # Build coadds
             qg_coadd = qg_dir / f"coadds_{night}_{cols.run_ts}.qg"
 
-            run_pipetask(
+            executor.run_pipetask(
                 [
                     "qgraph",
                     "-b",
@@ -733,7 +738,7 @@ def run(
                 log_file=log_file,
             )
 
-            run_pipetask(
+            executor.run_pipetask(
                 [
                     "run",
                     "-b",

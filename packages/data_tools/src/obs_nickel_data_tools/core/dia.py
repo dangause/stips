@@ -20,7 +20,7 @@ from obs_nickel_data_tools.core.pipeline import (
     parse_quanta_summary,
     validate_night,
 )
-from obs_nickel_data_tools.core.stack import run_butler, run_butler_query, run_pipetask
+from obs_nickel_data_tools.core.stack import run_butler, run_butler_query
 
 if TYPE_CHECKING:
     from obs_nickel_data_tools.core.config import Config
@@ -110,6 +110,7 @@ def run(
     subtract_config_file: Path | None = None,
     detect_config_file: Path | None = None,
     log_file: Path | None = None,
+    executor=None,
 ) -> DIAResult:
     """Run difference imaging for a night.
 
@@ -129,6 +130,11 @@ def run(
     Returns:
         DIAResult with collection names and counts
     """
+    from obs_nickel_data_tools.core.executor import LocalExecutor
+
+    if executor is None:
+        executor = LocalExecutor()
+
     night = validate_night(night)
     cols = CollectionNames(night)
     repo = str(config.repo)
@@ -269,7 +275,7 @@ def run(
                 ["--config-file", f"detectAndMeasureDiaSource:{detect_config}"]
             )
 
-        qg_result = run_pipetask(
+        qg_result = executor.run_pipetask(
             qgraph_args,
             config,
             capture_output=True,
@@ -303,7 +309,7 @@ def run(
             )
 
         # Run DIA
-        dia_result = run_pipetask(
+        dia_result = executor.run_pipetask(
             [
                 "run",
                 "-b",
