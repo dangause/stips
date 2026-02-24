@@ -331,6 +331,44 @@ class TestBPSExecutor:
             "timeout" in result.stderr.lower() or "timed out" in result.stderr.lower()
         )
 
+    def test_submit_passes_qgraph_file_to_bps_config(self):
+        """BPSExecutor passes qgraph_file from pipetask args to BPSConfig."""
+        from obs_nickel_data_tools.core.executor import BPSExecutor
+
+        executor = BPSExecutor(site="local", poll_interval=0.01, timeout=1.0)
+        mock_config = MagicMock()
+        mock_config.repo = Path("/repo")
+        mock_config.obs_nickel = Path("/obs_nickel")
+
+        mock_bps_result = MagicMock()
+        mock_bps_result.success = True
+        mock_bps_result.run_id = "test-run-456"
+        mock_bps_result.submit_dir = "/repo/bps/submit"
+
+        succeeded_report = (
+            "X_REPORT    STATE      EXPECTED    SUCCEEDED    FAILED"
+            "    UNREADY    READY    RUNNING\n"
+            "summary    SUCCEEDED           2            2         0"
+            "          0        0          0\n"
+        )
+        mock_status = {"success": True, "output": succeeded_report}
+
+        with patch("obs_nickel_data_tools.core.executor.bps") as mock_bps_mod:
+            mock_bps_mod.submit.return_value = mock_bps_result
+            mock_bps_mod.status.return_value = mock_status
+            mock_bps_mod.BPSConfig = MagicMock()
+
+            executor.run_pipetask(
+                ["run", "-b", "/repo", "-g", "/path/to/my_graph.qg", "-j", "4"],
+                mock_config,
+                check=False,
+            )
+
+            # Verify BPSConfig was created with qgraph_file
+            call_kwargs = mock_bps_mod.BPSConfig.call_args
+            assert call_kwargs is not None
+            assert call_kwargs.kwargs.get("qgraph_file") == "/path/to/my_graph.qg"
+
 
 class TestExecutorWiring:
     """Verify stage modules accept and use executor parameter."""

@@ -245,6 +245,7 @@ class BPSExecutor:
             pipeline="custom",  # Will use pre-built qgraph, not pipeline YAML
             night="00000000",  # Placeholder — qgraph has the actual data query
             site=self.site,
+            qgraph_file=qgraph_file,
         )
 
         # Submit to BPS
