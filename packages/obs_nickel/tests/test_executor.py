@@ -150,3 +150,47 @@ class TestParseBpsReport:
         assert result["state"] == "UNKNOWN"
         assert result["succeeded"] == 0
         assert result["failed"] == 0
+
+
+class TestTranslateBpsResult:
+    def test_succeeded_maps_to_returncode_zero(self):
+        from obs_nickel_data_tools.core.executor import (
+            _translate_bps_to_completed_process,
+        )
+
+        status = {"state": "SUCCEEDED", "succeeded": 10, "failed": 0}
+        result = _translate_bps_to_completed_process(status)
+        assert result.returncode == 0
+        assert "10" in result.stdout
+        assert "0 failed" in result.stdout
+
+    def test_failed_maps_to_returncode_one(self):
+        from obs_nickel_data_tools.core.executor import (
+            _translate_bps_to_completed_process,
+        )
+
+        status = {"state": "FAILED", "succeeded": 7, "failed": 3}
+        result = _translate_bps_to_completed_process(status)
+        assert result.returncode == 1
+        assert "7" in result.stdout
+        assert "3 failed" in result.stdout
+
+    def test_unknown_maps_to_returncode_one(self):
+        from obs_nickel_data_tools.core.executor import (
+            _translate_bps_to_completed_process,
+        )
+
+        status = {"state": "UNKNOWN", "succeeded": 0, "failed": 0}
+        result = _translate_bps_to_completed_process(status)
+        assert result.returncode == 1
+
+    def test_stdout_matches_quanta_summary_format(self):
+        """Verify stdout format is parseable by pipeline.parse_quanta_summary()."""
+        from obs_nickel_data_tools.core.executor import (
+            _translate_bps_to_completed_process,
+        )
+
+        status = {"state": "FAILED", "succeeded": 5, "failed": 2}
+        result = _translate_bps_to_completed_process(status)
+        assert "5 quanta successfully" in result.stdout
+        assert "2 failed" in result.stdout

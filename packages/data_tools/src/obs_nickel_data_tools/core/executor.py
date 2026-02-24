@@ -137,3 +137,38 @@ def _parse_bps_report(raw_output: str) -> dict:
         "ready": 0,
         "running": 0,
     }
+
+
+def _translate_bps_to_completed_process(
+    bps_status: dict,
+) -> subprocess.CompletedProcess:
+    """Translate BPS status into a CompletedProcess.
+
+    Stage modules parse CompletedProcess.stdout with _parse_quanta_summary()
+    which looks for "Executed N quanta successfully, M failed out of total T".
+    We format our stdout to match that pattern.
+
+    Args:
+        bps_status: Dict with state, succeeded, failed keys from _parse_bps_report()
+
+    Returns:
+        CompletedProcess with returncode and formatted stdout
+    """
+    state = bps_status.get("state", "UNKNOWN")
+    quanta_ok = bps_status.get("succeeded", 0)
+    quanta_fail = bps_status.get("failed", 0)
+    total = quanta_ok + quanta_fail
+
+    returncode = 0 if state == "SUCCEEDED" else 1
+
+    stdout = (
+        f"Executed {quanta_ok} quanta successfully, "
+        f"{quanta_fail} failed out of total {total}"
+    )
+
+    return subprocess.CompletedProcess(
+        args=["bps", "submit"],
+        returncode=returncode,
+        stdout=stdout,
+        stderr="",
+    )
