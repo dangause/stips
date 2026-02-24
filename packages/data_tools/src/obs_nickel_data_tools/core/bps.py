@@ -189,6 +189,7 @@ def render_bps_config(
         "coord_collection": bps_cfg.coord_collection or "",
         "object_filter": object_filter,
         "pipeline": bps_cfg.pipeline,
+        "qgraph_file": bps_cfg.qgraph_file or "",
     }
 
     # Perform substitution

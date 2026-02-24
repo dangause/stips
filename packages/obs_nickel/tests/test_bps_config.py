@@ -62,3 +62,76 @@ class TestBPSConfigQgraphField:
 
         cfg = BPSConfig(pipeline="custom", night="20230519")
         assert cfg.pipeline == "custom"
+
+
+class TestRenderBpsConfigQgraph:
+    def _make_mock_config(self, tmp_path):
+        """Create a mock Config object pointing at the real bps/ templates."""
+        from unittest.mock import MagicMock
+
+        # find_bps_config() goes: config.obs_nickel.parent.parent / "bps" / "pipelines"
+        mock_config = MagicMock()
+        mock_config.obs_nickel = REPO_ROOT / "packages" / "obs_nickel"
+        mock_config.repo = tmp_path / "repo"
+        mock_config.stack_dir = Path("/fake/stack")
+        mock_config.cp_pipe_dir = Path("/fake/cp_pipe")
+        mock_config.raw_parent_dir = Path("/fake/raw")
+        mock_config.refcat_repo = Path("/fake/refcats")
+        return mock_config
+
+    def test_render_custom_injects_qgraph_file(self, tmp_path):
+        """render_bps_config with custom pipeline substitutes {qgraph_file}."""
+        from obs_nickel_data_tools.core.bps import BPSConfig, render_bps_config
+
+        config = self._make_mock_config(tmp_path)
+        bps_cfg = BPSConfig(
+            pipeline="custom",
+            night="20230519",
+            site="local",
+            qgraph_file="/path/to/my_graph.qg",
+        )
+
+        output_dir = tmp_path / "submit"
+        rendered_path = render_bps_config(bps_cfg, config, output_dir)
+        rendered_content = rendered_path.read_text()
+
+        assert "qgraphFile:" in rendered_content
+        assert "/path/to/my_graph.qg" in rendered_content
+        # Must NOT contain unsubstituted placeholder
+        assert "{qgraph_file}" not in rendered_content
+
+    def test_render_custom_has_no_pipeline_yaml(self, tmp_path):
+        """Rendered custom config must not have pipelineYaml."""
+        from obs_nickel_data_tools.core.bps import BPSConfig, render_bps_config
+
+        config = self._make_mock_config(tmp_path)
+        bps_cfg = BPSConfig(
+            pipeline="custom",
+            night="20230519",
+            site="local",
+            qgraph_file="/path/to/graph.qg",
+        )
+
+        output_dir = tmp_path / "submit"
+        rendered_path = render_bps_config(bps_cfg, config, output_dir)
+        rendered_content = rendered_path.read_text()
+
+        assert "pipelineYaml:" not in rendered_content
+
+    def test_render_non_custom_ignores_qgraph(self, tmp_path):
+        """For non-custom pipelines, qgraph_file is ignored."""
+        from obs_nickel_data_tools.core.bps import BPSConfig, render_bps_config
+
+        config = self._make_mock_config(tmp_path)
+        bps_cfg = BPSConfig(
+            pipeline="science",
+            night="20230519",
+            site="local",
+        )
+
+        output_dir = tmp_path / "submit"
+        rendered_path = render_bps_config(bps_cfg, config, output_dir)
+        rendered_content = rendered_path.read_text()
+
+        # Science pipeline should have pipelineYaml, NOT qgraphFile
+        assert "pipelineYaml:" in rendered_content
