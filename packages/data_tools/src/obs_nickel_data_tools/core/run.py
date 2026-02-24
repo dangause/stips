@@ -856,10 +856,52 @@ def _run_calibs_step(
     """
     from obs_nickel_data_tools.core import calibs
 
-    for night in all_nights:
-        log.info(f"Running calibrations for {night}...")
+    if dry_run:
+        for night in all_nights:
+            log.info(f"Running calibrations for {night}...")
+            log.info(f"  [DRY RUN] calibs.run({night})")
+        return None
 
-        if not dry_run:
+    if run_cfg.concurrent_nights > 1:
+        log.info(
+            f"Concurrent calibs: {len(all_nights)} nights, "
+            f"max_workers={run_cfg.concurrent_nights}"
+        )
+
+        def _calibs_one(night: str) -> bool:
+            log.info(f"Running calibrations for {night}...")
+            calib_log = _get_step_log_file("calibs", night=night)
+            calib_result = calibs.run(
+                night,
+                config,
+                jobs=run_cfg.jobs,
+                log_file=calib_log,
+                executor=executor,
+            )
+            _maybe_split_log(calib_log)
+            if not calib_result.success:
+                log.warning(f"Calibrations failed for {night}: {calib_result.error}")
+                return False
+            return True
+
+        outcomes = _dispatch_concurrent(
+            _calibs_one,
+            all_nights,
+            max_workers=run_cfg.concurrent_nights,
+            item_label="calibs",
+        )
+        for night in all_nights:
+            ok = outcomes.get(night)
+            if not ok:
+                result.failed_calibs.append(night)
+                if not run_cfg.continue_on_error:
+                    result.success = False
+                    result.error = f"Calibrations failed for {night}"
+                    return result
+    else:
+        for night in all_nights:
+            log.info(f"Running calibrations for {night}...")
+
             calib_log = _get_step_log_file("calibs", night=night)
             calib_result = calibs.run(
                 night,
@@ -876,8 +918,6 @@ def _run_calibs_step(
                     result.success = False
                     result.error = f"Calibrations failed for {night}"
                     return result
-        else:
-            log.info(f"  [DRY RUN] calibs.run({night})")
 
     return None
 
@@ -898,20 +938,96 @@ def _run_science_step(
     """
     from obs_nickel_data_tools.core import science
 
-    for night in all_nights:
-        if night in result.failed_calibs:
-            log.info(f"Skipping science for {night} (calibrations failed)")
-            result.failed_science.append(night)
-            continue
+    if dry_run:
+        for night in all_nights:
+            if night in result.failed_calibs:
+                log.info(f"Skipping science for {night} (calibrations failed)")
+                result.failed_science.append(night)
+                continue
+            bands_for_night = _get_bands_for_night(night, run_cfg)
+            if not bands_for_night:
+                log.info(f"Skipping science for {night} (no bands configured)")
+                continue
+            log.info(f"Running science for {night}...")
+            log.info(f"  [DRY RUN] science.run({night}, bands={bands_for_night})")
+        return None
 
-        bands_for_night = _get_bands_for_night(night, run_cfg)
-        if not bands_for_night:
-            log.info(f"Skipping science for {night} (no bands configured)")
-            continue
+    if run_cfg.concurrent_nights > 1:
+        # Pre-filter: skip nights with failed calibs or no bands
+        eligible_nights: list[str] = []
+        for night in all_nights:
+            if night in result.failed_calibs:
+                log.info(f"Skipping science for {night} (calibrations failed)")
+                result.failed_science.append(night)
+                continue
+            bands_for_night = _get_bands_for_night(night, run_cfg)
+            if not bands_for_night:
+                log.info(f"Skipping science for {night} (no bands configured)")
+                continue
+            eligible_nights.append(night)
 
-        log.info(f"Running science for {night}...")
+        log.info(
+            f"Concurrent science: {len(eligible_nights)} nights, "
+            f"max_workers={run_cfg.concurrent_nights}"
+        )
 
-        if not dry_run:
+        def _science_one(night: str) -> tuple[bool, bool, str | None]:
+            """Returns (success, fallback_used, config_used)."""
+            bands = _get_bands_for_night(night, run_cfg)
+            log.info(f"Running science for {night}...")
+            sci_log = _get_step_log_file("science", night=night)
+            sci_result = science.run(
+                night,
+                config,
+                jobs=run_cfg.jobs,
+                object_filter=run_cfg.object_name,
+                skip_coadds=True,
+                science_cfg=science_cfg,
+                use_fallbacks=run_cfg.use_fallbacks,
+                bands=bands,
+                target_ra=run_cfg.ra,
+                target_dec=run_cfg.dec,
+                log_file=sci_log,
+                executor=executor,
+            )
+            _maybe_split_log(sci_log)
+            if not sci_result.success:
+                log.warning(f"Science failed for {night}: {sci_result.error}")
+                return (False, False, None)
+            if sci_result.fallback_used:
+                log.info(
+                    f"  Note: {night} used fallback config: {sci_result.config_used}"
+                )
+            return (True, sci_result.fallback_used, sci_result.config_used)
+
+        outcomes = _dispatch_concurrent(
+            _science_one,
+            eligible_nights,
+            max_workers=run_cfg.concurrent_nights,
+            item_label="science",
+        )
+        for night in eligible_nights:
+            res = outcomes.get(night)
+            if res is None or not res[0]:
+                result.failed_science.append(night)
+                if not run_cfg.continue_on_error:
+                    result.success = False
+                    result.error = f"Science failed for {night}"
+                    return result
+    else:
+        for night in all_nights:
+            if night in result.failed_calibs:
+                log.info(f"Skipping science for {night} (calibrations failed)")
+                result.failed_science.append(night)
+                continue
+
+            bands_for_night = _get_bands_for_night(night, run_cfg)
+            if not bands_for_night:
+                log.info(f"Skipping science for {night} (no bands configured)")
+                continue
+
+            log.info(f"Running science for {night}...")
+
             sci_log = _get_step_log_file("science", night=night)
             sci_result = science.run(
                 night,
@@ -939,8 +1055,6 @@ def _run_science_step(
                 log.info(
                     f"  Note: {night} used fallback config: {sci_result.config_used}"
                 )
-        else:
-            log.info(f"  [DRY RUN] science.run({night}, bands={bands_for_night})")
 
     return None
 
@@ -960,40 +1074,145 @@ def _run_dia_step(
     """
     from obs_nickel_data_tools.core import dia
 
-    for night in all_nights:
-        if night in result.failed_science:
-            log.info(f"Skipping DIA for {night} (science processing failed)")
+    if dry_run:
+        for night in all_nights:
+            if night in result.failed_science:
+                log.info(f"Skipping DIA for {night} (science processing failed)")
+                bands_for_night = _get_bands_for_night(night, run_cfg)
+                for band in bands_for_night:
+                    result.failed_dia.append(f"{night}/{band}")
+                continue
             bands_for_night = _get_bands_for_night(night, run_cfg)
+            if not bands_for_night:
+                log.info(f"Skipping DIA for {night} (no bands configured)")
+                continue
             for band in bands_for_night:
-                result.failed_dia.append(f"{night}/{band}")
-            continue
+                log.info(f"Running DIA for {night}/{band}...")
+                log.info(f"  [DRY RUN] dia.run({night}, band={band})")
+        return None
 
-        bands_for_night = _get_bands_for_night(night, run_cfg)
-        if not bands_for_night:
-            log.info(f"Skipping DIA for {night} (no bands configured)")
-            continue
+    # Resolve DIA config file paths from YAML (shared across all nights)
+    configs_dir = config.obs_nickel / "configs"
+    subtract_cfg = None
+    if run_cfg.dia_configs.subtract_images:
+        subtract_cfg = configs_dir / run_cfg.dia_configs.subtract_images
+    detect_cfg = None
+    if run_cfg.dia_configs.detect_and_measure:
+        detect_cfg = configs_dir / run_cfg.dia_configs.detect_and_measure
 
-        for band in bands_for_night:
-            template_coll = result.template_collections.get(band)
-            if template_coll is None:
-                log.warning(f"Skipping DIA for {night}/{band} (no template available)")
-                result.failed_dia.append(f"{night}/{band}")
+    if run_cfg.concurrent_nights > 1:
+        # Pre-filter: skip nights with failed science or no bands
+        eligible_nights: list[str] = []
+        for night in all_nights:
+            if night in result.failed_science:
+                log.info(f"Skipping DIA for {night} (science processing failed)")
+                bands_for_night = _get_bands_for_night(night, run_cfg)
+                for band in bands_for_night:
+                    result.failed_dia.append(f"{night}/{band}")
+                continue
+            bands_for_night = _get_bands_for_night(night, run_cfg)
+            if not bands_for_night:
+                log.info(f"Skipping DIA for {night} (no bands configured)")
+                continue
+            eligible_nights.append(night)
+
+        log.info(
+            f"Concurrent DIA: {len(eligible_nights)} nights, "
+            f"max_workers={run_cfg.concurrent_nights}"
+        )
+
+        def _dia_one(night: str) -> list[str]:
+            """Process all bands for one night. Returns list of failed night/band keys."""
+            failed: list[str] = []
+            bands = _get_bands_for_night(night, run_cfg)
+            for band in bands:
+                template_coll = result.template_collections.get(band)
+                if template_coll is None:
+                    log.warning(
+                        f"Skipping DIA for {night}/{band} (no template available)"
+                    )
+                    failed.append(f"{night}/{band}")
+                    continue
+
+                log.info(f"Running DIA for {night}/{band}...")
+                dia_log = _get_step_log_file("dia", night=night, band=band)
+                dia_result = dia.run(
+                    night,
+                    config,
+                    jobs=run_cfg.jobs,
+                    template=template_coll,
+                    auto_template=False,
+                    prefer_ps1=run_cfg.template_type == "ps1",
+                    band=band,
+                    object_filter=run_cfg.object_name,
+                    subtract_config_file=subtract_cfg,
+                    detect_config_file=detect_cfg,
+                    log_file=dia_log,
+                    executor=executor,
+                )
+                _maybe_split_log(dia_log)
+                if not dia_result.success:
+                    failed.append(f"{night}/{band}")
+                    log.warning(f"DIA failed for {night}/{band}: {dia_result.error}")
+            return failed
+
+        outcomes = _dispatch_concurrent(
+            _dia_one,
+            eligible_nights,
+            max_workers=run_cfg.concurrent_nights,
+            item_label="dia",
+        )
+        for night in eligible_nights:
+            failed_pairs = outcomes.get(night)
+            if failed_pairs is None:
+                # Thread raised an exception — mark all bands failed
+                bands = _get_bands_for_night(night, run_cfg)
+                for band in bands:
+                    result.failed_dia.append(f"{night}/{band}")
+            elif failed_pairs:
+                result.failed_dia.extend(failed_pairs)
+
+            # Check continue_on_error for any failure in this night
+            if not run_cfg.continue_on_error:
+                night_failures = (
+                    failed_pairs
+                    if failed_pairs
+                    else (
+                        [f"{night}/{b}" for b in _get_bands_for_night(night, run_cfg)]
+                        if failed_pairs is None
+                        else []
+                    )
+                )
+                if night_failures:
+                    result.success = False
+                    result.error = f"DIA failed for {night_failures[0]}"
+                    return result
+    else:
+        for night in all_nights:
+            if night in result.failed_science:
+                log.info(f"Skipping DIA for {night} (science processing failed)")
+                bands_for_night = _get_bands_for_night(night, run_cfg)
+                for band in bands_for_night:
+                    result.failed_dia.append(f"{night}/{band}")
                 continue
 
-            log.info(f"Running DIA for {night}/{band}...")
+            bands_for_night = _get_bands_for_night(night, run_cfg)
+            if not bands_for_night:
+                log.info(f"Skipping DIA for {night} (no bands configured)")
+                continue
 
-            if not dry_run:
+            for band in bands_for_night:
+                template_coll = result.template_collections.get(band)
+                if template_coll is None:
+                    log.warning(
+                        f"Skipping DIA for {night}/{band} (no template available)"
+                    )
+                    result.failed_dia.append(f"{night}/{band}")
+                    continue
+
+                log.info(f"Running DIA for {night}/{band}...")
+
                 dia_log = _get_step_log_file("dia", night=night, band=band)
-
-                # Resolve DIA config file paths from YAML
-                configs_dir = config.obs_nickel / "configs"
-                subtract_cfg = None
-                if run_cfg.dia_configs.subtract_images:
-                    subtract_cfg = configs_dir / run_cfg.dia_configs.subtract_images
-                detect_cfg = None
-                if run_cfg.dia_configs.detect_and_measure:
-                    detect_cfg = configs_dir / run_cfg.dia_configs.detect_and_measure
-
                 dia_result = dia.run(
                     night,
                     config,
@@ -1016,8 +1235,6 @@ def _run_dia_step(
                         result.success = False
                         result.error = f"DIA failed for {night}/{band}"
                         return result
-            else:
-                log.info(f"  [DRY RUN] dia.run({night}, band={band})")
 
     return None
 
@@ -1036,24 +1253,120 @@ def _run_fphot_step(
 
     failed_dia_set = set(result.failed_dia)
 
-    for night in all_nights:
-        bands_for_night = _get_bands_for_night(night, run_cfg)
-        successful_bands = [
-            b for b in bands_for_night if f"{night}/{b}" not in failed_dia_set
-        ]
+    if dry_run:
+        for night in all_nights:
+            bands_for_night = _get_bands_for_night(night, run_cfg)
+            successful_bands = [
+                b for b in bands_for_night if f"{night}/{b}" not in failed_dia_set
+            ]
+            if not successful_bands:
+                log.info(
+                    f"Skipping forced photometry for {night} (all DIA bands failed)"
+                )
+                result.failed_fphot.append(night)
+                continue
+            for band in successful_bands:
+                log.info(f"Running forced photometry for {night}/{band}...")
+                log.info(
+                    f"  [DRY RUN] fphot.run({night}, band={band}, "
+                    f"image_type={run_cfg.forced_phot_image_type})"
+                )
+        return
 
-        if not successful_bands:
-            log.info(f"Skipping forced photometry for {night} (all DIA bands failed)")
-            result.failed_fphot.append(night)
-            continue
+    if run_cfg.concurrent_nights > 1:
+        # Pre-filter: skip nights with all DIA bands failed
+        eligible_nights: list[str] = []
+        for night in all_nights:
+            bands_for_night = _get_bands_for_night(night, run_cfg)
+            successful_bands = [
+                b for b in bands_for_night if f"{night}/{b}" not in failed_dia_set
+            ]
+            if not successful_bands:
+                log.info(
+                    f"Skipping forced photometry for {night} (all DIA bands failed)"
+                )
+                result.failed_fphot.append(night)
+                continue
+            eligible_nights.append(night)
 
-        night_fphot_colls: list[str] = []
-        night_had_failure = False
+        log.info(
+            f"Concurrent fphot: {len(eligible_nights)} nights, "
+            f"max_workers={run_cfg.concurrent_nights}"
+        )
 
-        for band in successful_bands:
-            log.info(f"Running forced photometry for {night}/{band}...")
+        def _fphot_one(
+            night: str,
+        ) -> tuple[list[str], bool]:
+            """Process all bands for one night.
 
-            if not dry_run:
+            Returns (output_collections, had_failure).
+            """
+            bands = _get_bands_for_night(night, run_cfg)
+            ok_bands = [b for b in bands if f"{night}/{b}" not in failed_dia_set]
+            colls: list[str] = []
+            had_failure = False
+            for band in ok_bands:
+                log.info(f"Running forced photometry for {night}/{band}...")
+                fphot_log = _get_step_log_file("fphot", night=night, band=band)
+                fphot_result = fphot.run(
+                    night=night,
+                    ra=run_cfg.ra,
+                    dec=run_cfg.dec,
+                    config=config,
+                    band=band,
+                    image_type=run_cfg.forced_phot_image_type,
+                    jobs=run_cfg.jobs,
+                    log_file=fphot_log,
+                    executor=executor,
+                )
+                _maybe_split_log(fphot_log)
+                if not fphot_result.success:
+                    had_failure = True
+                    log.warning(
+                        f"Forced phot failed for {night}/{band}: "
+                        f"{fphot_result.error}"
+                    )
+                else:
+                    colls.extend(fphot_result.output_collections)
+            return (colls, had_failure)
+
+        outcomes = _dispatch_concurrent(
+            _fphot_one,
+            eligible_nights,
+            max_workers=run_cfg.concurrent_nights,
+            item_label="fphot",
+        )
+        for night in eligible_nights:
+            res = outcomes.get(night)
+            if res is None:
+                # Thread raised an exception
+                result.failed_fphot.append(night)
+            else:
+                colls, had_failure = res
+                if colls:
+                    result.forced_phot_collections[night] = colls
+                if had_failure:
+                    result.failed_fphot.append(night)
+    else:
+        for night in all_nights:
+            bands_for_night = _get_bands_for_night(night, run_cfg)
+            successful_bands = [
+                b for b in bands_for_night if f"{night}/{b}" not in failed_dia_set
+            ]
+
+            if not successful_bands:
+                log.info(
+                    f"Skipping forced photometry for {night} (all DIA bands failed)"
+                )
+                result.failed_fphot.append(night)
+                continue
+
+            night_fphot_colls: list[str] = []
+            night_had_failure = False
+
+            for band in successful_bands:
+                log.info(f"Running forced photometry for {night}/{band}...")
+
                 fphot_log = _get_step_log_file("fphot", night=night, band=band)
                 fphot_result = fphot.run(
                     night=night,
@@ -1074,16 +1387,11 @@ def _run_fphot_step(
                     )
                 else:
                     night_fphot_colls.extend(fphot_result.output_collections)
-            else:
-                log.info(
-                    f"  [DRY RUN] fphot.run({night}, band={band}, "
-                    f"image_type={run_cfg.forced_phot_image_type})"
-                )
 
-        if night_fphot_colls:
-            result.forced_phot_collections[night] = night_fphot_colls
-        if night_had_failure:
-            result.failed_fphot.append(night)
+            if night_fphot_colls:
+                result.forced_phot_collections[night] = night_fphot_colls
+            if night_had_failure:
+                result.failed_fphot.append(night)
 
 
 def _run_lightcurve_step(
