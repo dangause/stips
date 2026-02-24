@@ -588,6 +588,26 @@ class RunResult:
     error: str | None = None
 
 
+def _create_executor(run_cfg: RunConfig):
+    """Create the appropriate executor from RunConfig.
+
+    Args:
+        run_cfg: Pipeline run configuration
+
+    Returns:
+        LocalExecutor for local execution, BPSExecutor for BPS execution
+    """
+    from obs_nickel_data_tools.core.executor import BPSExecutor, LocalExecutor
+
+    if run_cfg.execution == "bps":
+        return BPSExecutor(
+            site=run_cfg.site,
+            poll_interval=run_cfg.bps_poll_interval,
+            timeout=run_cfg.bps_timeout,
+        )
+    return LocalExecutor()
+
+
 def _get_bands_for_night(
     night: str,
     run_cfg: RunConfig,

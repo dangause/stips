@@ -286,3 +286,24 @@ class TestRunConfigExecutionFields:
         cfg = RunConfig.from_yaml(path)
         assert cfg.execution == "local"
         assert cfg.concurrent_nights == 3
+
+
+class TestExecutorFactory:
+    def test_local_config_creates_local_executor(self, sn_yaml):
+        from obs_nickel_data_tools.core.executor import LocalExecutor
+        from obs_nickel_data_tools.core.run import RunConfig, _create_executor
+
+        cfg = RunConfig.from_yaml(sn_yaml)
+        executor = _create_executor(cfg)
+        assert isinstance(executor, LocalExecutor)
+
+    def test_bps_config_creates_bps_executor(self, bps_yaml):
+        from obs_nickel_data_tools.core.executor import BPSExecutor
+        from obs_nickel_data_tools.core.run import RunConfig, _create_executor
+
+        cfg = RunConfig.from_yaml(bps_yaml)
+        executor = _create_executor(cfg)
+        assert isinstance(executor, BPSExecutor)
+        assert executor.site == "slurm"
+        assert executor.poll_interval == 10.0
+        assert executor.timeout == 3600
