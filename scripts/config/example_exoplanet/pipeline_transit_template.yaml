@@ -1,25 +1,25 @@
-# Example pipeline configuration for a variable star campaign
+# Example pipeline configuration for an exoplanet transit campaign
 #
 # Usage:
-#   nickel run scripts/config/example_variable_star/pipeline_variable_template.yaml
-#   nickel run scripts/config/example_variable_star/pipeline_variable_template.yaml --dry-run
+#   nickel run scripts/config/example_exoplanet/pipeline_transit_template.yaml
+#   nickel run scripts/config/example_exoplanet/pipeline_transit_template.yaml --dry-run
 #
 # This is a TEMPLATE - copy and customize for your target:
-#   1. Replace object/ra/dec with your variable star coordinates
-#   2. Set template nights spanning multiple variability cycles
+#   1. Replace object/ra/dec with your exoplanet host coordinates
+#   2. Set template nights (any epochs — star is at baseline >95% of the time)
 #   3. Set science nights for your observing campaign
-#   4. Adjust period_min/period_max to your expected range
+#   4. Adjust period_min/period_max and transit_duration_min/max
 #   5. Update env paths to match your system
 #
 # Pipeline steps:
 #   0. Bootstrap repository (automatic if needed)
-#   1. Build coadd templates from many epochs (median -> mean flux reference)
+#   1. Build coadd templates from many epochs (median -> baseline reference)
 #   2. Run calibrations per night
 #   3. Run science processing per night
-#   4. Run DIA per night per band (measures deviation from mean flux)
-#   5. Run forced photometry at variable star coordinates (visit + diffim)
+#   4. Run DIA per night per band
+#   5. Run forced photometry at host star coordinates (visit images)
 #   6. Extract combined multi-band lightcurve
-#   7. Run Lomb-Scargle period search and phase folding
+#   7. Run BLS transit search and phase-folded transit plot
 
 # =============================================================================
 # Environment Configuration (update paths for your system)
@@ -32,17 +32,17 @@ env:
   REFCAT_REPO: "/path/to/refcats"
 
 # Target information
-# Replace with your variable star coordinates
-object: "V0678-Oph"
-ra: 257.123
-dec: -18.456
+# Replace with your exoplanet host star coordinates
+object: "HAT-P-32"
+ra: 30.456
+dec: 46.789
 
 # Bands to process (Nickel supports b, v, r, i)
-bands: ["b", "v", "r", "i"]
+bands: ["r", "i"]
 
 # Template configuration - use Nickel coadds from many epochs
-# Choose nights spanning multiple variability cycles so the median
-# stack approximates the star's mean brightness.
+# Star is at baseline brightness >95% of the time, so any epochs work.
+# Median stacking naturally rejects the few in-transit frames.
 template:
   type: coadd
   nights:
@@ -75,10 +75,7 @@ configs:
     make_direct_warp: coadds/makeDirectWarp_relaxed.py
   dia:
     subtract_images: dia/subtractImages.py
-    # Use sensitive detection for variable star source catalogs (optional).
-    # Standard detectAndMeasure.py (3.0 sigma) also works fine since
-    # forced photometry at known coordinates is threshold-independent.
-    detect_and_measure: dia/detectAndMeasure_sensitive.py
+    detect_and_measure: dia/detectAndMeasure.py
 
 # Processing options
 options:
@@ -90,21 +87,23 @@ options:
   continue_on_error: true
   use_fallbacks: true
 
-  # Variable star specific options
-  pipeline_type: variable
+  # Exoplanet transit options
+  pipeline_type: transit
   forced_phot: true
-  forced_phot_image_type: both    # Measure on both visit images AND difference images
+  # pipeline_type: transit auto-sets forced_phot_image_type: visit
+  # pipeline_type: transit auto-sets transit_search: true, search_method: bls
 
-  # Period search configuration
-  period_search: true
-  period_min: 0.1                 # Minimum search period (days)
-  period_max: 100.0               # Maximum search period (days)
-  period_samples: 10000           # Frequency grid resolution
+  # Transit search parameters
+  period_min: 1.0                 # Minimum orbital period (days)
+  period_max: 10.0                # Maximum orbital period (days)
+  transit_duration_min: 1.0       # Minimum transit duration (hours)
+  transit_duration_max: 4.0       # Maximum transit duration (hours)
+  period_samples: 10000           # BLS period grid resolution
 
 # Lightcurve configuration
 lightcurve:
   enabled: true
-  dataset_type: forced_phot_diffim_radec
-  min_snr: 0                              # Keep all detections for period search
+  dataset_type: forced_phot_visit_radec   # Total flux for transit depth
+  min_snr: 0                              # Keep all points for BLS
   y_axis: flux_nJy
   x_axis: mjd
