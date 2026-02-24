@@ -14,7 +14,7 @@ from obs_nickel_data_tools.core.pipeline import (
     night_to_date_range,
     validate_night,
 )
-from obs_nickel_data_tools.core.stack import run_butler, run_pipetask
+from obs_nickel_data_tools.core.stack import run_butler
 
 if TYPE_CHECKING:
     from obs_nickel_data_tools.core.config import Config
@@ -41,6 +41,7 @@ def run(
     *,
     jobs: int = 4,
     log_file: Path | None = None,
+    executor=None,
 ) -> CalibsResult:
     """Run nightly calibration processing.
 
@@ -60,6 +61,11 @@ def run(
     Returns:
         CalibsResult with collection names and status
     """
+    from obs_nickel_data_tools.core.executor import LocalExecutor
+
+    if executor is None:
+        executor = LocalExecutor()
+
     night = validate_night(night)
     cols = CollectionNames(night)
 
@@ -149,7 +155,7 @@ def run(
         bias_ok = False
 
         try:
-            run_pipetask(
+            executor.run_pipetask(
                 [
                     "qgraph",
                     "-b",
@@ -171,7 +177,7 @@ def run(
                 log_file=log_file,
             )
 
-            result = run_pipetask(
+            result = executor.run_pipetask(
                 [
                     "run",
                     "-b",
@@ -236,7 +242,7 @@ def run(
         flat_ok = False
 
         try:
-            run_pipetask(
+            executor.run_pipetask(
                 [
                     "qgraph",
                     "-b",
@@ -262,7 +268,7 @@ def run(
                 log_file=log_file,
             )
 
-            result = run_pipetask(
+            result = executor.run_pipetask(
                 [
                     "run",
                     "-b",

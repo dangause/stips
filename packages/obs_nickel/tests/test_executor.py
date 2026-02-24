@@ -329,3 +329,39 @@ class TestBPSExecutor:
         assert (
             "timeout" in result.stderr.lower() or "timed out" in result.stderr.lower()
         )
+
+
+class TestExecutorWiring:
+    """Verify stage modules accept and use executor parameter."""
+
+    def test_calibs_accepts_executor(self):
+        import inspect
+
+        from obs_nickel_data_tools.core import calibs
+
+        sig = inspect.signature(calibs.run)
+        assert "executor" in sig.parameters
+
+    def test_science_accepts_executor(self):
+        import inspect
+
+        from obs_nickel_data_tools.core import science
+
+        sig = inspect.signature(science.run)
+        assert "executor" in sig.parameters
+
+    def test_dia_accepts_executor(self):
+        import inspect
+
+        from obs_nickel_data_tools.core import dia
+
+        sig = inspect.signature(dia.run)
+        assert "executor" in sig.parameters
+
+    def test_fphot_accepts_executor(self):
+        import inspect
+
+        from obs_nickel_data_tools.core import fphot
+
+        sig = inspect.signature(fphot.run)
+        assert "executor" in sig.parameters
