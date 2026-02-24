@@ -46,6 +46,7 @@ class BPSConfig:
         template_collection: Template collection for DIA
         object_filter: Optional object name filter
         coord_collection: Coordinate collection for forced photometry
+        qgraph_file: Path to pre-built quantum graph (for custom pipeline)
         operator: Username for output collections
         project: Project/account for HPC allocation
         dry_run: If True, show what would be submitted without running
@@ -59,6 +60,7 @@ class BPSConfig:
     template_collection: str | None = None
     object_filter: str | None = None
     coord_collection: str | None = None
+    qgraph_file: str | None = None
     operator: str = field(default_factory=lambda: os.environ.get("USER", "nps"))
     project: str = "nickel"
     dry_run: bool = False

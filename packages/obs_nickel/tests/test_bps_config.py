@@ -35,3 +35,30 @@ class TestCustomTemplate:
         content = custom_yaml.read_text()
         assert "includeConfigs:" in content
         assert "{computeSite}" in content
+
+
+class TestBPSConfigQgraphField:
+    def test_qgraph_file_default_none(self):
+        """BPSConfig.qgraph_file defaults to None."""
+        from obs_nickel_data_tools.core.bps import BPSConfig
+
+        cfg = BPSConfig(pipeline="custom", night="20230519")
+        assert cfg.qgraph_file is None
+
+    def test_qgraph_file_accepts_path(self):
+        """BPSConfig.qgraph_file accepts a string path."""
+        from obs_nickel_data_tools.core.bps import BPSConfig
+
+        cfg = BPSConfig(
+            pipeline="custom",
+            night="20230519",
+            qgraph_file="/path/to/graph.qg",
+        )
+        assert cfg.qgraph_file == "/path/to/graph.qg"
+
+    def test_custom_pipeline_without_qgraph_is_valid(self):
+        """pipeline='custom' is valid even without qgraph_file (render will handle it)."""
+        from obs_nickel_data_tools.core.bps import BPSConfig
+
+        cfg = BPSConfig(pipeline="custom", night="20230519")
+        assert cfg.pipeline == "custom"
