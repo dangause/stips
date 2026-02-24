@@ -107,3 +107,46 @@ class TestParsePipetaskArgs:
         parsed = _parse_pipetask_args(args)
         assert parsed["subcommand"] == "run"
         assert parsed["jobs"] is None
+
+
+class TestParseBpsReport:
+    def test_parses_succeeded_report(self):
+        from obs_nickel_data_tools.core.executor import _parse_bps_report
+
+        report = (
+            "X_REPORT    STATE      EXPECTED    SUCCEEDED    FAILED"
+            "    UNREADY    READY    RUNNING\n"
+            "---------  ---------  ----------  -----------  --------"
+            "  ---------  -------  ---------\n"
+            "summary    SUCCEEDED          12           12         0"
+            "          0        0          0\n"
+        )
+        result = _parse_bps_report(report)
+        assert result["state"] == "SUCCEEDED"
+        assert result["succeeded"] == 12
+        assert result["failed"] == 0
+        assert result["expected"] == 12
+
+    def test_parses_failed_report(self):
+        from obs_nickel_data_tools.core.executor import _parse_bps_report
+
+        report = (
+            "X_REPORT    STATE      EXPECTED    SUCCEEDED    FAILED"
+            "    UNREADY    READY    RUNNING\n"
+            "---------  ---------  ----------  -----------  --------"
+            "  ---------  -------  ---------\n"
+            "summary    FAILED              8            5         3"
+            "          0        0          0\n"
+        )
+        result = _parse_bps_report(report)
+        assert result["state"] == "FAILED"
+        assert result["succeeded"] == 5
+        assert result["failed"] == 3
+
+    def test_handles_empty_output(self):
+        from obs_nickel_data_tools.core.executor import _parse_bps_report
+
+        result = _parse_bps_report("")
+        assert result["state"] == "UNKNOWN"
+        assert result["succeeded"] == 0
+        assert result["failed"] == 0

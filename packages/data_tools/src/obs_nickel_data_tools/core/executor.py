@@ -98,3 +98,42 @@ def _parse_pipetask_args(args: list[str]) -> dict:
             i += 1
 
     return parsed
+
+
+def _parse_bps_report(raw_output: str) -> dict:
+    """Parse bps report tabular output into structured data.
+
+    BPS report outputs a table with columns:
+        X_REPORT  STATE  EXPECTED  SUCCEEDED  FAILED  UNREADY  READY  RUNNING
+
+    We extract the 'summary' row.
+
+    Args:
+        raw_output: Raw text output from ``bps report <run_id>``
+
+    Returns:
+        Dict with state, expected, succeeded, failed, unready, ready, running
+    """
+    for line in raw_output.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("summary"):
+            parts = stripped.split()
+            if len(parts) >= 8:
+                return {
+                    "state": parts[1],
+                    "expected": int(parts[2]),
+                    "succeeded": int(parts[3]),
+                    "failed": int(parts[4]),
+                    "unready": int(parts[5]),
+                    "ready": int(parts[6]),
+                    "running": int(parts[7]),
+                }
+    return {
+        "state": "UNKNOWN",
+        "expected": 0,
+        "succeeded": 0,
+        "failed": 0,
+        "unready": 0,
+        "ready": 0,
+        "running": 0,
+    }
