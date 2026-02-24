@@ -1,7 +1,7 @@
 """YAML-driven pipeline orchestrator.
 
 This module reads a YAML configuration file and orchestrates the full pipeline:
-calibs → science → DIA → forced photometry → lightcurve → period analysis.
+calibs → science → DIA → forced photometry → lightcurve → period/transit analysis.
 
 Example YAML format:
     # Environment configuration (choose one approach):
@@ -55,11 +55,15 @@ Example YAML format:
       lightcurve_dataset_type: dia_source_unfiltered  # or forced_phot_diffim_radec
       lightcurve_min_snr: 3.0
       use_fallbacks: true    # Try fallback configs on failure
-      pipeline_type: supernova   # or "variable" for variable star campaigns
+      pipeline_type: supernova   # supernova | variable | transit
       period_search: false       # Enable Lomb-Scargle period search
       period_min: 0.1            # Minimum search period (days)
       period_max: 100.0          # Maximum search period (days)
       period_samples: 10000      # Frequency grid density
+      transit_search: false       # Enable BLS transit search
+      transit_duration_min: 0.5   # Min transit duration (hours)
+      transit_duration_max: 6.0   # Max transit duration (hours)
+      search_method: lomb_scargle # lomb_scargle | bls | both
 """
 
 from __future__ import annotations
