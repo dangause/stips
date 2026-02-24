@@ -277,3 +277,47 @@ class TestBLS:
         )
         # Noise-only data should have low depth
         assert result.depth < 0.02, f"Noise-only depth too high: {result.depth}"
+
+
+# ---------------------------------------------------------------------------
+# TestPhaseFolding
+# ---------------------------------------------------------------------------
+
+
+class TestPhaseFolding:
+    def test_phase_fold_produces_per_band_data(self, sample_transit_csv):
+        csv_path, true_period, *_ = sample_transit_csv
+        df = transit_mod._read_lightcurve(csv_path)
+        folded = transit_mod._phase_fold_transit(df, true_period, t0=60001.5)
+        assert "r" in folded
+        assert "i" in folded
+        for band in ("r", "i"):
+            for key in ("phase", "flux_norm", "flux_err"):
+                assert key in folded[band], f"Missing '{key}' for band {band}"
+
+    def test_phase_values_between_minus_half_and_half(self, sample_transit_csv):
+        csv_path, true_period, *_ = sample_transit_csv
+        df = transit_mod._read_lightcurve(csv_path)
+        folded = transit_mod._phase_fold_transit(df, true_period, t0=60001.5)
+        for band, data in folded.items():
+            phases = data["phase"]
+            assert phases.min() >= -0.5, f"Phase < -0.5 for band {band}"
+            assert phases.max() <= 0.5, f"Phase > 0.5 for band {band}"
+
+    def test_transit_centered_at_phase_zero(self, sample_transit_csv):
+        csv_path, true_period, true_depth, _ = sample_transit_csv
+        df = transit_mod._read_lightcurve(csv_path)
+        folded = transit_mod._phase_fold_transit(df, true_period, t0=60001.5)
+        # Points near phase 0 should have lower flux (in-transit)
+        for band, data in folded.items():
+            near_center = np.abs(data["phase"]) < 0.1
+            if near_center.sum() > 0:
+                near_flux = np.median(data["flux_norm"][near_center])
+                far_mask = np.abs(data["phase"]) > 0.3
+                if far_mask.sum() > 0:
+                    far_flux = np.median(data["flux_norm"][far_mask])
+                    # In-transit flux should be lower than out-of-transit
+                    assert near_flux <= far_flux + 0.01, (
+                        f"Band {band}: near-center flux {near_flux:.4f} >= "
+                        f"far flux {far_flux:.4f}"
+                    )

@@ -215,3 +215,40 @@ def _run_bls(
         periods=np.array([p.value for p in results.period]),
         powers=np.array(results.power),
     )
+
+
+def _phase_fold_transit(
+    df: pd.DataFrame, period: float, t0: float
+) -> dict[str, dict[str, np.ndarray]]:
+    """Phase-fold the lightcurve centered on mid-transit.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Lightcurve data with mjd, band, flux, flux_err.
+    period : float
+        Orbital period in days.
+    t0 : float
+        MJD of transit midpoint.
+
+    Returns
+    -------
+    dict[str, dict[str, np.ndarray]]
+        Per-band dict with keys 'phase', 'flux_norm', 'flux_err'.
+        Phase is in range [-0.5, 0.5] with 0.0 at mid-transit.
+    """
+    mjds = df["mjd"].to_numpy(dtype=float)
+    norm_flux, norm_err = _normalize_to_baseline(df)
+
+    # Phase centered on t0, range [-0.5, 0.5]
+    phase_all = ((mjds - t0) / period + 0.5) % 1.0 - 0.5
+
+    result: dict[str, dict[str, np.ndarray]] = {}
+    for band in df["band"].unique():
+        mask = (df["band"] == band).to_numpy()
+        result[band] = {
+            "phase": phase_all[mask],
+            "flux_norm": norm_flux[mask],
+            "flux_err": norm_err[mask],
+        }
+    return result
