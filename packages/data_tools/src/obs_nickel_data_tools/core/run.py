@@ -596,10 +596,32 @@ def _create_executor(run_cfg: RunConfig):
 
     Returns:
         LocalExecutor for local execution, BPSExecutor for BPS execution
+
+    Raises:
+        ImportError: If BPS execution requested but ctrl_bps not installed
     """
     from obs_nickel_data_tools.core.executor import BPSExecutor, LocalExecutor
 
     if run_cfg.execution == "bps":
+        # Fail fast if ctrl_bps is not available
+        try:
+            import lsst.ctrl.bps  # noqa: F401
+        except ImportError:
+            raise ImportError(
+                "BPS execution requires lsst.ctrl.bps. "
+                "Install with: pip install lsst-ctrl-bps\n"
+                "Or use --site local with ctrl_bps_parsl for local testing."
+            )
+
+        if run_cfg.site == "local":
+            try:
+                import lsst.ctrl.bps.parsl  # noqa: F401
+            except ImportError:
+                raise ImportError(
+                    "Local BPS execution requires lsst.ctrl.bps.parsl. "
+                    "Install with: pip install lsst-ctrl-bps-parsl"
+                )
+
         return BPSExecutor(
             site=run_cfg.site,
             poll_interval=run_cfg.bps_poll_interval,
