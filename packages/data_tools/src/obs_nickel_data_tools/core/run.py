@@ -814,6 +814,8 @@ def _run_calibs_step(
     config: Config,
     result: RunResult,
     dry_run: bool,
+    *,
+    executor=None,
 ) -> RunResult | None:
     """Run calibrations for each science night.
 
@@ -827,7 +829,11 @@ def _run_calibs_step(
         if not dry_run:
             calib_log = _get_step_log_file("calibs", night=night)
             calib_result = calibs.run(
-                night, config, jobs=run_cfg.jobs, log_file=calib_log
+                night,
+                config,
+                jobs=run_cfg.jobs,
+                log_file=calib_log,
+                executor=executor,
             )
             _maybe_split_log(calib_log)
             if not calib_result.success:
@@ -850,6 +856,8 @@ def _run_science_step(
     result: RunResult,
     science_cfg: "ScienceConfig",
     dry_run: bool,
+    *,
+    executor=None,
 ) -> RunResult | None:
     """Run science processing for each night.
 
@@ -884,6 +892,7 @@ def _run_science_step(
                 target_ra=run_cfg.ra,
                 target_dec=run_cfg.dec,
                 log_file=sci_log,
+                executor=executor,
             )
             _maybe_split_log(sci_log)
             if not sci_result.success:
@@ -909,6 +918,8 @@ def _run_dia_step(
     config: Config,
     result: RunResult,
     dry_run: bool,
+    *,
+    executor=None,
 ) -> RunResult | None:
     """Run DIA per night per band.
 
@@ -962,6 +973,7 @@ def _run_dia_step(
                     subtract_config_file=subtract_cfg,
                     detect_config_file=detect_cfg,
                     log_file=dia_log,
+                    executor=executor,
                 )
                 _maybe_split_log(dia_log)
                 if not dia_result.success:
@@ -983,6 +995,8 @@ def _run_fphot_step(
     config: Config,
     result: RunResult,
     dry_run: bool,
+    *,
+    executor=None,
 ) -> None:
     """Run forced photometry per night per successful DIA band."""
     from obs_nickel_data_tools.core import fphot
@@ -1017,6 +1031,7 @@ def _run_fphot_step(
                     image_type=run_cfg.forced_phot_image_type,
                     jobs=run_cfg.jobs,
                     log_file=fphot_log,
+                    executor=executor,
                 )
                 _maybe_split_log(fphot_log)
                 if not fphot_result.success:
@@ -1314,6 +1329,9 @@ def run(
     # Load run configuration
     run_cfg = RunConfig.from_yaml(config_file)
 
+    executor = _create_executor(run_cfg)
+    log.info(f"Execution: {run_cfg.execution} (site={run_cfg.site})")
+
     # Build ScienceConfig from YAML paths
     configs_dir = config.obs_nickel / "configs"
     science_cfg = ScienceConfig.default(config.obs_nickel)
@@ -1356,27 +1374,54 @@ def run(
 
     # Step 2: Calibrations per night
     if not run_cfg.skip_calibs:
-        early_exit = _run_calibs_step(all_nights, run_cfg, config, result, dry_run)
+        early_exit = _run_calibs_step(
+            all_nights,
+            run_cfg,
+            config,
+            result,
+            dry_run,
+            executor=executor,
+        )
         if early_exit is not None:
             return early_exit
 
     # Step 3: Science per night
     if not run_cfg.skip_science:
         early_exit = _run_science_step(
-            all_nights, run_cfg, config, result, science_cfg, dry_run
+            all_nights,
+            run_cfg,
+            config,
+            result,
+            science_cfg,
+            dry_run,
+            executor=executor,
         )
         if early_exit is not None:
             return early_exit
 
     # Step 4: DIA per night per band
     if not run_cfg.skip_dia:
-        early_exit = _run_dia_step(all_nights, run_cfg, config, result, dry_run)
+        early_exit = _run_dia_step(
+            all_nights,
+            run_cfg,
+            config,
+            result,
+            dry_run,
+            executor=executor,
+        )
         if early_exit is not None:
             return early_exit
 
     # Step 5: Forced photometry per night per successful DIA band
     if run_cfg.forced_phot:
-        _run_fphot_step(all_nights, run_cfg, config, result, dry_run)
+        _run_fphot_step(
+            all_nights,
+            run_cfg,
+            config,
+            result,
+            dry_run,
+            executor=executor,
+        )
 
     # Step 6: Lightcurve extraction
     if run_cfg.lc_config.enabled:
