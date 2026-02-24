@@ -116,3 +116,111 @@ class TestRunConfigNewFields:
             yaml.dump(cfg, f)
         rc = RunConfig.from_yaml(path)
         assert rc.forced_phot_image_type == "diffim"
+
+
+@pytest.fixture
+def transit_yaml(tmp_path):
+    """Transit YAML config with BLS search enabled."""
+    cfg = {
+        "object": "HAT-P-32",
+        "ra": 30.456,
+        "dec": 46.789,
+        "bands": ["r", "i"],
+        "template": {"type": "coadd", "nights": [20230601, 20230615]},
+        "science": {"nights": [20230701]},
+        "options": {
+            "pipeline_type": "transit",
+            "transit_search": True,
+            "period_min": 1.0,
+            "period_max": 5.0,
+            "transit_duration_min": 1.0,
+            "transit_duration_max": 4.0,
+        },
+    }
+    path = tmp_path / "transit.yaml"
+    with open(path, "w") as f:
+        yaml.dump(cfg, f)
+    return path
+
+
+@pytest.fixture
+def transit_defaults_yaml(tmp_path):
+    """Transit config relying on pipeline_type defaults."""
+    cfg = {
+        "object": "WASP-12",
+        "ra": 97.637,
+        "dec": 29.672,
+        "bands": ["r"],
+        "science": {"nights": [20230901]},
+        "options": {"pipeline_type": "transit"},
+    }
+    path = tmp_path / "transit_defaults.yaml"
+    with open(path, "w") as f:
+        yaml.dump(cfg, f)
+    return path
+
+
+class TestRunConfigTransitFields:
+    """Test transit extension fields in RunConfig."""
+
+    def test_transit_config_parses_all_fields(self, transit_yaml):
+        from obs_nickel_data_tools.core.run import RunConfig
+
+        cfg = RunConfig.from_yaml(transit_yaml)
+        assert cfg.pipeline_type == "transit"
+        assert cfg.transit_search is True
+        assert cfg.search_method == "bls"
+        assert cfg.period_min == 1.0
+        assert cfg.period_max == 5.0
+        assert cfg.transit_duration_min == 1.0
+        assert cfg.transit_duration_max == 4.0
+
+    def test_transit_type_defaults_forced_phot_to_visit(self, transit_defaults_yaml):
+        from obs_nickel_data_tools.core.run import RunConfig
+
+        cfg = RunConfig.from_yaml(transit_defaults_yaml)
+        assert cfg.pipeline_type == "transit"
+        assert cfg.forced_phot_image_type == "visit"
+
+    def test_transit_type_defaults_search_method_to_bls(self, transit_defaults_yaml):
+        from obs_nickel_data_tools.core.run import RunConfig
+
+        cfg = RunConfig.from_yaml(transit_defaults_yaml)
+        assert cfg.search_method == "bls"
+        assert cfg.transit_search is True
+
+    def test_transit_type_defaults_duration_range(self, transit_defaults_yaml):
+        from obs_nickel_data_tools.core.run import RunConfig
+
+        cfg = RunConfig.from_yaml(transit_defaults_yaml)
+        assert cfg.transit_duration_min == 0.5
+        assert cfg.transit_duration_max == 6.0
+
+    def test_explicit_search_method_overrides_transit_default(self, tmp_path):
+        from obs_nickel_data_tools.core.run import RunConfig
+
+        cfg = {
+            "object": "test",
+            "ra": 100.0,
+            "dec": 10.0,
+            "bands": ["r"],
+            "science": {"nights": [20230101]},
+            "options": {
+                "pipeline_type": "transit",
+                "search_method": "both",
+            },
+        }
+        path = tmp_path / "override.yaml"
+        with open(path, "w") as f:
+            yaml.dump(cfg, f)
+        rc = RunConfig.from_yaml(path)
+        assert rc.search_method == "both"
+
+    def test_sn_config_has_transit_defaults(self, sn_yaml):
+        from obs_nickel_data_tools.core.run import RunConfig
+
+        cfg = RunConfig.from_yaml(sn_yaml)
+        assert cfg.search_method == "lomb_scargle"
+        assert cfg.transit_search is False
+        assert cfg.transit_duration_min == 0.5
+        assert cfg.transit_duration_max == 6.0

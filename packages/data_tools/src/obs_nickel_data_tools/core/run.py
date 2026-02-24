@@ -379,11 +379,17 @@ class RunConfig:
     use_fallbacks: bool = True
 
     # Variable star options
-    pipeline_type: str = "supernova"  # "supernova" or "variable"
+    pipeline_type: str = "supernova"  # "supernova" or "variable" or "transit"
     period_search: bool = False
     period_min: float = 0.1
     period_max: float = 100.0
     period_samples: int = 10_000
+
+    # Transit search options
+    search_method: str = "lomb_scargle"  # "lomb_scargle" | "bls" | "both"
+    transit_search: bool = False
+    transit_duration_min: float = 0.5  # hours
+    transit_duration_max: float = 6.0  # hours
 
     # Environment profile (optional - embedded in YAML instead of -p flag)
     profile: str | None = None
@@ -456,8 +462,20 @@ class RunConfig:
         # Variable star default: forced phot on both visit + diffim
         if pipeline_type == "variable" and "forced_phot_image_type" not in options:
             default_fphot_type = "both"
+        # Transit default: forced phot on visit images (total flux for depth)
+        elif pipeline_type == "transit" and "forced_phot_image_type" not in options:
+            default_fphot_type = "visit"
         else:
             default_fphot_type = "diffim"
+
+        # Transit default: enable transit search with BLS
+        search_method = options.get("search_method", "lomb_scargle")
+        if pipeline_type == "transit":
+            default_transit_search = True
+            if "search_method" not in options:
+                search_method = "bls"
+        else:
+            default_transit_search = False
 
         return cls(
             object_name=data.get("object", ""),
@@ -490,6 +508,10 @@ class RunConfig:
             period_min=float(options.get("period_min", 0.1)),
             period_max=float(options.get("period_max", 100.0)),
             period_samples=int(options.get("period_samples", 10_000)),
+            search_method=search_method,
+            transit_search=options.get("transit_search", default_transit_search),
+            transit_duration_min=float(options.get("transit_duration_min", 0.5)),
+            transit_duration_max=float(options.get("transit_duration_max", 6.0)),
             profile=data.get("profile"),
         )
 
@@ -545,6 +567,7 @@ class RunResult:
     forced_phot_collections: dict[str, list[str]] = field(default_factory=dict)
     lightcurve_path: str | None = None
     period_result_path: str | None = None
+    transit_result_path: str | None = None
     log_dir: str | None = None
     error: str | None = None
 
@@ -1065,6 +1088,40 @@ def _run_period_step(
         log.info("  [DRY RUN] period.run()")
 
 
+def _run_transit_step(
+    run_cfg: RunConfig,
+    result: RunResult,
+    dry_run: bool,
+) -> None:
+    """Run BLS transit search on extracted lightcurve."""
+    if not result.lightcurve_path:
+        log.warning("No lightcurve available, skipping transit search")
+        return
+
+    if not dry_run:
+        from obs_nickel_data_tools.core import transit
+
+        transit_log = _get_step_log_file("transit")
+        transit_result = transit.run(
+            csv_path=Path(result.lightcurve_path),
+            period_min=run_cfg.period_min,
+            period_max=run_cfg.period_max,
+            duration_min=run_cfg.transit_duration_min,
+            duration_max=run_cfg.transit_duration_max,
+            n_samples=run_cfg.period_samples,
+            output_dir=Path(result.lightcurve_path).parent / "transit_analysis",
+            log_file=transit_log,
+        )
+        result.transit_result_path = str(transit_result.output_dir)
+        log.info(
+            f"  Transit: P={transit_result.best_period:.4f} d, "
+            f"depth={transit_result.depth*100:.3f}%, "
+            f"SNR={transit_result.transit_snr:.1f}"
+        )
+    else:
+        log.info("  [DRY RUN] transit.run()")
+
+
 def _discover_fphot_collections(
     all_nights: list[str],
     run_cfg: RunConfig,
@@ -1290,10 +1347,15 @@ def run(
         log.info("Extracting lightcurve...")
         _run_lightcurve_step(all_nights, run_cfg, config, result, dry_run)
 
-    # Step 7: Period analysis (variable stars only)
+    # Step 7a: Period analysis (variable stars)
     if run_cfg.period_search:
         log.info("Running period analysis...")
         _run_period_step(run_cfg, result, dry_run)
+
+    # Step 7b: Transit search (exoplanets)
+    if run_cfg.transit_search:
+        log.info("Running transit search...")
+        _run_transit_step(run_cfg, result, dry_run)
 
     # Determine overall success
     # Use a three-tier status: SUCCESS (no failures), PARTIAL (some failures but
@@ -1324,6 +1386,7 @@ def run(
             or successful_fphot > 0
             or result.lightcurve_path is not None
             or result.period_result_path is not None
+            or result.transit_result_path is not None
         )
 
         if has_successes:
@@ -1373,6 +1436,8 @@ def run(
         log.info(f"  Lightcurve: {result.lightcurve_path}")
     if result.period_result_path:
         log.info(f"  Period analysis: {result.period_result_path}")
+    if result.transit_result_path:
+        log.info(f"  Transit analysis: {result.transit_result_path}")
 
     summary_file = run_log_dir / "summary.txt"
     with open(summary_file, "w") as f:
@@ -1398,5 +1463,7 @@ def run(
             f.write(f"Lightcurve: {result.lightcurve_path}\n")
         if result.period_result_path:
             f.write(f"Period analysis: {result.period_result_path}\n")
+        if result.transit_result_path:
+            f.write(f"Transit analysis: {result.transit_result_path}\n")
 
     return result
