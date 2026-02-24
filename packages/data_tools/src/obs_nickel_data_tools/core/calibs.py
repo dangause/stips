@@ -35,6 +35,78 @@ class CalibsResult:
     error: str | None = None
 
 
+def write_curated_calibrations(
+    night: str,
+    config: Config,
+    *,
+    log_file: Path | None = None,
+) -> None:
+    """Write curated calibrations (defects, crosstalk) for a night.
+
+    This is safe to call once before concurrent calibs. The curated
+    calibrations are instrument-level data that only need to be written
+    once per run.
+
+    Args:
+        night: Any observing night (used for raw_run collection reference)
+        config: Pipeline configuration
+        log_file: Optional log file path
+    """
+    night = validate_night(night)
+    cols = CollectionNames(night)
+    repo = str(config.repo)
+
+    # Ingest raws for this night first (needed for write-curated-calibrations)
+    raw_dir = get_raw_dir(config, night)
+    if raw_dir.exists():
+        run_butler(
+            ["register-instrument", repo, INSTRUMENT],
+            config,
+            check=False,
+            log_file=log_file,
+        )
+        run_butler(
+            [
+                "ingest-raws",
+                repo,
+                str(raw_dir),
+                "--transfer",
+                "copy",
+                "--output-run",
+                cols.raw_run,
+            ],
+            config,
+            check=False,
+            log_file=log_file,
+        )
+        run_butler(["define-visits", repo, "Nickel"], config, log_file=log_file)
+
+    run_butler(
+        [
+            "write-curated-calibrations",
+            repo,
+            "Nickel",
+            cols.raw_run,
+            "--collection",
+            cols.curated_run,
+        ],
+        config,
+        log_file=log_file,
+    )
+    run_butler(
+        [
+            "collection-chain",
+            repo,
+            cols.curated_chain,
+            cols.curated_run,
+            "--mode",
+            "redefine",
+        ],
+        config,
+        log_file=log_file,
+    )
+
+
 def run(
     night: str,
     config: Config,
@@ -42,6 +114,7 @@ def run(
     jobs: int = 4,
     log_file: Path | None = None,
     executor=None,
+    skip_curated: bool = False,
 ) -> CalibsResult:
     """Run nightly calibration processing.
 
@@ -57,6 +130,7 @@ def run(
         config: Pipeline configuration
         jobs: Number of parallel jobs
         log_file: Optional path to write LSST pipeline logs
+        skip_curated: Skip curated calibrations write (already done externally)
 
     Returns:
         CalibsResult with collection names and status
@@ -123,31 +197,32 @@ def run(
         # Define visits
         run_butler(["define-visits", repo, "Nickel"], config, log_file=log_file)
 
-        # Write curated calibrations
-        run_butler(
-            [
-                "write-curated-calibrations",
-                repo,
-                "Nickel",
-                cols.raw_run,
-                "--collection",
-                cols.curated_run,
-            ],
-            config,
-            log_file=log_file,
-        )
-        run_butler(
-            [
-                "collection-chain",
-                repo,
-                cols.curated_chain,
-                cols.curated_run,
-                "--mode",
-                "redefine",
-            ],
-            config,
-            log_file=log_file,
-        )
+        # Write curated calibrations (skip if already done by orchestrator)
+        if not skip_curated:
+            run_butler(
+                [
+                    "write-curated-calibrations",
+                    repo,
+                    "Nickel",
+                    cols.raw_run,
+                    "--collection",
+                    cols.curated_run,
+                ],
+                config,
+                log_file=log_file,
+            )
+            run_butler(
+                [
+                    "collection-chain",
+                    repo,
+                    cols.curated_chain,
+                    cols.curated_run,
+                    "--mode",
+                    "redefine",
+                ],
+                config,
+                log_file=log_file,
+            )
 
         # Build bias
         qg_bias = config.repo / "qgraphs" / f"cp_bias_{night}_{cols.run_ts}.qg"

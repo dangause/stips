@@ -868,6 +868,17 @@ def _run_calibs_step(
             f"max_workers={run_cfg.concurrent_nights}"
         )
 
+        # Write curated calibrations once before concurrent dispatch.
+        # This avoids SQLite write conflicts when multiple nights try to
+        # write defects/crosstalk to the shared Nickel/calib/curated chain.
+        first_night = all_nights[0]
+        log.info("Writing curated calibrations (one-time)...")
+        curated_log = _get_step_log_file("calibs", night="curated")
+        try:
+            calibs.write_curated_calibrations(first_night, config, log_file=curated_log)
+        except Exception as e:
+            log.warning(f"Curated calibrations write failed: {e}")
+
         def _calibs_one(night: str) -> bool:
             log.info(f"Running calibrations for {night}...")
             calib_log = _get_step_log_file("calibs", night=night)
@@ -877,6 +888,7 @@ def _run_calibs_step(
                 jobs=run_cfg.jobs,
                 log_file=calib_log,
                 executor=executor,
+                skip_curated=True,
             )
             _maybe_split_log(calib_log)
             if not calib_result.success:
