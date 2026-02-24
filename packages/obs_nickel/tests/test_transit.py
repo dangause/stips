@@ -360,3 +360,57 @@ class TestTransitModel:
         center_flux = model["model_flux"][center_mask]
         assert len(center_flux) > 0
         assert np.allclose(center_flux, 1.0 - depth, atol=0.001)
+
+
+# ---------------------------------------------------------------------------
+# TestOutputGeneration
+# ---------------------------------------------------------------------------
+
+
+class TestOutputGeneration:
+    def _make_result(self, tmp_path, sample_transit_csv) -> transit_mod.TransitResult:
+        csv_path, *_ = sample_transit_csv
+        df = transit_mod._read_lightcurve(csv_path)
+        result = transit_mod._run_bls(
+            df,
+            period_min=1.0,
+            period_max=10.0,
+            duration_min=1.0,
+            duration_max=5.0,
+            n_samples=5_000,
+        )
+        result.phase_folded = transit_mod._phase_fold_transit(
+            df,
+            result.best_period,
+            result.t0,
+        )
+        result.transit_model = transit_mod._make_transit_model(
+            result.best_period,
+            result.duration,
+            result.depth,
+        )
+        return result
+
+    def test_save_creates_json(self, tmp_path, sample_transit_csv):
+        import json as json_mod
+
+        result = self._make_result(tmp_path, sample_transit_csv)
+        out_dir = tmp_path / "out"
+        transit_mod._save_results(result, out_dir)
+        json_path = out_dir / "transit_results.json"
+        assert json_path.exists()
+        data = json_mod.loads(json_path.read_text())
+        for key in ("best_period", "t0", "duration_hours", "depth", "transit_snr"):
+            assert key in data, f"Missing '{key}' in JSON"
+
+    def test_save_creates_bls_periodogram(self, tmp_path, sample_transit_csv):
+        result = self._make_result(tmp_path, sample_transit_csv)
+        out_dir = tmp_path / "out2"
+        transit_mod._save_results(result, out_dir)
+        assert (out_dir / "bls_periodogram.png").exists()
+
+    def test_save_creates_phase_folded_plot(self, tmp_path, sample_transit_csv):
+        result = self._make_result(tmp_path, sample_transit_csv)
+        out_dir = tmp_path / "out3"
+        transit_mod._save_results(result, out_dir)
+        assert (out_dir / "phase_folded_transit.png").exists()
