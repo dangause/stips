@@ -1,0 +1,63 @@
+# Nickel Processing Suite - Forced Photometry BPS Pipeline
+#
+# Perform forced photometry at specified coordinates.
+#
+# Usage:
+#   nickel bps submit fphot 20230519 --site slurm
+#
+# Variables:
+#   {night}             - Observing night (YYYYMMDD)
+#   {repo}              - Butler repository path
+#   {obs_nickel}        - Path to obs_nickel package
+#   {coord_collection}  - Collection containing coordinate table
+
+# Inherit site-specific settings
+includeConfigs:
+  - ../sites/{computeSite}.yaml
+
+# =============================================================================
+# Payload Configuration
+# =============================================================================
+payload:
+  payloadName: nickel-fphot-{night}
+  butlerConfig: "{repo}"
+
+  # Input collections (comma-separated, no spaces)
+  inCollection: "Nickel/runs/{night}/diff/*,Nickel/runs/{night}/processCcd/*,Nickel/calib/current,{coord_collection}"
+
+  # Output collection
+  output: "Nickel/runs/{night}/fphot"
+  outputRun: "Nickel/runs/{night}/fphot/{timestamp}/run"
+
+  # Data query
+  dataQuery: "instrument='Nickel'"
+
+# =============================================================================
+# Pipeline Definition
+# =============================================================================
+pipelineYaml: "{obs_nickel}/pipelines/ForcedPhotRaDec.yaml#diffim"
+
+# =============================================================================
+# Task-Specific Settings
+# =============================================================================
+# Forced photometry is relatively lightweight
+pipetask:
+  forcedPhotDiffimRaDec:
+    requestMemory: 4096
+    requestCpus: 1
+    numberOfRetries: 2
+
+  # If also doing direct image forced photometry
+  forcedPhotCcdRaDec:
+    requestMemory: 4096
+    requestCpus: 1
+
+# =============================================================================
+# Clustering Configuration
+# =============================================================================
+cluster:
+  # Group by visit for parallel processing
+  fphot_cluster:
+    pipetasks: forcedPhotDiffimRaDec
+    dimensions: visit, detector
+    clusterAlgorithm: lsst.ctrl.bps.quantum_clustering_funcs.dimension_clustering

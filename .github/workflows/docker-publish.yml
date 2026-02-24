@@ -1,0 +1,179 @@
+# Nickel Processing Suite - Docker Image Build and Publish
+#
+# Builds and publishes container images to GitHub Container Registry.
+#
+# Triggers:
+#   - Push to main branch (builds :latest)
+#   - Version tags v* (builds :v1.0.0, :v1.0, :v1)
+#   - Manual workflow dispatch
+#
+# Images are published to:
+#   ghcr.io/lick-observatory/nps:latest
+#   ghcr.io/lick-observatory/nps:v1.0.0
+
+name: Build and Publish Docker Image
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+    paths:
+      - 'docker/**'
+      - 'packages/**'
+      - 'bps/**'
+      - 'scripts/**'
+      - '.github/workflows/docker-publish.yml'
+
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'docker/**'
+      - 'packages/**'
+
+  workflow_dispatch:
+    inputs:
+      lsst_tag:
+        description: 'LSST Science Pipelines version tag'
+        required: true
+        default: 'v30_0_3'
+        type: string
+      push:
+        description: 'Push image to registry'
+        required: true
+        default: true
+        type: boolean
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            # Set latest tag for main branch
+            type=raw,value=latest,enable={{is_default_branch}}
+            # Use semver for version tags
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            # Use short SHA for branch pushes
+            type=sha,prefix=,enable={{is_default_branch}}
+            # Include branch name for PRs
+            type=ref,event=pr
+          labels: |
+            org.opencontainers.image.title=Nickel Processing Suite
+            org.opencontainers.image.description=LSST Science Pipelines for Nickel telescope data
+            org.opencontainers.image.vendor=Lick Observatory
+
+      - name: Determine LSST tag
+        id: lsst
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "tag=${{ github.event.inputs.lsst_tag }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=v30_0_3" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: docker/Dockerfile
+          push: ${{ github.event_name != 'pull_request' && (github.event_name != 'workflow_dispatch' || github.event.inputs.push == 'true') }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            LSST_TAG=${{ steps.lsst.outputs.tag }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64
+
+      - name: Generate build summary
+        run: |
+          echo "## Docker Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**LSST Stack:** \`${{ steps.lsst.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Tags:**" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "${{ steps.meta.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+  # Optional: Build Singularity image for HPC
+  build-singularity:
+    needs: build-and-push
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Singularity
+        run: |
+          # Install dependencies
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            libseccomp-dev \
+            pkg-config \
+            squashfs-tools \
+            cryptsetup \
+            curl wget git
+
+          # Install Go
+          export VERSION=1.21.5 OS=linux ARCH=amd64
+          wget https://dl.google.com/go/go$VERSION.$OS-$ARCH.tar.gz
+          sudo tar -C /usr/local -xzvf go$VERSION.$OS-$ARCH.tar.gz
+          export PATH=/usr/local/go/bin:$PATH
+
+          # Install Singularity
+          export VERSION=4.0.2
+          wget https://github.com/sylabs/singularity/releases/download/v${VERSION}/singularity-ce-${VERSION}.tar.gz
+          tar -xzf singularity-ce-${VERSION}.tar.gz
+          cd singularity-ce-${VERSION}
+          ./mconfig
+          make -C builddir
+          sudo make -C builddir install
+
+      - name: Build Singularity image
+        run: |
+          # Build from Docker image
+          singularity build nps.sif docker://${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}
+
+      - name: Upload Singularity image as release asset
+        uses: softprops/action-gh-release@v1
+        with:
+          files: nps.sif
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

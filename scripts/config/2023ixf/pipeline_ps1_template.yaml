@@ -1,0 +1,126 @@
+# Full pipeline configuration for SN 2023ixf using PS1 templates
+#
+# Usage:
+#   nickel run scripts/config/2023ixf/pipeline_ps1_template.yaml
+#   nickel run scripts/config/2023ixf/pipeline_ps1_template.yaml --dry-run
+#
+# This orchestrates the full DIA pipeline:
+#   0. Bootstrap repository (automatic if needed)
+#   1. Ingest PS1 templates (r/i bands)
+#   2. Run calibrations per night
+#   3. Run science processing per night
+#   4. Run DIA per night per band
+#   5. Run forced photometry at SN coordinates
+#   6. Extract combined lightcurve
+#
+# SN 2023ixf is a Type II-P supernova in M101 (NGC 5457), one of the
+# closest and brightest SNe in recent years.
+
+# =============================================================================
+# Environment Configuration (self-contained)
+# =============================================================================
+env:
+  REPO: "/Users/dangause/Developer/lick/lsst/data/nickel/2023ixf_ps1_022226_repo"
+  STACK_DIR: "/Users/dangause/Developer/lick/lsst/lsst_stack"
+  OBS_NICKEL: "/Users/dangause/Developer/lick/lsst/lsst_stack/stack/nickel_processing_suite/packages/obs_nickel"
+  RAW_PARENT_DIR: "/Users/dangause/Developer/lick/data"
+  REFCAT_REPO: "/Users/dangause/Developer/lick/lsst/lsst_stack/stack/refcats"
+  CP_PIPE_DIR: "${STACK_DIR}/cp_pipe"
+  LICK_ARCHIVE_DIR: "/Users/dangause/Developer/lick/lick_searchable_archive"
+  LICK_ARCHIVE_URL: "https://archive.ucolick.org/archive"
+  LICK_ARCHIVE_INSTR: "NICKEL_DIR"
+
+# Target information
+# SN 2023ixf in M101 (Pinwheel Galaxy)
+# Coordinates from TNS/Transient Name Server
+# RA = 14:03:38.580, Dec = +54:18:42.10
+object: "2023ixf"
+ra: 210.910750
+dec: 54.311694
+
+# Bands to process (PS1 templates only support r/i)
+bands: ["r", "i"]
+
+# Template configuration
+# NOTE: PS1 native seeing is ~1", Nickel typical seeing is 1.5-3".
+# Don't pre-degrade PS1 - let the AL kernel handle PSF matching during subtraction.
+# The subtractImages_ps1.py config uses mode=convolveTemplate to convolve PS1 to match Nickel.
+template:
+  type: ps1
+  size: 0.4            # Cutout size in degrees (24 arcmin; extra margin for pointing drift)
+
+# Science nights - SN observations from discovery through 2024
+# 22 public nights (2023) + 11 proprietary nights (2024, commented out)
+science:
+  nights:
+    # 2023 observations (22 nights) - public, available in archive
+    - 20230519   # Discovery epoch
+    - 20230521
+    - 20230523
+    - 20230527
+    - 20230531
+    - 20230602
+    - 20230608
+    - 20230611
+    - 20230616
+    - 20230618
+    - 20230625
+    - 20230629
+    - 20230703
+    - 20230706
+    - 20230709
+    - 20230714
+    - 20230728
+    - 20230801
+    - 20230817
+    - 20230905
+    - 20230910
+    - 20231211   # Late 2023
+    # 2024 observations (11 nights) - PROPRIETARY, not yet in archive
+    # Uncomment when data becomes public or available locally
+    # - 20240416
+    # - 20240429
+    # - 20240516
+    # - 20240521
+    # - 20240526
+    # - 20240616
+    # - 20240715
+    # - 20240719
+    # - 20240808
+    # - 20240812
+    # - 20240816
+
+# Pipeline configuration files (paths relative to obs_nickel/configs/)
+configs:
+  science:
+    calibrate_image: calibrateImage/tuned_configs/dense_strict.py
+    calibrate_image_fallbacks:
+      - calibrateImage/tuned_configs/dense_relaxed.py
+      - calibrateImage/tuned_configs/sparse_strict.py
+      - calibrateImage/tuned_configs/sparse_relaxed.py
+    colorterms: apply_colorterms.py
+  dia:
+    subtract_images: dia/subtractImages_ps1.py  # Optimized for PS1->Nickel PSF matching
+    detect_and_measure: dia/detectAndMeasure.py
+
+# Processing options
+options:
+  jobs: 6
+  skip_calibs: false
+  skip_science: false
+  rebuild_templates: false   # PS1 templates don't need rebuild
+  skip_dia: false
+  forced_phot: true
+  forced_phot_image_type: diffim
+  continue_on_error: true
+  use_fallbacks: true
+
+# Lightcurve configuration
+lightcurve:
+  enabled: true
+  dataset_type: forced_phot_diffim_radec
+  min_snr: 1
+  max_mag_err: 1.0
+  y_axis: apparent_mag
+  x_axis: days_since_explosion
+  explosion_mjd: 60082.75       # 2023-05-19 (~discovery date)

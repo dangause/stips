@@ -1,0 +1,134 @@
+# Full pipeline configuration for SN 2020wnt using Nickel coadd templates
+#
+# Usage:
+#   nickel run scripts/config/2020wnt/pipeline_nickel_template.yaml
+#   nickel run scripts/config/2020wnt/pipeline_nickel_template.yaml --dry-run
+#
+# This orchestrates the full DIA pipeline:
+#   0. Bootstrap repository (automatic if needed)
+#   1. Build coadd templates from late-time Nickel observations (SN faded)
+#   2. Run calibrations per night
+#   3. Run science processing per night
+#   4. Run DIA per night per band
+#   5. Run forced photometry at SN coordinates
+#   6. Extract combined lightcurve
+#
+# Note: Nickel templates are built from late 2021/2022 observations when the SN had faded.
+# This provides better PSF matching than PS1 templates.
+#
+# SN 2020wnt is a Type Ic-BL supernova in an anonymous host galaxy.
+
+# =============================================================================
+# Environment Configuration (self-contained)
+# =============================================================================
+env:
+  REPO: "/Users/dangause/Developer/lick/lsst/data/nickel/2020wnt_nickel_template_022226_repo"
+  STACK_DIR: "/Users/dangause/Developer/lick/lsst/lsst_stack"
+  OBS_NICKEL: "/Users/dangause/Developer/lick/lsst/lsst_stack/stack/nickel_processing_suite/packages/obs_nickel"
+  RAW_PARENT_DIR: "/Users/dangause/Developer/lick/data"
+  REFCAT_REPO: "/Users/dangause/Developer/lick/lsst/lsst_stack/stack/refcats"
+  CP_PIPE_DIR: "${STACK_DIR}/cp_pipe"
+  LICK_ARCHIVE_DIR: "/Users/dangause/Developer/lick/lick_searchable_archive"
+  LICK_ARCHIVE_URL: "https://archive.ucolick.org/archive"
+  LICK_ARCHIVE_INSTR: "NICKEL_DIR"
+
+# Target information
+# SN 2020wnt
+# Coordinates from TNS/Transient Name Server
+# RA = 03:46:37.950, Dec = +43:13:45.30
+object: "2020wnt"
+ra: 56.658125
+dec: 43.229250
+
+# Bands to process
+bands: ["v", "r", "i"]
+
+# Template configuration - use Nickel coadds from faded SN epochs
+template:
+  type: coadd
+  # Late-time nights when SN had faded, used to build template coadds
+  nights:
+    - 20211113
+    - 20211121
+    - 20211125
+    - 20211129
+    - 20211201
+    - 20211217
+    - 20220105
+    - 20220108
+    - 20220110
+    - 20220118
+    - 20220124
+    - 20220126
+    - 20220208
+    - 20220212
+
+# Science nights - SN observations during bright phase
+# Template nights excluded from science to avoid self-subtraction
+science:
+  nights:
+    - 20201207
+    - 20201219
+    - 20210218
+    - 20210228
+    - 20210306
+    - 20210321
+    - 20210324
+    - 20210706
+    - 20210712
+    - 20210715
+    - 20210721
+    - 20210724
+    - 20210810
+    - 20210825
+    - 20210904
+    - 20210906
+    - 20210916
+    - 20210923
+    - 20210926
+    - 20210928
+    - 20210930
+    - 20211004
+    - 20211009
+    - 20211013
+    - 20211018
+    - 20211027
+    - 20211030
+    - 20211111
+
+# Pipeline configuration files (paths relative to obs_nickel/configs/)
+configs:
+  science:
+    calibrate_image: calibrateImage/tuned_configs/dense_strict.py
+    calibrate_image_fallbacks:
+      - calibrateImage/tuned_configs/dense_relaxed.py
+      - calibrateImage/tuned_configs/sparse_strict.py
+      - calibrateImage/tuned_configs/sparse_relaxed.py
+    colorterms: apply_colorterms.py
+  coadd:
+    make_direct_warp: coadds/makeDirectWarp_relaxed.py
+  dia:
+    subtract_images: dia/subtractImages.py
+    detect_and_measure: dia/detectAndMeasure.py
+
+# Processing options
+options:
+  jobs: 6
+  skip_calibs: false
+  skip_science: false
+  rebuild_templates: true
+  skip_dia: false
+  forced_phot: true
+  forced_phot_image_type: diffim
+  continue_on_error: true
+  use_fallbacks: true
+
+# Lightcurve configuration
+lightcurve:
+  enabled: true
+  dataset_type: forced_phot_diffim_radec
+  min_snr: 1
+  max_mag_err: 1.0
+  y_axis: apparent_mag
+  x_axis: days_since_explosion
+  explosion_mjd: 59180.0        # 2020-11-27 (~discovery date)

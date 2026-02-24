@@ -42,7 +42,7 @@ def ps1_ingestion_module():
 
         sys.path.insert(
             0,
-            str(Path(__file__).parent.parent / "packages/data_tools/src"),
+            str(Path(__file__).resolve().parents[2] / "data_tools/src"),
         )
         from obs_nickel_data_tools.pipeline_tools import ingest_ps1_template
 
@@ -105,6 +105,43 @@ class TestPS1Download:
         if result:
             assert Path(result).exists()
             print(f"Successfully downloaded: {result}")
+
+
+class TestPS1CutoutValidation:
+    """Test cutout size/coverage validation helpers."""
+
+    def _write_mock_fits(self, path, nx, ny):
+        from astropy.wcs import WCS as AstropyWCS
+
+        data = np.random.poisson(100, size=(ny, nx)).astype(np.float32)
+        wcs = AstropyWCS(naxis=2)
+        wcs.wcs.crpix = [nx / 2.0, ny / 2.0]
+        wcs.wcs.crval = [TEST_RA, TEST_DEC]
+        wcs.wcs.cdelt = [-0.25 / 3600.0, 0.25 / 3600.0]  # PS1 plate scale
+        wcs.wcs.ctype = ["RA---TAN", "DEC--TAN"]
+        hdu = fits.PrimaryHDU(data=data, header=wcs.to_header())
+        hdu.header["FILTER"] = "r"
+        hdu.writeto(path, overwrite=True)
+
+    def test_cutout_size_check_passes_for_requested_size(
+        self, ps1_ingestion_module, temp_dir
+    ):
+        fits_path = Path(temp_dir) / "full_size.fits"
+        # ~0.3 deg at 0.25"/pix
+        self._write_mock_fits(fits_path, nx=4320, ny=4320)
+        assert ps1_ingestion_module.ps1_file_meets_requested_size(
+            fits_path, requested_size_deg=0.3
+        )
+
+    def test_cutout_size_check_rejects_trimmed_cutout(
+        self, ps1_ingestion_module, temp_dir
+    ):
+        fits_path = Path(temp_dir) / "trimmed.fits"
+        # Significantly smaller than requested 0.3 deg (mirrors observed trimmed case).
+        self._write_mock_fits(fits_path, nx=3028, ny=3538)
+        assert not ps1_ingestion_module.ps1_file_meets_requested_size(
+            fits_path, requested_size_deg=0.3
+        )
 
 
 class TestPS1Conversion:

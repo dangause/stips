@@ -2,11 +2,16 @@
 #
 # This pipeline performs image subtraction for transient/variable source detection
 # using deep coadd templates. It includes:
-#   1. Visit image reprocessing with calibrated metadata
-#   2. Template warping to match science image geometry
-#   3. PSF-matched image subtraction (Alard-Lupton)
-#   4. Difference source detection and measurement
-#   5. Source consolidation and catalog building
+#   1. Template warping to match science image geometry
+#   2. PSF-matched image subtraction (Alard-Lupton)
+#   3. Difference source detection and measurement
+#   4. Source consolidation and catalog building
+#
+# NOTE: The Nickel DRP's calibrateImage task bakes photometric calibration
+# into preliminary_visit_image pixels (BUNIT=nJy, PhotoCalib=1.0 identity).
+# Difference images inherit this nJy scale, so DIA source / forced phot
+# fluxes are already in nJy and must NOT be multiplied by
+# initial_photoCalib_detector again (that would double-calibrate).
 #
 # Usage:
 #   pipetask run -b $REPO \
@@ -19,41 +24,22 @@ description: >
   Difference Image Analysis pipeline for Nickel 1-meter telescope.
   Optimized for transient and variable source detection.
 
+imports:
+  - location: $OBS_NICKEL/pipelines/nickel-analysis-dia-detector.yaml
+  - location: $OBS_NICKEL/pipelines/nickel-analysis-dia-lightcurve.yaml
+
 parameters:
   release_id: 0
 
 tasks:
   # ==========================
-  # Stage 1: Visit Reprocessing
-  # ==========================
-  # Reprocess visit images with proper visit-level metadata
-  # This ensures consistent WCS and photometric calibration
-  reprocessVisitImage:
-    class: lsst.drp.tasks.reprocess_visit_image.ReprocessVisitImageTask
-    config:
-      # Input connections
-      connections.exposures: post_isr_image
-      connections.background_1: preliminary_visit_image_background
-      connections.visit_summary: preliminary_visit_summary
-
-      # Output connections
-      connections.exposure: visit_image
-
-      # Don't remove initial photo calib - we want to keep it
-      remove_initial_photo_calib: false
-
-      # ID generator for source IDs
-      id_generator.release_id: parameters.release_id
-
-  # ==========================
-  # Stage 2: Template Warping
+  # Stage 1: Template Warping
   # ==========================
   # Warp deep coadd template to match science visit geometry
   rewarpTemplate:
     class: lsst.ip.diffim.getTemplate.GetTemplateTask
     config:
-      # Get bounding box and WCS from preliminary_visit_image (from processCcd)
-      # Using preliminary_visit_image instead of visit_image to avoid needing reprocessVisitImage
+      # Get bounding box and WCS from preliminary_visit_image
       connections.bbox: preliminary_visit_image.bbox
       connections.wcs: preliminary_visit_image.wcs
 
@@ -68,13 +54,13 @@ tasks:
       warp.warpingKernelName: "lanczos4"
 
   # ==========================
-  # Stage 3: Image Subtraction
+  # Stage 2: Image Subtraction
   # ==========================
   # Subtract template from science using Alard-Lupton PSF matching
   subtractImages:
     class: lsst.ip.diffim.subtractImages.AlardLuptonSubtractTask
     config:
-      # Input connections - use preliminary_visit_image instead of visit_image
+      # Input connections
       connections.science: preliminary_visit_image
       connections.sources: single_visit_star_footprints  # From calibrateImage (in processCcd)
       connections.template: template_detector
@@ -87,13 +73,13 @@ tasks:
       # Task tuning lives in configs/dia/subtractImages.py
 
   # ==========================
-  # Stage 4: DIA Source Detection
+  # Stage 3: DIA Source Detection
   # ==========================
   # Detect and measure sources in difference images
   detectAndMeasureDiaSource:
     class: lsst.ip.diffim.detectAndMeasure.DetectAndMeasureTask
     config:
-      # Input connections - use preliminary_visit_image instead of visit_image
+      # Input connections
       connections.science: preliminary_visit_image
       connections.matchedTemplate: template_matched
       connections.difference: difference_image_predetection
@@ -106,57 +92,8 @@ tasks:
       connections.maskedStreaks: difference_streaks
       # Task tuning lives in configs/dia/detectAndMeasure.py
 
-      # Detection configuration
-      # Lower threshold for transients (3-sigma)
-      # NOTE: Most detection/measurement config may have changed in recent LSST stack
-      # Using minimal config - relying on task defaults
-      # detection.thresholdValue: 3.0
-      # detection.thresholdType: "stdev"
-      # detection.minPixels: 5
-
-      # Enable dipole detection (for moving objects, cosmic rays)
-      # NOTE: doMeasurement parameter removed in recent LSST stack versions
-      # doMeasurement: true
-
-      # Sky sources for false positive estimation
-      # NOTE: doSkySources config may have changed in recent LSST stack versions
-      # doSkySources: true
-      # skySources.avoidMask: ["DETECTED", "DETECTED_NEGATIVE", "BAD", "SAT", "NO_DATA"]
-
-      # Measurement configuration
-      # Include both positive and negative detections
-      # NOTE: measurement plugin config may have changed in recent LSST stack versions
-      # measurement.plugins.names: [
-      #   "base_PsfFlux",
-      #   "base_CircularApertureFlux",
-      #   "base_GaussianFlux",
-      #   "base_SkyCoord",
-      #   "base_PixelFlags",
-      #   "base_SdssShape",
-      #   "ext_shapeHSM_HsmSourceMoments",
-      # ]
-
-      # PSF flux measurement (primary for point sources)
-      # NOTE: measurement plugin config may have changed in recent LSST stack versions
-      # measurement.plugins["base_PsfFlux"].doMeasure: true
-
-      # Aperture flux in multiple radii
-      # NOTE: measurement slots config may have changed in recent LSST stack versions
-      # measurement.slots.apFlux: "base_CircularApertureFlux_12_0"
-
       # ID generator
       idGenerator.release_id: parameters.release_id
-
-      # Enable writeExposure to save difference image with detections
-      # NOTE: doWriteSubtractedExp parameter may have been removed/renamed in recent LSST stack versions
-      # doWriteSubtractedExp: true
-
-  # ==========================
-  # Stage 5: DIA Source Consolidation
-  # ==========================
-  # NOTE: In lsst-scipipe-12.0.0 (v29.2.0), the source transformation tasks have changed
-  # detectAndMeasureDiaSource outputs SourceCatalog, which can be used directly
-  # Skipping transformation/consolidation for now - use dia_source_unfiltered directly
 
 # ==========================
 # Pipeline Subsets
@@ -169,18 +106,8 @@ subsets:
       - subtractImages
       - detectAndMeasureDiaSource
     description: >
-      Complete DIA pipeline using preliminary_visit_image from processCcd:
-      template warping, image subtraction, and source detection.
-
-  # Quick DIA (skip reprocessing if visit_image already exists)
-  dia-quick:
-    subset:
-      - rewarpTemplate
-      - subtractImages
-      - detectAndMeasureDiaSource
-    description: >
-      Quick DIA pipeline assuming visit_image already exists.
-      Suitable for re-running with different templates.
+      Complete DIA pipeline: template warping, image subtraction, and source detection.
+      Uses preliminary_visit_image (PhotoCalib=1.0); calibration applied in lightcurve extraction.
 
   # Subtraction only (for testing)
   dia-subtract-only:
@@ -191,8 +118,42 @@ subsets:
       Image subtraction only, no source detection.
       Useful for visual inspection of difference images.
 
-# ==========================
-# Processing Steps
-# ==========================
-# NOTE: Steps section removed - not needed in recent LSST stack versions
-# Subsets are defined above and used via pipeline#subset syntax
+  dia-analysis:
+    subset:
+      - makeDiaSpatialMetrics
+      - analyzeImageDifferenceMetrics
+      - analyzeDiaSourceDetectionMetrics
+      - analyzeDiaSpatialPlots
+      - analyzeDiaKernelVisitPlot
+      - analyzeDiaSources
+    description: >
+      DIA diagnostics and plots using analysis_tools on existing DIA outputs.
+
+  dia-full-with-analysis:
+    subset:
+      - rewarpTemplate
+      - subtractImages
+      - detectAndMeasureDiaSource
+      - makeDiaSpatialMetrics
+      - analyzeImageDifferenceMetrics
+      - analyzeDiaSourceDetectionMetrics
+      - analyzeDiaSpatialPlots
+      - analyzeDiaKernelVisitPlot
+      - analyzeDiaSources
+    description: >
+      DIA processing plus diagnostic analysis plots and metrics.
+
+  dia-lightcurve:
+    subset:
+      - makeDiaVisitTable
+      - plotDiaLightcurve
+    description: >
+      Generate per-band DIA lightcurve tables and plots for a configured target.
+
+  dia-lightcurve-combined:
+    subset:
+      - makeDiaVisitTable
+      - plotDiaLightcurve
+      - plotDiaLightcurveCombined
+    description: >
+      Generate per-band DIA lightcurves and a combined multi-band plot.

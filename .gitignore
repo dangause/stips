@@ -209,3 +209,4 @@ packages/testdata/upstream/
 packages/refcats/upstream/
 
 *.png
+CLAUDE.md

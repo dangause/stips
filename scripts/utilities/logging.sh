@@ -56,6 +56,15 @@ source "$(dirname "${BASH_SOURCE[0]}")/repo_paths.sh"
 # Top-level run directory for this execution
 RUN_LOG_DIR="$LOG_ROOT/$RUN_ID"
 
+# Helper function to set a custom RUN_ID and update RUN_LOG_DIR
+# Call this BEFORE setup_logging() if you want a custom run ID
+# Usage: set_run_id "my_custom_run_id"
+set_run_id() {
+  local new_run_id="$1"
+  export RUN_ID="$new_run_id"
+  export RUN_LOG_DIR="$LOG_ROOT/$RUN_ID"
+}
+
 # Logging functions
 log() {
   echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] $*"

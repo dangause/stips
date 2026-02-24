@@ -12,6 +12,8 @@ imports:
   - location: $DRP_PIPE_DIR/pipelines/_ingredients/analysis-dia.yaml
   - location: $OBS_NICKEL/pipelines/nickel-visit-quality-detector.yaml
   - location: $OBS_NICKEL/pipelines/nickel-analysis-visit-single-visit.yaml
+  - location: $OBS_NICKEL/pipelines/nickel-analysis-dia-detector.yaml
+  - location: $OBS_NICKEL/pipelines/nickel-analysis-dia-lightcurve.yaml
 
 parameters:
   release_id: 0
@@ -51,8 +53,10 @@ tasks:
       connections.exposure: preliminary_visit_image
       connections.background: preliminary_visit_image_background
       id_generator.release_id: parameters.release_id
-      # Calibration file
-      file: $OBS_NICKEL/configs/calibrateImage/tuned_configs/best_calib_t071.py
+      # NOTE: calibrateImage config is applied via --config-file in science.py
+      # to allow fallback configs (dense_strict → dense_relaxed → sparse_*).
+      # All tuned configs load best_calib_t071.py as their base.
+      # DO NOT add a 'file:' directive here — it overrides --config-file CLI args.
       # --- bootstrap PSF for first-pass detection ---
       install_simple_psf.fwhm: 2.0
       install_simple_psf.width: 35
@@ -84,10 +88,6 @@ tasks:
       # ---- Photometry ----
       connections.photometry_ref_cat: the_monster_20250219_local  # panstarrs1_dr2
       photometry_ref_loader.filterMap:
-        # B: phot_bp_mean
-        # V: phot_g_mean
-        # R: phot_rp_mean
-        # I: phot_rp_mean
         b: monster_ComCam_g
         v: monster_ComCam_g
         r: monster_ComCam_r
@@ -120,7 +120,7 @@ tasks:
       connections.source_table_visit: single_visit_star
       connections.isolated_star_sources: isolated_star
       connections.isolated_star_cat: isolated_star_association
-      band_order: ['i', 'z', 'r', 'g', 'y', 'u', 'b', 'v']  # Nickel-specific
+      band_order: ['i', 'r', 'v', 'b']  # Nickel bands only
   makeInitialVisitDetectorTable:
     class: lsst.pipe.tasks.postprocess.MakeCcdVisitTableTask
     config:
@@ -147,8 +147,11 @@ tasks:
       useVisitSummaryPsf: false
       useVisitSummaryWcs: false
       useVisitSummaryPhotoCalib: false
-      select.maxEllipResidual: 0.015
-      select.maxScaledSizeScatter: 0.022
+      # Relaxed selection thresholds for Nickel 1-m telescope.
+      # LSST defaults (0.015 / 0.022) reject most Nickel visits due to
+      # the telescope's larger PSF variations.
+      select.maxEllipResidual: 0.05
+      select.maxScaledSizeScatter: 0.05
       doPreWarpInterpolation: true
 
   makePsfMatchedWarp:
@@ -162,7 +165,7 @@ tasks:
     config:
       connections.visitSummaries: preliminary_visit_summary
       connections.goodVisits: deep_coadd_visit_selection
-      maxPsfFwhm: 2.0         # adjust if Nickel seeing differs
+      maxPsfFwhm: 3.0         # Nickel seeing typically 1.5-3.0 arcsec; reject outliers
       nVisitsMax: -1
 
   selectTemplateCoaddVisits:
@@ -170,6 +173,12 @@ tasks:
     config:
       connections.visitSummaries: preliminary_visit_summary
       connections.goodVisits: template_coadd_visit_selection
+      # Keep the best 50% of visits by seeing for template building.
+      # Previously qMax=0.9999 accepted all visits, allowing warps with
+      # poor WCS (from relaxed fallback configs) into the template coadd.
+      # 0.5 balances quality vs data volume for Nickel's sparse visit counts.
+      qMax: 0.5
+      nVisitsMin: 1
 
   assembleDeepCoadd:
     class: lsst.drp.tasks.assemble_coadd.CompareWarpAssembleCoaddTask
@@ -374,10 +383,23 @@ subsets:
       - rewarpTemplate
       - subtractImages
       - detectAndMeasureDiaSource
+      - makeDiaSpatialMetrics
+      - analyzeImageDifferenceMetrics
+      - analyzeDiaSourceDetectionMetrics
+      - analyzeDiaSpatialPlots
+      - analyzeDiaKernelVisitPlot
+      - analyzeDiaSources
     description: |
       Difference imaging for transient/variable detection.
       Requires template_coadd in input collections.
       Run after single-visit processing (step1a/step1b) completes.
+
+  difference-imaging-lightcurve:
+    subset:
+      - makeDiaVisitTable
+      - plotDiaLightcurve
+    description: |
+      Generate DIA lightcurve tables/plots for a configured target.
 
 
 

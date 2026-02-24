@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "obs-nickel-data"
+version = "0.1.0"
+description = "Curated calibration data for the Nickel telescope"
+authors = [{ name = "Dan Gause" }]
+requires-python = ">=3.12"
+dependencies = []
+readme = "README.md"
+
+[tool.setuptools.packages.find]
+where = ["python"]
+
+[tool.setuptools.package-data]
+"*" = ["*.yaml", "*.ecsv"]
