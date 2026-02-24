@@ -395,6 +395,13 @@ class RunConfig:
     transit_duration_min: float = 0.5  # hours
     transit_duration_max: float = 6.0  # hours
 
+    # Execution backend
+    execution: str = "local"  # "local" | "bps"
+    site: str = "local"  # "local" | "slurm" | "htcondor"
+    concurrent_nights: int = 0  # 0 = sequential (default)
+    bps_poll_interval: float = 5.0  # Seconds between BPS status checks
+    bps_timeout: float = 7200.0  # Per-stage BPS timeout in seconds
+
     # Environment profile (optional - embedded in YAML instead of -p flag)
     profile: str | None = None
 
@@ -516,6 +523,11 @@ class RunConfig:
             transit_search=options.get("transit_search", default_transit_search),
             transit_duration_min=float(options.get("transit_duration_min", 0.5)),
             transit_duration_max=float(options.get("transit_duration_max", 6.0)),
+            execution=options.get("execution", "local"),
+            site=options.get("site", "local"),
+            concurrent_nights=int(options.get("concurrent_nights", 0)),
+            bps_poll_interval=float(options.get("bps_poll_interval", 5.0)),
+            bps_timeout=float(options.get("bps_timeout", 7200.0)),
             profile=data.get("profile"),
         )
 

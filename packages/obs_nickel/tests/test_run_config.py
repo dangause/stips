@@ -224,3 +224,65 @@ class TestRunConfigTransitFields:
         assert cfg.transit_search is False
         assert cfg.transit_duration_min == 0.5
         assert cfg.transit_duration_max == 6.0
+
+
+@pytest.fixture
+def bps_yaml(tmp_path):
+    cfg = {
+        "object": "2023ixf",
+        "ra": 210.91,
+        "dec": 54.32,
+        "bands": ["r", "i"],
+        "science": {"nights": [20230519]},
+        "options": {
+            "execution": "bps",
+            "site": "slurm",
+            "concurrent_nights": 4,
+            "bps_poll_interval": 10.0,
+            "bps_timeout": 3600,
+        },
+    }
+    path = tmp_path / "bps.yaml"
+    with open(path, "w") as f:
+        yaml.dump(cfg, f)
+    return path
+
+
+class TestRunConfigExecutionFields:
+    def test_parses_bps_execution_fields(self, bps_yaml):
+        from obs_nickel_data_tools.core.run import RunConfig
+
+        cfg = RunConfig.from_yaml(bps_yaml)
+        assert cfg.execution == "bps"
+        assert cfg.site == "slurm"
+        assert cfg.concurrent_nights == 4
+        assert cfg.bps_poll_interval == 10.0
+        assert cfg.bps_timeout == 3600
+
+    def test_default_execution_is_local(self, sn_yaml):
+        from obs_nickel_data_tools.core.run import RunConfig
+
+        cfg = RunConfig.from_yaml(sn_yaml)
+        assert cfg.execution == "local"
+        assert cfg.site == "local"
+        assert cfg.concurrent_nights == 0
+        assert cfg.bps_poll_interval == 5.0
+        assert cfg.bps_timeout == 7200.0
+
+    def test_concurrent_nights_without_bps(self, tmp_path):
+        from obs_nickel_data_tools.core.run import RunConfig
+
+        cfg_data = {
+            "object": "test",
+            "ra": 100.0,
+            "dec": 10.0,
+            "bands": ["r"],
+            "science": {"nights": [20230101]},
+            "options": {"concurrent_nights": 3},
+        }
+        path = tmp_path / "concurrent.yaml"
+        with open(path, "w") as f:
+            yaml.dump(cfg_data, f)
+        cfg = RunConfig.from_yaml(path)
+        assert cfg.execution == "local"
+        assert cfg.concurrent_nights == 3
