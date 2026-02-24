@@ -112,3 +112,32 @@ def _read_lightcurve(csv_path: Path) -> pd.DataFrame:
         raise ValueError(f"Lightcurve CSV missing required columns: {missing}")
     df = df.sort_values("mjd").reset_index(drop=True)
     return df
+
+
+def _normalize_to_baseline(df: pd.DataFrame) -> tuple[np.ndarray, np.ndarray]:
+    """Normalize flux to per-band baseline (fractional units).
+
+    Divides each band's flux by its median, producing values near 1.0
+    for out-of-transit points and < 1.0 during transit.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Lightcurve DataFrame with at least 'band', 'flux', 'flux_err'.
+
+    Returns
+    -------
+    norm_flux : np.ndarray
+        Baseline-normalized flux values (1.0 = baseline).
+    norm_err : np.ndarray
+        Normalized flux error values.
+    """
+    flux = df["flux"].to_numpy(dtype=float).copy()
+    flux_err = df["flux_err"].to_numpy(dtype=float).copy()
+    for band in df["band"].unique():
+        mask = df["band"] == band
+        median = np.median(flux[mask])
+        if median != 0:
+            flux[mask] /= median
+            flux_err[mask] /= abs(median)
+    return flux, flux_err
