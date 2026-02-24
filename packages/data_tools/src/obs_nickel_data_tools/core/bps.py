@@ -28,7 +28,7 @@ if TYPE_CHECKING:
 
 
 # Valid pipeline names
-VALID_PIPELINES = ("calibs", "science", "dia", "fphot")
+VALID_PIPELINES = ("calibs", "science", "dia", "fphot", "custom")
 
 # Valid site names
 VALID_SITES = ("slurm", "htcondor", "local")
@@ -77,7 +77,7 @@ class BPSConfig:
                 f"Must be one of: {', '.join(VALID_SITES)}"
             )
         # Validate night format
-        if not re.match(r"^\d{8}$", self.night):
+        if self.night != "00000000" and not re.match(r"^\d{8}$", self.night):
             raise ValueError(f"Invalid night format '{self.night}'. Expected YYYYMMDD.")
 
 
