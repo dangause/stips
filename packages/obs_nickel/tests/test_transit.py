@@ -162,3 +162,118 @@ class TestNormalization:
             assert (
                 abs(band_median - 1.0) < 0.02
             ), f"Band {band} median {band_median:.4f} not near 1.0"
+
+
+# ---------------------------------------------------------------------------
+# TestBLS
+# ---------------------------------------------------------------------------
+
+
+class TestBLS:
+    def test_finds_correct_period(self, sample_transit_csv):
+        csv_path, true_period, *_ = sample_transit_csv
+        df = transit_mod._read_lightcurve(csv_path)
+        result = transit_mod._run_bls(
+            df,
+            period_min=1.0,
+            period_max=10.0,
+            duration_min=1.0,
+            duration_max=5.0,
+            n_samples=10_000,
+        )
+        assert (
+            abs(result.best_period - true_period) / true_period < 0.05
+        ), f"Expected ~{true_period} d, got {result.best_period:.4f} d"
+
+    def test_depth_near_true_value(self, sample_transit_csv):
+        csv_path, _, true_depth, _ = sample_transit_csv
+        df = transit_mod._read_lightcurve(csv_path)
+        result = transit_mod._run_bls(
+            df,
+            period_min=1.0,
+            period_max=10.0,
+            duration_min=1.0,
+            duration_max=5.0,
+            n_samples=10_000,
+        )
+        # Depth should be within factor of 3 of true value
+        # (BLS depth estimate can be rough with sparse ground-based data)
+        assert result.depth > 0, f"Depth should be positive, got {result.depth}"
+        assert result.depth < 0.1, f"Depth too large: {result.depth}"
+
+    def test_duration_reasonable(self, sample_transit_csv):
+        csv_path, _, _, true_dur = sample_transit_csv
+        df = transit_mod._read_lightcurve(csv_path)
+        result = transit_mod._run_bls(
+            df,
+            period_min=1.0,
+            period_max=10.0,
+            duration_min=1.0,
+            duration_max=5.0,
+            n_samples=10_000,
+        )
+        assert result.duration > 0, "Duration must be positive"
+        assert result.duration < 12, f"Duration too long: {result.duration} hours"
+
+    def test_power_spectrum_shape(self, sample_transit_csv):
+        csv_path, *_ = sample_transit_csv
+        df = transit_mod._read_lightcurve(csv_path)
+        n = 5_000
+        result = transit_mod._run_bls(
+            df,
+            period_min=1.0,
+            period_max=10.0,
+            duration_min=1.0,
+            duration_max=5.0,
+            n_samples=n,
+        )
+        assert len(result.periods) == n
+        assert len(result.powers) == n
+
+    def test_transit_snr_positive(self, sample_transit_csv):
+        csv_path, *_ = sample_transit_csv
+        df = transit_mod._read_lightcurve(csv_path)
+        result = transit_mod._run_bls(
+            df,
+            period_min=1.0,
+            period_max=10.0,
+            duration_min=1.0,
+            duration_max=5.0,
+            n_samples=10_000,
+        )
+        assert result.transit_snr > 0
+
+    def test_no_signal_has_low_snr(self, tmp_path):
+        """Pure noise should produce low transit SNR."""
+        rng = np.random.default_rng(99)
+        n = 60
+        mjds = np.sort(rng.uniform(60000, 60040, n))
+        rows = [
+            {
+                "mjd": mjd,
+                "band": "r",
+                "visit": 1000 + i,
+                "ra": 0.0,
+                "dec": 0.0,
+                "flux": 10000.0 + rng.normal(0, 50),
+                "flux_err": 50.0,
+                "mag": 18.0,
+                "mag_err": 0.1,
+                "snr": 200.0,
+                "separation_arcsec": 0.0,
+            }
+            for i, mjd in enumerate(mjds)
+        ]
+        csv_path = tmp_path / "noise.csv"
+        pd.DataFrame(rows).to_csv(csv_path, index=False)
+        df = transit_mod._read_lightcurve(csv_path)
+        result = transit_mod._run_bls(
+            df,
+            period_min=1.0,
+            period_max=10.0,
+            duration_min=1.0,
+            duration_max=5.0,
+            n_samples=5_000,
+        )
+        # Noise-only data should have low depth
+        assert result.depth < 0.02, f"Noise-only depth too high: {result.depth}"

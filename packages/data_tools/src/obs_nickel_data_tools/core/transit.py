@@ -141,3 +141,77 @@ def _normalize_to_baseline(df: pd.DataFrame) -> tuple[np.ndarray, np.ndarray]:
             flux[mask] /= median
             flux_err[mask] /= abs(median)
     return flux, flux_err
+
+
+def _run_bls(
+    df: pd.DataFrame,
+    *,
+    period_min: float,
+    period_max: float,
+    duration_min: float,
+    duration_max: float,
+    n_samples: int,
+) -> TransitResult:
+    """Compute a BLS periodogram and extract transit parameters.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Lightcurve data (mjd, band, flux, flux_err).
+    period_min : float
+        Minimum period to search (days).
+    period_max : float
+        Maximum period to search (days).
+    duration_min : float
+        Minimum transit duration (hours).
+    duration_max : float
+        Maximum transit duration (hours).
+    n_samples : int
+        Number of period samples.
+
+    Returns
+    -------
+    TransitResult
+        Populated except for phase_folded, transit_model, and output_dir.
+    """
+    from astropy import units as u
+    from astropy.timeseries import BoxLeastSquares
+
+    times = df["mjd"].to_numpy(dtype=float)
+    norm_flux, norm_err = _normalize_to_baseline(df)
+
+    # BLS periodogram
+    bls = BoxLeastSquares(times * u.day, norm_flux, norm_err)
+    periods = np.linspace(period_min, period_max, n_samples) * u.day
+    durations = np.linspace(duration_min / 24.0, duration_max / 24.0, 10) * u.day
+
+    results = bls.power(periods, durations)
+
+    best_idx = int(np.argmax(results.power))
+    best_period = float(results.period[best_idx].value)
+    best_duration = float(results.duration[best_idx].to(u.hour).value)
+    best_t0 = float(results.transit_time[best_idx].value)
+
+    # Extract transit depth from the BLS model stats
+    # stats["depth"] is a (depth, depth_uncertainty) tuple
+    stats = bls.compute_stats(
+        best_period * u.day,
+        best_duration / 24.0 * u.day,
+        best_t0 * u.day,
+    )
+    depth = float(stats["depth"][0])
+    depth_err = float(stats["depth"][1])
+    if depth_err <= 0:
+        depth_err = abs(depth) * 0.1 if depth != 0 else 1e-10
+    transit_snr = abs(depth) / depth_err if depth_err > 0 else 0.0
+
+    return TransitResult(
+        best_period=best_period,
+        t0=best_t0,
+        duration=best_duration,
+        depth=depth,
+        depth_err=depth_err,
+        transit_snr=transit_snr,
+        periods=np.array([p.value for p in results.period]),
+        powers=np.array(results.power),
+    )
