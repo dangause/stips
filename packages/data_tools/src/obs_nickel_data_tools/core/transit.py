@@ -19,6 +19,7 @@ Dependencies (all in LSST stack):
 
 from __future__ import annotations
 
+import json
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -293,3 +294,100 @@ def _make_transit_model(
             model_flux[i] = 1.0 - depth * frac
 
     return {"phase": phase, "model_flux": model_flux}
+
+
+def _save_results(result: TransitResult, output_dir: Path) -> None:
+    """Write JSON summary, BLS periodogram PNG, and phase-folded transit PNG.
+
+    Parameters
+    ----------
+    result : TransitResult
+        Completed transit result (phase_folded and transit_model must be populated).
+    output_dir : Path
+        Destination directory (created if absent).
+    """
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # --- JSON summary -------------------------------------------------------
+    bands = sorted(result.phase_folded.keys())
+    summary = {
+        "best_period": result.best_period,
+        "t0": result.t0,
+        "duration_hours": result.duration,
+        "depth": result.depth,
+        "depth_err": result.depth_err,
+        "transit_snr": result.transit_snr,
+        "n_bands": len(bands),
+        "bands": bands,
+    }
+    json_path = output_dir / "transit_results.json"
+    with open(json_path, "w") as fh:
+        json.dump(summary, fh, indent=2)
+    log.info("Transit results written to %s", json_path)
+
+    # --- BLS Periodogram ----------------------------------------------------
+    fig, ax = plt.subplots(figsize=(8, 4))
+    ax.plot(result.periods, result.powers, lw=0.8, color="steelblue")
+    ax.axvline(
+        result.best_period,
+        color="red",
+        lw=1.5,
+        linestyle="--",
+        label=f"P = {result.best_period:.4f} d",
+    )
+    ax.set_xlabel("Period (days)")
+    ax.set_ylabel("BLS Power")
+    ax.set_title(f"Transit SNR = {result.transit_snr:.1f}")
+    ax.legend(loc="best")
+    fig.tight_layout()
+    fig.savefig(output_dir / "bls_periodogram.png")
+    plt.close(fig)
+    log.info("BLS periodogram saved to %s", output_dir / "bls_periodogram.png")
+
+    # --- Phase-folded transit -----------------------------------------------
+    fig2, ax2 = plt.subplots(figsize=(8, 4))
+    for band in sorted(result.phase_folded.keys()):
+        data = result.phase_folded[band]
+        color = _BAND_COLORS.get(band, "black")
+        ax2.errorbar(
+            data["phase"],
+            data["flux_norm"],
+            yerr=data["flux_err"],
+            fmt="o",
+            color=color,
+            label=f"{band.upper()}-band",
+            markersize=4,
+            capsize=2,
+            alpha=0.7,
+        )
+    # Overlay transit model
+    if result.transit_model:
+        ax2.plot(
+            result.transit_model["phase"],
+            result.transit_model["model_flux"],
+            color="black",
+            lw=2,
+            alpha=0.8,
+            label="Model",
+        )
+    ax2.set_xlabel("Orbital Phase")
+    ax2.set_ylabel("Normalized Flux")
+    ax2.set_title(
+        f"P = {result.best_period:.4f} d, "
+        f"depth = {result.depth * 100:.3f}%, "
+        f"dur = {result.duration:.1f} h"
+    )
+    ax2.legend(loc="best")
+    fig2.tight_layout()
+    fig2.savefig(output_dir / "phase_folded_transit.png")
+    plt.close(fig2)
+    log.info(
+        "Phase-folded transit saved to %s", output_dir / "phase_folded_transit.png"
+    )
+
+    result.output_dir = output_dir
