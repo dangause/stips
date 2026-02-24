@@ -321,3 +321,42 @@ class TestPhaseFolding:
                         f"Band {band}: near-center flux {near_flux:.4f} >= "
                         f"far flux {far_flux:.4f}"
                     )
+
+
+# ---------------------------------------------------------------------------
+# TestTransitModel
+# ---------------------------------------------------------------------------
+
+
+class TestTransitModel:
+    def test_model_has_expected_keys(self):
+        model = transit_mod._make_transit_model(
+            period=3.0,
+            duration_hours=3.0,
+            depth=0.02,
+        )
+        assert "phase" in model
+        assert "model_flux" in model
+
+    def test_model_baseline_near_one(self):
+        model = transit_mod._make_transit_model(
+            period=3.0,
+            duration_hours=3.0,
+            depth=0.02,
+        )
+        # Most model points should be at baseline (~1.0)
+        baseline_mask = np.abs(model["phase"]) > 0.2
+        assert np.allclose(model["model_flux"][baseline_mask], 1.0)
+
+    def test_model_dip_at_center(self):
+        depth = 0.02
+        model = transit_mod._make_transit_model(
+            period=3.0,
+            duration_hours=3.0,
+            depth=depth,
+        )
+        # Center should be at 1.0 - depth
+        center_mask = np.abs(model["phase"]) < 0.01
+        center_flux = model["model_flux"][center_mask]
+        assert len(center_flux) > 0
+        assert np.allclose(center_flux, 1.0 - depth, atol=0.001)
