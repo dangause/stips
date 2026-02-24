@@ -210,3 +210,6 @@ packages/refcats/upstream/
 
 *.png
 CLAUDE.md
+
+# Git worktrees
+.worktrees/
