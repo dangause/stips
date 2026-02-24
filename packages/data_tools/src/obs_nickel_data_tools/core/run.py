@@ -608,6 +608,39 @@ def _create_executor(run_cfg: RunConfig):
     return LocalExecutor()
 
 
+def _dispatch_concurrent(
+    fn,
+    items: list,
+    *,
+    max_workers: int = 4,
+    item_label: str = "item",
+):
+    """Run fn(item) concurrently for each item.
+
+    Args:
+        fn: Callable that takes a single item and returns a result
+        items: List of items to process
+        max_workers: Maximum concurrent workers
+        item_label: Label for log messages
+
+    Returns:
+        Dict mapping each item to its result (None if fn raised an exception)
+    """
+    import concurrent.futures
+
+    results = {}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as pool:
+        future_to_item = {pool.submit(fn, item): item for item in items}
+        for future in concurrent.futures.as_completed(future_to_item):
+            item = future_to_item[future]
+            try:
+                results[item] = future.result()
+            except Exception as e:
+                log.error(f"  {item_label} {item} raised: {e}")
+                results[item] = None
+    return results
+
+
 def _get_bands_for_night(
     night: str,
     run_cfg: RunConfig,

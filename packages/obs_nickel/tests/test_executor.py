@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import time
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -365,3 +366,56 @@ class TestExecutorWiring:
 
         sig = inspect.signature(fphot.run)
         assert "executor" in sig.parameters
+
+
+class TestDispatchConcurrent:
+    def test_runs_all_items(self):
+        from obs_nickel_data_tools.core.run import _dispatch_concurrent
+
+        results = _dispatch_concurrent(
+            lambda x: x * 2,
+            [1, 2, 3, 4],
+            max_workers=2,
+        )
+        assert results == {1: 2, 2: 4, 3: 6, 4: 8}
+
+    def test_handles_exceptions(self):
+        from obs_nickel_data_tools.core.run import _dispatch_concurrent
+
+        def failing_fn(x):
+            if x == 2:
+                raise ValueError("boom")
+            return x * 10
+
+        results = _dispatch_concurrent(failing_fn, [1, 2, 3], max_workers=2)
+        assert results[1] == 10
+        assert results[2] is None  # Failed items return None
+        assert results[3] == 30
+
+    def test_runs_concurrently(self):
+        """Items actually run in parallel, not sequentially."""
+        from obs_nickel_data_tools.core.run import _dispatch_concurrent
+
+        def slow_fn(x):
+            time.sleep(0.1)
+            return x
+
+        start = time.monotonic()
+        results = _dispatch_concurrent(slow_fn, [1, 2, 3, 4], max_workers=4)
+        elapsed = time.monotonic() - start
+
+        assert len(results) == 4
+        # 4 items at 0.1s each with 4 workers should take ~0.1s, not 0.4s
+        assert elapsed < 0.3
+
+    def test_single_worker_runs_sequentially(self):
+        from obs_nickel_data_tools.core.run import _dispatch_concurrent
+
+        order = []
+
+        def tracking_fn(x):
+            order.append(x)
+            return x
+
+        _dispatch_concurrent(tracking_fn, [1, 2, 3], max_workers=1)
+        assert len(order) == 3
