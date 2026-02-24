@@ -158,11 +158,16 @@ Lick observations use **local date** (Pacific time) for the observing night, but
 ## Target Campaigns
 
 ### 2023ixf (SN 2023ixf in M101)
-- RA: 210.910833°, Dec: 54.316389°
+- RA: 210.910750°, Dec: 54.311694° (14:03:38.580, +54:18:42.10)
+- Distance: 6.7 Mpc (distance_modulus: 29.05)
+- Explosion MJD: 60082.75 (2023-05-19)
 - Nights: 20230519, 20230521, 20230523, ... through 20231211
 - Config: `scripts/config/2023ixf/`
 
-### 2020wnt (SN 2020wnt)
+### 2020wnt (SN 2020wnt, SLSN-I at z=0.032)
+- RA: 56.658125°, Dec: 43.229250° (03:46:37.950, +43:13:45.30)
+- Explosion MJD: 59180.0 (2020-11-27)
+- Nights: 20201207, 20210228, 20210324, ... through 20211111
 - Config: `scripts/config/2020wnt/`
 
 ## Development Setup
@@ -197,7 +202,7 @@ nickel -p 2023ixf env
 
 7. **Template force rebuild** - When science is re-processed (`skip_science: false`), coadd templates are force-rebuilt via `overwrite=True` to pick up improved inputs
 
-8. **Fallback config strategy** - Science processing tries a primary `calibrateImage` config, then up to 3 fallbacks (dense/sparse x strict/relaxed) to handle varying field densities. Each fallback writes to its own RUN collection (`/run_fb1`, `/run_fb2`, etc.) to avoid LSST's `ConflictingDefinitionError` (Butler enforces config consistency per task label within a RUN). Fallback qgraphs use `--skip-existing-in` to only reprocess failed quanta. All successful RUNs are chained together under the parent CHAINED collection.
+8. **Fallback config strategy** - Science processing tries a primary `calibrateImage` config, then up to 3 fallbacks (dense/sparse x strict/relaxed). Each writes to its own RUN collection (`/run_fb1`, etc.) — see "Science fallback configs" in Common Issues for details.
 
 9. **Self-contained YAML configs** - Pipeline configs embed `env:` section with all paths, making them portable without needing `.env` files
 
@@ -208,8 +213,8 @@ The `nickel run <config.yaml>` command orchestrates the full pipeline from a sel
 ```yaml
 env:                    # Inline environment variables (REPO, STACK_DIR, etc.)
 object: "2023ixf"       # Target name (matched against FITS headers)
-ra: 210.910833          # Target RA (used for coordinate validation + forced photometry)
-dec: 54.316389          # Target Dec
+ra: 210.910750          # Target RA — use full TNS precision (see Coordinate Precision below)
+dec: 54.311694          # Target Dec
 bands: ["r", "i"]       # Bands to process
 
 template:
@@ -320,6 +325,15 @@ The LSST stack version installed uses specific config field names that may diffe
 - `BestSeeingQuantileSelectVisitsConfig`: uses `qMin`/`qMax` (NOT `quantile`)
 - `BestSeeingSelectVisitsConfig`: uses `maxPsfFwhm`/`nVisitsMax`
 - `makeDirectWarp` selection: `select.maxEllipResidual`, `select.maxScaledSizeScatter`
+
+### Coordinate precision for forced photometry
+Target RA/Dec must use full TNS precision (sexagesimal → decimal, 6+ decimal places). Rounding to 2 decimal places in degrees causes 5-17" offsets — enough to completely miss a point source on Nickel's 0.37"/pixel scale. Always convert from TNS sexagesimal (e.g., `14:03:38.580, +54:18:42.10`) rather than rounding. Symptom of wrong coordinates: 100% negative forced-photometry flux (measuring galaxy background instead of SN).
+
+### PS1 template pixel units
+PS1 templates must be pre-calibrated to nJy during ingestion (`ingest_ps1_template.py` does this automatically). If templates are in raw ADU (~363 nJy/ADU), the DIA kernel must absorb a ~363× flux ratio on top of PSF matching, causing numerical instability and unreliable kernel sums (200-1300 instead of ~1.0). After re-ingesting templates, existing DIA results must be rerun.
+
+### Nickel coadd template contamination
+If Nickel coadd templates are built from epochs when the SN is still active (e.g., 2023ixf template nights 20230728-20231211 = days 70-206 post-explosion, SN at mag 12-14), the template contains SN flux. This produces: (1) negative difference flux when science SN is fainter than template SN, (2) systematically underestimated flux at all epochs. Use PS1 templates for early epochs, or build Nickel templates only from SN-free data (post-fading or pre-explosion).
 
 ### Science fallback configs and collection naming
 Each fallback calibrateImage config writes to its own RUN collection (`/run_fb1`, `/run_fb2`, `/run_fb3`) under the same CHAINED parent as the primary `/run`. This is required because LSST's Butler enforces config consistency per task label within a single RUN collection — writing a different `calibrateImage_config` into an existing RUN raises `ConflictingDefinitionError`. Downstream steps (DIA, coadd, fphot) should always use the CHAINED parent collection, not individual `/run` or `/run_fb*` collections.
