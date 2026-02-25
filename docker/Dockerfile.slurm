@@ -68,6 +68,10 @@ RUN source /opt/lsst/software/stack/loadLSST.bash && \
     pip install --no-deps -e packages/obs_nickel && \
     chmod +x /opt/nps/packages/obs_nickel/pipelines/*.yaml 2>/dev/null || true
 
+# Add LSST conda env to default PATH so Parsl's process_worker_pool.py
+# is available when Slurm jobs start on compute nodes
+ENV PATH=/opt/lsst/software/stack/conda/envs/lsst-scipipe-12.1.0/bin:$PATH
+
 # =============================================================================
 # Systemd setup (for compute nodes — slurmd requires cgroup v2 scopes via systemd)
 # =============================================================================

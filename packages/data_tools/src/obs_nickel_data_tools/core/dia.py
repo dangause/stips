@@ -264,6 +264,7 @@ def run(
             cols.diff_run,
             "--save-qgraph",
             str(qg_file),
+            "--qgraph-datastore-records",
             "-d",
             data_query,
         ]
@@ -324,6 +325,7 @@ def run(
             capture_output=True,
             check=False,
             log_file=log_file,
+            output_run=cols.diff_run,
         )
 
         # Parse quanta counts to handle partial success

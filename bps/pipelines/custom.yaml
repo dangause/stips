@@ -9,6 +9,7 @@
 # Variables:
 #   {qgraph_file}   - Path to pre-built quantum graph
 #   {repo}           - Butler repository path
+#   {output_run}     - Output RUN collection name (must match qgraph)
 
 # Inherit site-specific settings
 includeConfigs:
@@ -20,6 +21,10 @@ includeConfigs:
 payload:
   payloadName: nickel-custom-{night}
   butlerConfig: "{repo}"
+  # Override BPS default output naming (u/{operator}/{payloadName}/{timestamp})
+  # to preserve the collection names baked into the pre-built qgraph.
+  # Without this, pipetask update-graph-run renames the output collection.
+  outputRun: "{output_run}"
 
 # =============================================================================
 # Pre-built Quantum Graph

@@ -236,7 +236,7 @@ def run(
                     "-b",
                     repo,
                     "-p",
-                    str(config.cp_pipe_dir / "pipelines/_ingredients/cpBias.yaml"),
+                    str(config.obs_nickel / "pipelines/NickelCpBias.yaml"),
                     "-i",
                     f"{cols.curated_chain},{cols.raw_run}",
                     "-o",
@@ -245,6 +245,7 @@ def run(
                     cols.cp_bias_run,
                     "--save-qgraph",
                     str(qg_bias),
+                    "--qgraph-datastore-records",
                     "-d",
                     "instrument='Nickel' AND exposure.observation_type='bias'",
                 ],
@@ -266,6 +267,7 @@ def run(
                 config,
                 check=False,
                 log_file=log_file,
+                output_run=cols.cp_bias_run,
             )
             if result.returncode != 0:
                 log.warning(
@@ -323,7 +325,7 @@ def run(
                     "-b",
                     repo,
                     "-p",
-                    str(config.cp_pipe_dir / "pipelines/_ingredients/cpFlat.yaml"),
+                    str(config.obs_nickel / "pipelines/NickelCpFlat.yaml"),
                     "-i",
                     f"{cols.curated_chain},{cols.raw_run},{cols.calib_out},{cols.cp_bias_run}",
                     "-o",
@@ -332,6 +334,7 @@ def run(
                     cols.cp_flat_run,
                     "--save-qgraph",
                     str(qg_flat),
+                    "--qgraph-datastore-records",
                     "-d",
                     "instrument='Nickel' AND exposure.observation_type='flat'",
                     "-c",
@@ -357,6 +360,7 @@ def run(
                 config,
                 check=False,
                 log_file=log_file,
+                output_run=cols.cp_flat_run,
             )
             if result.returncode != 0:
                 log.warning(

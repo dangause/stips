@@ -437,6 +437,7 @@ def run(
                 output_run,
                 "--save-qgraph",
                 str(qg_science),
+                "--qgraph-datastore-records",
                 "--config-file",
                 f"calibrateImage:{tuned_config}",
                 "--config-file",
@@ -490,6 +491,7 @@ def run(
                 capture_output=True,
                 check=False,
                 log_file=log_file,
+                output_run=output_run,
             )
 
             # Parse actual quanta counts from output (or log file if --no-log-tty)
@@ -731,6 +733,7 @@ def run(
                     cols.coadd_run,
                     "--save-qgraph",
                     str(qg_coadd),
+                    "--qgraph-datastore-records",
                     "-d",
                     f"instrument='Nickel' AND skymap='{SKYMAP_NAME}'",
                 ],
@@ -751,6 +754,7 @@ def run(
                 ],
                 config,
                 log_file=log_file,
+                output_run=cols.coadd_run,
             )
 
             run_butler(

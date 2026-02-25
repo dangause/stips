@@ -43,26 +43,23 @@ site:
       #SBATCH --partition=normal
       #SBATCH --export=ALL
 
-    # Conservative parallelism for Docker
-    max_blocks: 2
-    min_blocks: 0
-    init_blocks: 1
-    parallelism: 1.0
+    # Parsl run_dir on shared volume (accessible from NPS + compute nodes)
+    run_dir: /data/repo/parsl_runinfo
 
-    # Worker initialization
-    worker_init: |
-      # Source LSST stack (pre-installed in container)
+    # Command prefix: sourced before each pipetask command on compute nodes.
+    # Note: ctrl_bps_parsl's Slurm class does NOT pass worker_init through
+    # to Parsl's SlurmProvider, so we use commandPrefix instead.
+    commandPrefix: |
       source /opt/lsst/software/stack/loadLSST.bash
       setup lsst_distrib
-
-      # Setup obs_nickel (mounted into container)
-      if [[ -d "/shared/obs_nickel" ]]; then
-          setup -r /shared/obs_nickel obs_nickel
+      setup -r /opt/nps/packages/obs_nickel obs_nickel 2>/dev/null || true
+      if [[ -d /opt/nps/packages/obs_nickel_data ]]; then
+          setup -r /opt/nps/packages/obs_nickel_data obs_nickel_data 2>/dev/null || true
       fi
-
-      # Export environment
-      export REPO=/shared/repo
-      export OBS_NICKEL=/shared/obs_nickel
+      export REPO=/data/repo
+      export OBS_NICKEL=/opt/nps/packages/obs_nickel
+      export RAW_PARENT_DIR=/data/raw
+      export REFCAT_REPO=/data/refcats
 
 # =============================================================================
 # Reduced Resources for Docker Testing

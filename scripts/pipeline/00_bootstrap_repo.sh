@@ -35,8 +35,20 @@ log_info "Repository: $REPO"
 cd "$STACK_DIR"
 source loadLSST.zsh
 setup lsst_distrib
-setup obs_nickel || true
-setup obs_nickel_data || true
+
+# Use -r (path-based) setup so obs_nickel works even without eups registration
+if [ -n "${OBS_NICKEL:-}" ] && [ -d "$OBS_NICKEL" ]; then
+  setup -r "$OBS_NICKEL" obs_nickel 2>/dev/null || true
+else
+  setup obs_nickel || true
+fi
+
+OBS_NICKEL_DATA_DIR="${OBS_NICKEL%/*}/obs_nickel_data"
+if [ -d "$OBS_NICKEL_DATA_DIR" ]; then
+  setup -r "$OBS_NICKEL_DATA_DIR" obs_nickel_data 2>/dev/null || true
+else
+  setup obs_nickel_data || true
+fi
 
 ########## REPO ##########
 log_section "Butler Repository Setup"
@@ -76,7 +88,14 @@ else
     NEED_BUILD=1
     log_warn "Existing map is not ECSV; rebuilding: $MON_MAP"
   else
-    log_info "Using existing ECSV map: $MON_MAP"
+    # Verify first data path actually exists (catches host/container path mismatch)
+    FIRST_PATH=$(awk '!/^#/ && /^\// {print $1; exit}' "$MON_MAP")
+    if [ -n "$FIRST_PATH" ] && [ ! -f "$FIRST_PATH" ]; then
+      NEED_BUILD=1
+      log_warn "ECSV paths stale (path not found: $FIRST_PATH); rebuilding"
+    else
+      log_info "Using existing ECSV map: $MON_MAP"
+    fi
   fi
 fi
 

@@ -61,6 +61,7 @@ class BPSConfig:
     object_filter: str | None = None
     coord_collection: str | None = None
     qgraph_file: str | None = None
+    output_run: str | None = None
     operator: str = field(default_factory=lambda: os.environ.get("USER", "nps"))
     project: str = "nickel"
     dry_run: bool = False
@@ -157,7 +158,6 @@ def render_bps_config(
     Returns:
         Path to the rendered config file
     """
-    import shutil
 
     timestamp = generate_timestamp()
 
@@ -190,6 +190,7 @@ def render_bps_config(
         "object_filter": object_filter,
         "pipeline": bps_cfg.pipeline,
         "qgraph_file": bps_cfg.qgraph_file or "",
+        "output_run": bps_cfg.output_run or "",
     }
 
     # Perform substitution
@@ -207,15 +208,21 @@ def render_bps_config(
     sites_dest = output_dir / "sites"
     sites_dest.mkdir(parents=True, exist_ok=True)
 
-    # Copy base.yaml to output_dir (sites reference ../base.yaml)
+    # Copy and render base.yaml (sites reference ../base.yaml)
     base_yaml = bps_source_dir / "base.yaml"
     if base_yaml.exists():
-        shutil.copy(base_yaml, output_dir / "base.yaml")
+        base_content = base_yaml.read_text()
+        for key, value in variables.items():
+            base_content = base_content.replace(f"{{{key}}}", str(value))
+        (output_dir / "base.yaml").write_text(base_content)
 
-    # Copy the specific site config
+    # Copy and render the specific site config
     site_yaml = bps_source_dir / "sites" / f"{bps_cfg.site}.yaml"
     if site_yaml.exists():
-        shutil.copy(site_yaml, sites_dest / f"{bps_cfg.site}.yaml")
+        site_content = site_yaml.read_text()
+        for key, value in variables.items():
+            site_content = site_content.replace(f"{{{key}}}", str(value))
+        (sites_dest / f"{bps_cfg.site}.yaml").write_text(site_content)
 
     # Fix the include path in the rendered config
     # Change "../sites/{site}.yaml" to "./sites/{site}.yaml"
