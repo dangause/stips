@@ -47,6 +47,14 @@ COPY packages/obs_nickel_data/ packages/obs_nickel_data/
 COPY scripts/ /opt/nps/scripts/
 COPY bps/ /opt/nps/bps/
 
+# Install Slurm client tools, munge, and utilities (for BPS job submission)
+RUN dnf install -y epel-release && \
+    dnf install -y slurm munge munge-libs which && \
+    dnf clean all
+
+# Copy Slurm config (must match cluster's slurm.conf)
+COPY docker/slurm/slurm.conf /etc/slurm/slurm.conf
+
 # Install packages into LSST conda environment
 # Using a single RUN to keep layers minimal
 RUN source /opt/lsst/software/stack/loadLSST.bash && \

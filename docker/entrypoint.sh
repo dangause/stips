@@ -65,6 +65,24 @@ if [[ -n "${NPS_PROFILE}" && -f "/config/.env.${NPS_PROFILE}" ]]; then
 fi
 
 # =============================================================================
+# Slurm / Munge Setup (for BPS job submission)
+# =============================================================================
+
+# Pick up shared munge key from cluster volume
+if [[ -f /shared-munge/munge.key ]]; then
+    echo "[NPS] Loading shared munge key..."
+    cp /shared-munge/munge.key /etc/munge/munge.key
+    chown munge:munge /etc/munge/munge.key
+    chmod 400 /etc/munge/munge.key
+    munged --force 2>/dev/null && echo "[NPS] munged started" || echo "[NPS] munged failed (Slurm commands may not work)"
+elif [[ -f /etc/munge/munge.key ]]; then
+    echo "[NPS] Starting munge with local key..."
+    chown munge:munge /etc/munge/munge.key 2>/dev/null || true
+    chmod 400 /etc/munge/munge.key 2>/dev/null || true
+    munged --force 2>/dev/null && echo "[NPS] munged started" || echo "[NPS] munged failed (Slurm commands may not work)"
+fi
+
+# =============================================================================
 # Environment Validation
 # =============================================================================
 

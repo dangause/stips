@@ -14,7 +14,7 @@
 #   0 = all checks passed
 #   1 = one or more checks failed
 
-set -euo pipefail
+set -eo pipefail
 
 PASS=0
 FAIL=0
@@ -64,10 +64,11 @@ echo
 # 3. obs_nickel
 # -------------------------------------------------------------------
 echo "[3/5] obs_nickel"
-if [[ -d /shared/obs_nickel ]]; then
-    setup -r /shared/obs_nickel obs_nickel 2>/dev/null || true
+OBS_NICKEL_DIR="${OBS_NICKEL:-/opt/nps/packages/obs_nickel}"
+if [[ -d "$OBS_NICKEL_DIR" ]]; then
+    setup -r "$OBS_NICKEL_DIR" obs_nickel 2>/dev/null || true
 fi
-check "obs_nickel package exists" test -d /shared/obs_nickel
+check "obs_nickel package exists" test -d "$OBS_NICKEL_DIR"
 check "import lsst.obs.nickel" python -c "import lsst.obs.nickel"
 
 echo
@@ -86,8 +87,9 @@ echo
 # 5. nickel CLI (if data_tools installed)
 # -------------------------------------------------------------------
 echo "[5/5] nickel CLI"
-if [[ -d /shared/data_tools ]]; then
-    pip install -e /shared/data_tools 2>/dev/null || true
+DATA_TOOLS_DIR="${NPS_ROOT:-/opt/nps}/packages/data_tools"
+if [[ -d "$DATA_TOOLS_DIR" ]] && ! command -v nickel &>/dev/null; then
+    pip install -e "$DATA_TOOLS_DIR" 2>/dev/null || true
 fi
 check "nickel --help" nickel --help
 
