@@ -157,10 +157,20 @@ def _parse_run(run_dir: Path) -> RunInfo | None:
     if info.started:
         try:
             start = datetime.fromisoformat(info.started)
-            elapsed = datetime.now(timezone.utc) - start
+            # For completed runs, use summary.txt mtime as end time
+            if summary_path.exists():
+                end_ts = summary_path.stat().st_mtime
+                end = datetime.fromtimestamp(end_ts, tz=timezone.utc)
+            else:
+                end = datetime.now(timezone.utc)
+            elapsed = end - start
             hours, remainder = divmod(int(elapsed.total_seconds()), 3600)
             minutes, seconds = divmod(remainder, 60)
-            if hours > 0:
+            if hours >= 24:
+                days = hours // 24
+                hours = hours % 24
+                info.duration = f"{days}d {hours}h {minutes}m"
+            elif hours > 0:
                 info.duration = f"{hours}h {minutes}m"
             elif minutes > 0:
                 info.duration = f"{minutes}m {seconds}s"
