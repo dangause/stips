@@ -847,6 +847,94 @@ mark {
   color: var(--red);
 }
 
+/* === View Transitions === */
+::view-transition-old(tab-content) {
+  animation: fade-out 0.15s ease-in;
+}
+
+::view-transition-new(tab-content) {
+  animation: fade-in 0.2s ease-out;
+}
+
+@keyframes fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* === Loading Skeletons === */
+.skeleton-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.skeleton-cards {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+}
+
+.skeleton-card {
+  height: 90px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  animation: skeleton-pulse 1.5s ease-in-out infinite;
+}
+
+.skeleton-block {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  animation: skeleton-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 0.3; }
+}
+
+/* === Micro-animations === */
+.summary-card {
+  animation: card-fade-in 0.3s ease-out backwards;
+}
+
+.summary-card:nth-child(1) { animation-delay: 0ms; }
+.summary-card:nth-child(2) { animation-delay: 60ms; }
+.summary-card:nth-child(3) { animation-delay: 120ms; }
+.summary-card:nth-child(4) { animation-delay: 180ms; }
+
+@keyframes card-fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.night-table td .cell-status {
+  transition: transform 0.15s ease;
+}
+
+.night-table tr:hover .cell-status {
+  transform: scale(1.05);
+}
+
+.phase-step {
+  transition: opacity 0.3s ease;
+}
+
+.detail-section {
+  animation: section-fade-in 0.25s ease-out backwards;
+}
+
+@keyframes section-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
 /* === Responsive === */
 @media (max-width: 900px) {
   .summary-cards {
@@ -863,6 +951,19 @@ mark {
 
   .image-gallery {
     grid-template-columns: 1fr;
+  }
+
+  .fits-panels {
+    grid-template-columns: 1fr;
+  }
+
+  .skeleton-cards {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .catalog-controls {
+    flex-direction: column;
+    align-items: stretch;
   }
 }
 

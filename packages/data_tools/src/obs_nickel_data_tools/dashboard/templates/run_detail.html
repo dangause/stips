@@ -40,15 +40,25 @@
 
   <!-- Tab navigation -->
   <div class="tab-nav">
-    <button class="tab-btn active" hx-get="/run/{{ run.run_id }}/tab/overview" hx-target="#tab-content" hx-swap="innerHTML" onclick="setActiveTab(this)">Overview</button>
-    <button class="tab-btn" hx-get="/run/{{ run.run_id }}/tab/logs" hx-target="#tab-content" hx-swap="innerHTML" onclick="setActiveTab(this)">Logs</button>
-    <button class="tab-btn" hx-get="/run/{{ run.run_id }}/tab/analysis" hx-target="#tab-content" hx-swap="innerHTML" onclick="setActiveTab(this)">Analysis</button>
-    <button class="tab-btn" hx-get="/run/{{ run.run_id }}/tab/data" hx-target="#tab-content" hx-swap="innerHTML" onclick="setActiveTab(this)">Data</button>
+    <button class="tab-btn active" hx-get="/run/{{ run.run_id }}/tab/overview" hx-target="#tab-content" hx-swap="innerHTML transition:true" onclick="setActiveTab(this)">Overview</button>
+    <button class="tab-btn" hx-get="/run/{{ run.run_id }}/tab/logs" hx-target="#tab-content" hx-swap="innerHTML transition:true" onclick="setActiveTab(this)">Logs</button>
+    <button class="tab-btn" hx-get="/run/{{ run.run_id }}/tab/analysis" hx-target="#tab-content" hx-swap="innerHTML transition:true" onclick="setActiveTab(this)">Analysis</button>
+    <button class="tab-btn" hx-get="/run/{{ run.run_id }}/tab/data" hx-target="#tab-content" hx-swap="innerHTML transition:true" onclick="setActiveTab(this)">Data</button>
   </div>
 
   <!-- Tab content (initially loads overview) -->
-  <div id="tab-content" hx-get="/run/{{ run.run_id }}/tab/overview" hx-trigger="load" hx-swap="innerHTML">
-    <p class="text-muted">Loading...</p>
+  <div id="tab-content" style="view-transition-name: tab-content"
+       hx-get="/run/{{ run.run_id }}/tab/overview" hx-trigger="load" hx-swap="innerHTML transition:true">
+    <div class="skeleton-container">
+      <div class="skeleton skeleton-cards">
+        <div class="skeleton-card"></div>
+        <div class="skeleton-card"></div>
+        <div class="skeleton-card"></div>
+        <div class="skeleton-card"></div>
+      </div>
+      <div class="skeleton skeleton-block" style="height: 200px"></div>
+      <div class="skeleton skeleton-block" style="height: 300px"></div>
+    </div>
   </div>
 </div>
 
