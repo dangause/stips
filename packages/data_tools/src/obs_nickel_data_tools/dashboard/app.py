@@ -208,6 +208,59 @@ def create_app(logs_dir: Path) -> FastAPI:
         data = query_butler_counts(run_id, logs_dir)
         return JSONResponse(data)
 
+    @app.get("/api/fits-image/{run_id}")
+    async def api_fits_image(run_id: str, type: str, night: str, band: str):
+        """Render and serve a FITS image as PNG."""
+        from fastapi.responses import FileResponse
+
+        from .image_renderer import get_cached_png, render_fits_image
+
+        # Check cache first
+        cached = get_cached_png(run_id, type, night, band)
+        if cached:
+            return FileResponse(cached, media_type="image/png")
+
+        # Find repo path
+        run_info_path = logs_dir / run_id / "run_info.txt"
+        if not run_info_path.exists():
+            return PlainTextResponse("Run info not found", status_code=404)
+
+        repo_path = None
+        for line in run_info_path.read_text().splitlines():
+            if line.startswith("Repository:"):
+                repo_path = line.split(":", 1)[1].strip()
+                break
+
+        if not repo_path:
+            return PlainTextResponse("Repository not found", status_code=404)
+
+        png_path = render_fits_image(repo_path, run_id, type, night, band)
+        if png_path is None:
+            return PlainTextResponse("Failed to render image", status_code=500)
+
+        return FileResponse(png_path, media_type="image/png")
+
+    @app.get("/api/fits-list/{run_id}", response_class=JSONResponse)
+    async def api_fits_list(run_id: str):
+        """List available FITS images for a run."""
+        from .image_renderer import list_available_images
+
+        run_info_path = logs_dir / run_id / "run_info.txt"
+        if not run_info_path.exists():
+            return JSONResponse({"images": [], "error": "Run info not found"})
+
+        repo_path = None
+        for line in run_info_path.read_text().splitlines():
+            if line.startswith("Repository:"):
+                repo_path = line.split(":", 1)[1].strip()
+                break
+
+        if not repo_path:
+            return JSONResponse({"images": [], "error": "Repository not found"})
+
+        images = list_available_images(repo_path)
+        return JSONResponse({"images": images, "error": None})
+
     @app.get("/api/events/{run_id}")
     async def api_events(run_id: str) -> EventSourceResponse:
         """SSE stream for live run updates."""

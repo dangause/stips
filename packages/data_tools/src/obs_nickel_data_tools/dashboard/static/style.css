@@ -706,6 +706,74 @@ mark {
   word-wrap: break-word;
 }
 
+/* === FITS Image Viewer === */
+.fits-viewer {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.fits-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.fits-select {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 0.4rem 0.75rem;
+  border-radius: 4px;
+  font-size: 0.85rem;
+}
+
+.fits-select:disabled {
+  opacity: 0.5;
+}
+
+.fits-panels {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+}
+
+.fits-panel {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.75rem;
+}
+
+.fits-panel h4 {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.5rem;
+}
+
+.fits-img-container {
+  min-height: 200px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.fits-image {
+  max-width: 100%;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.fits-image.expanded {
+  transform: scale(2);
+  position: relative;
+  z-index: 20;
+}
+
 /* === Responsive === */
 @media (max-width: 900px) {
   .summary-cards {
