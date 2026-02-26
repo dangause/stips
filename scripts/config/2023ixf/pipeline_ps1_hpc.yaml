@@ -1,0 +1,115 @@
+# Full pipeline configuration for SN 2023ixf - HPC Cluster Deployment
+#
+# Template for running the full DIA pipeline on an HPC cluster using
+# Singularity/Apptainer containers with Slurm job scheduling.
+#
+# Deployment workflow:
+#   1. Build Docker image:    docker build -t nps:latest -f docker/Dockerfile .
+#   2. Convert to SIF:        singularity build nps.sif docker-daemon://nps:latest
+#   3. Transfer to cluster:   scp nps.sif cluster:/scratch/images/
+#   4. Bootstrap on login:    apptainer exec --bind /scratch nps.sif \
+#                               nickel bootstrap --env-file /scratch/config/.env.hpc
+#   5. Run pipeline:          apptainer exec --bind /scratch nps.sif \
+#                               nickel run /scratch/config/pipeline_ps1_hpc.yaml
+#
+# The orchestrator (nickel run) runs inside the container on the login node.
+# BPS/Parsl submits Slurm jobs whose commandPrefix wraps pipetask in
+# `apptainer exec` so compute nodes also run inside the container.
+
+# =============================================================================
+# Environment Configuration
+# =============================================================================
+# STACK_DIR and OBS_NICKEL use in-container paths (baked into the SIF image).
+# Data paths (REPO, RAW_PARENT_DIR, REFCAT_REPO) use host paths that get
+# bind-mounted into the container by the singularity-slurm commandPrefix.
+env:
+  REPO: "/scratch/nps/repo"
+  STACK_DIR: "/opt/lsst/software/stack"
+  OBS_NICKEL: "/opt/nps/packages/obs_nickel"
+  RAW_PARENT_DIR: "/scratch/nps/raw"
+  REFCAT_REPO: "/scratch/nps/refcats"
+
+# Target information
+# SN 2023ixf in M101 (Pinwheel Galaxy)
+# Coordinates from TNS: RA = 14:03:38.580, Dec = +54:18:42.10
+object: "2023ixf"
+ra: 210.910750
+dec: 54.311694
+
+# Bands to process (PS1 templates only support r/i)
+bands: ["r", "i"]
+
+# Template configuration
+template:
+  type: ps1
+  size: 0.4
+
+# Science nights
+science:
+  nights:
+    - 20230519
+    - 20230521
+    - 20230523
+    - 20230527
+    - 20230531
+    - 20230602
+    - 20230608
+    - 20230611
+    - 20230616
+    - 20230618
+    - 20230625
+    - 20230629
+    - 20230703
+    - 20230706
+    - 20230709
+    - 20230714
+    - 20230728
+    - 20230801
+    - 20230817
+    - 20230905
+    - 20230910
+    - 20231211
+
+# Pipeline configuration files (paths relative to obs_nickel/configs/)
+configs:
+  science:
+    calibrate_image: calibrateImage/tuned_configs/dense_strict.py
+    calibrate_image_fallbacks:
+      - calibrateImage/tuned_configs/dense_relaxed.py
+      - calibrateImage/tuned_configs/sparse_strict.py
+      - calibrateImage/tuned_configs/sparse_relaxed.py
+    colorterms: apply_colorterms.py
+  dia:
+    subtract_images: dia/subtractImages_ps1.py
+    detect_and_measure: dia/detectAndMeasure.py
+
+# Processing options
+options:
+  # Execution backend: route pipetask through BPS/Parsl/Slurm
+  execution: bps
+  site: singularity-slurm
+  container_image: /scratch/images/nps.sif
+
+  # Parallelism
+  jobs: 8
+  concurrent_nights: 4
+
+  # Pipeline control
+  skip_calibs: false
+  skip_science: false
+  rebuild_templates: false
+  skip_dia: false
+  forced_phot: true
+  forced_phot_image_type: diffim
+  continue_on_error: true
+  use_fallbacks: true
+
+# Lightcurve configuration
+lightcurve:
+  enabled: true
+  dataset_type: forced_phot_diffim_radec
+  min_snr: 1
+  max_mag_err: 1.0
+  y_axis: apparent_mag
+  x_axis: days_since_explosion
+  explosion_mjd: 60082.75

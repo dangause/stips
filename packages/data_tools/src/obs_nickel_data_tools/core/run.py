@@ -397,10 +397,13 @@ class RunConfig:
 
     # Execution backend
     execution: str = "local"  # "local" | "bps"
-    site: str = "local"  # "local" | "slurm" | "htcondor"
+    site: str = "local"  # "local" | "slurm" | "htcondor" | "singularity-slurm"
     concurrent_nights: int = 0  # 0 = sequential (default)
     bps_poll_interval: float = 5.0  # Seconds between BPS status checks
     bps_timeout: float = 7200.0  # Per-stage BPS timeout in seconds
+
+    # HPC container options
+    container_image: str | None = None  # Path to Singularity/Apptainer SIF image
 
     # Environment profile (optional - embedded in YAML instead of -p flag)
     profile: str | None = None
@@ -528,6 +531,7 @@ class RunConfig:
             concurrent_nights=int(options.get("concurrent_nights", 0)),
             bps_poll_interval=float(options.get("bps_poll_interval", 5.0)),
             bps_timeout=float(options.get("bps_timeout", 7200.0)),
+            container_image=options.get("container_image"),
             profile=data.get("profile"),
         )
 
@@ -604,6 +608,7 @@ def _create_executor(run_cfg: RunConfig):
             site=run_cfg.site,
             poll_interval=run_cfg.bps_poll_interval,
             timeout=run_cfg.bps_timeout,
+            container_image=run_cfg.container_image,
         )
     return LocalExecutor()
 

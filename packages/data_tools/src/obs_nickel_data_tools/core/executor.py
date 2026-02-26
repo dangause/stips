@@ -203,10 +203,12 @@ class BPSExecutor:
         site: str = "local",
         poll_interval: float = 5.0,
         timeout: float = 7200.0,
+        container_image: str | None = None,
     ):
         self.site = site
         self.poll_interval = poll_interval
         self.timeout = timeout
+        self.container_image = container_image
 
     def run_pipetask(
         self,
@@ -245,6 +247,7 @@ class BPSExecutor:
             pipeline="custom",  # Will use pre-built qgraph, not pipeline YAML
             night="00000000",  # Placeholder — qgraph has the actual data query
             site=self.site,
+            container_image=self.container_image,
         )
 
         # Submit to BPS

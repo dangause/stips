@@ -31,7 +31,7 @@ if TYPE_CHECKING:
 VALID_PIPELINES = ("calibs", "science", "dia", "fphot", "custom")
 
 # Valid site names
-VALID_SITES = ("slurm", "htcondor", "local")
+VALID_SITES = ("slurm", "htcondor", "local", "singularity-slurm")
 
 
 @dataclass
@@ -63,6 +63,14 @@ class BPSConfig:
     project: str = "nickel"
     dry_run: bool = False
     extra_args: list[str] = field(default_factory=list)
+
+    # HPC cluster options (used by singularity-slurm and slurm sites)
+    container_image: str | None = None
+    cores_per_node: int = 32
+    mem_per_node: int = 128  # GB
+    walltime: str = "04:00:00"
+    partition: str = "normal"
+    max_blocks: int = 10
 
     def __post_init__(self) -> None:
         """Validate configuration after initialization."""
@@ -187,6 +195,14 @@ def render_bps_config(
         "coord_collection": bps_cfg.coord_collection or "",
         "object_filter": object_filter,
         "pipeline": bps_cfg.pipeline,
+        # HPC cluster options
+        "container_image": bps_cfg.container_image or "",
+        "cores_per_node": str(bps_cfg.cores_per_node),
+        "mem_per_node": str(bps_cfg.mem_per_node),
+        "walltime": bps_cfg.walltime,
+        "partition": bps_cfg.partition,
+        "max_blocks": str(bps_cfg.max_blocks),
+        "run_dir": str(config.repo / "parsl_runinfo"),
     }
 
     # Perform substitution
