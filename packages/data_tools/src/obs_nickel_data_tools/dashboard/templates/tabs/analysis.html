@@ -79,32 +79,122 @@ function renderPlotlyChart(data) {
   const traces = [];
   const cols = data.columns;
   const xCol = cols.find(c => c.match(/mjd|MJD|days/i)) || cols[0];
-  const yCol = cols.find(c => c.match(/mag|flux/i)) || cols[1];
-  const errCol = cols.find(c => c.match(/err|error|sigma/i));
+  const magCol = cols.find(c => c.match(/^mag$|magnitude/i));
+  const fluxCol = cols.find(c => c.match(/flux_nJy|flux/i));
+  const errCol = cols.find(c => c.match(/mag_err|err|error|sigma/i));
+  const fluxErrCol = cols.find(c => c.match(/flux.*err/i)) || errCol;
   const bandCol = cols.find(c => c.match(/band|filter/i));
+  const snrCol = cols.find(c => c.match(/snr|s_n|signal/i));
+  const nightCol = cols.find(c => c.match(/night|day_obs/i));
+  const yCol = magCol || cols.find(c => c.match(/mag|flux/i)) || cols[1];
+  const isMag = yCol && yCol.toLowerCase().includes('mag');
+
+  // Build traces per band — magnitude view
+  const magTraces = [];
+  const fluxTraces = [];
 
   for (const band of data.bands) {
-    const points = data.data.filter(r => r[bandCol] === band);
-    const trace = {
-      x: points.map(r => r[xCol]),
-      y: points.map(r => r[yCol]),
-      mode: 'markers',
-      type: 'scatter',
-      name: band,
-      marker: { color: BAND_COLORS[band] || '#8b949e', size: 6 },
-    };
-    if (errCol) {
-      trace.error_y = {
-        type: 'data',
-        array: points.map(r => r[errCol]),
-        visible: true,
-        color: BAND_COLORS[band] || '#8b949e',
+    const points = data.data
+      .filter(r => r[bandCol] === band)
+      .sort((a, b) => a[xCol] - b[xCol]);
+
+    // Build tooltip text
+    const hoverTexts = points.map(r => {
+      let text = '';
+      if (nightCol) text += `Night: ${r[nightCol]}<br>`;
+      text += `Band: ${band}<br>`;
+      text += `${xCol}: ${typeof r[xCol] === 'number' ? r[xCol].toFixed(4) : r[xCol]}<br>`;
+      if (magCol && r[magCol] != null) {
+        text += `Mag: ${r[magCol].toFixed(3)}`;
+        if (errCol && r[errCol] != null) text += ` &plusmn; ${r[errCol].toFixed(3)}`;
+        text += '<br>';
+      }
+      if (fluxCol && r[fluxCol] != null) {
+        text += `Flux: ${r[fluxCol].toFixed(2)} nJy`;
+        if (fluxErrCol && r[fluxErrCol] != null) text += ` &plusmn; ${r[fluxErrCol].toFixed(2)}`;
+        text += '<br>';
+      }
+      if (snrCol && r[snrCol] != null) text += `S/N: ${r[snrCol].toFixed(1)}`;
+      return text;
+    });
+
+    const color = BAND_COLORS[band] || '#8b949e';
+
+    // Magnitude trace
+    if (magCol) {
+      const magTrace = {
+        x: points.map(r => r[xCol]),
+        y: points.map(r => r[magCol]),
+        mode: 'lines+markers',
+        type: 'scatter',
+        name: band,
+        marker: { color: color, size: 7 },
+        line: { color: color, width: 1.5 },
+        hovertext: hoverTexts,
+        hoverinfo: 'text',
       };
+      if (errCol) {
+        magTrace.error_y = {
+          type: 'data',
+          array: points.map(r => r[errCol]),
+          visible: true,
+          color: color,
+          thickness: 1,
+        };
+      }
+      magTraces.push(magTrace);
     }
-    traces.push(trace);
+
+    // Flux trace (hidden initially if mag is primary)
+    if (fluxCol) {
+      const fluxTrace = {
+        x: points.map(r => r[xCol]),
+        y: points.map(r => r[fluxCol]),
+        mode: 'lines+markers',
+        type: 'scatter',
+        name: band + ' (flux)',
+        visible: magCol ? false : true,
+        marker: { color: color, size: 7 },
+        line: { color: color, width: 1.5 },
+        hovertext: hoverTexts,
+        hoverinfo: 'text',
+        showlegend: !magCol,
+      };
+      if (fluxErrCol) {
+        fluxTrace.error_y = {
+          type: 'data',
+          array: points.map(r => r[fluxErrCol]),
+          visible: true,
+          color: color,
+          thickness: 1,
+        };
+      }
+      fluxTraces.push(fluxTrace);
+    }
   }
 
-  const isFlux = yCol.toLowerCase().includes('flux');
+  // Use mag traces if available, else flux
+  const allTraces = magCol ? [...magTraces, ...fluxTraces] : fluxTraces.length ? fluxTraces : magTraces;
+
+  // If no mag or flux columns detected, fall back to generic y column
+  if (allTraces.length === 0) {
+    for (const band of data.bands) {
+      const points = data.data
+        .filter(r => r[bandCol] === band)
+        .sort((a, b) => a[xCol] - b[xCol]);
+      const color = BAND_COLORS[band] || '#8b949e';
+      allTraces.push({
+        x: points.map(r => r[xCol]),
+        y: points.map(r => r[yCol]),
+        mode: 'lines+markers',
+        type: 'scatter',
+        name: band,
+        marker: { color: color, size: 7 },
+        line: { color: color, width: 1.5 },
+      });
+    }
+  }
+
   const layout = {
     paper_bgcolor: '#0d1117',
     plot_bgcolor: '#161b22',
@@ -113,19 +203,52 @@ function renderPlotlyChart(data) {
       title: xCol,
       gridcolor: '#30363d',
       zerolinecolor: '#30363d',
+      rangeslider: { visible: true, bgcolor: '#161b22', bordercolor: '#30363d', thickness: 0.08 },
     },
     yaxis: {
-      title: yCol,
-      autorange: isFlux ? true : 'reversed',
+      title: magCol ? 'Magnitude' : (fluxCol ? 'Flux (nJy)' : yCol),
+      autorange: (magCol && !fluxCol) ? 'reversed' : true,
       gridcolor: '#30363d',
       zerolinecolor: '#30363d',
     },
-    legend: { orientation: 'h', y: -0.15 },
-    margin: { t: 30, r: 20, b: 60, l: 60 },
-    hovermode: 'closest',
+    legend: { orientation: 'h', y: -0.25 },
+    margin: { t: 40, r: 20, b: 80, l: 60 },
+    hovermode: 'x unified',
   };
 
-  Plotly.newPlot('plotly-chart', traces, layout, {
+  // Add mag/flux toggle button if both columns exist
+  if (magCol && fluxCol) {
+    const nBands = data.bands.length;
+    layout.updatemenus = [{
+      type: 'buttons',
+      direction: 'left',
+      x: 0,
+      y: 1.12,
+      xanchor: 'left',
+      bgcolor: '#21262d',
+      font: { color: '#e6edf3', size: 11 },
+      buttons: [
+        {
+          label: 'Magnitude',
+          method: 'update',
+          args: [
+            { visible: [...Array(nBands).fill(true), ...Array(nBands).fill(false)] },
+            { 'yaxis.title': 'Magnitude', 'yaxis.autorange': 'reversed' },
+          ],
+        },
+        {
+          label: 'Flux (nJy)',
+          method: 'update',
+          args: [
+            { visible: [...Array(nBands).fill(false), ...Array(nBands).fill(true)] },
+            { 'yaxis.title': 'Flux (nJy)', 'yaxis.autorange': true },
+          ],
+        },
+      ],
+    }];
+  }
+
+  Plotly.newPlot('plotly-chart', allTraces, layout, {
     responsive: true,
     displayModeBar: true,
     modeBarButtonsToRemove: ['lasso2d', 'select2d'],
