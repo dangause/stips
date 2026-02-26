@@ -15,7 +15,7 @@ import subprocess
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from obs_nickel_data_tools.core import bps
-from obs_nickel_data_tools.core.stack import run_pipetask
+from obs_nickel_data_tools.core.stack import run_butler_query, run_pipetask
 
 if TYPE_CHECKING:
 
@@ -250,10 +250,16 @@ class BPSExecutor:
                 "stage module expectations"
             )
 
-        # Build BPSConfig for submission
+        # Build BPSConfig for submission.
+        # Derive a unique pipeline+night from the qgraph filename to avoid
+        # FileExistsError when concurrent nights submit in the same second.
+        # Qgraph filenames follow: processCcd_20230527_20260226T043651Z_cfg0.qg
+        from pathlib import Path
+
+        qg_stem = Path(qgraph_file).stem  # e.g. processCcd_20230527_..._cfg0
         bps_cfg = bps.BPSConfig(
-            pipeline="custom",  # Will use pre-built qgraph, not pipeline YAML
-            night="00000000",  # Placeholder — qgraph has the actual data query
+            pipeline=qg_stem,
+            night="0",
             site=self.site,
             qgraph_file=qgraph_file,
             output_run=output_run,
@@ -277,33 +283,61 @@ class BPSExecutor:
         run_id = bps_result.run_id
         log.info(f"  BPS job completed: run_id={run_id}")
 
-        # With Parsl, bps submit blocks until completion. The result's
-        # stdout/stderr contains the workflow output. Parse quanta counts
-        # from the aggregate-graph output if available.
         stdout = bps_result.stdout or ""
         stderr = bps_result.stderr or ""
 
-        # Try to extract quanta results from aggregate-graph output
-        ingested = 0
-        for line in (stdout + stderr).splitlines():
-            if "Ingested" in line and "dataset(s)" in line:
-                import re
+        # Determine success by checking if the output_run collection was
+        # created in Butler. This is the definitive test: pipetask run-qbb
+        # only creates the RUN collection when at least one quantum produces
+        # output. If all quanta fail, no collection is registered.
+        #
+        # Previous approaches (parsing finalJob.stderr for "Ingested N
+        # dataset(s)") were unreliable because: (a) bps_result.submit_dir
+        # doesn't match BPS's actual submitPath, and (b) globbing for the
+        # most recent submit directory picks up logs from prior runs.
+        repo = parsed.get("repo", "")
+        if output_run and repo:
+            verify = run_butler_query(
+                ["query-collections", repo, output_run],
+                config,
+                check=False,
+            )
+            collection_exists = verify.returncode == 0 and output_run in (
+                verify.stdout or ""
+            )
 
-                m = re.search(r"Ingested (\d+) dataset", line)
-                if m:
-                    ingested = int(m.group(1))
+            if collection_exists:
+                log.info(f"  RUN collection {output_run} verified in Butler")
+                return subprocess.CompletedProcess(
+                    args=["bps", "submit"],
+                    returncode=0,
+                    stdout=(
+                        "Executed 1 quanta successfully, "
+                        "0 failed out of total 1\n" + stdout
+                    ),
+                    stderr=stderr,
+                )
+            else:
+                log.warning(
+                    f"  BPS job completed but RUN collection {output_run} "
+                    f"not found in Butler — all quanta may have failed"
+                )
+                return subprocess.CompletedProcess(
+                    args=["bps", "submit"],
+                    returncode=1,
+                    stdout=(
+                        "Executed 0 quanta successfully, "
+                        "0 failed out of total 0\n" + stdout
+                    ),
+                    stderr=stderr,
+                )
 
-        # Construct a quanta summary compatible with stage parsers.
-        # Since bps submit returned success=True, the workflow itself
-        # completed (though individual quanta may have failed).
-        # Use ingested dataset count as a proxy for success.
-        total_quanta = ingested  # approximate
+        # Fallback: no output_run provided — can't verify collection.
+        # Return success since bps.submit() reported success.
+        log.warning("  No output_run to verify — trusting BPS exit status")
         return subprocess.CompletedProcess(
             args=["bps", "submit"],
             returncode=0,
-            stdout=(
-                f"Executed {total_quanta} quanta successfully, "
-                f"0 failed out of total {total_quanta}\n" + stdout
-            ),
+            stdout=stdout,
             stderr=stderr,
         )

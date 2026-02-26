@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}NPS - {{ run.run_id }}{% endblock %}
+{% block content %}
+<div class="run-detail">
+  <!-- Back link -->
+  <a href="/" class="back-link">&larr; All Runs</a>
+
+  <!-- Header -->
+  <div class="detail-header">
+    <h1>
+      {{ run.object_name or 'Pipeline Run' }}
+      <span class="status-badge {{ run.status_class }}">{{ run.status.value }}</span>
+    </h1>
+    <div class="run-meta">
+      <span>Run: <code>{{ run.run_id }}</code></span>
+      <span>Started: {{ run.started[:19] if run.started else '-' }}</span>
+      <span>Duration: {{ run.duration or '-' }}</span>
+      {% if run.bands %}<span>Bands: {{ run.bands | join(', ') }}</span>{% endif %}
+      {% if run.is_bps %}<span>BPS: {{ run.bps_site }}</span>{% endif %}
+    </div>
+  </div>
+
+  <!-- Phase Progress Bar -->
+  <div class="phase-bar">
+    {% for phase in phases %}
+    <div class="phase-step {{ 'done' if phase_index(run, phase) < 0 else ('active' if phase == run.current_phase else 'pending') }}">
+      <div class="phase-icon">
+        {% if phase_index(run, phase) < 0 %}
+          <span class="check">&#10003;</span>
+        {% elif phase == run.current_phase and run.status.value == 'running' %}
+          <span class="spinner"></span>
+        {% else %}
+          <span class="dot"></span>
+        {% endif %}
+      </div>
+      <div class="phase-label">{{ phase.value }}</div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- Tab navigation -->
+  <div class="tab-nav">
+    <button class="tab-btn active" hx-get="/run/{{ run.run_id }}/tab/overview" hx-target="#tab-content" hx-swap="innerHTML" onclick="setActiveTab(this)">Overview</button>
+    <button class="tab-btn" hx-get="/run/{{ run.run_id }}/tab/logs" hx-target="#tab-content" hx-swap="innerHTML" onclick="setActiveTab(this)">Logs</button>
+    <button class="tab-btn" hx-get="/run/{{ run.run_id }}/tab/analysis" hx-target="#tab-content" hx-swap="innerHTML" onclick="setActiveTab(this)">Analysis</button>
+    <button class="tab-btn" hx-get="/run/{{ run.run_id }}/tab/data" hx-target="#tab-content" hx-swap="innerHTML" onclick="setActiveTab(this)">Data</button>
+  </div>
+
+  <!-- Tab content (initially loads overview) -->
+  <div id="tab-content" hx-get="/run/{{ run.run_id }}/tab/overview" hx-trigger="load" hx-swap="innerHTML">
+    <p class="text-muted">Loading...</p>
+  </div>
+</div>
+
+<script>
+function setActiveTab(btn) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+</script>
+{% endblock %}

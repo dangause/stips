@@ -1,0 +1,62 @@
+<div class="data-tab">
+  <div class="detail-section">
+    <h3>Butler Dataset Counts</h3>
+    <p class="text-muted">Query the Butler repository for actual dataset counts per night and band. This may take a moment.</p>
+    <button class="action-btn" id="load-butler-btn"
+            hx-get="/api/butler-counts/{{ run.run_id }}"
+            hx-target="#butler-results"
+            hx-swap="innerHTML"
+            hx-indicator="#butler-spinner">
+      Load Dataset Counts
+    </button>
+    <span id="butler-spinner" class="htmx-indicator spinner-inline"></span>
+    <div id="butler-results" class="butler-results"></div>
+  </div>
+</div>
+
+<script>
+document.body.addEventListener('htmx:afterSwap', function(evt) {
+  if (evt.detail.target.id === 'butler-results') {
+    try {
+      const data = JSON.parse(evt.detail.target.textContent);
+      evt.detail.target.innerHTML = renderButlerTable(data);
+    } catch(e) {
+      // Already rendered or error
+    }
+  }
+});
+
+function renderButlerTable(data) {
+  if (!data.available) {
+    return '<p class="text-muted">Butler not available: ' + (data.error || 'unknown error') + '</p>';
+  }
+
+  const nights = Object.keys(data.nights).sort();
+  const dtypes = data.dataset_types;
+
+  if (nights.length === 0) {
+    return '<p class="text-muted">No datasets found in repository.</p>';
+  }
+
+  let html = '<table class="night-table butler-table"><thead><tr><th>Night</th>';
+  for (const dt of dtypes) {
+    const short = dt.replace('goodSeeingDiff_', '').replace('forced_diff_', 'fphot_');
+    html += '<th>' + short + '</th>';
+  }
+  html += '</tr></thead><tbody>';
+
+  for (const night of nights) {
+    html += '<tr><td class="mono">' + night + '</td>';
+    for (const dt of dtypes) {
+      const bands = data.nights[night][dt] || {};
+      const parts = Object.entries(bands)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([band, count]) => '<span class="band-count">' + band + ':' + count + '</span>');
+      html += '<td>' + (parts.length ? parts.join(' ') : '<span class="text-muted">&mdash;</span>') + '</td>';
+    }
+    html += '</tr>';
+  }
+  html += '</tbody></table>';
+  return html;
+}
+</script>

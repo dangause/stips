@@ -699,7 +699,37 @@ def run(
         # collection so downstream consumers (DIA, fphot) see a unified view.
         # Order matters: later runs (fallbacks) should be searched first so
         # their outputs take precedence over partial/failed primary outputs.
-        chain_members = list(reversed(successful_runs))
+        #
+        # Verify each RUN collection actually exists in the Butler before
+        # chaining. BPS may report success even when all quanta failed
+        # (no outputs written = no RUN collection created).
+        verified_runs: list[str] = []
+        for run_name in successful_runs:
+            result = run_butler_query(
+                ["query-collections", repo, run_name],
+                config,
+                check=False,
+            )
+            if result.returncode == 0 and run_name in (result.stdout or ""):
+                verified_runs.append(run_name)
+            else:
+                log.warning(
+                    f"RUN collection {run_name} does not exist in Butler "
+                    "(all quanta may have failed) — skipping"
+                )
+
+        if not verified_runs:
+            return ScienceResult(
+                success=False,
+                night=night,
+                science_run=cols.science_parent,
+                coadd_run=None,
+                error="No RUN collections were created (all quanta failed)",
+                quanta_succeeded=0,
+                quanta_failed=total_failed,
+            )
+
+        chain_members = list(reversed(verified_runs))
         run_butler(
             [
                 "collection-chain",

@@ -1,0 +1,158 @@
+<div class="analysis-tab">
+  {% if lc_files.found %}
+
+  <!-- Static lightcurve PNG -->
+  {% if lc_files.png_path %}
+  <div class="detail-section">
+    <h3>Lightcurve Plot</h3>
+    <div class="plot-container">
+      <img src="/api/image/{{ run.run_id }}?path={{ lc_files.png_path }}"
+           alt="Lightcurve" class="output-image" onclick="this.classList.toggle('expanded')">
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Interactive Plotly chart -->
+  <div class="detail-section">
+    <h3>Interactive Lightcurve</h3>
+    <div id="plotly-chart" class="plotly-container">
+      <p class="text-muted">Loading chart data...</p>
+    </div>
+  </div>
+
+  <!-- CSV Data Table -->
+  <div class="detail-section">
+    <h3>Data Table</h3>
+    <div id="lc-table-container" class="table-scroll">
+      <p class="text-muted">Loading...</p>
+    </div>
+  </div>
+
+  {% else %}
+  <div class="detail-section">
+    <p class="text-muted">No lightcurve data available for this run. The pipeline may not have reached the lightcurve extraction phase.</p>
+  </div>
+  {% endif %}
+
+  <!-- Output images gallery -->
+  {% if output_images %}
+  <div class="detail-section">
+    <h3>Output Files</h3>
+    <div class="image-gallery">
+      {% for img in output_images %}
+      <div class="gallery-item">
+        <img src="/api/image/{{ run.run_id }}?path={{ img.path }}"
+             alt="{{ img.name }}" loading="lazy" onclick="this.classList.toggle('expanded')">
+        <span class="gallery-label">{{ img.name }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+{% if lc_files.found %}
+<script>
+const BAND_COLORS = {
+  'b': '#58a6ff', 'v': '#3fb950', 'r': '#f85149', 'i': '#d29922',
+  'B': '#58a6ff', 'V': '#3fb950', 'R': '#f85149', 'I': '#d29922',
+  'g': '#3fb950', 'u': '#bc8cff', 'z': '#8b949e', 'y': '#e6edf3',
+};
+
+fetch('/api/lightcurve-data/{{ run.run_id }}')
+  .then(r => r.json())
+  .then(data => {
+    if (data.error || !data.data || data.data.length === 0) {
+      document.getElementById('plotly-chart').innerHTML = '<p class="text-muted">No data available</p>';
+      document.getElementById('lc-table-container').innerHTML = '<p class="text-muted">No data available</p>';
+      return;
+    }
+    renderPlotlyChart(data);
+    renderDataTable(data);
+  })
+  .catch(err => {
+    document.getElementById('plotly-chart').innerHTML = '<p class="text-muted">Failed to load chart data</p>';
+    document.getElementById('lc-table-container').innerHTML = '<p class="text-muted">Failed to load data</p>';
+  });
+
+function renderPlotlyChart(data) {
+  const traces = [];
+  const cols = data.columns;
+  const xCol = cols.find(c => c.match(/mjd|MJD|days/i)) || cols[0];
+  const yCol = cols.find(c => c.match(/mag|flux/i)) || cols[1];
+  const errCol = cols.find(c => c.match(/err|error|sigma/i));
+  const bandCol = cols.find(c => c.match(/band|filter/i));
+
+  for (const band of data.bands) {
+    const points = data.data.filter(r => r[bandCol] === band);
+    const trace = {
+      x: points.map(r => r[xCol]),
+      y: points.map(r => r[yCol]),
+      mode: 'markers',
+      type: 'scatter',
+      name: band,
+      marker: { color: BAND_COLORS[band] || '#8b949e', size: 6 },
+    };
+    if (errCol) {
+      trace.error_y = {
+        type: 'data',
+        array: points.map(r => r[errCol]),
+        visible: true,
+        color: BAND_COLORS[band] || '#8b949e',
+      };
+    }
+    traces.push(trace);
+  }
+
+  const isFlux = yCol.toLowerCase().includes('flux');
+  const layout = {
+    paper_bgcolor: '#0d1117',
+    plot_bgcolor: '#161b22',
+    font: { color: '#e6edf3', family: 'system-ui, sans-serif' },
+    xaxis: {
+      title: xCol,
+      gridcolor: '#30363d',
+      zerolinecolor: '#30363d',
+    },
+    yaxis: {
+      title: yCol,
+      autorange: isFlux ? true : 'reversed',
+      gridcolor: '#30363d',
+      zerolinecolor: '#30363d',
+    },
+    legend: { orientation: 'h', y: -0.15 },
+    margin: { t: 30, r: 20, b: 60, l: 60 },
+    hovermode: 'closest',
+  };
+
+  Plotly.newPlot('plotly-chart', traces, layout, {
+    responsive: true,
+    displayModeBar: true,
+    modeBarButtonsToRemove: ['lasso2d', 'select2d'],
+  });
+}
+
+function renderDataTable(data) {
+  if (!data.data.length) return;
+  let html = '<table class="night-table"><thead><tr>';
+  for (const col of data.columns) {
+    html += '<th>' + col + '</th>';
+  }
+  html += '</tr></thead><tbody>';
+  for (const row of data.data.slice(0, 200)) {
+    html += '<tr>';
+    for (const col of data.columns) {
+      const val = row[col];
+      const display = typeof val === 'number' ? val.toFixed(4) : val;
+      html += '<td class="mono">' + display + '</td>';
+    }
+    html += '</tr>';
+  }
+  html += '</tbody></table>';
+  if (data.data.length > 200) {
+    html += '<p class="text-muted">Showing first 200 of ' + data.data.length + ' rows</p>';
+  }
+  document.getElementById('lc-table-container').innerHTML = html;
+}
+</script>
+{% endif %}

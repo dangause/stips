@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Night {{ night }} - {{ run.run_id }}{% endblock %}
+{% block content %}
+<div class="run-detail">
+  <a href="/run/{{ run.run_id }}" class="back-link">&larr; {{ run.object_name or run.run_id }}</a>
+
+  <div class="detail-header">
+    <h1>Night {{ night }}</h1>
+    <div class="run-meta">
+      <span class="mono">{{ run.run_id }}</span>
+    </div>
+  </div>
+
+  {% for phase_name, phase_data in detail.phases.items() %}
+  <div class="detail-section">
+    <h3>{{ phase_name | title }}</h3>
+    {% if phase_data.exposures %}
+    <table class="night-table">
+      <thead>
+        <tr>
+          <th>{% if phase_name in ('dia', 'fphot') %}Night/Band{% else %}Exposure{% endif %}</th>
+          <th>Status</th>
+          <th>Log</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for exp in phase_data.exposures %}
+        <tr>
+          <td class="mono">{{ exp.id }}</td>
+          <td><span class="cell-status {{ exp.status }}">{{ exp.status }}</span></td>
+          <td>
+            <a href="#"
+               hx-get="/api/log/{{ run.run_id }}/{{ exp.log_path }}"
+               hx-target="#log-panel"
+               hx-swap="innerHTML"
+               class="log-link">View log</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="text-muted">No logs found for this phase.</p>
+    {% endif %}
+  </div>
+  {% endfor %}
+
+  <!-- Log panel for inline viewing -->
+  <div class="log-section" id="log-panel-section" style="display:none">
+    <div class="log-header"><h3>Log Viewer</h3></div>
+    <div class="log-viewer"><pre id="log-panel"></pre></div>
+  </div>
+</div>
+
+<script>
+document.body.addEventListener('htmx:afterSwap', function(evt) {
+  if (evt.detail.target.id === 'log-panel') {
+    document.getElementById('log-panel-section').style.display = 'block';
+    document.getElementById('log-panel').closest('.log-viewer').scrollTop = 0;
+  }
+});
+</script>
+{% endblock %}

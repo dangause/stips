@@ -1567,6 +1567,82 @@ def bps_list(ctx: click.Context) -> None:
         click.echo(f"  {run.get('raw', run)}")
 
 
+# =============================================================================
+# dashboard - Pipeline monitoring dashboard
+# =============================================================================
+
+
+@cli.command("dashboard")
+@click.option("--port", default=8787, help="Server port (default: 8787)")
+@click.option("--host", default="127.0.0.1", help="Server host (default: 127.0.0.1)")
+@click.option(
+    "--logs-dir",
+    type=click.Path(exists=True, path_type=Path),
+    help="Logs directory to monitor (default: auto-detect from config)",
+)
+@click.option("--no-browser", is_flag=True, help="Don't open browser automatically")
+@click.pass_context
+def dashboard(
+    ctx: click.Context,
+    port: int,
+    host: str,
+    logs_dir: Path | None,
+    no_browser: bool,
+) -> None:
+    """Launch the pipeline monitoring dashboard.
+
+    Opens a browser-based dashboard showing live pipeline progress,
+    per-night status grids, and log tailing.
+
+    \b
+    Example:
+        nickel dashboard
+        nickel dashboard --port 9000
+        nickel dashboard --logs-dir ./logs --no-browser
+        nickel -p 2023ixf dashboard
+    """
+    # Determine logs directory
+    if logs_dir is None:
+        # Try loading config to find repo root
+        try:
+            config = _load_config(ctx)
+            repo_root = config.obs_nickel.parent.parent
+            logs_dir = repo_root / "logs"
+        except (SystemExit, Exception):
+            # Fallback: look for logs/ in current directory
+            logs_dir = Path.cwd() / "logs"
+
+    if not logs_dir.is_dir():
+        _print_error(f"Logs directory not found: {logs_dir}")
+        _print_info("Use --logs-dir to specify the logs directory")
+        sys.exit(1)
+
+    _print_info("Starting NPS Dashboard...")
+    _print_info(f"  Logs: {logs_dir}")
+    _print_info(f"  URL:  http://{host}:{port}")
+
+    # Open browser
+    if not no_browser:
+        import threading
+        import webbrowser
+
+        def _open_browser() -> None:
+            import time
+
+            time.sleep(1.5)
+            webbrowser.open(f"http://{host}:{port}")
+
+        threading.Thread(target=_open_browser, daemon=True).start()
+
+    # Import and run
+    import uvicorn
+
+    from obs_nickel_data_tools.dashboard import create_app
+
+    app = create_app(logs_dir)
+    uvicorn.run(app, host=host, port=port, log_level="warning")
+
+
 def main() -> None:
     """Entry point for the CLI."""
     cli()

@@ -347,6 +347,25 @@ def run(
                 f"{quanta_ok} quanta succeeded, {quanta_fail} failed"
             )
 
+        # Verify the RUN collection exists before chaining.
+        # BPS may report success even when all quanta failed, leaving
+        # no RUN collection in the Butler.
+        verify_result = run_butler_query(
+            ["query-collections", repo, cols.diff_run],
+            config,
+            check=False,
+        )
+        if verify_result.returncode != 0 or cols.diff_run not in (
+            verify_result.stdout or ""
+        ):
+            return DIAResult(
+                success=False,
+                night=night,
+                diff_run=cols.diff_run,
+                template_collection=template_collection,
+                error="DIA RUN collection was not created (all quanta may have failed)",
+            )
+
         # Update collection chain
         run_butler(
             [

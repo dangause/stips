@@ -869,8 +869,6 @@ def _run_calibs_step(
     config: Config,
     result: RunResult,
     dry_run: bool,
-    *,
-    executor=None,
 ) -> RunResult | None:
     """Run calibrations for each science night.
 
@@ -909,7 +907,6 @@ def _run_calibs_step(
                 config,
                 jobs=run_cfg.jobs,
                 log_file=calib_log,
-                executor=executor,
                 skip_curated=True,
             )
             _maybe_split_log(calib_log)
@@ -942,7 +939,6 @@ def _run_calibs_step(
                 config,
                 jobs=run_cfg.jobs,
                 log_file=calib_log,
-                executor=executor,
             )
             _maybe_split_log(calib_log)
             if not calib_result.success:
@@ -1758,7 +1754,7 @@ def run(
             return early_exit
         _log_template_summary(run_cfg, result)
 
-    # Step 2: Calibrations per night
+    # Step 2: Calibrations per night (always local — too small for BPS overhead)
     if not run_cfg.skip_calibs:
         early_exit = _run_calibs_step(
             all_nights,
@@ -1766,7 +1762,6 @@ def run(
             config,
             result,
             dry_run,
-            executor=executor,
         )
         if early_exit is not None:
             return early_exit

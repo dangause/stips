@@ -1,0 +1,80 @@
+<div class="log-browser">
+  <!-- File tree sidebar -->
+  <div class="log-tree-panel">
+    <h3>Log Files</h3>
+    <div id="log-tree"></div>
+  </div>
+
+  <!-- Log content viewer -->
+  <div class="log-content-panel">
+    <div class="log-content-header">
+      <span id="log-file-name" class="mono text-muted">Select a log file</span>
+      <div class="log-actions">
+        <input type="text" id="log-search-input" placeholder="Search in log..." class="log-search" oninput="searchInLog(this.value)">
+      </div>
+    </div>
+    <div class="log-viewer" id="browser-log-viewer">
+      <pre id="browser-log-content" class="text-muted">&#8592; Select a file from the tree</pre>
+    </div>
+  </div>
+</div>
+
+<script>
+// Render tree from server-provided data
+(function() {
+  const treeData = {{ log_tree | tojson }};
+  const treeEl = document.getElementById('log-tree');
+  if (treeData && treeData.length > 0) {
+    treeEl.innerHTML = renderTree(treeData);
+  } else {
+    treeEl.innerHTML = '<p class="text-muted">No log files found</p>';
+  }
+})();
+
+function renderTree(items, depth) {
+  depth = depth || 0;
+  let html = '<ul class="tree-list">';
+  for (const item of items) {
+    if (item.type === 'dir') {
+      html += '<li class="tree-dir">';
+      html += '<span class="tree-toggle" onclick="this.parentElement.classList.toggle(\'collapsed\')">';
+      html += '<span class="tree-arrow">&#9660;</span> ' + item.name + '</span>';
+      html += renderTree(item.children, depth + 1);
+      html += '</li>';
+    } else {
+      const sizeKb = (item.size / 1024).toFixed(1);
+      html += '<li class="tree-file">';
+      html += '<a href="#" onclick="loadLog(\'' + item.path + '\', \'' + item.name + '\'); return false;">';
+      html += item.name + '</a>';
+      html += '<span class="tree-size">' + sizeKb + 'K</span>';
+      html += '</li>';
+    }
+  }
+  html += '</ul>';
+  return html;
+}
+
+function loadLog(path, name) {
+  document.getElementById('log-file-name').textContent = path;
+  fetch('/api/log/{{ run.run_id }}/' + path)
+    .then(r => r.text())
+    .then(text => {
+      const pre = document.getElementById('browser-log-content');
+      pre.className = '';
+      pre.textContent = text;
+      document.getElementById('browser-log-viewer').scrollTop = 0;
+    });
+}
+
+function searchInLog(query) {
+  const pre = document.getElementById('browser-log-content');
+  if (!query) {
+    pre.innerHTML = pre.textContent;
+    return;
+  }
+  const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp('(' + escaped + ')', 'gi');
+  const text = pre.textContent;
+  pre.innerHTML = text.replace(re, '<mark>$1</mark>');
+}
+</script>
