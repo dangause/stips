@@ -261,6 +261,55 @@ def create_app(logs_dir: Path) -> FastAPI:
         images = list_available_images(repo_path)
         return JSONResponse({"images": images, "error": None})
 
+    @app.get("/api/catalog/{run_id}/{catalog_type}", response_class=JSONResponse)
+    async def api_catalog(
+        run_id: str,
+        catalog_type: str,
+        night: str | None = None,
+        band: str | None = None,
+        limit: int = 200,
+        offset: int = 0,
+    ):
+        """Query a Butler source catalog."""
+        from .catalog_query import query_catalog
+
+        run_info_path = logs_dir / run_id / "run_info.txt"
+        if not run_info_path.exists():
+            return JSONResponse({"available": False, "error": "Run info not found"})
+
+        repo_path = None
+        for line in run_info_path.read_text().splitlines():
+            if line.startswith("Repository:"):
+                repo_path = line.split(":", 1)[1].strip()
+                break
+
+        if not repo_path:
+            return JSONResponse({"available": False, "error": "Repository not found"})
+
+        data = query_catalog(repo_path, catalog_type, night, band, limit, offset)
+        return JSONResponse(data)
+
+    @app.get("/api/metrics/{run_id}", response_class=JSONResponse)
+    async def api_metrics(run_id: str):
+        """Query pipeline quality metrics."""
+        from .catalog_query import query_metrics
+
+        run_info_path = logs_dir / run_id / "run_info.txt"
+        if not run_info_path.exists():
+            return JSONResponse({"available": False, "error": "Run info not found"})
+
+        repo_path = None
+        for line in run_info_path.read_text().splitlines():
+            if line.startswith("Repository:"):
+                repo_path = line.split(":", 1)[1].strip()
+                break
+
+        if not repo_path:
+            return JSONResponse({"available": False, "error": "Repository not found"})
+
+        data = query_metrics(repo_path)
+        return JSONResponse(data)
+
     @app.get("/api/events/{run_id}")
     async def api_events(run_id: str) -> EventSourceResponse:
         """SSE stream for live run updates."""

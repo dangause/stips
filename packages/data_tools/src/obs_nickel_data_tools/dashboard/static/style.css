@@ -774,6 +774,79 @@ mark {
   z-index: 20;
 }
 
+/* === Source Catalog === */
+.catalog-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.catalog-results {
+  margin-top: 0.5rem;
+}
+
+.catalog-table th.sortable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.catalog-table th.sortable:hover {
+  color: var(--accent);
+}
+
+.catalog-pagination {
+  margin-top: 0.75rem;
+}
+
+.pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+/* === Pipeline Quality Metrics === */
+.metrics-group {
+  margin-top: 1rem;
+}
+
+.metrics-group h4 {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  margin-bottom: 0.5rem;
+}
+
+.metrics-table th {
+  font-size: 0.7rem;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.metric-cell {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-family: var(--mono);
+  font-size: 0.75rem;
+}
+
+.metric-good {
+  background: rgba(63, 185, 80, 0.15);
+  color: var(--green);
+}
+
+.metric-warn {
+  background: rgba(210, 153, 34, 0.15);
+  color: var(--yellow);
+}
+
+.metric-bad {
+  background: rgba(248, 81, 73, 0.15);
+  color: var(--red);
+}
+
 /* === Responsive === */
 @media (max-width: 900px) {
   .summary-cards {

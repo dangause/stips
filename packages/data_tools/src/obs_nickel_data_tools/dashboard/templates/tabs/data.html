@@ -1,7 +1,8 @@
 <div class="data-tab">
+  <!-- Butler Dataset Counts (existing) -->
   <div class="detail-section">
     <h3>Butler Dataset Counts</h3>
-    <p class="text-muted">Query the Butler repository for actual dataset counts per night and band. This may take a moment.</p>
+    <p class="text-muted">Query the Butler repository for actual dataset counts per night and band.</p>
     <button class="action-btn" id="load-butler-btn"
             hx-get="/api/butler-counts/{{ run.run_id }}"
             hx-target="#butler-results"
@@ -12,17 +13,44 @@
     <span id="butler-spinner" class="htmx-indicator spinner-inline"></span>
     <div id="butler-results" class="butler-results"></div>
   </div>
+
+  <!-- Source Catalog Viewer -->
+  <div class="detail-section">
+    <h3>Source Catalogs</h3>
+    <div class="catalog-controls">
+      <select id="catalog-type" class="fits-select" onchange="resetCatalogFilters()">
+        <option value="dia_source_unfiltered">DIA Sources</option>
+        <option value="forced_phot_diffim_radec">Forced Photometry</option>
+      </select>
+      <input type="text" id="catalog-night" class="fits-select" placeholder="Night (e.g. 20230527)" style="width:160px">
+      <input type="text" id="catalog-band" class="fits-select" placeholder="Band (e.g. r)" style="width:80px">
+      <button class="action-btn" onclick="loadCatalog(0)">Query</button>
+      <span id="catalog-spinner" class="spinner-inline" style="display:none"></span>
+    </div>
+    <div id="catalog-results" class="catalog-results"></div>
+    <div id="catalog-pagination" class="catalog-pagination"></div>
+  </div>
+
+  <!-- Pipeline Quality Metrics -->
+  <div class="detail-section">
+    <h3>Pipeline Quality Metrics</h3>
+    <p class="text-muted">Color-coded quality indicators per night: calibration, DIA, and detection metrics.</p>
+    <button class="action-btn" id="load-metrics-btn" onclick="loadMetrics()">
+      Load Metrics
+    </button>
+    <span id="metrics-spinner" class="spinner-inline" style="display:none"></span>
+    <div id="metrics-results"></div>
+  </div>
 </div>
 
 <script>
+// === Butler Counts (existing) ===
 document.body.addEventListener('htmx:afterSwap', function(evt) {
   if (evt.detail.target.id === 'butler-results') {
     try {
       const data = JSON.parse(evt.detail.target.textContent);
       evt.detail.target.innerHTML = renderButlerTable(data);
-    } catch(e) {
-      // Already rendered or error
-    }
+    } catch(e) {}
   }
 });
 
@@ -30,21 +58,17 @@ function renderButlerTable(data) {
   if (!data.available) {
     return '<p class="text-muted">Butler not available: ' + (data.error || 'unknown error') + '</p>';
   }
-
   const nights = Object.keys(data.nights).sort();
   const dtypes = data.dataset_types;
-
   if (nights.length === 0) {
     return '<p class="text-muted">No datasets found in repository.</p>';
   }
-
   let html = '<table class="night-table butler-table"><thead><tr><th>Night</th>';
   for (const dt of dtypes) {
     const short = dt.replace('goodSeeingDiff_', '').replace('forced_diff_', 'fphot_');
     html += '<th>' + short + '</th>';
   }
   html += '</tr></thead><tbody>';
-
   for (const night of nights) {
     html += '<tr><td class="mono">' + night + '</td>';
     for (const dt of dtypes) {
@@ -58,5 +82,222 @@ function renderButlerTable(data) {
   }
   html += '</tbody></table>';
   return html;
+}
+
+// === Source Catalog ===
+let catalogCurrentOffset = 0;
+const CATALOG_LIMIT = 200;
+
+function resetCatalogFilters() {
+  document.getElementById('catalog-results').innerHTML = '';
+  document.getElementById('catalog-pagination').innerHTML = '';
+}
+
+function loadCatalog(offset) {
+  catalogCurrentOffset = offset;
+  const type = document.getElementById('catalog-type').value;
+  const night = document.getElementById('catalog-night').value.trim();
+  const band = document.getElementById('catalog-band').value.trim();
+  const spinner = document.getElementById('catalog-spinner');
+  spinner.style.display = 'inline-block';
+
+  let url = `/api/catalog/{{ run.run_id }}/${type}?limit=${CATALOG_LIMIT}&offset=${offset}`;
+  if (night) url += `&night=${night}`;
+  if (band) url += `&band=${band}`;
+
+  fetch(url)
+    .then(r => r.json())
+    .then(data => {
+      spinner.style.display = 'none';
+      if (!data.available) {
+        document.getElementById('catalog-results').innerHTML =
+          '<p class="text-muted">' + (data.error || 'Not available') + '</p>';
+        return;
+      }
+      renderCatalogTable(data);
+      renderCatalogPagination(data.total, offset);
+    })
+    .catch(err => {
+      spinner.style.display = 'none';
+      document.getElementById('catalog-results').innerHTML =
+        '<p class="text-muted">Query failed</p>';
+    });
+}
+
+let catalogSortCol = null;
+let catalogSortAsc = true;
+let catalogRows = [];
+let catalogColumns = [];
+
+function renderCatalogTable(data) {
+  catalogRows = data.rows;
+  catalogColumns = data.columns;
+  catalogSortCol = null;
+  catalogSortAsc = true;
+  _renderCatalogRows();
+}
+
+function _renderCatalogRows() {
+  const rows = [...catalogRows];
+  if (catalogSortCol !== null) {
+    rows.sort((a, b) => {
+      const va = a[catalogSortCol], vb = b[catalogSortCol];
+      if (typeof va === 'number' && typeof vb === 'number') {
+        return catalogSortAsc ? va - vb : vb - va;
+      }
+      return catalogSortAsc ? String(va).localeCompare(String(vb)) : String(vb).localeCompare(String(va));
+    });
+  }
+
+  let html = '<table class="night-table catalog-table"><thead><tr>';
+  for (const col of catalogColumns) {
+    const arrow = catalogSortCol === col ? (catalogSortAsc ? ' &uarr;' : ' &darr;') : '';
+    html += `<th class="sortable" onclick="sortCatalog('${col}')">${col}${arrow}</th>`;
+  }
+  html += '</tr></thead><tbody>';
+  for (const row of rows) {
+    html += '<tr>';
+    for (const col of catalogColumns) {
+      const val = row[col];
+      const display = typeof val === 'number' ? val.toFixed(4) : (val || '');
+      html += '<td class="mono">' + display + '</td>';
+    }
+    html += '</tr>';
+  }
+  html += '</tbody></table>';
+  if (rows.length === 0) {
+    html = '<p class="text-muted">No results found for this query.</p>';
+  }
+  document.getElementById('catalog-results').innerHTML = html;
+}
+
+function sortCatalog(col) {
+  if (catalogSortCol === col) {
+    catalogSortAsc = !catalogSortAsc;
+  } else {
+    catalogSortCol = col;
+    catalogSortAsc = true;
+  }
+  _renderCatalogRows();
+}
+
+function renderCatalogPagination(total, offset) {
+  let html = '<div class="pagination-controls">';
+  html += `<span class="text-muted">Showing ${offset + 1}-${Math.min(offset + CATALOG_LIMIT, total)} of ${total} dataset refs</span>`;
+  if (offset > 0) {
+    html += ` <button class="action-btn" onclick="loadCatalog(${offset - CATALOG_LIMIT})">Prev</button>`;
+  }
+  if (offset + CATALOG_LIMIT < total) {
+    html += ` <button class="action-btn" onclick="loadCatalog(${offset + CATALOG_LIMIT})">Next</button>`;
+  }
+  html += '</div>';
+  document.getElementById('catalog-pagination').innerHTML = html;
+}
+
+// === Pipeline Quality Metrics ===
+function loadMetrics() {
+  const btn = document.getElementById('load-metrics-btn');
+  const spinner = document.getElementById('metrics-spinner');
+  btn.disabled = true;
+  spinner.style.display = 'inline-block';
+
+  fetch('/api/metrics/{{ run.run_id }}')
+    .then(r => r.json())
+    .then(data => {
+      spinner.style.display = 'none';
+      btn.style.display = 'none';
+      if (!data.available) {
+        document.getElementById('metrics-results').innerHTML =
+          '<p class="text-muted">' + (data.error || 'Metrics not available') + '</p>';
+        return;
+      }
+      renderMetrics(data);
+    })
+    .catch(err => {
+      spinner.style.display = 'none';
+      btn.disabled = false;
+      document.getElementById('metrics-results').innerHTML =
+        '<p class="text-muted">Failed to load metrics</p>';
+    });
+}
+
+function renderMetrics(data) {
+  const groups = data.metric_groups;
+  const thresholds = data.thresholds;
+  let html = '';
+
+  const groupLabels = {
+    'calibrateImage_metadata_metrics': 'Science Calibration',
+    'diffimMetadata_metrics': 'DIA Quality',
+    'detectAndMeasureDiaSource_metadata_metrics': 'Detection Counts',
+  };
+
+  for (const [dt, nightData] of Object.entries(groups)) {
+    const label = groupLabels[dt] || dt;
+    const thresh = thresholds[dt] || {};
+    const metrics = Object.keys(thresh);
+    const nightKeys = Object.keys(nightData).sort();
+
+    if (nightKeys.length === 0) continue;
+
+    html += `<div class="metrics-group"><h4>${label}</h4>`;
+    html += '<div class="table-scroll"><table class="night-table metrics-table"><thead><tr><th>Night/Band</th>';
+    for (const m of metrics) {
+      html += `<th title="${m}">${m.replace(/_/g, ' ')}</th>`;
+    }
+    html += '</tr></thead><tbody>';
+
+    for (const key of nightKeys) {
+      const row = nightData[key];
+      html += `<tr><td class="mono">${key}</td>`;
+      for (const m of metrics) {
+        const val = row[m];
+        if (val === undefined || val === null) {
+          html += '<td><span class="text-muted">&mdash;</span></td>';
+          continue;
+        }
+        const cls = getMetricClass(m, val, thresh[m] || {});
+        const display = typeof val === 'number' ? val.toFixed(3) : val;
+        html += `<td><span class="metric-cell ${cls}" title="${m}: ${display}">${display}</span></td>`;
+      }
+      html += '</tr>';
+    }
+    html += '</tbody></table></div></div>';
+  }
+
+  if (!html) {
+    html = '<p class="text-muted">No metrics data available.</p>';
+  }
+  document.getElementById('metrics-results').innerHTML = html;
+}
+
+function getMetricClass(name, value, thresh) {
+  if (typeof value !== 'number' || !thresh || Object.keys(thresh).length === 0) return '';
+
+  // Handle metrics where lower is better (fractions)
+  if (thresh.good) {
+    const [lo, hi] = thresh.good;
+    if ((lo === null || value >= lo) && (hi === null || value <= hi)) return 'metric-good';
+  }
+  if (thresh.warn) {
+    const [lo, hi] = thresh.warn;
+    if ((lo === null || value >= lo) && (hi === null || value <= hi)) return 'metric-warn';
+  }
+  if (thresh.warn_low) {
+    const [lo, hi] = thresh.warn_low;
+    if ((lo === null || value >= lo) && (hi === null || value <= hi)) return 'metric-warn';
+  }
+  if (thresh.warn_high) {
+    const [lo, hi] = thresh.warn_high;
+    if ((lo === null || value >= lo) && (hi === null || value <= hi)) return 'metric-warn';
+  }
+  if (thresh.bad) {
+    const [lo, hi] = thresh.bad;
+    if ((lo === null || value >= lo) && (hi === null || value <= hi)) return 'metric-bad';
+  }
+
+  // If none matched explicitly, check if value is outside good range
+  if (thresh.good) return 'metric-bad';
+  return '';
 }
 </script>
