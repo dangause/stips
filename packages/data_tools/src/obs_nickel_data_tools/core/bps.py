@@ -163,8 +163,6 @@ def render_bps_config(
     Returns:
         Path to the rendered config file
     """
-    import shutil
-
     timestamp = generate_timestamp()
 
     # Load template config
@@ -220,15 +218,22 @@ def render_bps_config(
     sites_dest = output_dir / "sites"
     sites_dest.mkdir(parents=True, exist_ok=True)
 
-    # Copy base.yaml to output_dir (sites reference ../base.yaml)
+    # Copy base.yaml to output_dir with variable substitution
+    # (sites reference ../base.yaml)
     base_yaml = bps_source_dir / "base.yaml"
     if base_yaml.exists():
-        shutil.copy(base_yaml, output_dir / "base.yaml")
+        base_content = base_yaml.read_text()
+        for key, value in variables.items():
+            base_content = base_content.replace(f"{{{key}}}", str(value))
+        (output_dir / "base.yaml").write_text(base_content)
 
-    # Copy the specific site config
+    # Copy the specific site config (with variable substitution)
     site_yaml = bps_source_dir / "sites" / f"{bps_cfg.site}.yaml"
     if site_yaml.exists():
-        shutil.copy(site_yaml, sites_dest / f"{bps_cfg.site}.yaml")
+        site_content = site_yaml.read_text()
+        for key, value in variables.items():
+            site_content = site_content.replace(f"{{{key}}}", str(value))
+        (sites_dest / f"{bps_cfg.site}.yaml").write_text(site_content)
 
     # Fix the include path in the rendered config
     # Change "../sites/{site}.yaml" to "./sites/{site}.yaml"
