@@ -122,6 +122,8 @@ services:
       - ${RAW_PARENT_DIR:-/tmp/raw}:/data/raw
       - ${REFCAT_REPO:-/tmp/refcats}:/data/refcats:ro
       - slurm-etc:/etc/slurm:ro
+    ports:
+      - "${NPS_DASHBOARD_PORT:-8080}:8080"
     environment:
       - REPO=/data/repo
       - RAW_PARENT_DIR=/data/raw

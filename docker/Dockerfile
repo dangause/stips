@@ -49,11 +49,14 @@ COPY bps/ /opt/nps/bps/
 
 # Install packages into LSST conda environment
 # Using a single RUN to keep layers minimal
+# Dashboard deps (fastapi, uvicorn, etc.) installed separately since --no-deps
+# skips them to avoid touching LSST-managed packages
 RUN source /opt/lsst/software/stack/loadLSST.bash && \
     setup lsst_distrib && \
     cd /opt/nps && \
     pip install --no-deps -e packages/data_tools && \
     pip install --no-deps -e packages/obs_nickel && \
+    pip install fastapi "uvicorn[standard]" jinja2 sse-starlette && \
     chmod +x /opt/nps/scripts/pipeline/*.sh 2>/dev/null || true
 
 # Copy entrypoint
@@ -61,7 +64,10 @@ COPY docker/entrypoint.sh /opt/nps/docker/entrypoint.sh
 RUN chmod +x /opt/nps/docker/entrypoint.sh
 
 # Create data directories (will be mount points)
-RUN mkdir -p /data/repo /data/raw /data/refcats /data/outputs /config
+RUN mkdir -p /data/repo /data/raw /data/refcats /data/outputs /config /opt/nps/logs
+
+# Expose dashboard port
+EXPOSE 8080
 
 # =============================================================================
 # Environment Configuration
