@@ -486,6 +486,7 @@ def run(
             template_run,
             "--save-qgraph",
             str(qg_file),
+            "--qgraph-datastore-records",
             "-d",
             data_query,
         ] + config_args

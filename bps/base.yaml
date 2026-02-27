@@ -98,5 +98,5 @@ submitPath: "{repo}/bps/submit"
 
 # Keep logs for debugging
 saveClusteredQgraph: true
-saveDot: true
+saveDot: false
 saveExecutionButler: true

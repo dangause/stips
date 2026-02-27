@@ -264,6 +264,7 @@ def run(
             cols.diff_run,
             "--save-qgraph",
             str(qg_file),
+            "--qgraph-datastore-records",
             "-d",
             data_query,
         ]
@@ -316,6 +317,8 @@ def run(
                 repo,
                 "-g",
                 str(qg_file),
+                "--output-run",
+                cols.diff_run,
                 "-j",
                 str(jobs),
                 "--register-dataset-types",

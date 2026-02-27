@@ -31,7 +31,7 @@ if TYPE_CHECKING:
 VALID_PIPELINES = ("calibs", "science", "dia", "fphot", "custom")
 
 # Valid site names
-VALID_SITES = ("slurm", "htcondor", "local", "singularity-slurm")
+VALID_SITES = ("slurm", "htcondor", "local", "singularity-slurm", "docker-slurm")
 
 
 @dataclass
@@ -63,6 +63,10 @@ class BPSConfig:
     project: str = "nickel"
     dry_run: bool = False
     extra_args: list[str] = field(default_factory=list)
+
+    # Pre-built quantum graph (used by BPSExecutor with pipeline="custom")
+    qgraph_file: str | None = None
+    output_run: str | None = None
 
     # HPC cluster options (used by singularity-slurm and slurm sites)
     container_image: str | None = None
@@ -193,6 +197,9 @@ def render_bps_config(
         "coord_collection": bps_cfg.coord_collection or "",
         "object_filter": object_filter,
         "pipeline": bps_cfg.pipeline,
+        # Pre-built quantum graph (custom pipeline)
+        "qgraph_file": bps_cfg.qgraph_file or "",
+        "output_run": bps_cfg.output_run or "",
         # HPC cluster options
         "container_image": bps_cfg.container_image or "",
         "cores_per_node": str(bps_cfg.cores_per_node),
