@@ -33,10 +33,22 @@ log_info "Repository: $REPO"
 
 ########## LSST ENV ##########
 cd "$STACK_DIR"
-source loadLSST.zsh
+if [ -f loadLSST.bash ]; then
+  source loadLSST.bash
+elif [ -f loadLSST.zsh ]; then
+  source loadLSST.zsh
+elif [ -f loadLSST.sh ]; then
+  source loadLSST.sh
+else
+  log_error "No loadLSST script found in $STACK_DIR"
+  exit 1
+fi
 setup lsst_distrib
-setup obs_nickel || true
-setup obs_nickel_data || true
+setup -r "$OBS_NICKEL" obs_nickel || true
+OBS_NICKEL_DATA="${OBS_NICKEL_DATA:-$(dirname "$OBS_NICKEL")/obs_nickel_data}"
+if [ -d "$OBS_NICKEL_DATA" ]; then
+  setup -r "$OBS_NICKEL_DATA" obs_nickel_data || true
+fi
 
 ########## REPO ##########
 log_section "Butler Repository Setup"
@@ -66,27 +78,52 @@ if ! compgen -G "$MON_DIR/refcat_htm7_*.fits" > /dev/null; then
 fi
 
 # Build/repair a proper ECSV map (Astropy expects the ECSV header)
+# Also detect stale host paths (e.g. /Users/... when running in Docker with /data/refcats/...)
 NEED_BUILD=0
+INGEST_MAP="$MON_MAP"
 if [[ ! -s "$MON_MAP" ]]; then
   NEED_BUILD=1
   log_info "Will build map: $MON_MAP"
+  # If dir is read-only, redirect to temp
+  if ! touch "$MON_DIR/.write_test" 2>/dev/null; then
+    INGEST_MAP="/tmp/nps_refcat_ecsv/filename_to_htm.ecsv"
+    mkdir -p "$(dirname "$INGEST_MAP")"
+    log_info "Refcat dir is read-only; writing ECSV to $INGEST_MAP"
+  else
+    rm -f "$MON_DIR/.write_test"
+  fi
 else
   # verify header is ECSV; if not, rebuild
   if ! head -n1 "$MON_MAP" | grep -q "^# %ECSV"; then
     NEED_BUILD=1
     log_warn "Existing map is not ECSV; rebuilding: $MON_MAP"
   else
-    log_info "Using existing ECSV map: $MON_MAP"
+    # Check if paths inside ECSV are valid for current environment
+    FIRST_PATH=$(grep -m1 "refcat_htm7_" "$MON_MAP" | awk '{print $1}' || true)
+    if [[ -n "$FIRST_PATH" ]] && [[ ! -f "$FIRST_PATH" ]]; then
+      NEED_BUILD=1
+      log_warn "ECSV contains stale paths (e.g. $FIRST_PATH); rebuilding for current environment"
+      # If original ECSV dir is read-only (mounted volume), write to temp
+      if ! touch "$MON_DIR/.write_test" 2>/dev/null; then
+        INGEST_MAP="/tmp/nps_refcat_ecsv/filename_to_htm.ecsv"
+        mkdir -p "$(dirname "$INGEST_MAP")"
+        log_info "Refcat dir is read-only; writing corrected ECSV to $INGEST_MAP"
+      else
+        rm -f "$MON_DIR/.write_test"
+      fi
+    else
+      log_info "Using existing ECSV map: $MON_MAP"
+    fi
   fi
 fi
 
 if [[ $NEED_BUILD -eq 1 ]]; then
-  export MON_DIR MON_MAP
+  export MON_DIR INGEST_MAP
   python - <<'PY'
 import os, re, glob
 from astropy.table import Table
 mon_dir = os.environ["MON_DIR"]
-out = os.environ["MON_MAP"]
+out = os.environ["INGEST_MAP"]
 rows = []
 for fn in glob.glob(os.path.join(mon_dir, "refcat_htm7_*.fits")):
     m = re.search(r"refcat_htm7_(\d+)\.fits$", os.path.basename(fn))
@@ -99,8 +136,8 @@ print(f"[monster] wrote ECSV: {out} rows={len(tab)}")
 PY
 fi
 
-if [[ ! -s "$MON_MAP" ]]; then
-  log_error "MONSTER filename_to_htm map missing after build: $MON_MAP"
+if [[ ! -s "$INGEST_MAP" ]]; then
+  log_error "MONSTER filename_to_htm map missing after build: $INGEST_MAP"
   print_log_summary
   exit 2
 fi
@@ -111,7 +148,7 @@ butler register-dataset-type "$REPO" "$MON_DT" SimpleCatalog htm7 || true
 # Ingest AFW shards (direct = leave files in place)
 if ! butler query-collections "$REPO" | awk '{print $1}' | grep -qx "$MON_RUN"; then
   log_info "Ingesting MONSTER -> $MON_RUN"
-  butler ingest-files -t direct "$REPO" "$MON_DT" "$MON_RUN" "$MON_MAP"
+  butler ingest-files -t direct "$REPO" "$MON_DT" "$MON_RUN" "$INGEST_MAP"
 else
   log_info "MONSTER RUN already present: $MON_RUN"
 fi
