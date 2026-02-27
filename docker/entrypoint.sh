@@ -102,6 +102,26 @@ if [[ ! -d "${RAW_PARENT_DIR}" ]]; then
 fi
 
 # =============================================================================
+# Dashboard (background)
+# =============================================================================
+
+NPS_DASHBOARD=${NPS_DASHBOARD:-true}
+NPS_DASHBOARD_PORT=${NPS_DASHBOARD_PORT:-8080}
+NPS_LOGS_DIR=${NPS_LOGS_DIR:-/opt/nps/logs}
+
+if [[ "${NPS_DASHBOARD}" == "true" ]]; then
+    mkdir -p "${NPS_LOGS_DIR}"
+    echo "[NPS] Starting dashboard on port ${NPS_DASHBOARD_PORT} (logs: ${NPS_LOGS_DIR})"
+    python3 -c "
+import uvicorn
+from obs_nickel_data_tools.dashboard import create_app
+from pathlib import Path
+app = create_app(Path('${NPS_LOGS_DIR}'))
+uvicorn.run(app, host='0.0.0.0', port=${NPS_DASHBOARD_PORT}, log_level='warning')
+" > "${NPS_LOGS_DIR}/dashboard.log" 2>&1 &
+fi
+
+# =============================================================================
 # Execute Command
 # =============================================================================
 

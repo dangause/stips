@@ -1,7 +1,8 @@
 # NPS Slurm Test Cluster
 #
 # All Slurm services built from the same LSST base image (AlmaLinux 9,
-# Slurm 22.05, ARM native). Compute nodes have the full LSST stack.
+# Slurm 22.05). Compute nodes have the full LSST stack so they can run
+# pipetask directly (no Singularity needed in Docker test cluster).
 #
 # Usage:
 #   # Build images
@@ -10,9 +11,6 @@
 #
 #   # Start the cluster
 #   docker compose -f docker/docker-compose.slurm.yml up -d
-#
-#   # Run smoke test
-#   docker exec nps-hpc bash /opt/nps/docker/scripts/run-bps-test.sh
 #
 #   # Check cluster status
 #   docker exec nps-hpc sinfo
@@ -141,6 +139,7 @@ services:
       - REPO=/data/repo
       - RAW_PARENT_DIR=/data/raw
       - REFCAT_REPO=/data/refcats
+      - KMP_AFFINITY=disabled
     depends_on:
       - slurmctld
     stdin_open: true

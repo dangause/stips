@@ -31,7 +31,7 @@ if TYPE_CHECKING:
 VALID_PIPELINES = ("calibs", "science", "dia", "fphot", "custom")
 
 # Valid site names
-VALID_SITES = ("slurm", "htcondor", "local", "docker-slurm")
+VALID_SITES = ("slurm", "htcondor", "local", "singularity-slurm", "docker-slurm")
 
 
 @dataclass
@@ -46,7 +46,6 @@ class BPSConfig:
         template_collection: Template collection for DIA
         object_filter: Optional object name filter
         coord_collection: Coordinate collection for forced photometry
-        qgraph_file: Path to pre-built quantum graph (for custom pipeline)
         operator: Username for output collections
         project: Project/account for HPC allocation
         dry_run: If True, show what would be submitted without running
@@ -60,12 +59,22 @@ class BPSConfig:
     template_collection: str | None = None
     object_filter: str | None = None
     coord_collection: str | None = None
-    qgraph_file: str | None = None
-    output_run: str | None = None
     operator: str = field(default_factory=lambda: os.environ.get("USER", "nps"))
     project: str = "nickel"
     dry_run: bool = False
     extra_args: list[str] = field(default_factory=list)
+
+    # Pre-built quantum graph (used by BPSExecutor with pipeline="custom")
+    qgraph_file: str | None = None
+    output_run: str | None = None
+
+    # HPC cluster options (used by singularity-slurm and slurm sites)
+    container_image: str | None = None
+    cores_per_node: int = 32
+    mem_per_node: int = 128  # GB
+    walltime: str = "04:00:00"
+    partition: str = "normal"
+    max_blocks: int = 10
 
     def __post_init__(self) -> None:
         """Validate configuration after initialization."""
@@ -158,7 +167,6 @@ def render_bps_config(
     Returns:
         Path to the rendered config file
     """
-
     timestamp = generate_timestamp()
 
     # Load template config
@@ -189,8 +197,17 @@ def render_bps_config(
         "coord_collection": bps_cfg.coord_collection or "",
         "object_filter": object_filter,
         "pipeline": bps_cfg.pipeline,
+        # Pre-built quantum graph (custom pipeline)
         "qgraph_file": bps_cfg.qgraph_file or "",
         "output_run": bps_cfg.output_run or "",
+        # HPC cluster options
+        "container_image": bps_cfg.container_image or "",
+        "cores_per_node": str(bps_cfg.cores_per_node),
+        "mem_per_node": str(bps_cfg.mem_per_node),
+        "walltime": bps_cfg.walltime,
+        "partition": bps_cfg.partition,
+        "max_blocks": str(bps_cfg.max_blocks),
+        "run_dir": str(config.repo / "parsl_runinfo"),
     }
 
     # Perform substitution
@@ -208,7 +225,8 @@ def render_bps_config(
     sites_dest = output_dir / "sites"
     sites_dest.mkdir(parents=True, exist_ok=True)
 
-    # Copy and render base.yaml (sites reference ../base.yaml)
+    # Copy base.yaml to output_dir with variable substitution
+    # (sites reference ../base.yaml)
     base_yaml = bps_source_dir / "base.yaml"
     if base_yaml.exists():
         base_content = base_yaml.read_text()
@@ -216,7 +234,7 @@ def render_bps_config(
             base_content = base_content.replace(f"{{{key}}}", str(value))
         (output_dir / "base.yaml").write_text(base_content)
 
-    # Copy and render the specific site config
+    # Copy the specific site config (with variable substitution)
     site_yaml = bps_source_dir / "sites" / f"{bps_cfg.site}.yaml"
     if site_yaml.exists():
         site_content = site_yaml.read_text()

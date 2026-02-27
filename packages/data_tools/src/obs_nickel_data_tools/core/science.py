@@ -470,6 +470,8 @@ def run(
                 repo,
                 "-g",
                 str(qg_science),
+                "--output-run",
+                output_run,
                 "-j",
                 str(jobs),
                 "--register-dataset-types",

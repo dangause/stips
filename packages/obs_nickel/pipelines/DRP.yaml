@@ -32,7 +32,7 @@ tasks:
       doDark: false
       doDefect: true
       doFringe: false
-      doLinearize: false    # Nickel CCD is linear; avoids detector=None crash in BPS run-qbb
+      doLinearize: false
       doSuspect: true
       doWrite: true
       doVignette: false

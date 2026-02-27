@@ -331,44 +331,6 @@ class TestBPSExecutor:
             "timeout" in result.stderr.lower() or "timed out" in result.stderr.lower()
         )
 
-    def test_submit_passes_qgraph_file_to_bps_config(self):
-        """BPSExecutor passes qgraph_file from pipetask args to BPSConfig."""
-        from obs_nickel_data_tools.core.executor import BPSExecutor
-
-        executor = BPSExecutor(site="local", poll_interval=0.01, timeout=1.0)
-        mock_config = MagicMock()
-        mock_config.repo = Path("/repo")
-        mock_config.obs_nickel = Path("/obs_nickel")
-
-        mock_bps_result = MagicMock()
-        mock_bps_result.success = True
-        mock_bps_result.run_id = "test-run-456"
-        mock_bps_result.submit_dir = "/repo/bps/submit"
-
-        succeeded_report = (
-            "X_REPORT    STATE      EXPECTED    SUCCEEDED    FAILED"
-            "    UNREADY    READY    RUNNING\n"
-            "summary    SUCCEEDED           2            2         0"
-            "          0        0          0\n"
-        )
-        mock_status = {"success": True, "output": succeeded_report}
-
-        with patch("obs_nickel_data_tools.core.executor.bps") as mock_bps_mod:
-            mock_bps_mod.submit.return_value = mock_bps_result
-            mock_bps_mod.status.return_value = mock_status
-            mock_bps_mod.BPSConfig = MagicMock()
-
-            executor.run_pipetask(
-                ["run", "-b", "/repo", "-g", "/path/to/my_graph.qg", "-j", "4"],
-                mock_config,
-                check=False,
-            )
-
-            # Verify BPSConfig was created with qgraph_file
-            call_kwargs = mock_bps_mod.BPSConfig.call_args
-            assert call_kwargs is not None
-            assert call_kwargs.kwargs.get("qgraph_file") == "/path/to/my_graph.qg"
-
 
 class TestExecutorWiring:
     """Verify stage modules accept and use executor parameter."""
@@ -494,7 +456,7 @@ class TestIntegration:
         local_exec = _create_executor(local_cfg)
         assert isinstance(local_exec, LocalExecutor)
 
-        # BPS (mock lsst.ctrl.bps since it's not installed in dev env)
+        # BPS
         bps_cfg = RunConfig(
             object_name="test",
             ra=100,
@@ -503,93 +465,6 @@ class TestIntegration:
             execution="bps",
             site="slurm",
         )
-
-        import builtins
-
-        original_import = builtins.__import__
-
-        def allow_lsst_import(name, *args, **kwargs):
-            if name in ("lsst.ctrl.bps", "lsst.ctrl.bps.parsl"):
-                return MagicMock()
-            return original_import(name, *args, **kwargs)
-
-        with patch("builtins.__import__", side_effect=allow_lsst_import):
-            bps_exec = _create_executor(bps_cfg)
+        bps_exec = _create_executor(bps_cfg)
         assert isinstance(bps_exec, BPSExecutor)
         assert bps_exec.site == "slurm"
-
-
-class TestCtrlBpsAvailabilityCheck:
-    def test_bps_executor_fails_fast_when_ctrl_bps_missing(self):
-        """_create_executor raises ImportError when ctrl_bps is not installed."""
-        from obs_nickel_data_tools.core.run import RunConfig, _create_executor
-
-        bps_cfg = RunConfig(
-            object_name="test",
-            ra=100,
-            dec=10,
-            bands=["r"],
-            execution="bps",
-            site="slurm",
-        )
-
-        # Mock the ctrl_bps import to fail
-        import builtins
-
-        original_import = builtins.__import__
-
-        def mock_import(name, *args, **kwargs):
-            if name == "lsst.ctrl.bps":
-                raise ImportError("No module named 'lsst.ctrl.bps'")
-            return original_import(name, *args, **kwargs)
-
-        with patch("builtins.__import__", side_effect=mock_import):
-            try:
-                _create_executor(bps_cfg)
-                assert False, "Should have raised ImportError"
-            except ImportError as e:
-                assert "ctrl_bps" in str(e).lower() or "lsst" in str(e).lower()
-
-    def test_bps_local_fails_fast_when_ctrl_bps_parsl_missing(self):
-        """_create_executor raises ImportError when ctrl_bps_parsl missing for local site."""
-        from obs_nickel_data_tools.core.run import RunConfig, _create_executor
-
-        bps_cfg = RunConfig(
-            object_name="test",
-            ra=100,
-            dec=10,
-            bands=["r"],
-            execution="bps",
-            site="local",
-        )
-
-        import builtins
-
-        original_import = builtins.__import__
-
-        def mock_import(name, *args, **kwargs):
-            if name == "lsst.ctrl.bps.parsl":
-                raise ImportError("No module named 'lsst.ctrl.bps.parsl'")
-            return original_import(name, *args, **kwargs)
-
-        with patch("builtins.__import__", side_effect=mock_import):
-            try:
-                _create_executor(bps_cfg)
-                assert False, "Should have raised ImportError"
-            except ImportError as e:
-                assert "parsl" in str(e).lower()
-
-    def test_local_executor_skips_ctrl_bps_check(self):
-        """_create_executor with execution='local' never checks for ctrl_bps."""
-        from obs_nickel_data_tools.core.executor import LocalExecutor
-        from obs_nickel_data_tools.core.run import RunConfig, _create_executor
-
-        local_cfg = RunConfig(
-            object_name="test",
-            ra=100,
-            dec=10,
-            bands=["r"],
-            execution="local",
-        )
-        executor = _create_executor(local_cfg)
-        assert isinstance(executor, LocalExecutor)

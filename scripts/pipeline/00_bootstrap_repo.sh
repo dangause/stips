@@ -33,21 +33,21 @@ log_info "Repository: $REPO"
 
 ########## LSST ENV ##########
 cd "$STACK_DIR"
-source loadLSST.zsh
-setup lsst_distrib
-
-# Use -r (path-based) setup so obs_nickel works even without eups registration
-if [ -n "${OBS_NICKEL:-}" ] && [ -d "$OBS_NICKEL" ]; then
-  setup -r "$OBS_NICKEL" obs_nickel 2>/dev/null || true
+if [ -f loadLSST.bash ]; then
+  source loadLSST.bash
+elif [ -f loadLSST.zsh ]; then
+  source loadLSST.zsh
+elif [ -f loadLSST.sh ]; then
+  source loadLSST.sh
 else
-  setup obs_nickel || true
+  log_error "No loadLSST script found in $STACK_DIR"
+  exit 1
 fi
-
-OBS_NICKEL_DATA_DIR="${OBS_NICKEL%/*}/obs_nickel_data"
-if [ -d "$OBS_NICKEL_DATA_DIR" ]; then
-  setup -r "$OBS_NICKEL_DATA_DIR" obs_nickel_data 2>/dev/null || true
-else
-  setup obs_nickel_data || true
+setup lsst_distrib
+setup -r "$OBS_NICKEL" obs_nickel || true
+OBS_NICKEL_DATA="${OBS_NICKEL_DATA:-$(dirname "$OBS_NICKEL")/obs_nickel_data}"
+if [ -d "$OBS_NICKEL_DATA" ]; then
+  setup -r "$OBS_NICKEL_DATA" obs_nickel_data || true
 fi
 
 ########## REPO ##########
@@ -78,44 +78,52 @@ if ! compgen -G "$MON_DIR/refcat_htm7_*.fits" > /dev/null; then
 fi
 
 # Build/repair a proper ECSV map (Astropy expects the ECSV header)
+# Also detect stale host paths (e.g. /Users/... when running in Docker with /data/refcats/...)
 NEED_BUILD=0
+INGEST_MAP="$MON_MAP"
 if [[ ! -s "$MON_MAP" ]]; then
   NEED_BUILD=1
   log_info "Will build map: $MON_MAP"
+  # If dir is read-only, redirect to temp
+  if ! touch "$MON_DIR/.write_test" 2>/dev/null; then
+    INGEST_MAP="/tmp/nps_refcat_ecsv/filename_to_htm.ecsv"
+    mkdir -p "$(dirname "$INGEST_MAP")"
+    log_info "Refcat dir is read-only; writing ECSV to $INGEST_MAP"
+  else
+    rm -f "$MON_DIR/.write_test"
+  fi
 else
   # verify header is ECSV; if not, rebuild
   if ! head -n1 "$MON_MAP" | grep -q "^# %ECSV"; then
     NEED_BUILD=1
     log_warn "Existing map is not ECSV; rebuilding: $MON_MAP"
   else
-    # Verify first data path actually exists (catches host/container path mismatch)
-    FIRST_PATH=$(awk '!/^#/ && /^\// {print $1; exit}' "$MON_MAP")
-    if [ -n "$FIRST_PATH" ] && [ ! -f "$FIRST_PATH" ]; then
+    # Check if paths inside ECSV are valid for current environment
+    FIRST_PATH=$(grep -m1 "refcat_htm7_" "$MON_MAP" | awk '{print $1}' || true)
+    if [[ -n "$FIRST_PATH" ]] && [[ ! -f "$FIRST_PATH" ]]; then
       NEED_BUILD=1
-      log_warn "ECSV paths stale (path not found: $FIRST_PATH); rebuilding"
+      log_warn "ECSV contains stale paths (e.g. $FIRST_PATH); rebuilding for current environment"
+      # If original ECSV dir is read-only (mounted volume), write to temp
+      if ! touch "$MON_DIR/.write_test" 2>/dev/null; then
+        INGEST_MAP="/tmp/nps_refcat_ecsv/filename_to_htm.ecsv"
+        mkdir -p "$(dirname "$INGEST_MAP")"
+        log_info "Refcat dir is read-only; writing corrected ECSV to $INGEST_MAP"
+      else
+        rm -f "$MON_DIR/.write_test"
+      fi
     else
       log_info "Using existing ECSV map: $MON_MAP"
     fi
   fi
 fi
 
-INGEST_MAP="$MON_MAP"
 if [[ $NEED_BUILD -eq 1 ]]; then
-  # Try writing to the original location first; fall back to a writable
-  # temp directory if the refcats are mounted read-only (e.g., Docker).
-  if ! touch "$MON_MAP" 2>/dev/null; then
-    INGEST_MAP="/tmp/nps_refcat_ecsv/filename_to_htm.ecsv"
-    mkdir -p "$(dirname "$INGEST_MAP")"
-    log_info "Refcats directory is read-only; writing ECSV to $INGEST_MAP"
-  fi
-
-  export MON_DIR
-  export ECSV_OUT="$INGEST_MAP"
+  export MON_DIR INGEST_MAP
   python - <<'PY'
 import os, re, glob
 from astropy.table import Table
 mon_dir = os.environ["MON_DIR"]
-out = os.environ["ECSV_OUT"]
+out = os.environ["INGEST_MAP"]
 rows = []
 for fn in glob.glob(os.path.join(mon_dir, "refcat_htm7_*.fits")):
     m = re.search(r"refcat_htm7_(\d+)\.fits$", os.path.basename(fn))

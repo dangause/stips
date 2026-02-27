@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 import subprocess
+import time
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from obs_nickel_data_tools.core import bps
@@ -53,7 +54,6 @@ class LocalExecutor:
         config: Config,
         **kwargs,
     ) -> subprocess.CompletedProcess:
-        kwargs.pop("output_run", None)  # Only used by BPSExecutor
         return run_pipetask(args, config, **kwargs)
 
 
@@ -144,6 +144,25 @@ def _parse_bps_report(raw_output: str) -> dict:
     }
 
 
+def _check_output_collection(output_run: str, config: Config) -> bool:
+    """Check if a Butler output_run collection exists.
+
+    This is the definitive test for whether BPS quanta produced output.
+    pipetask run-qbb only creates the RUN collection when quanta succeed.
+    """
+    if not output_run:
+        return False
+    try:
+        result = run_butler_query(
+            ["query-collections", str(config.repo), output_run],
+            config,
+            check=False,
+        )
+        return result.returncode == 0 and output_run in (result.stdout or "")
+    except Exception:
+        return False
+
+
 def _translate_bps_to_completed_process(
     bps_status: dict,
 ) -> subprocess.CompletedProcess:
@@ -203,10 +222,12 @@ class BPSExecutor:
         site: str = "local",
         poll_interval: float = 5.0,
         timeout: float = 7200.0,
+        container_image: str | None = None,
     ):
         self.site = site
         self.poll_interval = poll_interval
         self.timeout = timeout
+        self.container_image = container_image
 
     def run_pipetask(
         self,
@@ -215,7 +236,6 @@ class BPSExecutor:
         **kwargs,
     ) -> subprocess.CompletedProcess:
         subcommand = args[0] if args else ""
-        output_run = kwargs.pop("output_run", None)
 
         if subcommand == "qgraph":
             # QGraph generation runs locally (fast, needed for validation)
@@ -225,14 +245,12 @@ class BPSExecutor:
             # Unknown subcommand — fall back to local execution
             return run_pipetask(args, config, **kwargs)
 
-        return self._submit_and_poll(args, config, output_run=output_run, **kwargs)
+        return self._submit_and_poll(args, config, **kwargs)
 
     def _submit_and_poll(
         self,
         args: list[str],
         config: Config,
-        *,
-        output_run: str | None = None,
         **kwargs,
     ) -> subprocess.CompletedProcess:
         """Submit a pipeline run to BPS and poll until completion."""
@@ -243,31 +261,18 @@ class BPSExecutor:
             log.warning("No qgraph file in args, falling back to local execution")
             return run_pipetask(args, config, **kwargs)
 
-        if not output_run:
-            log.warning(
-                "No output_run provided to BPSExecutor — BPS will use default "
-                "collection naming (u/{operator}/...) which may not match "
-                "stage module expectations"
-            )
-
-        # Build BPSConfig for submission.
-        # Derive a unique pipeline+night from the qgraph filename to avoid
-        # FileExistsError when concurrent nights submit in the same second.
-        # Qgraph filenames follow: processCcd_20230527_20260226T043651Z_cfg0.qg
-        from pathlib import Path
-
-        qg_stem = Path(qgraph_file).stem  # e.g. processCcd_20230527_..._cfg0
+        # Build BPSConfig for submission
+        output_run = parsed.get("output_run") or ""
         bps_cfg = bps.BPSConfig(
-            pipeline=qg_stem,
-            night="0",
+            pipeline="custom",  # Will use pre-built qgraph, not pipeline YAML
+            night="00000000",  # Placeholder — qgraph has the actual data query
             site=self.site,
+            container_image=self.container_image,
             qgraph_file=qgraph_file,
             output_run=output_run,
         )
 
         # Submit to BPS
-        # NOTE: With Parsl backend, bps submit BLOCKS until the workflow
-        # completes. The result already contains the final status.
         log.info(f"  Submitting to BPS (site={self.site}, qgraph={qgraph_file})")
         bps_result = bps.submit(bps_cfg, config)
 
@@ -276,68 +281,83 @@ class BPSExecutor:
             return subprocess.CompletedProcess(
                 args=["bps", "submit"],
                 returncode=1,
-                stdout=bps_result.stdout or "",
+                stdout="",
                 stderr=bps_result.error or "BPS submission failed",
             )
 
         run_id = bps_result.run_id
-        log.info(f"  BPS job completed: run_id={run_id}")
 
-        stdout = bps_result.stdout or ""
-        stderr = bps_result.stderr or ""
-
-        # Determine success by checking if the output_run collection was
-        # created in Butler. This is the definitive test: pipetask run-qbb
-        # only creates the RUN collection when at least one quantum produces
-        # output. If all quanta fail, no collection is registered.
-        #
-        # Previous approaches (parsing finalJob.stderr for "Ingested N
-        # dataset(s)") were unreliable because: (a) bps_result.submit_dir
-        # doesn't match BPS's actual submitPath, and (b) globbing for the
-        # most recent submit directory picks up logs from prior runs.
-        repo = parsed.get("repo", "")
-        if output_run and repo:
-            verify = run_butler_query(
-                ["query-collections", repo, output_run],
-                config,
-                check=False,
-            )
-            collection_exists = verify.returncode == 0 and output_run in (
-                verify.stdout or ""
-            )
-
+        # Synchronous backend (Parsl): bps submit blocks until completion.
+        # The job is already done when we get here. BPS exits 0 even when
+        # all quanta fail (Parsl orchestration "succeeds"), so we check
+        # Butler for the output_run collection as the definitive test.
+        if not run_id:
+            log.info("  BPS job completed (synchronous backend)")
+            collection_exists = _check_output_collection(output_run, config)
             if collection_exists:
-                log.info(f"  RUN collection {output_run} verified in Butler")
-                return subprocess.CompletedProcess(
-                    args=["bps", "submit"],
-                    returncode=0,
-                    stdout=(
-                        "Executed 1 quanta successfully, "
-                        "0 failed out of total 1\n" + stdout
-                    ),
-                    stderr=stderr,
-                )
+                log.info(f"  Output collection verified: {output_run}")
+                returncode = 0
             else:
                 log.warning(
-                    f"  BPS job completed but RUN collection {output_run} "
-                    f"not found in Butler — all quanta may have failed"
+                    f"  Output collection not found: {output_run} "
+                    "(no quanta produced output)"
                 )
-                return subprocess.CompletedProcess(
-                    args=["bps", "submit"],
-                    returncode=1,
-                    stdout=(
-                        "Executed 0 quanta successfully, "
-                        "0 failed out of total 0\n" + stdout
-                    ),
-                    stderr=stderr,
-                )
+                returncode = 1
 
-        # Fallback: no output_run provided — can't verify collection.
-        # Return success since bps.submit() reported success.
-        log.warning("  No output_run to verify — trusting BPS exit status")
+            # Synthesize quanta summary for stage module parsing.
+            # Use conservative counts: 1/0 based on collection existence.
+            quanta_ok = 1 if collection_exists else 0
+            quanta_fail = 0 if collection_exists else 1
+            total = quanta_ok + quanta_fail
+
+            result_stdout = (
+                f"Executed {quanta_ok} quanta successfully, "
+                f"{quanta_fail} failed out of total {total}"
+            )
+            return subprocess.CompletedProcess(
+                args=["bps", "submit"],
+                returncode=returncode,
+                stdout=result_stdout,
+                stderr=bps_result.stderr or "",
+            )
+
+        # Asynchronous backend (HTCondor): poll until completion
+        log.info(f"  BPS job submitted: run_id={run_id}")
+
+        interval = self.poll_interval
+        max_interval = 60.0
+        start = time.monotonic()
+
+        while time.monotonic() - start < self.timeout:
+            status_result = bps.status(run_id, config)
+            raw_output = status_result.get("output", "")
+            parsed_status = _parse_bps_report(raw_output)
+            state = parsed_status["state"]
+
+            if state in ("SUCCEEDED", "FAILED", "DELETED"):
+                log.info(
+                    f"  BPS job {state}: {parsed_status['succeeded']} ok, "
+                    f"{parsed_status['failed']} failed"
+                )
+                if bps_result.submit_dir:
+                    log_file = kwargs.get("log_file")
+                    if log_file:
+                        with open(log_file, "a") as f:
+                            f.write(
+                                f"\nBPS job completed: run_id={run_id}, "
+                                f"state={state}, "
+                                f"logs at: {bps_result.submit_dir}/logging/\n"
+                            )
+                return _translate_bps_to_completed_process(parsed_status)
+
+            time.sleep(interval)
+            interval = min(interval * 1.5, max_interval)
+
+        # Timeout
+        log.warning(f"  BPS job timed out after {self.timeout}s (run_id={run_id})")
         return subprocess.CompletedProcess(
             args=["bps", "submit"],
-            returncode=0,
-            stdout=stdout,
-            stderr=stderr,
+            returncode=1,
+            stdout="",
+            stderr=f"BPS job timed out after {self.timeout}s (run_id={run_id})",
         )

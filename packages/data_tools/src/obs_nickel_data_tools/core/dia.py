@@ -317,6 +317,8 @@ def run(
                 repo,
                 "-g",
                 str(qg_file),
+                "--output-run",
+                cols.diff_run,
                 "-j",
                 str(jobs),
                 "--register-dataset-types",
