@@ -135,6 +135,8 @@ services:
       - ${RAW_PARENT_DIR:-nps-raw}:/data/raw
       - ${REFCAT_REPO:-nps-refcats}:/data/refcats:ro
       - munge-etc:/shared-munge
+    ports:
+      - "${NPS_DASHBOARD_PORT:-8080}:8080"
     environment:
       - REPO=/data/repo
       - RAW_PARENT_DIR=/data/raw
