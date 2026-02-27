@@ -1,0 +1,45 @@
+# Docker Slurm cluster test config
+# Tests single night through science + DIA via BPS/Parsl/Slurm
+
+env:
+  REPO: "/data/repo"
+  STACK_DIR: "/opt/lsst/software/stack"
+  OBS_NICKEL: "/opt/nps/packages/obs_nickel"
+  RAW_PARENT_DIR: "/data/raw"
+  REFCAT_REPO: "/data/refcats"
+
+object: "2023ixf"
+ra: 210.910750
+dec: 54.311694
+bands: ["r", "i"]
+
+template:
+  type: ps1
+  size: 0.4
+
+science:
+  nights:
+    - 20230519
+
+configs:
+  science:
+    calibrate_image: calibrateImage/tuned_configs/dense_strict.py
+    calibrate_image_fallbacks:
+      - calibrateImage/tuned_configs/dense_relaxed.py
+      - calibrateImage/tuned_configs/sparse_strict.py
+      - calibrateImage/tuned_configs/sparse_relaxed.py
+    colorterms: apply_colorterms.py
+  dia:
+    subtract_images: dia/subtractImages_ps1.py
+    detect_and_measure: dia/detectAndMeasure.py
+
+options:
+  execution: bps
+  site: docker-slurm
+  jobs: 2
+  skip_calibs: true
+  skip_science: false
+  skip_dia: false
+  forced_phot: false
+  continue_on_error: true
+  use_fallbacks: true
