@@ -184,7 +184,10 @@ h2 { font-size: 1.1rem; margin-bottom: 12px; color: var(--text-muted); }
 }
 .phase-step:last-child::after { display: none; }
 .phase-step.done::after { background: var(--green); }
+.phase-step.partial::after { background: var(--yellow); }
+.phase-step.failed::after { background: var(--red); }
 .phase-step.active::after { background: var(--blue); }
+.phase-step.skipped::after { background: var(--border); }
 
 .phase-icon {
     width: 24px;
@@ -198,13 +201,21 @@ h2 { font-size: 1.1rem; margin-bottom: 12px; color: var(--text-muted); }
     background: var(--bg);
 }
 .phase-step.done .phase-icon { background: var(--green); color: #fff; }
+.phase-step.partial .phase-icon { background: var(--yellow); color: #fff; }
+.phase-step.failed .phase-icon { background: var(--red); color: #fff; }
 .phase-step.active .phase-icon { background: var(--blue); color: #fff; }
+.phase-step.skipped .phase-icon { background: var(--bg-tertiary); color: var(--text-muted); }
 .phase-step.pending .phase-icon { background: var(--bg-tertiary); color: var(--text-muted); }
 .phase-label { font-size: 0.7rem; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.5px; }
 .phase-step.done .phase-label { color: var(--green); }
+.phase-step.partial .phase-label { color: var(--yellow); }
+.phase-step.failed .phase-label { color: var(--red); }
 .phase-step.active .phase-label { color: var(--blue); font-weight: 600; }
 
 .check { font-size: 0.7rem; }
+.warning { font-size: 0.8rem; font-weight: bold; }
+.cross { font-size: 0.8rem; font-weight: bold; }
+.dash { font-size: 0.9rem; font-weight: bold; }
 .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 
 .spinner {

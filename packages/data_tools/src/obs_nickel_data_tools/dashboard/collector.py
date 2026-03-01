@@ -62,6 +62,8 @@ class RunInfo:
     dia_total: int = 0
     fphot_ok: int = 0
     fphot_total: int = 0
+    lightcurve_ok: int = 0
+    lightcurve_total: int = 0
     is_bps: bool = False
     bps_site: str = ""
     slurm_jobs: list[dict[str, str]] = field(default_factory=list)
@@ -132,6 +134,22 @@ def get_run(logs_dir: Path, run_id: str) -> RunInfo | None:
     return _parse_run(run_dir)
 
 
+def _is_completed_bootstrap(run_dir: Path, info: RunInfo) -> bool:
+    """Detect a bootstrap-only run that has already finished.
+
+    Bootstrap runs (from ``00_bootstrap_repo.sh``) create a log directory
+    with ``run_info.txt`` and ``bootstrap/`` but no ``pipeline.log`` or
+    ``summary.txt``.  Once the bootstrap subdirectory has log content, the
+    run is complete.
+    """
+    bootstrap_dir = run_dir / "bootstrap"
+    if not bootstrap_dir.is_dir():
+        return False
+    # Must have at least one log file inside bootstrap/
+    has_log = any(f.suffix == ".log" for f in bootstrap_dir.iterdir())
+    return has_log
+
+
 def _parse_run(run_dir: Path) -> RunInfo | None:
     """Parse a single run directory into RunInfo."""
     run_id = run_dir.name
@@ -147,11 +165,17 @@ def _parse_run(run_dir: Path) -> RunInfo | None:
     if summary_path.exists():
         _parse_summary(summary_path, info)
     else:
-        # Active run - parse pipeline.log for phase/status
-        info.status = RunStatus.RUNNING
         pipeline_log = run_dir / "pipeline.log"
         if pipeline_log.exists():
+            # Active pipeline run - parse pipeline.log for phase/status
+            info.status = RunStatus.RUNNING
             _parse_pipeline_log(pipeline_log, info)
+        elif _is_completed_bootstrap(run_dir, info):
+            # Bootstrap-only run with no pipeline.log — already finished
+            info.status = RunStatus.SUCCESS
+            info.current_phase = Phase.COMPLETE
+        else:
+            info.status = RunStatus.RUNNING
 
     # Calculate duration
     if info.started:
@@ -370,6 +394,16 @@ def _parse_pipeline_log(path: Path, info: RunInfo) -> None:
     info.fphot_total = len(fphot_nights)
     info.fphot_ok = len(fphot_nights) - len(fphot_failed)
 
+    # Lightcurve: single extraction, detect from log lines
+    lc_attempted = any(
+        "Extracting lightcurve" in line or "Lightcurve using" in line for line in lines
+    )
+    lc_failed = any("Lightcurve extraction failed" in line for line in lines)
+    lc_skipped = any("skipping lightcurve extraction" in line for line in lines)
+    if lc_attempted or lc_skipped:
+        info.lightcurve_total = 1
+        info.lightcurve_ok = 0 if (lc_failed or lc_skipped) else 1
+
 
 def _scan_night_logs(run_dir: Path, info: RunInfo) -> None:
     """Scan per-night log subdirectories to build NightStatus list."""
@@ -411,6 +445,7 @@ def _scan_night_logs(run_dir: Path, info: RunInfo) -> None:
             ns.science = "running"
 
         # DIA status per band
+        run_done = info.current_phase == Phase.COMPLETE
         dia_dir = run_dir / "dia"
         if dia_dir.is_dir():
             for band in info.bands or ["r", "i"]:
@@ -419,11 +454,13 @@ def _scan_night_logs(run_dir: Path, info: RunInfo) -> None:
                     ns.dia[band] = "failed" if key in failed_dia else "success"
                 elif info.current_phase == Phase.DIA:
                     ns.dia[band] = "running"
+                elif run_done:
+                    ns.dia[band] = "skipped"
                 else:
                     ns.dia[band] = "pending"
         else:
             for band in info.bands or ["r", "i"]:
-                ns.dia[band] = "pending"
+                ns.dia[band] = "skipped" if run_done else "pending"
 
         # Fphot status per band
         fphot_dir = run_dir / "fphot"
@@ -433,11 +470,13 @@ def _scan_night_logs(run_dir: Path, info: RunInfo) -> None:
                     ns.fphot[band] = "failed" if night in failed_fphot else "success"
                 elif info.current_phase == Phase.FPHOT:
                     ns.fphot[band] = "running"
+                elif run_done:
+                    ns.fphot[band] = "skipped"
                 else:
                     ns.fphot[band] = "pending"
         else:
             for band in info.bands or ["r", "i"]:
-                ns.fphot[band] = "pending"
+                ns.fphot[band] = "skipped" if run_done else "pending"
 
         nights_list.append(ns)
 

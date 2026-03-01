@@ -43,18 +43,39 @@ def create_app(logs_dir: Path) -> FastAPI:
     # Jinja2 templates
     templates = Jinja2Templates(directory=_HERE / "templates")
 
-    def _phase_index(run: RunInfo, phase: Phase) -> int:
-        """Return -1 if phase is complete, 0 if current, 1 if pending."""
+    def _phase_status(run: RunInfo, phase: Phase) -> str:
+        """Return the display status for a phase in the progress bar.
+
+        Returns one of: 'done', 'partial', 'failed', 'active', 'skipped', 'pending'.
+        """
         current_idx = PHASE_ORDER.index(run.current_phase)
         phase_idx = PHASE_ORDER.index(phase)
-        if phase_idx < current_idx:
-            return -1  # done
-        elif phase_idx == current_idx:
-            return 0  # active
-        return 1  # pending
+
+        if phase_idx > current_idx:
+            return "pending"
+        if phase_idx == current_idx and run.status.value == "running":
+            return "active"
+
+        # Phase is past — check actual results
+        _fail_map = {
+            Phase.CALIBS: (run.calibs_ok, run.calibs_total),
+            Phase.SCIENCE: (run.science_ok, run.science_total),
+            Phase.DIA: (run.dia_ok, run.dia_total),
+            Phase.FPHOT: (run.fphot_ok, run.fphot_total),
+            Phase.LIGHTCURVE: (run.lightcurve_ok, run.lightcurve_total),
+        }
+        if phase in _fail_map:
+            ok, total = _fail_map[phase]
+            if total == 0:
+                return "skipped"
+            if ok == 0:
+                return "failed"
+            if ok < total:
+                return "partial"
+        return "done"
 
     # Register template globals
-    templates.env.globals["phase_index"] = _phase_index
+    templates.env.globals["phase_status"] = _phase_status
     templates.env.globals["phases"] = [p for p in Phase if p != Phase.COMPLETE]
 
     # ── Routes ────────────────────────────────────────────────────────

@@ -23,12 +23,19 @@
   <!-- Phase Progress Bar -->
   <div class="phase-bar">
     {% for phase in phases %}
-    <div class="phase-step {{ 'done' if phase_index(run, phase) < 0 else ('active' if phase == run.current_phase else 'pending') }}">
+    {% set ps = phase_status(run, phase) %}
+    <div class="phase-step {{ ps }}">
       <div class="phase-icon">
-        {% if phase_index(run, phase) < 0 %}
+        {% if ps == 'done' %}
           <span class="check">&#10003;</span>
-        {% elif phase == run.current_phase and run.status.value == 'running' %}
+        {% elif ps == 'partial' %}
+          <span class="warning">!</span>
+        {% elif ps == 'failed' %}
+          <span class="cross">&#10007;</span>
+        {% elif ps == 'active' %}
           <span class="spinner"></span>
+        {% elif ps == 'skipped' %}
+          <span class="dash">&ndash;</span>
         {% else %}
           <span class="dot"></span>
         {% endif %}
