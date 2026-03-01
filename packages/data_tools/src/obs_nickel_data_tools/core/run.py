@@ -1741,7 +1741,8 @@ def run(
             return early_exit
         _log_template_summary(run_cfg, result)
 
-    # Step 2: Calibrations per night
+    # Step 2: Calibrations per night (always local — BPS overhead too high
+    # for small calib pipelines, and calib qgraphs lack --output-run)
     if not run_cfg.skip_calibs:
         early_exit = _run_calibs_step(
             all_nights,
@@ -1749,7 +1750,6 @@ def run(
             config,
             result,
             dry_run,
-            executor=executor,
         )
         if early_exit is not None:
             return early_exit

@@ -48,13 +48,18 @@ class LocalExecutor:
     This is a passthrough to stack.run_pipetask() with zero behavior change.
     """
 
+    # kwargs accepted by stack.run_pipetask()
+    _PASSTHROUGH_KWARGS = {"capture_output", "check", "log_file", "log_level"}
+
     def run_pipetask(
         self,
         args: list[str],
         config: Config,
         **kwargs,
     ) -> subprocess.CompletedProcess:
-        return run_pipetask(args, config, **kwargs)
+        # Strip kwargs only used by BPSExecutor (e.g. output_run)
+        filtered = {k: v for k, v in kwargs.items() if k in self._PASSTHROUGH_KWARGS}
+        return run_pipetask(args, config, **filtered)
 
 
 def _parse_pipetask_args(args: list[str]) -> dict:
@@ -145,20 +150,49 @@ def _parse_bps_report(raw_output: str) -> dict:
 
 
 def _check_output_collection(output_run: str, config: Config) -> bool:
-    """Check if a Butler output_run collection exists.
+    """Check if a Butler output_run collection has actual datasets.
 
-    This is the definitive test for whether BPS quanta produced output.
-    pipetask run-qbb only creates the RUN collection when quanta succeed.
+    BPS infrastructure may create an empty RUN collection before quanta
+    execute, so checking collection existence alone is insufficient.
+    We query for datasets to confirm quanta actually produced output.
     """
     if not output_run:
         return False
     try:
+        # First check the collection exists at all
         result = run_butler_query(
             ["query-collections", str(config.repo), output_run],
             config,
             check=False,
         )
-        return result.returncode == 0 and output_run in (result.stdout or "")
+        if result.returncode != 0 or output_run not in (result.stdout or ""):
+            return False
+
+        # Then verify it contains actual datasets (not just an empty shell)
+        ds_result = run_butler_query(
+            [
+                "query-datasets",
+                str(config.repo),
+                "--collections",
+                output_run,
+                "--limit",
+                "1",
+            ],
+            config,
+            check=False,
+        )
+        # If query-datasets returns any output lines beyond the header,
+        # the collection has real data
+        if ds_result.returncode != 0:
+            return False
+        lines = [
+            ln
+            for ln in (ds_result.stdout or "").splitlines()
+            if ln.strip()
+            and not ln.strip().startswith("type")
+            and not ln.strip().startswith("----")
+        ]
+        return len(lines) > 0
     except Exception:
         return False
 
