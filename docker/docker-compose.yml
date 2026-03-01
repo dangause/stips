@@ -1,19 +1,26 @@
 # Nickel Processing Suite - Docker Compose
 #
 # Local development and testing configuration.
+# Dashboard auto-starts on port 8080 for live pipeline monitoring.
 #
 # Usage:
-#   # Start with defaults
-#   docker-compose up -d
+#   # Start with your data directories
+#   REPO=/path/to/repo RAW_PARENT_DIR=/path/to/raw REFCAT_REPO=/path/to/refcats \
+#     docker compose up -d
 #
-#   # With custom environment
-#   REPO=/path/to/repo RAW_PARENT_DIR=/path/to/raw docker-compose up -d
+#   # Dashboard is now live at http://localhost:8080
 #
-#   # Run a command
-#   docker-compose run --rm nps nickel calibs 20230519
+#   # Run a pipeline (dashboard shows live progress)
+#   docker exec nps-processing nps-exec nickel run /opt/nps/scripts/config/2023ixf/pipeline_docker_test.yaml
 #
-#   # Interactive shell
-#   docker-compose run --rm nps bash
+#   # Or run individual commands
+#   docker exec nps-processing nps-exec nickel calibs 20230519
+#
+#   # Interactive shell (with LSST stack activated)
+#   docker exec -it nps-processing nps-exec bash
+#
+#   # Stop
+#   docker compose down
 
 version: '3.8'
 
@@ -52,12 +59,16 @@ services:
       # - ../packages/data_tools/src:/opt/nps/packages/data_tools/src:ro
       # - ../packages/obs_nickel:/opt/nps/packages/obs_nickel:ro
 
+    ports:
+      - "${NPS_DASHBOARD_PORT:-8080}:8080"
+
     environment:
       # Core paths (override defaults if mounted elsewhere)
       - REPO=/data/repo
       - RAW_PARENT_DIR=/data/raw
       - REFCAT_REPO=/data/refcats
       - OBS_NICKEL=/opt/nps/packages/obs_nickel
+      - KMP_AFFINITY=disabled
 
       # Optional: Profile to load from /config/.env.{profile}
       - NPS_PROFILE=${NPS_PROFILE:-}
@@ -84,9 +95,10 @@ services:
       retries: 3
       start_period: 30s
 
-    # Keep container running for exec commands
+    # Keep container running (dashboard serves on :8080, use docker exec for commands)
     stdin_open: true
     tty: true
+    command: ["bash"]
 
   # =============================================================================
   # Jupyter Lab Service (for interactive analysis)

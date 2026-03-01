@@ -1,0 +1,136 @@
+# Nickel Processing Suite - Singularity/Apptainer + Slurm Site Configuration
+#
+# BPS configuration for HPC clusters where compute nodes run inside
+# Singularity/Apptainer containers. The commandPrefix wraps each pipetask
+# invocation in `apptainer exec` so the LSST stack is available on compute
+# nodes without native installation.
+#
+# Two-layer execution model:
+#   1. Login node: User runs `apptainer exec nps.sif nickel run config.yaml`
+#      The orchestrator runs inside the container where the LSST stack exists.
+#   2. Compute nodes: BPS/Parsl submits Slurm jobs. The commandPrefix below
+#      wraps each `pipetask` call in `apptainer exec` so compute-node commands
+#      also execute inside the container.
+#
+# Usage:
+#   nickel run config.yaml  (with options: execution: bps, site: singularity-slurm)
+
+includeConfigs:
+  - ../base.yaml
+
+# =============================================================================
+# WMS Backend Selection
+# =============================================================================
+wmsServiceClass: lsst.ctrl.bps.parsl.ParslService
+computeSite: singularity-slurm
+
+# =============================================================================
+# Parsl Configuration
+# =============================================================================
+parsl:
+  log_level: INFO
+  retries: 3
+
+# =============================================================================
+# Singularity + Slurm Site Definition
+# =============================================================================
+site:
+  singularity-slurm:
+    class: lsst.ctrl.bps.parsl.sites.Slurm
+
+    # Cluster resources per block (override via BPSConfig fields)
+    nodes: 1
+    cores_per_node: {cores_per_node}
+    mem_per_node: {mem_per_node}
+
+    # Job time limit
+    walltime: "{walltime}"
+
+    # Slurm scheduler options
+    scheduler_options: |
+      #SBATCH --partition={partition}
+      #SBATCH --account={project}
+      #SBATCH --export=ALL
+
+    # Parallelism configuration
+    max_blocks: {max_blocks}
+    min_blocks: 0
+    init_blocks: 1
+    parallelism: 1.0
+
+    # Command prefix: wraps every pipetask invocation in apptainer exec.
+    #
+    # How this works: BPS generates job scripts like:
+    #   <commandPrefix>
+    #   pipetask run -b /repo ...
+    #
+    # The commandPrefix defines a shell function `pipetask()` that shadows
+    # the binary. When BPS calls `pipetask run ...`, the function intercepts
+    # it, enters the Singularity container, sets up the LSST stack, and
+    # calls the real `pipetask` via `command pipetask`.
+    #
+    # Bind mounts: repo, raw data, refcats, and the Parsl run directory
+    # are all bind-mounted into the container so pipetask can access them.
+    commandPrefix: |
+      module load apptainer 2>/dev/null || module load singularity 2>/dev/null || true
+      _NPS_IMAGE="{container_image}"
+      _NPS_BIND="{repo},{raw_parent_dir},{refcat_repo},{run_dir}"
+      pipetask() {
+          apptainer exec --bind "$_NPS_BIND" "$_NPS_IMAGE" \
+            bash -c 'source /opt/lsst/software/stack/loadLSST.bash && setup lsst_distrib && setup -r /opt/nps/packages/obs_nickel obs_nickel 2>/dev/null; setup -r /opt/nps/packages/obs_nickel_data obs_nickel_data 2>/dev/null; export NUMEXPR_MAX_THREADS=1; command pipetask "$@"' _ "$@"
+      }
+
+    # Run directory for Parsl (must be on shared filesystem)
+    run_dir: "{run_dir}"
+
+# =============================================================================
+# Task-Specific Resource Overrides
+# =============================================================================
+pipetask:
+  # Calibration tasks
+  cpBiasIsr:
+    requestMemory: 2048
+    requestCpus: 1
+
+  cpBias:
+    requestMemory: 4096
+    requestCpus: 1
+
+  cpFlatIsr:
+    requestMemory: 4096
+    requestCpus: 1
+
+  cpFlat:
+    requestMemory: 8192
+    requestCpus: 2
+
+  # Science processing tasks
+  isr:
+    requestMemory: 4096
+    requestCpus: 1
+
+  calibrateImage:
+    requestMemory: 8192
+    requestCpus: 2
+    memoryMultiplier: 2.0
+    numberOfRetries: 3
+
+  # DIA tasks (memory intensive)
+  rewarpTemplate:
+    requestMemory: 8192
+    requestCpus: 1
+
+  subtractImages:
+    requestMemory: 16384
+    requestCpus: 2
+    memoryMultiplier: 1.5
+    numberOfRetries: 4
+
+  detectAndMeasureDiaSource:
+    requestMemory: 8192
+    requestCpus: 1
+
+  # Forced photometry
+  forcedPhotDiffimRaDec:
+    requestMemory: 4096
+    requestCpus: 1

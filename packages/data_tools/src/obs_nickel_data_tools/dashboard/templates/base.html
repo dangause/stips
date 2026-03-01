@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}NPS Dashboard{% endblock %}</title>
+    <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+    <script src="https://unpkg.com/htmx-ext-sse@2.2.2/sse.js"></script>
+    <script src="https://cdn.plot.ly/plotly-2.35.0.min.js" charset="utf-8"></script>
+    <link rel="stylesheet" href="/static/style.css">
+    <meta name="view-transition" content="same-origin">
+</head>
+<body>
+    <header>
+        <nav>
+            <a href="/" class="logo">NPS Dashboard</a>
+            <span class="subtitle">Nickel Processing Suite</span>
+        </nav>
+    </header>
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+</body>
+</html>

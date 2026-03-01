@@ -14,7 +14,7 @@ from obs_nickel_data_tools.core.pipeline import (
     night_to_date_range,
     validate_night,
 )
-from obs_nickel_data_tools.core.stack import run_butler, run_pipetask
+from obs_nickel_data_tools.core.stack import run_butler
 
 if TYPE_CHECKING:
     from obs_nickel_data_tools.core.config import Config
@@ -35,12 +35,86 @@ class CalibsResult:
     error: str | None = None
 
 
+def write_curated_calibrations(
+    night: str,
+    config: Config,
+    *,
+    log_file: Path | None = None,
+) -> None:
+    """Write curated calibrations (defects, crosstalk) for a night.
+
+    This is safe to call once before concurrent calibs. The curated
+    calibrations are instrument-level data that only need to be written
+    once per run.
+
+    Args:
+        night: Any observing night (used for raw_run collection reference)
+        config: Pipeline configuration
+        log_file: Optional log file path
+    """
+    night = validate_night(night)
+    cols = CollectionNames(night)
+    repo = str(config.repo)
+
+    # Ingest raws for this night first (needed for write-curated-calibrations)
+    raw_dir = get_raw_dir(config, night)
+    if raw_dir.exists():
+        run_butler(
+            ["register-instrument", repo, INSTRUMENT],
+            config,
+            check=False,
+            log_file=log_file,
+        )
+        run_butler(
+            [
+                "ingest-raws",
+                repo,
+                str(raw_dir),
+                "--transfer",
+                "copy",
+                "--output-run",
+                cols.raw_run,
+            ],
+            config,
+            check=False,
+            log_file=log_file,
+        )
+        run_butler(["define-visits", repo, "Nickel"], config, log_file=log_file)
+
+    run_butler(
+        [
+            "write-curated-calibrations",
+            repo,
+            "Nickel",
+            cols.raw_run,
+            "--collection",
+            cols.curated_run,
+        ],
+        config,
+        log_file=log_file,
+    )
+    run_butler(
+        [
+            "collection-chain",
+            repo,
+            cols.curated_chain,
+            cols.curated_run,
+            "--mode",
+            "redefine",
+        ],
+        config,
+        log_file=log_file,
+    )
+
+
 def run(
     night: str,
     config: Config,
     *,
     jobs: int = 4,
     log_file: Path | None = None,
+    executor=None,
+    skip_curated: bool = False,
 ) -> CalibsResult:
     """Run nightly calibration processing.
 
@@ -56,10 +130,16 @@ def run(
         config: Pipeline configuration
         jobs: Number of parallel jobs
         log_file: Optional path to write LSST pipeline logs
+        skip_curated: Skip curated calibrations write (already done externally)
 
     Returns:
         CalibsResult with collection names and status
     """
+    from obs_nickel_data_tools.core.executor import LocalExecutor
+
+    if executor is None:
+        executor = LocalExecutor()
+
     night = validate_night(night)
     cols = CollectionNames(night)
 
@@ -117,31 +197,32 @@ def run(
         # Define visits
         run_butler(["define-visits", repo, "Nickel"], config, log_file=log_file)
 
-        # Write curated calibrations
-        run_butler(
-            [
-                "write-curated-calibrations",
-                repo,
-                "Nickel",
-                cols.raw_run,
-                "--collection",
-                cols.curated_run,
-            ],
-            config,
-            log_file=log_file,
-        )
-        run_butler(
-            [
-                "collection-chain",
-                repo,
-                cols.curated_chain,
-                cols.curated_run,
-                "--mode",
-                "redefine",
-            ],
-            config,
-            log_file=log_file,
-        )
+        # Write curated calibrations (skip if already done by orchestrator)
+        if not skip_curated:
+            run_butler(
+                [
+                    "write-curated-calibrations",
+                    repo,
+                    "Nickel",
+                    cols.raw_run,
+                    "--collection",
+                    cols.curated_run,
+                ],
+                config,
+                log_file=log_file,
+            )
+            run_butler(
+                [
+                    "collection-chain",
+                    repo,
+                    cols.curated_chain,
+                    cols.curated_run,
+                    "--mode",
+                    "redefine",
+                ],
+                config,
+                log_file=log_file,
+            )
 
         # Build bias
         qg_bias = config.repo / "qgraphs" / f"cp_bias_{night}_{cols.run_ts}.qg"
@@ -149,13 +230,13 @@ def run(
         bias_ok = False
 
         try:
-            run_pipetask(
+            executor.run_pipetask(
                 [
                     "qgraph",
                     "-b",
                     repo,
                     "-p",
-                    str(config.cp_pipe_dir / "pipelines/_ingredients/cpBias.yaml"),
+                    str(config.obs_nickel / "pipelines/NickelCpBias.yaml"),
                     "-i",
                     f"{cols.curated_chain},{cols.raw_run}",
                     "-o",
@@ -164,6 +245,7 @@ def run(
                     cols.cp_bias_run,
                     "--save-qgraph",
                     str(qg_bias),
+                    "--qgraph-datastore-records",
                     "-d",
                     "instrument='Nickel' AND exposure.observation_type='bias'",
                 ],
@@ -171,7 +253,7 @@ def run(
                 log_file=log_file,
             )
 
-            result = run_pipetask(
+            result = executor.run_pipetask(
                 [
                     "run",
                     "-b",
@@ -185,6 +267,7 @@ def run(
                 config,
                 check=False,
                 log_file=log_file,
+                output_run=cols.cp_bias_run,
             )
             if result.returncode != 0:
                 log.warning(
@@ -236,13 +319,13 @@ def run(
         flat_ok = False
 
         try:
-            run_pipetask(
+            executor.run_pipetask(
                 [
                     "qgraph",
                     "-b",
                     repo,
                     "-p",
-                    str(config.cp_pipe_dir / "pipelines/_ingredients/cpFlat.yaml"),
+                    str(config.obs_nickel / "pipelines/NickelCpFlat.yaml"),
                     "-i",
                     f"{cols.curated_chain},{cols.raw_run},{cols.calib_out},{cols.cp_bias_run}",
                     "-o",
@@ -251,6 +334,7 @@ def run(
                     cols.cp_flat_run,
                     "--save-qgraph",
                     str(qg_flat),
+                    "--qgraph-datastore-records",
                     "-d",
                     "instrument='Nickel' AND exposure.observation_type='flat'",
                     "-c",
@@ -262,7 +346,7 @@ def run(
                 log_file=log_file,
             )
 
-            result = run_pipetask(
+            result = executor.run_pipetask(
                 [
                     "run",
                     "-b",
@@ -276,6 +360,7 @@ def run(
                 config,
                 check=False,
                 log_file=log_file,
+                output_run=cols.cp_flat_run,
             )
             if result.returncode != 0:
                 log.warning(

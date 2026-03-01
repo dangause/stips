@@ -32,6 +32,7 @@ tasks:
       doDark: false
       doDefect: true
       doFringe: false
+      doLinearize: false
       doSuspect: true
       doWrite: true
       doVignette: false

@@ -1,0 +1,65 @@
+# Test config: validates science.py star-footprints check
+# Tests 3 nights where calibrateImage succeeds but downstream tasks fail
+# (no single_visit_star_footprints: 20230523, 20230905, 20230910)
+# plus 2 control nights that should fully succeed (20230519, 20230521)
+
+env:
+  REPO: "/Users/dangause/Developer/lick/lsst/data/nickel/2023ixf_ps1_test_fix_repo"
+  STACK_DIR: "/Users/dangause/Developer/lick/lsst/lsst_stack"
+  OBS_NICKEL: "/Users/dangause/Developer/lick/lsst/lsst_stack/stack/nickel_processing_suite/packages/obs_nickel"
+  RAW_PARENT_DIR: "/Users/dangause/Developer/lick/data"
+  REFCAT_REPO: "/Users/dangause/Developer/lick/lsst/lsst_stack/stack/refcats"
+  CP_PIPE_DIR: "${STACK_DIR}/cp_pipe"
+  LICK_ARCHIVE_DIR: "/Users/dangause/Developer/lick/lick_searchable_archive"
+  LICK_ARCHIVE_URL: "https://archive.ucolick.org/archive"
+  LICK_ARCHIVE_INSTR: "NICKEL_DIR"
+
+object: "2023ixf"
+ra: 210.910750
+dec: 54.311694
+bands: ["r", "i"]
+
+template:
+  type: ps1
+  size: 0.4
+
+science:
+  nights:
+    - 20230519   # Control: should succeed
+    - 20230521   # Control: should succeed
+    - 20230523   # Test: calibrateImage fails (1 R-band, empty source catalog)
+    - 20230905   # Test: calibrateImage fails (2 R-band, no good star candidates)
+    - 20230910   # Test: calibrateImage fails (1 I-band, no good star candidates)
+
+configs:
+  science:
+    calibrate_image: calibrateImage/tuned_configs/dense_strict.py
+    calibrate_image_fallbacks:
+      - calibrateImage/tuned_configs/dense_relaxed.py
+      - calibrateImage/tuned_configs/sparse_strict.py
+      - calibrateImage/tuned_configs/sparse_relaxed.py
+    colorterms: apply_colorterms.py
+  dia:
+    subtract_images: dia/subtractImages_ps1.py
+    detect_and_measure: dia/detectAndMeasure.py
+
+options:
+  jobs: 4
+  concurrent_nights: 3
+  skip_calibs: false
+  skip_science: false
+  rebuild_templates: false
+  skip_dia: false
+  forced_phot: true
+  forced_phot_image_type: diffim
+  continue_on_error: true
+  use_fallbacks: true
+
+lightcurve:
+  enabled: true
+  dataset_type: forced_phot_diffim_radec
+  min_snr: 1
+  max_mag_err: 1.0
+  y_axis: apparent_mag
+  x_axis: days_since_explosion
+  explosion_mjd: 60082.75

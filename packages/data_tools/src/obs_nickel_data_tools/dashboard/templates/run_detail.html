@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}NPS - {{ run.run_id }}{% endblock %}
+{% block content %}
+<div class="run-detail">
+  <!-- Back link -->
+  <a href="/" class="back-link">&larr; All Runs</a>
+
+  <!-- Header -->
+  <div class="detail-header">
+    <h1>
+      {{ run.object_name or 'Pipeline Run' }}
+      <span class="status-badge {{ run.status_class }}">{{ run.status.value }}</span>
+    </h1>
+    <div class="run-meta">
+      <span>Run: <code>{{ run.run_id }}</code></span>
+      <span>Started: {{ run.started[:19] if run.started else '-' }}</span>
+      <span>Duration: {{ run.duration or '-' }}</span>
+      {% if run.bands %}<span>Bands: {{ run.bands | join(', ') }}</span>{% endif %}
+      {% if run.is_bps %}<span>BPS: {{ run.bps_site }}</span>{% endif %}
+    </div>
+  </div>
+
+  <!-- Phase Progress Bar -->
+  <div class="phase-bar">
+    {% for phase in phases %}
+    {% set ps = phase_status(run, phase) %}
+    <div class="phase-step {{ ps }}">
+      <div class="phase-icon">
+        {% if ps == 'done' %}
+          <span class="check">&#10003;</span>
+        {% elif ps == 'partial' %}
+          <span class="warning">!</span>
+        {% elif ps == 'failed' %}
+          <span class="cross">&#10007;</span>
+        {% elif ps == 'active' %}
+          <span class="spinner"></span>
+        {% elif ps == 'skipped' %}
+          <span class="dash">&ndash;</span>
+        {% else %}
+          <span class="dot"></span>
+        {% endif %}
+      </div>
+      <div class="phase-label">{{ phase.value }}</div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- Tab navigation -->
+  <div class="tab-nav">
+    <button class="tab-btn active" hx-get="/run/{{ run.run_id }}/tab/overview" hx-target="#tab-content" hx-swap="innerHTML transition:true" onclick="setActiveTab(this)">Overview</button>
+    <button class="tab-btn" hx-get="/run/{{ run.run_id }}/tab/logs" hx-target="#tab-content" hx-swap="innerHTML transition:true" onclick="setActiveTab(this)">Logs</button>
+    <button class="tab-btn" hx-get="/run/{{ run.run_id }}/tab/analysis" hx-target="#tab-content" hx-swap="innerHTML transition:true" onclick="setActiveTab(this)">Analysis</button>
+    <button class="tab-btn" hx-get="/run/{{ run.run_id }}/tab/data" hx-target="#tab-content" hx-swap="innerHTML transition:true" onclick="setActiveTab(this)">Data</button>
+  </div>
+
+  <!-- Tab content (initially loads overview) -->
+  <div id="tab-content" style="view-transition-name: tab-content"
+       hx-get="/run/{{ run.run_id }}/tab/overview" hx-trigger="load" hx-swap="innerHTML transition:true">
+    <div class="skeleton-container">
+      <div class="skeleton skeleton-cards">
+        <div class="skeleton-card"></div>
+        <div class="skeleton-card"></div>
+        <div class="skeleton-card"></div>
+        <div class="skeleton-card"></div>
+      </div>
+      <div class="skeleton skeleton-block" style="height: 200px"></div>
+      <div class="skeleton skeleton-block" style="height: 300px"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+function setActiveTab(btn) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+</script>
+{% endblock %}

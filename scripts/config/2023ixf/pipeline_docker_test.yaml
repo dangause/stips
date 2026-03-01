@@ -1,0 +1,72 @@
+# Docker container test pipeline for SN 2023ixf
+#
+# Single-night test to verify the pipeline works inside the Docker Slurm cluster.
+# Uses container paths (not host paths).
+#
+# Usage (inside NPS container):
+#   nickel run /opt/nps/scripts/config/2023ixf/pipeline_docker_test.yaml
+#   nickel run /opt/nps/scripts/config/2023ixf/pipeline_docker_test.yaml --dry-run
+
+# =============================================================================
+# Environment Configuration (container paths)
+# =============================================================================
+env:
+  REPO: "/data/repo"
+  STACK_DIR: "/opt/lsst/software/stack"
+  OBS_NICKEL: "/opt/nps/packages/obs_nickel"
+  RAW_PARENT_DIR: "/data/raw"
+  REFCAT_REPO: "/data/refcats"
+
+# Target information (SN 2023ixf in M101)
+object: "2023ixf"
+ra: 210.910750
+dec: 54.311694
+
+# Bands to process (PS1 templates only support r/i)
+bands: ["r", "i"]
+
+# Template configuration
+template:
+  type: ps1
+  size: 0.4
+
+# Single night for testing
+science:
+  nights:
+    - 20230519   # Discovery epoch
+
+# Pipeline configuration files
+configs:
+  science:
+    calibrate_image: calibrateImage/tuned_configs/dense_strict.py
+    calibrate_image_fallbacks:
+      - calibrateImage/tuned_configs/dense_relaxed.py
+      - calibrateImage/tuned_configs/sparse_strict.py
+      - calibrateImage/tuned_configs/sparse_relaxed.py
+    colorterms: apply_colorterms.py
+  dia:
+    subtract_images: dia/subtractImages_ps1.py
+    detect_and_measure: dia/detectAndMeasure.py
+
+# Processing options (conservative for container testing)
+options:
+  jobs: 4
+  concurrent_nights: 1
+  skip_calibs: false
+  skip_science: false
+  rebuild_templates: false
+  skip_dia: false
+  forced_phot: true
+  forced_phot_image_type: diffim
+  continue_on_error: true
+  use_fallbacks: true
+
+# Lightcurve configuration
+lightcurve:
+  enabled: true
+  dataset_type: forced_phot_diffim_radec
+  min_snr: 1
+  max_mag_err: 1.0
+  y_axis: apparent_mag
+  x_axis: days_since_explosion
+  explosion_mjd: 60082.75

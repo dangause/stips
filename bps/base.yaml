@@ -94,9 +94,9 @@ output:
 # =============================================================================
 
 # Where to create submit directories
-submitPath: "{repo}/bps/submit"
+submitPath: "{repo}/bps/submit/{pipeline}_{night}_{timestamp}"
 
 # Keep logs for debugging
 saveClusteredQgraph: true
-saveDot: true
+saveDot: false
 saveExecutionButler: true
