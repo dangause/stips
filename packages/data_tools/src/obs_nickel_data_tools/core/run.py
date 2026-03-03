@@ -1581,7 +1581,7 @@ def _run_differential_phot_step(
     run_args = [
         "run",
         "-b",
-        repo,
+        str(repo),
         "-p",
         pipeline_yaml,
         "-i",
