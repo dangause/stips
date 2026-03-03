@@ -1,0 +1,34 @@
+{% if run.nights %}
+<table class="night-table">
+    <thead>
+        <tr>
+            <th>Night</th>
+            <th>Calibs</th>
+            <th>Science</th>
+            {% for band in run.bands or ['r', 'i'] %}
+            <th>DIA({{ band }})</th>
+            {% endfor %}
+            {% for band in run.bands or ['r', 'i'] %}
+            <th>FPhot({{ band }})</th>
+            {% endfor %}
+        </tr>
+    </thead>
+    <tbody>
+        {% for ns in run.nights %}
+        <tr>
+            <td class="mono"><a href="/run/{{ run.run_id }}/night/{{ ns.night }}" class="night-link">{{ ns.night }}</a></td>
+            <td><span class="cell-status {{ ns.calibs }}">{{ ns.calibs }}</span></td>
+            <td><span class="cell-status {{ ns.science }}">{{ ns.science }}</span></td>
+            {% for band in run.bands or ['r', 'i'] %}
+            <td><span class="cell-status {{ ns.dia.get(band, 'pending') }}">{{ ns.dia.get(band, 'pending') }}</span></td>
+            {% endfor %}
+            {% for band in run.bands or ['r', 'i'] %}
+            <td><span class="cell-status {{ ns.fphot.get(band, 'pending') }}">{{ ns.fphot.get(band, 'pending') }}</span></td>
+            {% endfor %}
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p class="empty-state">No night data found</p>
+{% endif %}

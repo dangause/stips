@@ -65,6 +65,24 @@ if [[ -n "${NPS_PROFILE}" && -f "/config/.env.${NPS_PROFILE}" ]]; then
 fi
 
 # =============================================================================
+# Slurm / Munge Setup (for BPS job submission)
+# =============================================================================
+
+# Pick up shared munge key from cluster volume
+if [[ -f /shared-munge/munge.key ]]; then
+    echo "[NPS] Loading shared munge key..."
+    cp /shared-munge/munge.key /etc/munge/munge.key
+    chown munge:munge /etc/munge/munge.key
+    chmod 400 /etc/munge/munge.key
+    munged --force 2>/dev/null && echo "[NPS] munged started" || echo "[NPS] munged failed (Slurm commands may not work)"
+elif [[ -f /etc/munge/munge.key ]]; then
+    echo "[NPS] Starting munge with local key..."
+    chown munge:munge /etc/munge/munge.key 2>/dev/null || true
+    chmod 400 /etc/munge/munge.key 2>/dev/null || true
+    munged --force 2>/dev/null && echo "[NPS] munged started" || echo "[NPS] munged failed (Slurm commands may not work)"
+fi
+
+# =============================================================================
 # Environment Validation
 # =============================================================================
 
@@ -81,6 +99,26 @@ fi
 
 if [[ ! -d "${RAW_PARENT_DIR}" ]]; then
     echo "[NPS] WARNING: RAW_PARENT_DIR directory does not exist: ${RAW_PARENT_DIR}"
+fi
+
+# =============================================================================
+# Dashboard (background)
+# =============================================================================
+
+NPS_DASHBOARD=${NPS_DASHBOARD:-true}
+NPS_DASHBOARD_PORT=${NPS_DASHBOARD_PORT:-8080}
+NPS_LOGS_DIR=${NPS_LOGS_DIR:-/opt/nps/logs}
+
+if [[ "${NPS_DASHBOARD}" == "true" ]]; then
+    mkdir -p "${NPS_LOGS_DIR}"
+    echo "[NPS] Starting dashboard on port ${NPS_DASHBOARD_PORT} (logs: ${NPS_LOGS_DIR})"
+    python3 -c "
+import uvicorn
+from obs_nickel_data_tools.dashboard import create_app
+from pathlib import Path
+app = create_app(Path('${NPS_LOGS_DIR}'))
+uvicorn.run(app, host='0.0.0.0', port=${NPS_DASHBOARD_PORT}, log_level='warning')
+" > "${NPS_LOGS_DIR}/dashboard.log" 2>&1 &
 fi
 
 # =============================================================================

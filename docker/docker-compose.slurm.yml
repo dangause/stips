@@ -1,41 +1,28 @@
-# Mini Slurm Cluster for Local HPC Testing
+# NPS Slurm Test Cluster
 #
-# This creates a small Slurm cluster for testing BPS workflows locally.
-# Based on giovtorres/slurm-docker-cluster
+# All Slurm services built from the same LSST base image (AlmaLinux 9,
+# Slurm 22.05). Compute nodes have the full LSST stack so they can run
+# pipetask directly (no Singularity needed in Docker test cluster).
 #
 # Usage:
+#   # Build images
+#   docker build -t nps-slurm:latest -f docker/Dockerfile.slurm .
+#   docker build -t nps:latest -f docker/Dockerfile .
+#
 #   # Start the cluster
-#   docker-compose -f docker/docker-compose.slurm.yml up -d
+#   docker compose -f docker/docker-compose.slurm.yml up -d
 #
-#   # Submit a job from the controller
-#   docker exec -it slurmctld bash
-#   > sbatch /data/test_job.sh
-#
-#   # Check job status
-#   docker exec slurmctld squeue
+#   # Check cluster status
+#   docker exec nps-hpc sinfo
 #
 #   # Stop the cluster
-#   docker-compose -f docker/docker-compose.slurm.yml down
-
-version: "3.8"
+#   docker compose -f docker/docker-compose.slurm.yml down
+#
+#   # With real data (override defaults with host bind mounts):
+#   REPO=/path/to/repo RAW_PARENT_DIR=/path/to/raw REFCAT_REPO=/path/to/refcats \
+#     docker compose -f docker/docker-compose.slurm.yml up -d
 
 services:
-  # ==========================================================================
-  # Slurm Database
-  # ==========================================================================
-  slurmdbd:
-    image: giovtorres/slurm-docker-cluster:latest
-    container_name: slurmdbd
-    command: ["slurmdbd"]
-    hostname: slurmdbd
-    volumes:
-      - slurm-etc:/etc/slurm
-      - slurm-log:/var/log/slurm
-    expose:
-      - "6819"
-    depends_on:
-      - mysql
-
   # ==========================================================================
   # MySQL Database (for Slurm accounting)
   # ==========================================================================
@@ -48,69 +35,95 @@ services:
       MYSQL_DATABASE: slurm_acct_db
       MYSQL_USER: slurm
       MYSQL_PASSWORD: password
+    command: ["--default-authentication-plugin=mysql_native_password"]
     volumes:
       - mysql-data:/var/lib/mysql
+
+  # ==========================================================================
+  # Slurm Database Daemon
+  # ==========================================================================
+  slurmdbd:
+    image: nps-slurm:latest
+    container_name: slurmdbd
+    hostname: slurmdbd
+    command: ["slurmdbd"]
+    volumes:
+      - munge-etc:/shared-munge
+      - slurm-log:/var/log/slurm
+    expose:
+      - "6819"
+    depends_on:
+      - mysql
 
   # ==========================================================================
   # Slurm Controller
   # ==========================================================================
   slurmctld:
-    image: giovtorres/slurm-docker-cluster:latest
+    image: nps-slurm:latest
     container_name: slurmctld
-    command: ["slurmctld"]
     hostname: slurmctld
+    command: ["slurmctld"]
     volumes:
-      - slurm-etc:/etc/slurm
+      - munge-etc:/shared-munge
       - slurm-log:/var/log/slurm
       - shared-home:/home
-      # Mount NPS data directories
-      - ${REPO:-/tmp/repo}:/data/repo
-      - ${RAW_PARENT_DIR:-/tmp/raw}:/data/raw
-      - ${REFCAT_REPO:-/tmp/refcats}:/data/refcats:ro
+      - ${REPO:-nps-repo}:/data/repo
+      - ${RAW_PARENT_DIR:-nps-raw}:/data/raw
+      - ${REFCAT_REPO:-nps-refcats}:/data/refcats:ro
     expose:
       - "6817"
     depends_on:
       - slurmdbd
 
   # ==========================================================================
-  # Compute Nodes (2 workers)
+  # Compute Nodes
   # ==========================================================================
+  # Compute nodes use systemd as PID 1 (required for Slurm 22 cgroup/v2 scopes).
+  # slurmd-init.sh copies the munge key and waits for slurmctld, then execs /sbin/init.
   c1:
-    image: giovtorres/slurm-docker-cluster:latest
+    image: nps-slurm:latest
     container_name: c1
-    command: ["slurmd"]
     hostname: c1
+    entrypoint: ["/usr/local/bin/slurmd-init.sh"]
+    privileged: true
     volumes:
-      - slurm-etc:/etc/slurm
+      - munge-etc:/shared-munge
       - slurm-log:/var/log/slurm
       - shared-home:/home
-      - ${REPO:-/tmp/repo}:/data/repo
-      - ${RAW_PARENT_DIR:-/tmp/raw}:/data/raw
-      - ${REFCAT_REPO:-/tmp/refcats}:/data/refcats:ro
+      - ${REPO:-nps-repo}:/data/repo
+      - ${RAW_PARENT_DIR:-nps-raw}:/data/raw
+      - ${REFCAT_REPO:-nps-refcats}:/data/refcats:ro
+    tmpfs:
+      - /run
+      - /tmp
     expose:
       - "6818"
     depends_on:
       - slurmctld
 
   c2:
-    image: giovtorres/slurm-docker-cluster:latest
+    image: nps-slurm:latest
     container_name: c2
-    command: ["slurmd"]
     hostname: c2
+    entrypoint: ["/usr/local/bin/slurmd-init.sh"]
+    privileged: true
     volumes:
-      - slurm-etc:/etc/slurm
+      - munge-etc:/shared-munge
       - slurm-log:/var/log/slurm
       - shared-home:/home
-      - ${REPO:-/tmp/repo}:/data/repo
-      - ${RAW_PARENT_DIR:-/tmp/raw}:/data/raw
-      - ${REFCAT_REPO:-/tmp/refcats}:/data/refcats:ro
+      - ${REPO:-nps-repo}:/data/repo
+      - ${RAW_PARENT_DIR:-nps-raw}:/data/raw
+      - ${REFCAT_REPO:-nps-refcats}:/data/refcats:ro
+    tmpfs:
+      - /run
+      - /tmp
     expose:
       - "6818"
     depends_on:
       - slurmctld
 
   # ==========================================================================
-  # NPS Container (for submitting jobs)
+  # NPS Container (for submitting BPS jobs)
   # ==========================================================================
   nps:
     image: nps:latest
@@ -118,14 +131,17 @@ services:
     hostname: nps
     volumes:
       - shared-home:/home
-      - ${REPO:-/tmp/repo}:/data/repo
-      - ${RAW_PARENT_DIR:-/tmp/raw}:/data/raw
-      - ${REFCAT_REPO:-/tmp/refcats}:/data/refcats:ro
-      - slurm-etc:/etc/slurm:ro
+      - ${REPO:-nps-repo}:/data/repo
+      - ${RAW_PARENT_DIR:-nps-raw}:/data/raw
+      - ${REFCAT_REPO:-nps-refcats}:/data/refcats:ro
+      - munge-etc:/shared-munge
+    ports:
+      - "${NPS_DASHBOARD_PORT:-8080}:8080"
     environment:
       - REPO=/data/repo
       - RAW_PARENT_DIR=/data/raw
       - REFCAT_REPO=/data/refcats
+      - KMP_AFFINITY=disabled
     depends_on:
       - slurmctld
     stdin_open: true
@@ -133,10 +149,13 @@ services:
     command: ["bash"]
 
 volumes:
-  slurm-etc:
+  munge-etc:
   slurm-log:
   shared-home:
   mysql-data:
+  nps-repo:
+  nps-raw:
+  nps-refcats:
 
 networks:
   default:

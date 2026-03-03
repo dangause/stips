@@ -1,0 +1,84 @@
+# HD 189733 b exoplanet transit pipeline
+#
+# Target: HD 189733 (V=7.65, B=8.58)
+# Planet: HD 189733 b — hot Jupiter, P=2.219 d, depth=2.4%, duration=1.84 hr
+# Data: 2025B observing campaign (Christopher Bell, Kevin McLin, Anne Metevier)
+# Night: 20250802 — 400 B-band frames at 4s cadence spanning 4.06 hours
+# Transit window: ingress 05:57 UT, midpoint 06:51 UT, egress 07:46 UT (Aug 3)
+#
+# Usage:
+#   nickel run scripts/config/hd189733/pipeline_transit.yaml
+#   nickel run scripts/config/hd189733/pipeline_transit.yaml --dry-run
+
+# =============================================================================
+# Environment Configuration
+# =============================================================================
+env:
+  REPO: "/Users/dangause/Developer/lick/lsst/data/nickel/hd189733_repo"
+  STACK_DIR: "/Users/dangause/Developer/lick/lsst/lsst_stack"
+  OBS_NICKEL: "/Users/dangause/Developer/lick/lsst/lsst_stack/stack/nickel_processing_suite/packages/obs_nickel"
+  RAW_PARENT_DIR: "/Users/dangause/Developer/lick/data"
+  REFCAT_REPO: "/Users/dangause/Developer/lick/lsst/lsst_stack/stack/refcats"
+
+# Target information
+# HD 189733: RA 20h 00m 43.71s, Dec +22d 42m 39.07s (SIMBAD J2000)
+object: "HD_189733"
+ra: 300.182125
+dec: 22.710853
+
+# B-band only (all 400 transit frames are B-band at 4s cadence)
+bands: ["b"]
+
+# No template needed — transit photometry uses visit-level forced photometry
+# (no DIA, no image subtraction)
+template:
+  type: none
+
+# Science night — single transit event on 20250802
+science:
+  nights:
+    - 20250802
+
+# Pipeline configuration files
+configs:
+  science:
+    calibrate_image: calibrateImage/tuned_configs/dense_strict.py
+    calibrate_image_fallbacks:
+      - calibrateImage/tuned_configs/dense_relaxed.py
+      - calibrateImage/tuned_configs/sparse_strict.py
+      - calibrateImage/tuned_configs/sparse_relaxed.py
+    colorterms: apply_colorterms.py
+
+# Processing options
+options:
+  jobs: 6
+  skip_calibs: false
+  skip_science: false
+  skip_dia: true                    # No DIA needed for transit photometry
+  continue_on_error: true
+  use_fallbacks: true
+
+  # Transit pipeline type
+  pipeline_type: transit
+  forced_phot: true
+  # pipeline_type: transit auto-sets:
+  #   forced_phot_image_type: visit
+  #   transit_search: true
+  #   search_method: bls
+
+  # Transit search parameters
+  # Known: P=2.21858 d, but single-night data can't constrain period
+  # BLS will detect the box-shaped transit dip regardless
+  period_min: 0.5
+  period_max: 5.0
+  transit_duration_min: 0.5         # hours
+  transit_duration_max: 4.0         # hours
+  period_samples: 10000
+
+# Lightcurve configuration
+lightcurve:
+  enabled: true
+  dataset_type: forced_phot_radec   # Visit-level photometry (total flux)
+  min_snr: 0                        # Keep all data points for transit detection
+  y_axis: flux_nJy
+  x_axis: mjd

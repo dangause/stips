@@ -1,0 +1,39 @@
+# Nickel Processing Suite - Custom Pipeline (Pre-built Quantum Graph)
+#
+# Used by BPSExecutor when submitting a pre-built quantum graph.
+# The qgraph was already built by the stage module (science.py, dia.py),
+# so BPS just needs to execute the quanta via the WMS.
+#
+# Variables:
+#   {qgraph_file}   - Path to the pre-built quantum graph file
+#   {output_run}     - Output RUN collection name (must match qgraph)
+#   {repo}           - Butler repository path
+#   {computeSite}    - BPS compute site
+
+# Inherit site-specific settings
+includeConfigs:
+  - ../sites/{computeSite}.yaml
+
+# =============================================================================
+# Payload Configuration
+# =============================================================================
+payload:
+  payloadName: nickel-custom-{night}
+  butlerConfig: "{repo}"
+
+  # CRITICAL: preserve the output_run from the pre-built qgraph.
+  # Without this, ctrl_bps defaults to u/{operator}/{payloadName}/{timestamp}
+  # and calls `pipetask update-graph-run` to rename collections.
+  outputRun: "{output_run}"
+
+# =============================================================================
+# Quantum Graph
+# =============================================================================
+# Use the pre-built qgraph instead of generating from a pipeline YAML.
+qgraphFile: "{qgraph_file}"
+
+# =============================================================================
+# Submit Directory
+# =============================================================================
+# Include pipeline/night/timestamp to avoid FileExistsError on repeated runs.
+submitPath: "{repo}/bps/submit/{pipeline}_{night}_{timestamp}"

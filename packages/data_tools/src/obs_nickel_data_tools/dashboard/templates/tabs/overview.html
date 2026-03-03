@@ -1,0 +1,79 @@
+<!-- Summary cards -->
+<div class="summary-cards">
+  <div class="summary-card">
+    <span class="card-label">Calibs</span>
+    <span class="card-value">{{ run.calibs_ok }}/{{ run.calibs_total }}</span>
+    <div class="card-bar"><div class="card-bar-fill green" style="width: {{ (run.calibs_ok / run.calibs_total * 100) if run.calibs_total else 0 }}%"></div></div>
+  </div>
+  <div class="summary-card">
+    <span class="card-label">Science</span>
+    <span class="card-value">{{ run.science_ok }}/{{ run.science_total }}</span>
+    <div class="card-bar"><div class="card-bar-fill green" style="width: {{ (run.science_ok / run.science_total * 100) if run.science_total else 0 }}%"></div></div>
+  </div>
+  <div class="summary-card">
+    <span class="card-label">DIA</span>
+    <span class="card-value">{{ run.dia_ok }}/{{ run.dia_total }}</span>
+    <div class="card-bar"><div class="card-bar-fill green" style="width: {{ (run.dia_ok / run.dia_total * 100) if run.dia_total else 0 }}%"></div></div>
+  </div>
+  <div class="summary-card">
+    <span class="card-label">FPhot</span>
+    <span class="card-value">{{ run.fphot_ok }}/{{ run.fphot_total }}</span>
+    <div class="card-bar"><div class="card-bar-fill green" style="width: {{ (run.fphot_ok / run.fphot_total * 100) if run.fphot_total else 0 }}%"></div></div>
+  </div>
+</div>
+
+<!-- Night grid -->
+<div class="detail-section"
+     {% if run.status.value == 'running' %}
+     hx-ext="sse"
+     sse-connect="/api/events/{{ run.run_id }}"
+     {% endif %}>
+  <h3>Nights ({{ run.nights | length }})</h3>
+  <div id="night-grid" {% if run.status.value == 'running' %}sse-swap="night-update"{% endif %}>
+    {% include 'partials/night_grid.html' %}
+  </div>
+</div>
+
+<!-- Log viewer -->
+<div class="log-section">
+  <div class="log-header">
+    <h3>Pipeline Log</h3>
+    {% if run.status.value == 'running' %}
+    <button id="auto-scroll-toggle" class="toggle-btn active" onclick="toggleAutoScroll()">Auto-scroll</button>
+    {% endif %}
+  </div>
+  <div class="log-viewer" id="log-viewer">
+    <pre id="log-content">{{ initial_log }}</pre>
+  </div>
+  {% if run.status.value == 'running' %}
+  <div id="log-append" sse-swap="log-line" hx-swap="beforeend" hx-target="#log-content"></div>
+  {% endif %}
+</div>
+
+<!-- BPS panel (conditional) -->
+{% if run.is_bps %}
+<div class="bps-section">
+  <h3>Slurm Jobs ({{ run.bps_site }})</h3>
+  <div id="bps-panel" {% if run.status.value == 'running' %}sse-swap="bps-update"{% endif %}>
+    <p class="text-muted">Waiting for job data...</p>
+  </div>
+</div>
+{% endif %}
+
+<script>
+let autoScroll = true;
+function toggleAutoScroll() {
+  autoScroll = !autoScroll;
+  const btn = document.getElementById('auto-scroll-toggle');
+  if (btn) btn.classList.toggle('active', autoScroll);
+}
+const logViewer = document.getElementById('log-viewer');
+if (logViewer) {
+  const observer = new MutationObserver(() => {
+    if (autoScroll) logViewer.scrollTop = logViewer.scrollHeight;
+  });
+  const logContent = document.getElementById('log-content');
+  if (logContent) observer.observe(logContent, { childList: true, characterData: true, subtree: true });
+  logViewer.scrollTop = logViewer.scrollHeight;
+}
+</script>

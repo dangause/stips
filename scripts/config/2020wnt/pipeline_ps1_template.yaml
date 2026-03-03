@@ -101,6 +101,7 @@ configs:
 # Processing options
 options:
   jobs: 6
+  concurrent_nights: 3       # Process up to 3 nights in parallel
   skip_calibs: false
   skip_science: false
   skip_dia: false

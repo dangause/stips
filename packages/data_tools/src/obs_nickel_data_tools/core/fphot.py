@@ -16,7 +16,7 @@ from obs_nickel_data_tools.core.pipeline import (
     parse_butler_query_output,
     validate_night,
 )
-from obs_nickel_data_tools.core.stack import run_butler_query, run_pipetask
+from obs_nickel_data_tools.core.stack import run_butler_query
 
 if TYPE_CHECKING:
     from obs_nickel_data_tools.core.config import Config
@@ -104,6 +104,7 @@ def run(
     image_type: str = "diffim",
     jobs: int = 1,
     log_file: Path | None = None,
+    executor=None,
 ) -> ForcedPhotResult:
     """Run forced photometry at specified coordinates.
 
@@ -123,6 +124,11 @@ def run(
     Returns:
         ForcedPhotResult with output collections
     """
+    from obs_nickel_data_tools.core.executor import LocalExecutor
+
+    if executor is None:
+        executor = LocalExecutor()
+
     night = validate_night(night)
     run_ts = generate_run_timestamp()
     repo = str(config.repo)
@@ -186,7 +192,7 @@ def run(
             log.info(f"  Input: {visit_input}")
             log.info(f"  Output: {output_coll}")
 
-            result = run_pipetask(
+            result = executor.run_pipetask(
                 [
                     "run",
                     "-b",
@@ -254,7 +260,7 @@ def run(
                 log.info(f"  Input: {input_colls}")
                 log.info(f"  Output: {output_coll}")
 
-                result = run_pipetask(
+                result = executor.run_pipetask(
                     [
                         "run",
                         "-b",

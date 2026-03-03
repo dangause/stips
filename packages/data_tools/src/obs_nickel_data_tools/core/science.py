@@ -26,7 +26,6 @@ from obs_nickel_data_tools.core.pipeline import (
 from obs_nickel_data_tools.core.stack import (
     run_butler,
     run_butler_query,
-    run_pipetask,
 )
 
 if TYPE_CHECKING:
@@ -191,6 +190,7 @@ def run(
     target_ra: float | None = None,
     target_dec: float | None = None,
     log_file: Path | None = None,
+    executor=None,
 ) -> ScienceResult:
     """Run science processing for a night.
 
@@ -217,6 +217,11 @@ def run(
     Returns:
         ScienceResult with collection names and status
     """
+    from obs_nickel_data_tools.core.executor import LocalExecutor
+
+    if executor is None:
+        executor = LocalExecutor()
+
     night = validate_night(night)
     cols = CollectionNames(night)
     repo = str(config.repo)
@@ -440,6 +445,9 @@ def run(
                 data_query,
             ]
 
+            if executor.needs_datastore_records:
+                qgraph_args.append("--qgraph-datastore-records")
+
             # For fallback attempts, build a qgraph that excludes quanta
             # whose outputs already exist in any prior successful RUN.
             # --skip-existing-in filters at graph-build time based on _metadata
@@ -455,7 +463,7 @@ def run(
                 qgraph_args.append("--clobber-outputs")
 
             # Build quantum graph
-            run_pipetask(qgraph_args, config, log_file=log_file)
+            executor.run_pipetask(qgraph_args, config, log_file=log_file)
 
             # Build run arguments
             run_args = [
@@ -464,6 +472,8 @@ def run(
                 repo,
                 "-g",
                 str(qg_science),
+                "--output-run",
+                output_run,
                 "-j",
                 str(jobs),
                 "--register-dataset-types",
@@ -479,12 +489,13 @@ def run(
                     pass
 
             # Run science processing
-            result = run_pipetask(
+            result = executor.run_pipetask(
                 run_args,
                 config,
                 capture_output=True,
                 check=False,
                 log_file=log_file,
+                output_run=output_run,
             )
 
             # Parse actual quanta counts from output (or log file if --no-log-tty)
@@ -692,7 +703,37 @@ def run(
         # collection so downstream consumers (DIA, fphot) see a unified view.
         # Order matters: later runs (fallbacks) should be searched first so
         # their outputs take precedence over partial/failed primary outputs.
-        chain_members = list(reversed(successful_runs))
+        #
+        # Verify each RUN collection actually exists in the Butler before
+        # chaining. BPS may report success even when all quanta failed
+        # (no outputs written = no RUN collection created).
+        verified_runs: list[str] = []
+        for run_name in successful_runs:
+            result = run_butler_query(
+                ["query-collections", repo, run_name],
+                config,
+                check=False,
+            )
+            if result.returncode == 0 and run_name in (result.stdout or ""):
+                verified_runs.append(run_name)
+            else:
+                log.warning(
+                    f"RUN collection {run_name} does not exist in Butler "
+                    "(all quanta may have failed) — skipping"
+                )
+
+        if not verified_runs:
+            return ScienceResult(
+                success=False,
+                night=night,
+                science_run=cols.science_parent,
+                coadd_run=None,
+                error="No RUN collections were created (all quanta failed)",
+                quanta_succeeded=0,
+                quanta_failed=total_failed,
+            )
+
+        chain_members = list(reversed(verified_runs))
         run_butler(
             [
                 "collection-chain",
@@ -711,7 +752,7 @@ def run(
             # Build coadds
             qg_coadd = qg_dir / f"coadds_{night}_{cols.run_ts}.qg"
 
-            run_pipetask(
+            executor.run_pipetask(
                 [
                     "qgraph",
                     "-b",
@@ -728,12 +769,17 @@ def run(
                     str(qg_coadd),
                     "-d",
                     f"instrument='Nickel' AND skymap='{SKYMAP_NAME}'",
-                ],
+                ]
+                + (
+                    ["--qgraph-datastore-records"]
+                    if executor.needs_datastore_records
+                    else []
+                ),
                 config,
                 log_file=log_file,
             )
 
-            run_pipetask(
+            executor.run_pipetask(
                 [
                     "run",
                     "-b",
@@ -746,6 +792,7 @@ def run(
                 ],
                 config,
                 log_file=log_file,
+                output_run=cols.coadd_run,
             )
 
             run_butler(

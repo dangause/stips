@@ -94,12 +94,17 @@ options:
   pipeline_type: variable
   forced_phot: true
   forced_phot_image_type: both    # Measure on both visit images AND difference images
-  lightcurve: true
-  lightcurve_dataset_type: forced_phot_diffim_radec
-  lightcurve_min_snr: 0           # Keep all detections for period search
 
   # Period search configuration
   period_search: true
   period_min: 0.1                 # Minimum search period (days)
   period_max: 100.0               # Maximum search period (days)
   period_samples: 10000           # Frequency grid resolution
+
+# Lightcurve configuration
+lightcurve:
+  enabled: true
+  dataset_type: forced_phot_diffim_radec
+  min_snr: 0                              # Keep all detections for period search
+  y_axis: flux_nJy
+  x_axis: mjd

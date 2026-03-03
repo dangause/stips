@@ -1,0 +1,105 @@
+# Pipeline configuration for AC Andromedae (variable star campaign)
+#
+# Usage:
+#   nickel run scripts/config/ac_and/pipeline.yaml
+#   nickel run scripts/config/ac_and/pipeline.yaml --dry-run
+#
+# AC Andromedae is a triple-mode high-amplitude Delta Scuti (HADS) star,
+# sometimes classified as an anomalous RR Lyrae. It pulsates simultaneously
+# in three radial modes:
+#   - Fundamental (F):       P = 0.711242 days (17.1 hours)
+#   - First overtone (1O):   P = 0.525127 days (12.6 hours)
+#   - Second overtone (2O):  P = 0.421069 days (10.1 hours)
+#
+# V magnitude range: 10.77 - 11.9 (amplitude ~1.13 mag)
+# Spectral type: A9 (metal-strong)
+#
+# Data: Christopher Bell, Lick Observatory 2024B semester
+#   - 20240905: AC And + DY Peg (shared night)
+#   - 20240906: AC And + CY Aqr (shared night)
+#   - 20241030: AC And + DY Peg (split observations, gaps expected)
+#
+# Pipeline steps:
+#   0. Bootstrap repository (automatic if needed)
+#   1. Build coadd templates from all 3 nights (median -> mean flux reference)
+#   2. Run calibrations per night
+#   3. Run science processing per night
+#   4. Run DIA per night per band (measures deviation from mean flux)
+#   5. Run forced photometry at AC And coordinates (visit + diffim)
+#   6. Extract combined multi-band lightcurve
+#   7. Run Lomb-Scargle period search and phase folding
+
+# =============================================================================
+# Environment Configuration
+# =============================================================================
+env:
+  REPO: "/Users/dangause/Developer/lick/lsst/data/nickel/ac_and_repo"
+  STACK_DIR: "/Users/dangause/Developer/lick/lsst/lsst_stack"
+  OBS_NICKEL: "/Users/dangause/Developer/lick/lsst/lsst_stack/stack/nickel_processing_suite/packages/obs_nickel"
+  RAW_PARENT_DIR: "/Users/dangause/Developer/lick/data"
+  REFCAT_REPO: "/Users/dangause/Developer/lick/lsst/lsst_stack/stack/refcats"
+  CP_PIPE_DIR: "${STACK_DIR}/cp_pipe"
+
+# Target information
+# AC Andromedae (SIMBAD ICRS J2000)
+# RA = 23:18:02.346, Dec = +48:46:58.34
+object: "AC_Andromedae"
+ra: 349.509775
+dec: 48.782872
+
+# Bands to process
+# B and V are standard for pulsating variable photometry.
+# Include R/I if Christopher observed in those bands too.
+# The pipeline auto-filters to bands present in the data.
+bands: ["v"]
+
+# No template section - using visit-level forced photometry for period search.
+# Coadd DIA templates are not needed since V-band visit photometry
+# captures the ~1.13 mag pulsation amplitude directly.
+# If DIA is wanted later, add template section with type: coadd.
+
+# Science nights - all 3 observing epochs
+science:
+  nights:
+    - 20240905
+    - 20240906
+    - 20241030
+
+# Pipeline configuration files (paths relative to obs_nickel/configs/)
+configs:
+  science:
+    calibrate_image: calibrateImage/tuned_configs/dense_strict.py
+    calibrate_image_fallbacks:
+      - calibrateImage/tuned_configs/dense_relaxed.py
+      - calibrateImage/tuned_configs/sparse_strict.py
+      - calibrateImage/tuned_configs/sparse_relaxed.py
+    colorterms: apply_colorterms.py
+
+# Processing options
+options:
+  jobs: 6
+  skip_calibs: false
+  skip_science: false
+  skip_dia: true                  # Visit photometry sufficient for period search
+  continue_on_error: true
+  use_fallbacks: true
+
+  # Variable star pipeline type
+  pipeline_type: variable
+  forced_phot: true
+  forced_phot_image_type: visit   # Visit-level total flux
+
+  # Period search configuration
+  # Search range covers all 3 known modes plus harmonics
+  period_search: true
+  period_min: 0.05                # Well below 2nd overtone (0.421 days)
+  period_max: 1.5                 # Well above fundamental (0.711 days)
+  period_samples: 50000           # High resolution for multi-mode detection
+
+# Lightcurve configuration
+lightcurve:
+  enabled: true
+  dataset_type: forced_phot_radec   # Visit-level total flux
+  min_snr: 0                              # Keep all detections for period search
+  y_axis: flux_nJy
+  x_axis: mjd

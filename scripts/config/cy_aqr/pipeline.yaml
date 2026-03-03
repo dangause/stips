@@ -1,0 +1,103 @@
+# Pipeline configuration for CY Aquarii (variable star campaign)
+#
+# Usage:
+#   nickel run scripts/config/cy_aqr/pipeline.yaml
+#   nickel run scripts/config/cy_aqr/pipeline.yaml --dry-run
+#
+# CY Aquarii is an SX Phoenicis (SXPHE) Population II blue straggler,
+# pulsating in the fundamental mode. Recently identified as a triple system.
+#   - Period: P = 0.061039 days (88 minutes = 1 hour 28 minutes)
+#   - One of the shortest-period SX Phe stars (~16.4 cycles per 24 hours)
+#   - Extremely rapid rise from minimum to maximum (~20 minutes)
+#
+# V magnitude range: 10.42 - 11.26 (amplitude ~0.74 mag)
+# B amplitude: ~0.88 mag
+# Spectral type: A2-A8 (varies with pulsation phase)
+#
+# Data: Christopher Bell, Lick Observatory 2024B semester
+#   - 20240906: CY Aqr + AC And (shared night) -- ONLY NIGHT
+#
+# IMPORTANT: With only 1 observing night, we cannot build a separate
+# coadd template for DIA. Instead, we skip DIA and use visit-level
+# forced photometry (total flux on calibrated science frames).
+# This is sufficient for period determination since the ~0.74 mag
+# amplitude is easily detected in visit photometry.
+#
+# Pipeline steps:
+#   0. Bootstrap repository (automatic if needed)
+#   1. (skipped - no template needed)
+#   2. Run calibrations
+#   3. Run science processing
+#   4. (skipped - no DIA)
+#   5. Run forced photometry at CY Aqr coordinates (visit images)
+#   6. Extract lightcurve (flux vs time)
+#   7. Run Lomb-Scargle period search and phase folding
+
+# =============================================================================
+# Environment Configuration
+# =============================================================================
+env:
+  REPO: "/Users/dangause/Developer/lick/lsst/data/nickel/cy_aqr_repo"
+  STACK_DIR: "/Users/dangause/Developer/lick/lsst/lsst_stack"
+  OBS_NICKEL: "/Users/dangause/Developer/lick/lsst/lsst_stack/stack/nickel_processing_suite/packages/obs_nickel"
+  RAW_PARENT_DIR: "/Users/dangause/Developer/lick/data"
+  REFCAT_REPO: "/Users/dangause/Developer/lick/lsst/lsst_stack/stack/refcats"
+  CP_PIPE_DIR: "${STACK_DIR}/cp_pipe"
+
+# Target information
+# CY Aquarii (SIMBAD ICRS J2000)
+# RA = 22:37:47.852, Dec = +01:32:03.81
+object: "CY_Aquarii"
+ra: 339.449384
+dec: 1.534391
+
+# Bands to process
+bands: ["v"]
+
+# No template section - DIA is skipped for this single-night target.
+# If additional nights are obtained later, add a template section with
+# type: coadd and re-enable DIA (skip_dia: false).
+
+# Science nights
+science:
+  nights:
+    - 20240906
+
+# Pipeline configuration files (paths relative to obs_nickel/configs/)
+configs:
+  science:
+    calibrate_image: calibrateImage/tuned_configs/dense_strict.py
+    calibrate_image_fallbacks:
+      - calibrateImage/tuned_configs/dense_relaxed.py
+      - calibrateImage/tuned_configs/sparse_strict.py
+      - calibrateImage/tuned_configs/sparse_relaxed.py
+    colorterms: apply_colorterms.py
+
+# Processing options
+options:
+  jobs: 6
+  skip_calibs: false
+  skip_science: false
+  skip_dia: true                  # No template available (single night)
+  continue_on_error: true
+  use_fallbacks: true
+
+  # Variable star pipeline type
+  pipeline_type: variable
+  forced_phot: true
+  forced_phot_image_type: visit   # Visit photometry only (no DIA)
+
+  # Period search configuration
+  # CY Aqr's 88-minute period is extremely short
+  period_search: true
+  period_min: 0.03                # ~43 minutes
+  period_max: 0.2                 # ~4.8 hours
+  period_samples: 50000           # High resolution needed for short periods
+
+# Lightcurve configuration
+lightcurve:
+  enabled: true
+  dataset_type: forced_phot_radec   # Visit-level total flux
+  min_snr: 0                              # Keep all detections for period search
+  y_axis: flux_nJy
+  x_axis: mjd

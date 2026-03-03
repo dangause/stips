@@ -584,16 +584,22 @@ def main():
             mag = np.nan
             mag_err = np.nan
 
-            _DIFFIM_DATASET_TYPES = {
+            # Dataset types where flux is already calibrated to nJy:
+            # - DIA types: measured on difference images (PVI in nJy)
+            # - forced_phot_radec: measured on preliminary_visit_image (nJy)
+            # For these, DO NOT multiply by initial_photoCalib_detector
+            # (that factor was already applied to image pixels by calibrateImage).
+            _CALIBRATED_DATASET_TYPES = {
                 "forced_phot_diffim_radec",
+                "forced_phot_radec",
                 "dia_source_unfiltered",
                 "dia_source",
                 "forced_diff",
                 "forced_diff_radec",
             }
-            is_diffim = args.dataset_type in _DIFFIM_DATASET_TYPES
+            is_calibrated = args.dataset_type in _CALIBRATED_DATASET_TYPES
 
-            if is_diffim:
+            if is_calibrated:
                 # Flux is already in nJy — use directly
                 flux_nJy = flux
                 flux_nJy_err = flux_err

@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}NPS Dashboard - Runs{% endblock %}
+{% block content %}
+<h1>Pipeline Runs</h1>
+
+{% if not runs %}
+<p class="empty-state">No pipeline runs found in <code>{{ logs_dir }}</code></p>
+{% else %}
+<table class="run-table">
+    <thead>
+        <tr>
+            <th>Run ID</th>
+            <th>Object</th>
+            <th>Started</th>
+            <th>Duration</th>
+            <th>Phase</th>
+            <th>Calibs</th>
+            <th>Science</th>
+            <th>DIA</th>
+            <th>FPhot</th>
+            <th>Status</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for run in runs %}
+        <tr class="run-row {% if run.status.value == 'running' %}pulse{% endif %}"
+            onclick="window.location='/run/{{ run.run_id }}'">
+            <td class="mono">{{ run.run_id }}</td>
+            <td>{{ run.object_name or '-' }}</td>
+            <td>{{ run.started[:19] if run.started else '-' }}</td>
+            <td>{{ run.duration or '-' }}</td>
+            <td><span class="phase-badge">{{ run.current_phase.value }}</span></td>
+            <td>{{ run.calibs_ok }}/{{ run.calibs_total }}</td>
+            <td>{{ run.science_ok }}/{{ run.science_total }}</td>
+            <td>{{ run.dia_ok }}/{{ run.dia_total }}</td>
+            <td>{{ run.fphot_ok }}/{{ run.fphot_total }}</td>
+            <td><span class="status-badge {{ run.status_class }}">{{ run.status.value }}</span></td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endif %}
+{% endblock %}
