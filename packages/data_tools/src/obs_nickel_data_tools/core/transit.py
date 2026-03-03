@@ -296,8 +296,26 @@ def _make_transit_model(
     return {"phase": phase, "model_flux": model_flux}
 
 
-def _save_results(result: TransitResult, output_dir: Path) -> None:
-    """Write JSON summary, BLS periodogram PNG, and phase-folded transit PNG.
+def _flux_to_mag(
+    flux: np.ndarray, flux_err: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
+    """Convert nJy flux to AB magnitude, returning NaN for non-positive flux."""
+    mag = np.full_like(flux, np.nan)
+    mag_err = np.full_like(flux_err, np.nan)
+    pos = flux > 0
+    mag[pos] = -2.5 * np.log10(flux[pos]) + 31.4
+    mag_err[pos] = 2.5 / np.log(10) * flux_err[pos] / flux[pos]
+    return mag, mag_err
+
+
+def _save_results(result: TransitResult, output_dir: Path, df: pd.DataFrame) -> None:
+    """Write JSON summary, plots (BLS periodogram, lightcurve, phase-folded).
+
+    Produces output files:
+    - transit_results.json: best period, depth, duration, SNR
+    - bls_periodogram.png: BLS power vs period
+    - lightcurve.png: non-folded time series (flux + apparent mag)
+    - phase_folded_transit.png: phase-folded at best period (normalized flux + mag)
 
     Parameters
     ----------
@@ -305,6 +323,8 @@ def _save_results(result: TransitResult, output_dir: Path) -> None:
         Completed transit result (phase_folded and transit_model must be populated).
     output_dir : Path
         Destination directory (created if absent).
+    df : pd.DataFrame
+        Lightcurve DataFrame with mjd, band, flux, flux_err columns.
     """
     import matplotlib
 
@@ -330,6 +350,53 @@ def _save_results(result: TransitResult, output_dir: Path) -> None:
         json.dump(summary, fh, indent=2)
     log.info("Transit results written to %s", json_path)
 
+    # --- Non-folded lightcurve (flux + apparent mag) ------------------------
+    fig_lc, (ax_flux, ax_mag) = plt.subplots(2, 1, figsize=(10, 7), sharex=True)
+    for band in sorted(df["band"].unique()):
+        mask = df["band"] == band
+        color = _BAND_COLORS.get(band, "black")
+        bdf = df[mask]
+        mjd = bdf["mjd"].to_numpy(dtype=float)
+        flux = bdf["flux"].to_numpy(dtype=float)
+        flux_err = bdf["flux_err"].to_numpy(dtype=float)
+        mag, mag_err = _flux_to_mag(flux, flux_err)
+
+        ax_flux.errorbar(
+            mjd,
+            flux,
+            yerr=flux_err,
+            fmt="o",
+            color=color,
+            label=f"{band.upper()}-band",
+            markersize=3,
+            capsize=1,
+            alpha=0.6,
+        )
+        valid = np.isfinite(mag)
+        ax_mag.errorbar(
+            mjd[valid],
+            mag[valid],
+            yerr=mag_err[valid],
+            fmt="o",
+            color=color,
+            label=f"{band.upper()}-band",
+            markersize=3,
+            capsize=1,
+            alpha=0.6,
+        )
+
+    ax_flux.set_ylabel("Flux (nJy)")
+    ax_flux.legend(loc="best")
+    ax_flux.set_title("Lightcurve (non-folded)")
+    ax_mag.set_ylabel("Apparent Magnitude")
+    ax_mag.set_xlabel("MJD")
+    ax_mag.invert_yaxis()
+    fig_lc.tight_layout()
+    lc_path = output_dir / "lightcurve.png"
+    fig_lc.savefig(lc_path)
+    plt.close(fig_lc)
+    log.info("Lightcurve plot saved to %s", lc_path)
+
     # --- BLS Periodogram ----------------------------------------------------
     fig, ax = plt.subplots(figsize=(8, 4))
     ax.plot(result.periods, result.powers, lw=0.8, color="steelblue")
@@ -349,15 +416,38 @@ def _save_results(result: TransitResult, output_dir: Path) -> None:
     plt.close(fig)
     log.info("BLS periodogram saved to %s", output_dir / "bls_periodogram.png")
 
-    # --- Phase-folded transit -----------------------------------------------
-    fig2, ax2 = plt.subplots(figsize=(8, 4))
+    # --- Phase-folded transit (normalized flux + apparent mag) ---------------
+    fig2, (ax_pf, ax_pm) = plt.subplots(2, 1, figsize=(10, 7), sharex=True)
     for band in sorted(result.phase_folded.keys()):
         data = result.phase_folded[band]
         color = _BAND_COLORS.get(band, "black")
-        ax2.errorbar(
-            data["phase"],
-            data["flux_norm"],
-            yerr=data["flux_err"],
+        phase = data["phase"]
+        flux_norm = data["flux_norm"]
+        flux_err = data["flux_err"]
+
+        ax_pf.errorbar(
+            phase,
+            flux_norm,
+            yerr=flux_err,
+            fmt="o",
+            color=color,
+            label=f"{band.upper()}-band",
+            markersize=4,
+            capsize=2,
+            alpha=0.7,
+        )
+        # Convert normalized flux to relative magnitude
+        # norm_flux ~1.0 → mag ~0.0 (baseline), transit dip → positive mag change
+        rel_mag = np.full_like(flux_norm, np.nan)
+        rel_mag_err = np.full_like(flux_err, np.nan)
+        pos = flux_norm > 0
+        rel_mag[pos] = -2.5 * np.log10(flux_norm[pos])
+        rel_mag_err[pos] = 2.5 / np.log(10) * flux_err[pos] / flux_norm[pos]
+        valid = np.isfinite(rel_mag)
+        ax_pm.errorbar(
+            phase[valid],
+            rel_mag[valid],
+            yerr=rel_mag_err[valid],
             fmt="o",
             color=color,
             label=f"{band.upper()}-band",
@@ -367,7 +457,7 @@ def _save_results(result: TransitResult, output_dir: Path) -> None:
         )
     # Overlay transit model
     if result.transit_model:
-        ax2.plot(
+        ax_pf.plot(
             result.transit_model["phase"],
             result.transit_model["model_flux"],
             color="black",
@@ -375,14 +465,28 @@ def _save_results(result: TransitResult, output_dir: Path) -> None:
             alpha=0.8,
             label="Model",
         )
-    ax2.set_xlabel("Orbital Phase")
-    ax2.set_ylabel("Normalized Flux")
-    ax2.set_title(
+        # Model in magnitude space
+        model_mag = -2.5 * np.log10(
+            np.clip(result.transit_model["model_flux"], 1e-10, None)
+        )
+        ax_pm.plot(
+            result.transit_model["phase"],
+            model_mag,
+            color="black",
+            lw=2,
+            alpha=0.8,
+            label="Model",
+        )
+    ax_pf.set_ylabel("Normalized Flux")
+    ax_pf.legend(loc="best")
+    ax_pf.set_title(
         f"P = {result.best_period:.4f} d, "
         f"depth = {result.depth * 100:.3f}%, "
         f"dur = {result.duration:.1f} h"
     )
-    ax2.legend(loc="best")
+    ax_pm.set_ylabel("Relative Magnitude")
+    ax_pm.set_xlabel("Orbital Phase")
+    ax_pm.invert_yaxis()
     fig2.tight_layout()
     fig2.savefig(output_dir / "phase_folded_transit.png")
     plt.close(fig2)
@@ -492,6 +596,6 @@ def run(
     )
 
     log.info("Saving results to %s", output_dir)
-    _save_results(result, output_dir)
+    _save_results(result, output_dir, df)
 
     return result

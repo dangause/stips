@@ -396,7 +396,9 @@ class TestOutputGeneration:
 
         result = self._make_result(tmp_path, sample_transit_csv)
         out_dir = tmp_path / "out"
-        transit_mod._save_results(result, out_dir)
+        csv_path, *_ = sample_transit_csv
+        df = transit_mod._read_lightcurve(csv_path)
+        transit_mod._save_results(result, out_dir, df)
         json_path = out_dir / "transit_results.json"
         assert json_path.exists()
         data = json_mod.loads(json_path.read_text())
@@ -406,13 +408,17 @@ class TestOutputGeneration:
     def test_save_creates_bls_periodogram(self, tmp_path, sample_transit_csv):
         result = self._make_result(tmp_path, sample_transit_csv)
         out_dir = tmp_path / "out2"
-        transit_mod._save_results(result, out_dir)
+        csv_path, *_ = sample_transit_csv
+        df = transit_mod._read_lightcurve(csv_path)
+        transit_mod._save_results(result, out_dir, df)
         assert (out_dir / "bls_periodogram.png").exists()
 
     def test_save_creates_phase_folded_plot(self, tmp_path, sample_transit_csv):
         result = self._make_result(tmp_path, sample_transit_csv)
         out_dir = tmp_path / "out3"
-        transit_mod._save_results(result, out_dir)
+        csv_path, *_ = sample_transit_csv
+        df = transit_mod._read_lightcurve(csv_path)
+        transit_mod._save_results(result, out_dir, df)
         assert (out_dir / "phase_folded_transit.png").exists()
 
 

@@ -1531,6 +1531,78 @@ def _run_transit_step(
         log.info("  [DRY RUN] transit.run()")
 
 
+def _run_differential_phot_step(
+    all_nights: list[str],
+    run_cfg: RunConfig,
+    config: "Config",
+    result: RunResult,
+    dry_run: bool,
+) -> None:
+    """Run differential aperture photometry for transit targets.
+
+    For bright stars where PSF-fitting forced photometry is unreliable,
+    this step performs aperture photometry on preliminary visit images
+    and computes differential flux relative to comparison stars.
+    """
+    from obs_nickel_data_tools.pipeline_tools.differential_phot import (
+        run_differential_phot,
+    )
+
+    repo = config.repo
+
+    # Discover the science collection directory
+    science_coll = None
+    for night in all_nights:
+        coll_parent = Path(repo) / "Nickel" / "runs" / night / "processCcd"
+        if coll_parent.exists():
+            # Take the most recent timestamp directory
+            ts_dirs = sorted(
+                [d for d in coll_parent.iterdir() if d.is_dir()], reverse=True
+            )
+            if ts_dirs:
+                rel_path = ts_dirs[0].relative_to(Path(repo))
+                science_coll = str(rel_path)
+                break
+
+    if not science_coll:
+        log.warning("No science collection found, skipping differential photometry")
+        return
+
+    log.info(f"Running differential aperture photometry on {science_coll}")
+
+    # Determine output path
+    lc_dir = Path(repo) / "lightcurves"
+    lc_dir.mkdir(parents=True, exist_ok=True)
+    output_csv = lc_dir / f"lightcurve_{run_cfg.object_name}_differential.csv"
+
+    bands = run_cfg.bands
+    band_filter = bands[0] if len(bands) == 1 else None
+
+    if not dry_run:
+        _get_step_log_file("differential_phot")
+        try:
+            df = run_differential_phot(
+                repo=repo,
+                collection=science_coll,
+                ra=run_cfg.ra,
+                dec=run_cfg.dec,
+                aperture_radius=20,
+                n_comparisons=6,
+                output=str(output_csv),
+                band_filter=band_filter,
+                make_plots=True,
+            )
+            result.lightcurve_path = str(output_csv)
+            log.info(
+                f"  Differential photometry: {len(df)} measurements, "
+                f"RMS={df['norm_flux'].std()*100:.2f}%"
+            )
+        except Exception as e:
+            log.error(f"Differential photometry failed: {e}")
+    else:
+        log.info("  [DRY RUN] differential_phot.run_differential_phot()")
+
+
 def _discover_fphot_collections(
     all_nights: list[str],
     run_cfg: RunConfig,
@@ -1796,6 +1868,11 @@ def run(
     if run_cfg.lc_config.enabled:
         log.info("Extracting lightcurve...")
         _run_lightcurve_step(all_nights, run_cfg, config, result, dry_run)
+
+    # Step 6b: Differential aperture photometry (transit targets)
+    if run_cfg.pipeline_type == "transit":
+        log.info("Running differential aperture photometry...")
+        _run_differential_phot_step(all_nights, run_cfg, config, result, dry_run)
 
     # Step 7a: Period analysis (variable stars)
     if run_cfg.period_search:
