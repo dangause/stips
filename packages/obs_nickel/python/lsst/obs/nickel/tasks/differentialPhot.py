@@ -198,24 +198,33 @@ def _process_catalogs(
     if not catalogs:
         return Table()
 
-    # Step 1: Pick reference visit (most sources)
-    ref_vid, ref_cat = max(catalogs, key=lambda x: len(x[1]))
+    # Step 1: Pick reference visit — try candidates sorted by source count
+    # (the visit with the most sources may have a bad WCS or be from a
+    # fallback config that doesn't include the target)
+    sorted_catalogs = sorted(catalogs, key=lambda x: len(x[1]), reverse=True)
 
-    # Step 2: Find target in reference catalog
-    target_idx = _find_target(ref_cat, target_ra, target_dec, match_radius)
+    ref_cat = target_idx = None
+    comp_indices = []
+    for _, cand_cat in sorted_catalogs[:20]:  # Try top 20
+        ti = _find_target(cand_cat, target_ra, target_dec, match_radius)
+        if ti is None:
+            continue
+        ci = _select_comparisons(
+            cand_cat,
+            ti,
+            ap_col,
+            n_max=n_comparisons * 3,
+            min_rel_mag=min_rel_mag,
+            max_rel_mag=max_rel_mag,
+        )
+        if len(ci) >= min_comparisons:
+            ref_cat, target_idx, comp_indices = cand_cat, ti, ci
+            break
+
     if target_idx is None:
-        _LOG.warning("Target not found in reference visit %s", ref_vid)
+        _LOG.warning("Target not found in any of the top reference visits")
         return Table()
 
-    # Step 3: Select comparison candidates from reference visit
-    comp_indices = _select_comparisons(
-        ref_cat,
-        target_idx,
-        ap_col,
-        n_max=n_comparisons * 3,  # Over-select, prune by stability later
-        min_rel_mag=min_rel_mag,
-        max_rel_mag=max_rel_mag,
-    )
     if len(comp_indices) < min_comparisons:
         _LOG.warning(
             "Only %d comparisons found (need %d)", len(comp_indices), min_comparisons
@@ -355,7 +364,7 @@ if _HAS_LSST:
         starCatalogs = ct.Input(
             doc="Star catalogs from calibrateImage with aperture fluxes.",
             name="{starCatalogName}",
-            storageClass="SourceCatalog",
+            storageClass="ArrowAstropy",
             dimensions=("instrument", "visit", "detector"),
             multiple=True,
             deferLoad=True,
@@ -416,8 +425,9 @@ if _HAS_LSST:
         )
         matchRadius = pexConfig.Field(
             dtype=float,
-            default=2.0,
-            doc="Cross-match radius in arcseconds.",
+            default=10.0,
+            doc="Cross-match radius in arcseconds. Nickel WCS residuals "
+            "can be 5-7 arcsec, so the default is set generously.",
         )
         minRelMag = pexConfig.Field(
             dtype=float,
@@ -490,24 +500,24 @@ if _HAS_LSST:
                 except Exception:
                     _LOG.warning("Failed to load catalog for visit %s", visit_id)
                     continue
-                # Convert SourceCatalog to list of dicts for processing
+                # Convert astropy Table to list of dicts for processing
                 ap_col = f"base_CircularApertureFlux_{self._ap_key}_instFlux"
                 ap_err_col = f"base_CircularApertureFlux_{self._ap_key}_instFluxErr"
                 records = []
-                for rec in cat:
+                for row in cat:
                     records.append(
                         {
-                            "coord_ra": rec.get("coord_ra"),
-                            "coord_dec": rec.get("coord_dec"),
-                            ap_col: rec.get(ap_col),
-                            ap_err_col: rec.get(ap_err_col),
-                            "base_PixelFlags_flag_saturatedCenter": rec.get(
+                            "coord_ra": row["coord_ra"],
+                            "coord_dec": row["coord_dec"],
+                            ap_col: row[ap_col],
+                            ap_err_col: row[ap_err_col],
+                            "base_PixelFlags_flag_saturatedCenter": row[
                                 "base_PixelFlags_flag_saturatedCenter"
-                            ),
-                            "base_PixelFlags_flag_edge": rec.get(
+                            ],
+                            "base_PixelFlags_flag_edge": row[
                                 "base_PixelFlags_flag_edge"
-                            ),
-                            "deblend_nChild": rec.get("deblend_nChild"),
+                            ],
+                            "deblend_nChild": row["deblend_nChild"],
                         }
                     )
                 catalogs.append((visit_id, records))
