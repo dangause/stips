@@ -437,7 +437,6 @@ def run(
                 output_run,
                 "--save-qgraph",
                 str(qg_science),
-                "--qgraph-datastore-records",
                 "--config-file",
                 f"calibrateImage:{tuned_config}",
                 "--config-file",
@@ -445,6 +444,9 @@ def run(
                 "-d",
                 data_query,
             ]
+
+            if executor.needs_datastore_records:
+                qgraph_args.append("--qgraph-datastore-records")
 
             # For fallback attempts, build a qgraph that excludes quanta
             # whose outputs already exist in any prior successful RUN.
@@ -765,10 +767,14 @@ def run(
                     cols.coadd_run,
                     "--save-qgraph",
                     str(qg_coadd),
-                    "--qgraph-datastore-records",
                     "-d",
                     f"instrument='Nickel' AND skymap='{SKYMAP_NAME}'",
-                ],
+                ]
+                + (
+                    ["--qgraph-datastore-records"]
+                    if executor.needs_datastore_records
+                    else []
+                ),
                 config,
                 log_file=log_file,
             )

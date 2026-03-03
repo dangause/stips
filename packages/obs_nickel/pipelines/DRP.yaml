@@ -76,9 +76,16 @@ tasks:
       psf_detection.nSigmaToGrow: 2.0
       psf_detection.combinedGrow: true
       # ---- Astrometry ----
-      # Use gaia_dr3 registered in bootstrap
-      connections.astrometry_ref_cat: the_monster_20250219_local  # gaia_dr3
-      astrometry_ref_loader.anyFilterMapsToThis: phot_g_mean
+      # Use MONSTER catalog registered in bootstrap
+      connections.astrometry_ref_cat: the_monster_20250219_local
+      # CalibrateImageConfig defaults anyFilterMapsToThis='phot_g_mean' (Gaia column);
+      # must explicitly clear it to use filterMap with MONSTER column names instead.
+      astrometry_ref_loader.anyFilterMapsToThis: null
+      astrometry_ref_loader.filterMap:
+        b: monster_ComCam_g
+        v: monster_ComCam_g
+        r: monster_ComCam_r
+        i: monster_ComCam_i
       astrometry.forceKnownWcs: false
       astrometry.matcher.maxOffsetPix: 300
       astrometry.matcher.maxRotationDeg: 5.0

@@ -264,10 +264,12 @@ def run(
             cols.diff_run,
             "--save-qgraph",
             str(qg_file),
-            "--qgraph-datastore-records",
             "-d",
             data_query,
         ]
+
+        if executor.needs_datastore_records:
+            qgraph_args.append("--qgraph-datastore-records")
 
         if subtract_config.exists():
             qgraph_args.extend(["--config-file", f"subtractImages:{subtract_config}"])

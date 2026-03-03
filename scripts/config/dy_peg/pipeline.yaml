@@ -1,0 +1,105 @@
+# Pipeline configuration for DY Pegasi (variable star campaign)
+#
+# Usage:
+#   nickel run scripts/config/dy_peg/pipeline.yaml
+#   nickel run scripts/config/dy_peg/pipeline.yaml --dry-run
+#
+# DY Pegasi is an SX Phoenicis (SXPHE) double-mode pulsating variable star,
+# in a binary system with an evolved companion (likely a hot white dwarf).
+#   - Fundamental mode: P = 0.072926 days (1 hour 45 minutes)
+#   - First overtone:   P1/P0 = 0.764, giving P1 ~ 0.0557 days
+#
+# V magnitude range: 9.95 - 10.62 (amplitude ~0.67 mag)
+# B amplitude: ~0.88 mag
+# Spectral type: F5
+#
+# Data: Christopher Bell, Lick Observatory 2024B semester
+#   - 20240905: DY Peg + AC And (shared night)
+#   - 20241030: DY Peg + AC And (split observations, gaps expected)
+#
+# NOTE: With a 1.75-hour period, a single Nickel observing session of
+# 4-6 hours captures 2-3 complete pulsation cycles. This is ideal for
+# period determination even with just 2 nights.
+#
+# Pipeline steps:
+#   0. Bootstrap repository (automatic if needed)
+#   1. Build coadd templates from both nights (median -> mean flux reference)
+#   2. Run calibrations per night
+#   3. Run science processing per night
+#   4. Run DIA per night per band
+#   5. Run forced photometry at DY Peg coordinates (visit + diffim)
+#   6. Extract combined multi-band lightcurve
+#   7. Run Lomb-Scargle period search and phase folding
+
+# =============================================================================
+# Environment Configuration
+# =============================================================================
+env:
+  REPO: "/Users/dangause/Developer/lick/lsst/data/nickel/dy_peg_repo"
+  STACK_DIR: "/Users/dangause/Developer/lick/lsst/lsst_stack"
+  OBS_NICKEL: "/Users/dangause/Developer/lick/lsst/lsst_stack/stack/nickel_processing_suite/packages/obs_nickel"
+  RAW_PARENT_DIR: "/Users/dangause/Developer/lick/data"
+  REFCAT_REPO: "/Users/dangause/Developer/lick/lsst/lsst_stack/stack/refcats"
+  CP_PIPE_DIR: "${STACK_DIR}/cp_pipe"
+
+# Target information
+# DY Pegasi (SIMBAD ICRS J2000)
+# RA = 23:08:51.186, Dec = +17:12:56.00
+object: "DY_Pegasi"
+ra: 347.213274
+dec: 17.215555
+
+# Bands to process
+# B and V are standard for SX Phe photometry (large B amplitude useful).
+# Include R/I if observed.
+bands: ["v"]
+
+# No template section - using visit-level forced photometry for period search.
+# Coadd DIA templates are not needed since V-band visit photometry
+# captures the ~0.67 mag pulsation amplitude directly.
+# If DIA is wanted later, add template section with type: coadd.
+
+# Science nights
+science:
+  nights:
+    - 20240905
+    - 20241030
+
+# Pipeline configuration files (paths relative to obs_nickel/configs/)
+configs:
+  science:
+    calibrate_image: calibrateImage/tuned_configs/dense_strict.py
+    calibrate_image_fallbacks:
+      - calibrateImage/tuned_configs/dense_relaxed.py
+      - calibrateImage/tuned_configs/sparse_strict.py
+      - calibrateImage/tuned_configs/sparse_relaxed.py
+    colorterms: apply_colorterms.py
+
+# Processing options
+options:
+  jobs: 6
+  skip_calibs: false
+  skip_science: false
+  skip_dia: true                  # Visit photometry sufficient for period search
+  continue_on_error: true
+  use_fallbacks: true
+
+  # Variable star pipeline type
+  pipeline_type: variable
+  forced_phot: true
+  forced_phot_image_type: visit   # Visit-level total flux
+
+  # Period search configuration
+  # Focused on SX Phe period range (0.03-0.2 days)
+  period_search: true
+  period_min: 0.03                # Below shortest expected period
+  period_max: 0.2                 # Above longest expected harmonic
+  period_samples: 50000           # High resolution for short-period detection
+
+# Lightcurve configuration
+lightcurve:
+  enabled: true
+  dataset_type: forced_phot_radec   # Visit-level total flux
+  min_snr: 0                              # Keep all detections for period search
+  y_axis: flux_nJy
+  x_axis: mjd

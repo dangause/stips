@@ -153,3 +153,25 @@ def pointings_from_fits_dir(
     # Optional: print a small summary (only when used directly)
     if used == 0:
         print(f"[fits-scan] No usable FITS found in {fits_dir} (recursive={recursive})")
+
+
+def pointings_from_pipeline_configs(
+    config_paths: Iterable[str | Path],
+) -> Iterable[tuple[float, float, str]]:
+    """Yield (ra, dec, config_path) from pipeline YAML configs with top-level ra/dec keys."""
+    import yaml
+
+    for p in config_paths:
+        p = Path(p)
+        if not p.exists() or p.suffix not in (".yaml", ".yml"):
+            continue
+        try:
+            cfg = yaml.safe_load(p.read_text())
+            if not isinstance(cfg, dict):
+                continue
+            ra = cfg.get("ra")
+            dec = cfg.get("dec")
+            if ra is not None and dec is not None:
+                yield float(ra), float(dec), str(p)
+        except Exception:
+            continue
