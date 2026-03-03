@@ -1538,17 +1538,17 @@ def _run_differential_phot_step(
     result: RunResult,
     dry_run: bool,
 ) -> None:
-    """Run differential aperture photometry for transit targets.
+    """Run LSST differential aperture photometry pipeline.
 
     For bright stars where PSF-fitting forced photometry is unreliable,
-    this step performs aperture photometry on preliminary visit images
-    and computes differential flux relative to comparison stars.
+    this runs DifferentialPhotTask which reads aperture fluxes from
+    calibrateImage star catalogs, selects comparison stars, and computes
+    differential flux ratios.
     """
-    from obs_nickel_data_tools.pipeline_tools.differential_phot import (
-        run_differential_phot,
-    )
+    from obs_nickel_data_tools.core.stack import run_pipetask
 
     repo = config.repo
+    obs_nickel = config.obs_nickel
 
     # Discover the science collection directory
     science_coll = None
@@ -1568,39 +1568,55 @@ def _run_differential_phot_step(
         log.warning("No science collection found, skipping differential photometry")
         return
 
-    log.info(f"Running differential aperture photometry on {science_coll}")
+    log.info(f"Running LSST differential photometry on {science_coll}")
 
-    # Determine output path
-    lc_dir = Path(repo) / "lightcurves"
-    lc_dir.mkdir(parents=True, exist_ok=True)
-    output_csv = lc_dir / f"lightcurve_{run_cfg.object_name}_differential.csv"
+    pipeline_yaml = str(Path(obs_nickel) / "pipelines" / "DifferentialPhot.yaml")
+    input_colls = f"{science_coll},Nickel/calib/current,refcats,skymaps/nickelRings"
+    output_coll = f"Nickel/runs/{all_nights[0]}/differentialPhot"
 
     bands = run_cfg.bands
-    band_filter = bands[0] if len(bands) == 1 else None
+    band_filter = bands[0] if len(bands) == 1 else ""
+
+    # Build pipetask run arguments
+    run_args = [
+        "run",
+        "-b",
+        repo,
+        "-p",
+        pipeline_yaml,
+        "-i",
+        input_colls,
+        "-o",
+        output_coll,
+        "-c",
+        f"differentialPhot:targetRa={run_cfg.ra}",
+        "-c",
+        f"differentialPhot:targetDec={run_cfg.dec}",
+        "-c",
+        f"differentialPhot:targetName={run_cfg.object_name}",
+        "--register-dataset-types",
+    ]
+    if band_filter:
+        run_args.extend(["-c", f"differentialPhot:bandFilter={band_filter}"])
 
     if not dry_run:
-        _get_step_log_file("differential_phot")
+        log_file = _get_step_log_file("differential_phot")
         try:
-            df = run_differential_phot(
-                repo=repo,
-                collection=science_coll,
-                ra=run_cfg.ra,
-                dec=run_cfg.dec,
-                aperture_radius=20,
-                n_comparisons=6,
-                output=str(output_csv),
-                band_filter=band_filter,
-                make_plots=True,
+            run_pipetask(
+                run_args,
+                config,
+                check=False,
+                log_file=log_file,
             )
-            result.lightcurve_path = str(output_csv)
-            log.info(
-                f"  Differential photometry: {len(df)} measurements, "
-                f"RMS={df['norm_flux'].std()*100:.2f}%"
-            )
+            log.info("  Differential photometry pipeline complete")
         except Exception as e:
             log.error(f"Differential photometry failed: {e}")
     else:
-        log.info("  [DRY RUN] differential_phot.run_differential_phot()")
+        log.info(
+            f"  [DRY RUN] pipetask run -p DifferentialPhot.yaml "
+            f"-c differentialPhot:targetRa={run_cfg.ra} "
+            f"-c differentialPhot:targetDec={run_cfg.dec}"
+        )
 
 
 def _discover_fphot_collections(
