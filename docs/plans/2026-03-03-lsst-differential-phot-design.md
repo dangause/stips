@@ -18,7 +18,7 @@ Build a single consolidation-level `PipelineTask` that reads `initial_stars_dete
 calibrateImage (per visit)
     |
     v
-initial_stars_detector (SourceCatalog, per visit/detector)
+single_visit_star_unstandardized (SourceCatalog, per visit/detector)
     |
     v
 DifferentialPhotTask (instrument-level consolidation)
@@ -52,7 +52,7 @@ class DifferentialPhotConnections(
     dimensions=("instrument",),
 ):
     starCatalogs = ct.Input(
-        name="initial_stars_detector",
+        name="single_visit_star_unstandardized",
         storageClass="SourceCatalog",
         dimensions=("instrument", "visit", "detector"),
         multiple=True,
@@ -187,7 +187,7 @@ tasks:
   differentialPhot:
     class: lsst.obs.nickel.tasks.DifferentialPhotTask
     config:
-      connections.starCatalogs: initial_stars_detector
+      connections.starCatalogs: single_visit_star_unstandardized
       connections.visitTable: preliminary_visit_table
       connections.lightcurve: differential_phot_lightcurve
       apertureRadius: 17.0
