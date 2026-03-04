@@ -18,6 +18,14 @@ for source, target in [
     ("R", "monster_ComCam_r"),
     ("I", "monster_ComCam_i"),
     ("CLEAR", "monster_ComCam_r"),
+    # Sloan filters (closest MONSTER band)
+    ("gp", "monster_ComCam_g"),
+    ("rp", "monster_ComCam_r"),
+    # Narrowband (approximate broadband mapping for astrometry refcat)
+    ("halpha", "monster_ComCam_r"),
+    ("Halpha", "monster_ComCam_r"),
+    ("oiii", "monster_ComCam_g"),
+    ("OIII", "monster_ComCam_g"),
 ]:
     config.filterMap[source] = target
 # ruff: noqa: F821

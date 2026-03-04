@@ -89,8 +89,28 @@ class TestNickelTranslator(unittest.TestCase):
         self.assertLess(sep, 0.1)
 
     def test_physical_filter(self):
-        # Translator returns FILTNAM as-is, stripped.
+        # Standard broadband
         self.assertEqual(self.tr.to_physical_filter(), "B")
+
+    def test_physical_filter_sloan(self):
+        for raw, expected in [("gp", "gp"), ("g'", "gp"), ("rp", "rp"), ("r'", "rp")]:
+            hdr = dict(self.header, FILTNAM=raw)
+            self.assertEqual(NickelTranslator(hdr).to_physical_filter(), expected)
+
+    def test_physical_filter_narrowband(self):
+        for raw, expected in [
+            ("Halpha", "Halpha"),
+            ("6563/100", "Halpha"),
+            ("OIII", "OIII"),
+            ("5000/100", "OIII"),
+        ]:
+            hdr = dict(self.header, FILTNAM=raw)
+            self.assertEqual(NickelTranslator(hdr).to_physical_filter(), expected)
+
+    def test_physical_filter_open(self):
+        for raw in ("Open", "open", "OPEN", "C"):
+            hdr = dict(self.header, FILTNAM=raw)
+            self.assertEqual(NickelTranslator(hdr).to_physical_filter(), "clear")
 
     def test_observation_type_and_reason(self):
         self.assertEqual(self.tr.to_observation_type(), "science")

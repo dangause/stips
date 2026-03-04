@@ -167,12 +167,24 @@ class NickelTranslator(FitsTranslator):
         return "science"
 
     def to_physical_filter(self) -> str:
-        val = str(self._header.get("FILTNAM", "UNKNOWN")).strip().upper()
-        if val in {"OPEN", "C"}:
+        raw = str(self._header.get("FILTNAM", "UNKNOWN")).strip()
+        val = raw.upper()
+        if val in {"OPEN", "C", "CLEAR"}:
             return "clear"
         if val in {"B", "V", "R", "I"}:
             return val
-        return "clear"  # safe fallback
+        # Sloan filters (FILTNAM: gp, g', GP, G')
+        if val in {"GP", "G'"}:
+            return "gp"
+        if val in {"RP", "R'"}:
+            return "rp"
+        # Narrowband (FILTNAM: Halpha, OIII, 6563/100, 5000/100)
+        if val in {"HALPHA", "H-ALPHA", "6563/100"}:
+            return "Halpha"
+        if val in {"OIII", "[OIII]", "5000/100"}:
+            return "OIII"
+        log.warning("Unrecognized FILTNAM %r, falling back to 'clear'", raw)
+        return "clear"
 
     @cache_translation
     def to_location(self) -> EarthLocation:

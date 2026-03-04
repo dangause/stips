@@ -349,8 +349,8 @@ class RunConfig:
     """Configuration parsed from YAML."""
 
     object_name: str
-    ra: float
-    dec: float
+    ra: float | None
+    dec: float | None
     bands: list[str]
     nights: list[str] = field(default_factory=list)
 
@@ -493,8 +493,8 @@ class RunConfig:
 
         return cls(
             object_name=data.get("object", ""),
-            ra=data["ra"],
-            dec=data["dec"],
+            ra=data.get("ra"),
+            dec=data.get("dec"),
             bands=data.get("bands", ["r"]),
             nights=nights,
             template_type=template_type,
@@ -1827,8 +1827,9 @@ def run(
     result = RunResult(success=True, log_dir=str(run_log_dir))
     all_nights = list(run_cfg.nights)
 
-    log.info(f"Pipeline run for {run_cfg.object_name}")
-    log.info(f"  Target: RA={run_cfg.ra:.4f}, Dec={run_cfg.dec:.4f}")
+    log.info(f"Pipeline run for {run_cfg.object_name or '(survey mode)'}")
+    if run_cfg.ra is not None and run_cfg.dec is not None:
+        log.info(f"  Target: RA={run_cfg.ra:.4f}, Dec={run_cfg.dec:.4f}")
     log.info(f"  Bands: {run_cfg.bands}")
     log.info(f"  Template type: {run_cfg.template_type}")
     log.info(f"  Nights: {len(all_nights)}")
