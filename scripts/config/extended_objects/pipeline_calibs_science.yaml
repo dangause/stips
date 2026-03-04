@@ -1,0 +1,88 @@
+# Bulk calibration + science processing for 12 new Nickel nights
+#
+# Usage:
+#   nickel run scripts/config/extended_objects/pipeline_calibs_science.yaml
+#   nickel run scripts/config/extended_objects/pipeline_calibs_science.yaml --dry-run
+#
+# These nights span multiple observing programs (2023B-2025B) and include
+# extended objects (galaxies, nebulae, clusters), narrowband imaging,
+# comets, planets, and a few supernova epochs. The goal is to produce
+# calibrated, astrometrically-registered preliminary visit images (PVIs)
+# for all science frames.
+#
+# Pipeline steps per night:
+#   1. Ingest raw FITS
+#   2. Build bias + flats, certify calibrations
+#   3. Science processing (ISR, WCS, photometric calibration)
+#
+# No DIA, forced photometry, or lightcurve extraction.
+#
+# Observers: Anne Metevier, Christopher Bell, Kevin McLin, Claia Bryja, CCSF students
+
+# =============================================================================
+# Environment Configuration
+# =============================================================================
+env:
+  REPO: "/Users/dangause/Developer/lick/lsst/data/nickel/extended_objects_repo"
+  STACK_DIR: "/Users/dangause/Developer/lick/lsst/lsst_stack"
+  OBS_NICKEL: "/Users/dangause/Developer/lick/lsst/lsst_stack/stack/nickel_processing_suite/packages/obs_nickel"
+  RAW_PARENT_DIR: "/Users/dangause/Developer/lick/data"
+  REFCAT_REPO: "/Users/dangause/Developer/lick/lsst/lsst_stack/stack/refcats"
+  CP_PIPE_DIR: "${STACK_DIR}/cp_pipe"
+
+# No single target — these are survey/imaging nights with many objects per night.
+# object/ra/dec omitted since we're not doing forced photometry.
+
+# All filters present across the 12 nights
+bands: ["b", "v", "r", "i", "gp", "rp", "halpha", "oiii"]
+
+# No templates needed (calibs + science only)
+template:
+  type: none
+
+# All 12 new nights
+science:
+  nights:
+    # 2023B semester
+    - 20230815   # SN2023ixf (3 R/I frames) + dome flats — sparse night
+    - 20230816   # NGC 7814, M57, M27, NGC 7331, PegDIG — narrowband (5000/100, 6563/100, g', r')
+    # 2023B fall semester
+    - 20231014   # Saturn, M92, NGC 584, M77, M76, LBN 144/851, M1 — BVRI
+    - 20231015   # SH 2-175, M77, LBN 144, M76, Saturn, M1 — narrowband
+    # 2024B summer semester
+    - 20240828   # SN2023ixf, NGC 7790 Cepheids, galaxies, Asteroid 54P, Cas A — BVR + Halpha
+    - 20240829   # SN2023ixf, M57, NGC 7331, Comet 54P — Halpha, OIII, g', r'
+    # 2024B fall semester
+    - 20241025   # Comet Tsuchinshan-ATLAS, nebulae survey, galaxies — BVR + Halpha
+    - 20241026   # Jupiter, Saturn, Uranus, Neptune, Giant Squid Nebula — Halpha, OIII, g', r'
+    # 2025B summer semester
+    - 20250804   # 3I/ATLAS (interstellar object), NGC 7331, nebulae — BVRI + OIII
+    - 20250807   # 3I/ATLAS, SN2023ixf, nebulae, galaxies — Halpha, OIII, Open, g', r'
+    # 2025B fall semester
+    - 20251026   # NGC 1084 only (2 science frames) — weather-truncated
+    - 20251027   # Comets Lemmon & Swan, PNe, clusters, galaxies — narrowband
+
+# Pipeline configuration files (paths relative to obs_nickel/configs/)
+configs:
+  science:
+    calibrate_image: calibrateImage/tuned_configs/dense_strict.py
+    calibrate_image_fallbacks:
+      - calibrateImage/tuned_configs/dense_relaxed.py
+      - calibrateImage/tuned_configs/sparse_strict.py
+      - calibrateImage/tuned_configs/sparse_relaxed.py
+    colorterms: apply_colorterms.py
+
+# Processing options
+options:
+  jobs: 6
+  concurrent_nights: 3
+  skip_calibs: false
+  skip_science: false
+  skip_dia: true
+  forced_phot: false
+  continue_on_error: true
+  use_fallbacks: true
+
+# No lightcurve extraction
+lightcurve:
+  enabled: false
