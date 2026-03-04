@@ -585,6 +585,7 @@ class RunResult:
     failed_fphot: list[str] = field(default_factory=list)
     template_collections: dict[str, str] = field(default_factory=dict)
     forced_phot_collections: dict[str, list[str]] = field(default_factory=dict)
+    differential_phot_success: bool | None = None
     lightcurve_path: str | None = None
     period_result_path: str | None = None
     transit_result_path: str | None = None
@@ -1534,7 +1535,7 @@ def _run_transit_step(
 def _run_differential_phot_step(
     all_nights: list[str],
     run_cfg: RunConfig,
-    config: "Config",
+    config: Config,
     result: RunResult,
     dry_run: bool,
 ) -> None:
@@ -1545,27 +1546,36 @@ def _run_differential_phot_step(
     calibrateImage star catalogs, selects comparison stars, and computes
     differential flux ratios.
     """
-    from obs_nickel_data_tools.core.stack import run_pipetask
+    from obs_nickel_data_tools.core.pipeline import parse_butler_query_output
+    from obs_nickel_data_tools.core.stack import run_butler_query, run_pipetask
 
-    repo = config.repo
-    obs_nickel = config.obs_nickel
+    repo = str(config.repo)
+    obs_nickel = str(config.obs_nickel)
 
-    # Discover the science collection directory
+    # Discover science collection via Butler (consistent with fphot.py pattern)
     science_coll = None
     for night in all_nights:
-        coll_parent = Path(repo) / "Nickel" / "runs" / night / "processCcd"
-        if coll_parent.exists():
-            # Take the most recent timestamp directory
-            ts_dirs = sorted(
-                [d for d in coll_parent.iterdir() if d.is_dir()], reverse=True
-            )
-            if ts_dirs:
-                rel_path = ts_dirs[0].relative_to(Path(repo))
-                science_coll = str(rel_path)
+        qresult = run_butler_query(
+            ["query-collections", repo, f"Nickel/runs/{night}/processCcd/*"],
+            config,
+            check=False,
+        )
+        if qresult.returncode == 0:
+            colls = parse_butler_query_output(qresult.stdout, prefix_filter="Nickel/")
+            if colls:
+                # Prefer CHAINED parents over individual RUNs
+                chained = [
+                    c for c in colls if not c.endswith(("/run",)) and "/run_fb" not in c
+                ]
+                if chained:
+                    science_coll = sorted(chained)[-1]
+                else:
+                    science_coll = sorted(colls)[-1]
                 break
 
     if not science_coll:
         log.warning("No science collection found, skipping differential photometry")
+        result.differential_phot_success = False
         return
 
     log.info(f"Running LSST differential photometry on {science_coll}")
@@ -1581,7 +1591,7 @@ def _run_differential_phot_step(
     run_args = [
         "run",
         "-b",
-        str(repo),
+        repo,
         "-p",
         pipeline_yaml,
         "-i",
@@ -1595,6 +1605,7 @@ def _run_differential_phot_step(
         "-c",
         f"differentialPhot:targetName={run_cfg.object_name}",
         "--register-dataset-types",
+        "--clobber-outputs",
     ]
     if band_filter:
         run_args.extend(["-c", f"differentialPhot:bandFilter={band_filter}"])
@@ -1602,15 +1613,24 @@ def _run_differential_phot_step(
     if not dry_run:
         log_file = _get_step_log_file("differential_phot")
         try:
-            run_pipetask(
+            proc = run_pipetask(
                 run_args,
                 config,
                 check=False,
                 log_file=log_file,
             )
-            log.info("  Differential photometry pipeline complete")
+            if proc.returncode == 0:
+                log.info("  Differential photometry pipeline complete")
+                result.differential_phot_success = True
+            else:
+                log.error(
+                    "  Differential photometry pipeline failed (exit code %d)",
+                    proc.returncode,
+                )
+                result.differential_phot_success = False
         except Exception as e:
             log.error(f"Differential photometry failed: {e}")
+            result.differential_phot_success = False
     else:
         log.info(
             f"  [DRY RUN] pipetask run -p DifferentialPhot.yaml "
@@ -1908,6 +1928,7 @@ def run(
         or result.failed_science
         or result.failed_dia
         or result.failed_fphot
+        or result.differential_phot_success is False
     )
     has_successes = False
 
@@ -1975,6 +1996,9 @@ def run(
         f"  Calibs: {n_calibs_ok}/{total_nights}, Science: {n_science_ok}/{total_nights}, "
         f"DIA: {n_dia_ok}/{total_dia_pairs}, Fphot: {n_fphot_ok}/{total_nights}"
     )
+    if result.differential_phot_success is not None:
+        dp_status = "OK" if result.differential_phot_success else "FAILED"
+        log.info(f"  Differential phot: {dp_status}")
     if result.lightcurve_path:
         log.info(f"  Lightcurve: {result.lightcurve_path}")
     if result.period_result_path:
@@ -2000,6 +2024,9 @@ def run(
             f.write(f"Failed DIA: {result.failed_dia}\n")
         if result.failed_fphot:
             f.write(f"Failed fphot: {result.failed_fphot}\n")
+        if result.differential_phot_success is not None:
+            dp_status = "OK" if result.differential_phot_success else "FAILED"
+            f.write(f"Differential phot: {dp_status}\n")
         if result.template_collections:
             f.write(f"Templates: {result.template_collections}\n")
         if result.lightcurve_path:

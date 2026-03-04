@@ -124,6 +124,8 @@ def _compute_differential_flux(target_flux, target_err, comp_fluxes, comp_errs):
     comp_sum = sum(comp_fluxes)
     if comp_sum <= 0:
         return None, None
+    if target_flux == 0:
+        return 0.0, 0.0
     diff = target_flux / comp_sum
     # Error propagation: sigma_diff = diff * sqrt((sigma_t/t)^2 + (sigma_c/c_sum)^2)
     comp_err_sum = np.sqrt(sum(e**2 for e in comp_errs))
@@ -236,7 +238,7 @@ def _process_catalogs(
         (ref_cat[ci]["coord_ra"], ref_cat[ci]["coord_dec"]) for ci in comp_indices
     ]
 
-    # Step 4: Cross-match across all visits, assess stability
+    # Step 2: Cross-match across all visits, assess stability
     n_visits = len(catalogs)
     comp_detections = [0] * len(comp_indices)
     comp_flux_lists = [[] for _ in range(len(comp_indices))]
@@ -285,7 +287,7 @@ def _process_catalogs(
         ),
     )
 
-    # Step 5: Compute differential flux per visit
+    # Step 3: Compute differential flux per visit
     rows = []
     for vid, cat in catalogs:
         mjd = visit_mjd.get(vid, np.nan)
@@ -335,7 +337,7 @@ def _process_catalogs(
     table = Table(rows=rows)
     table.sort("mjd")
 
-    # Step 6: Normalize
+    # Step 4: Normalize
     norm, norm_err = _normalize_lightcurve(
         np.array(table["diff_flux"]),
         np.array(table["diff_flux_err"]),
@@ -457,6 +459,12 @@ if _HAS_LSST:
 
         def validate(self):
             super().validate()
+            if self.targetRa == 0.0 and self.targetDec == 0.0:
+                raise pexConfig.FieldValidationError(
+                    self.__class__.targetRa,
+                    self,
+                    "targetRa and targetDec must be set (both are 0.0)",
+                )
             if self.apertureRadius not in VALID_APERTURE_RADII:
                 raise pexConfig.FieldValidationError(
                     self.__class__.apertureRadius,
@@ -498,7 +506,9 @@ if _HAS_LSST:
                     if isinstance(cat, DeferredDatasetHandle):
                         cat = cat.get()
                 except Exception:
-                    _LOG.warning("Failed to load catalog for visit %s", visit_id)
+                    _LOG.warning(
+                        "Failed to load catalog for visit %s", visit_id, exc_info=True
+                    )
                     continue
                 # Convert astropy Table to list of dicts for processing
                 ap_col = f"base_CircularApertureFlux_{self._ap_key}_instFlux"
