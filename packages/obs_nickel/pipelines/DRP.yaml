@@ -42,6 +42,10 @@ tasks:
         V: 1.6e12
         R: 2.2e12
         I: 3.1e12
+        Halpha: 1.0e12
+        OIII: 0.8e12
+        gp: 1.5e12
+        rp: 2.0e12
   calibrateImage:
     class: lsst.pipe.tasks.calibrateImage.CalibrateImageTask
     config:
@@ -86,6 +90,10 @@ tasks:
         v: monster_ComCam_g
         r: monster_ComCam_r
         i: monster_ComCam_i
+        halpha: monster_ComCam_r
+        oiii: monster_ComCam_g
+        gp: monster_ComCam_g
+        rp: monster_ComCam_r
       astrometry.forceKnownWcs: false
       astrometry.matcher.maxOffsetPix: 300
       astrometry.matcher.maxRotationDeg: 5.0
@@ -100,6 +108,10 @@ tasks:
         v: monster_ComCam_g
         r: monster_ComCam_r
         i: monster_ComCam_i
+        halpha: monster_ComCam_r
+        oiii: monster_ComCam_g
+        gp: monster_ComCam_g
+        rp: monster_ComCam_r
       photometry.match.matchRadius: 1.5
       photometry.applyColorTerms: true
       photometry.photoCatName: the_monster_20250219_local  # panstarrs1_dr2
@@ -128,7 +140,7 @@ tasks:
       connections.source_table_visit: single_visit_star
       connections.isolated_star_sources: isolated_star
       connections.isolated_star_cat: isolated_star_association
-      band_order: ['i', 'r', 'v', 'b']  # Nickel bands only
+      band_order: ['i', 'r', 'rp', 'v', 'gp', 'b', 'halpha', 'oiii']
   makeInitialVisitDetectorTable:
     class: lsst.pipe.tasks.postprocess.MakeCcdVisitTableTask
     config:

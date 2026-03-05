@@ -647,6 +647,31 @@ def _dispatch_concurrent(
     return results
 
 
+BROADBAND = {"b", "v", "r", "i"}
+
+
+def _split_band_groups(bands: list[str]) -> list[list[str]]:
+    """Split bands into broadband and narrowband/Sloan groups.
+
+    Broadband filters (b, v, r, i) go in one quantum graph;
+    everything else (halpha, oiii, gp, rp, ...) goes in another.
+    This prevents a missing calibration for one group (e.g. no OIII flat)
+    from killing the entire night's science processing.
+
+    Returns:
+        List of band groups (1 or 2 groups). Falls back to [bands]
+        if all bands belong to one group.
+    """
+    bb = [b for b in bands if b in BROADBAND]
+    other = [b for b in bands if b not in BROADBAND]
+    groups: list[list[str]] = []
+    if bb:
+        groups.append(bb)
+    if other:
+        groups.append(other)
+    return groups or [bands]
+
+
 def _get_bands_for_night(
     night: str,
     run_cfg: RunConfig,
@@ -966,8 +991,10 @@ def _run_science_step(
             if not bands_for_night:
                 log.info(f"Skipping science for {night} (no bands configured)")
                 continue
-            log.info(f"Running science for {night}...")
-            log.info(f"  [DRY RUN] science.run({night}, bands={bands_for_night})")
+            band_groups = _split_band_groups(bands_for_night)
+            for group in band_groups:
+                log.info(f"Running science for {night}...")
+                log.info(f"  [DRY RUN] science.run({night}, bands={group})")
         return None
 
     if run_cfg.concurrent_nights > 1:
@@ -990,33 +1017,52 @@ def _run_science_step(
         )
 
         def _science_one(night: str) -> tuple[bool, bool, str | None]:
-            """Returns (success, fallback_used, config_used)."""
+            """Returns (success, fallback_used, config_used).
+
+            Processes band groups independently so a failure in one group
+            (e.g. missing OIII flat) doesn't block broadband processing.
+            The night is "failed" only if ALL groups fail.
+            """
             bands = _get_bands_for_night(night, run_cfg)
-            log.info(f"Running science for {night}...")
-            sci_log = _get_step_log_file("science", night=night)
-            sci_result = science.run(
-                night,
-                config,
-                jobs=run_cfg.jobs,
-                object_filter=run_cfg.object_name,
-                skip_coadds=True,
-                science_cfg=science_cfg,
-                use_fallbacks=run_cfg.use_fallbacks,
-                bands=bands,
-                target_ra=run_cfg.ra,
-                target_dec=run_cfg.dec,
-                log_file=sci_log,
-                executor=executor,
-            )
-            _maybe_split_log(sci_log)
-            if not sci_result.success:
-                log.warning(f"Science failed for {night}: {sci_result.error}")
-                return (False, False, None)
-            if sci_result.fallback_used:
-                log.info(
-                    f"  Note: {night} used fallback config: {sci_result.config_used}"
+            band_groups = _split_band_groups(bands)
+            any_success = False
+            last_fallback_used = False
+            last_config_used = None
+            for group in band_groups:
+                group_tag = "_".join(group)
+                log.info(f"Running science for {night} bands={group}...")
+                sci_log = _get_step_log_file("science", night=night, band=group_tag)
+                sci_result = science.run(
+                    night,
+                    config,
+                    jobs=run_cfg.jobs,
+                    object_filter=run_cfg.object_name,
+                    skip_coadds=True,
+                    science_cfg=science_cfg,
+                    use_fallbacks=run_cfg.use_fallbacks,
+                    bands=group,
+                    target_ra=run_cfg.ra,
+                    target_dec=run_cfg.dec,
+                    log_file=sci_log,
+                    executor=executor,
                 )
-            return (True, sci_result.fallback_used, sci_result.config_used)
+                _maybe_split_log(sci_log)
+                if sci_result.success:
+                    any_success = True
+                    if sci_result.fallback_used:
+                        last_fallback_used = True
+                        last_config_used = sci_result.config_used
+                        log.info(
+                            f"  Note: {night} bands={group} used fallback config: "
+                            f"{sci_result.config_used}"
+                        )
+                else:
+                    log.warning(
+                        f"Science failed for {night} bands={group}: {sci_result.error}"
+                    )
+            if not any_success:
+                return (False, False, None)
+            return (any_success, last_fallback_used, last_config_used)
 
         outcomes = _dispatch_concurrent(
             _science_one,
@@ -1044,35 +1090,49 @@ def _run_science_step(
                 log.info(f"Skipping science for {night} (no bands configured)")
                 continue
 
-            log.info(f"Running science for {night}...")
+            # Process band groups independently so a failure in one group
+            # (e.g. missing OIII flat) doesn't block broadband processing.
+            band_groups = _split_band_groups(bands_for_night)
+            any_group_success = False
 
-            sci_log = _get_step_log_file("science", night=night)
-            sci_result = science.run(
-                night,
-                config,
-                jobs=run_cfg.jobs,
-                object_filter=run_cfg.object_name,
-                skip_coadds=True,
-                science_cfg=science_cfg,
-                use_fallbacks=run_cfg.use_fallbacks,
-                bands=bands_for_night,
-                target_ra=run_cfg.ra,
-                target_dec=run_cfg.dec,
-                log_file=sci_log,
-                executor=executor,
-            )
-            _maybe_split_log(sci_log)
-            if not sci_result.success:
+            for group in band_groups:
+                group_tag = "_".join(group)
+                log.info(f"Running science for {night} bands={group}...")
+
+                sci_log = _get_step_log_file("science", night=night, band=group_tag)
+                sci_result = science.run(
+                    night,
+                    config,
+                    jobs=run_cfg.jobs,
+                    object_filter=run_cfg.object_name,
+                    skip_coadds=True,
+                    science_cfg=science_cfg,
+                    use_fallbacks=run_cfg.use_fallbacks,
+                    bands=group,
+                    target_ra=run_cfg.ra,
+                    target_dec=run_cfg.dec,
+                    log_file=sci_log,
+                    executor=executor,
+                )
+                _maybe_split_log(sci_log)
+                if sci_result.success:
+                    any_group_success = True
+                    if sci_result.fallback_used:
+                        log.info(
+                            f"  Note: {night} bands={group} used fallback config: "
+                            f"{sci_result.config_used}"
+                        )
+                else:
+                    log.warning(
+                        f"Science failed for {night} bands={group}: {sci_result.error}"
+                    )
+
+            if not any_group_success:
                 result.failed_science.append(night)
-                log.warning(f"Science failed for {night}: {sci_result.error}")
                 if not run_cfg.continue_on_error:
                     result.success = False
                     result.error = f"Science failed for {night}"
                     return result
-            elif sci_result.fallback_used:
-                log.info(
-                    f"  Note: {night} used fallback config: {sci_result.config_used}"
-                )
 
     return None
 
