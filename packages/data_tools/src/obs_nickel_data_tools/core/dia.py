@@ -166,17 +166,21 @@ def run(
         sci_collections = parse_butler_query_output(
             result.stdout, prefix_filter="Nickel/"
         )
-        # Prefer CHAINED parents (no /run or /run_fb suffix) over individual RUNs
+        # Prefer CHAINED parents (no /run or /run_fb suffix) over individual RUNs.
+        # Join ALL CHAINED parents so DIA sees science outputs from every
+        # band group (broadband + narrowband are processed separately).
+        # sorted() gives deterministic order; band groups are disjoint by filter
+        # so no duplicate datasets across parents.
         chained = [
             c for c in sci_collections if not c.endswith("/run") and "/run_fb" not in c
         ]
-        sci_parent = (
-            sorted(chained)[-1]
+        sci_parents = (
+            ",".join(sorted(chained))
             if chained
             else sci_collections[-1] if sci_collections else None
         )
 
-        if not sci_parent:
+        if not sci_parents:
             return DIAResult(
                 success=False,
                 night=night,
@@ -246,9 +250,9 @@ def run(
         if raw_collections:
             raw_run = raw_collections[0]
 
-        input_collections = f"{sci_parent},{cols.calib_chain},{REFCATS_CHAIN},{SKYMAPS_CHAIN},{template_collection}"
+        input_collections = f"{sci_parents},{cols.calib_chain},{REFCATS_CHAIN},{SKYMAPS_CHAIN},{template_collection}"
         if raw_run:
-            input_collections = f"{sci_parent},{raw_run},{cols.calib_chain},{REFCATS_CHAIN},{SKYMAPS_CHAIN},{template_collection}"
+            input_collections = f"{sci_parents},{raw_run},{cols.calib_chain},{REFCATS_CHAIN},{SKYMAPS_CHAIN},{template_collection}"
 
         qgraph_args = [
             "qgraph",

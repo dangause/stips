@@ -96,6 +96,36 @@ config.data = {
                 c1=0.2159,
                 c2=0.0,
             ),
+            # Sloan-like filters (approximate: treat as close to LSST g/r)
+            "gp": Colorterm(
+                primary="monster_ComCam_g",
+                secondary="monster_ComCam_r",
+                c0=0.0,
+                c1=0.0,
+                c2=0.0,
+            ),
+            "rp": Colorterm(
+                primary="monster_ComCam_r",
+                secondary="monster_ComCam_i",
+                c0=0.0,
+                c1=0.0,
+                c2=0.0,
+            ),
+            # Narrowband (identity — broadband calibration is approximate)
+            "Halpha": Colorterm(
+                primary="monster_ComCam_r",
+                secondary="monster_ComCam_i",
+                c0=0.0,
+                c1=0.0,
+                c2=0.0,
+            ),
+            "OIII": Colorterm(
+                primary="monster_ComCam_g",
+                secondary="monster_ComCam_r",
+                c0=0.0,
+                c1=0.0,
+                c2=0.0,
+            ),
             # "B": Colorterm(
             #     primary="monster_ComCam_g",
             #     secondary="monster_ComCam_r",

@@ -26,7 +26,6 @@ configs:
     calibrate_image: calibrateImage/tuned_configs/dense_strict.py
     calibrate_image_fallbacks:
       - calibrateImage/tuned_configs/dense_relaxed.py
-      - calibrateImage/tuned_configs/sparse_strict.py
       - calibrateImage/tuned_configs/sparse_relaxed.py
     colorterms: apply_colorterms.py
   dia:

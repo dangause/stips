@@ -349,8 +349,8 @@ class RunConfig:
     """Configuration parsed from YAML."""
 
     object_name: str
-    ra: float
-    dec: float
+    ra: float | None
+    dec: float | None
     bands: list[str]
     nights: list[str] = field(default_factory=list)
 
@@ -493,8 +493,8 @@ class RunConfig:
 
         return cls(
             object_name=data.get("object", ""),
-            ra=data["ra"],
-            dec=data["dec"],
+            ra=data.get("ra"),
+            dec=data.get("dec"),
             bands=data.get("bands", ["r"]),
             nights=nights,
             template_type=template_type,
@@ -645,6 +645,31 @@ def _dispatch_concurrent(
                 log.error(f"  {item_label} {item} raised: {e}")
                 results[item] = None
     return results
+
+
+BROADBAND = {"b", "v", "r", "i"}
+
+
+def _split_band_groups(bands: list[str]) -> list[list[str]]:
+    """Split bands into broadband group + individual narrowband filters.
+
+    Broadband filters (b, v, r, i) go in one quantum graph;
+    each narrowband/Sloan filter (halpha, oiii, gp, rp, ...) gets its
+    own group.  This prevents a missing calibration for one filter
+    (e.g. no OIII flat) from killing unrelated filters.
+
+    Returns:
+        List of band groups. Falls back to [bands] if all bands
+        belong to one group.
+    """
+    bb = [b for b in bands if b in BROADBAND]
+    other = [b for b in bands if b not in BROADBAND]
+    groups: list[list[str]] = []
+    if bb:
+        groups.append(bb)
+    for nb in other:
+        groups.append([nb])
+    return groups or [bands]
 
 
 def _get_bands_for_night(
@@ -966,8 +991,10 @@ def _run_science_step(
             if not bands_for_night:
                 log.info(f"Skipping science for {night} (no bands configured)")
                 continue
-            log.info(f"Running science for {night}...")
-            log.info(f"  [DRY RUN] science.run({night}, bands={bands_for_night})")
+            band_groups = _split_band_groups(bands_for_night)
+            for group in band_groups:
+                log.info(f"Running science for {night}...")
+                log.info(f"  [DRY RUN] science.run({night}, bands={group})")
         return None
 
     if run_cfg.concurrent_nights > 1:
@@ -990,33 +1017,52 @@ def _run_science_step(
         )
 
         def _science_one(night: str) -> tuple[bool, bool, str | None]:
-            """Returns (success, fallback_used, config_used)."""
+            """Returns (success, fallback_used, config_used).
+
+            Processes band groups independently so a failure in one group
+            (e.g. missing OIII flat) doesn't block broadband processing.
+            The night is "failed" only if ALL groups fail.
+            """
             bands = _get_bands_for_night(night, run_cfg)
-            log.info(f"Running science for {night}...")
-            sci_log = _get_step_log_file("science", night=night)
-            sci_result = science.run(
-                night,
-                config,
-                jobs=run_cfg.jobs,
-                object_filter=run_cfg.object_name,
-                skip_coadds=True,
-                science_cfg=science_cfg,
-                use_fallbacks=run_cfg.use_fallbacks,
-                bands=bands,
-                target_ra=run_cfg.ra,
-                target_dec=run_cfg.dec,
-                log_file=sci_log,
-                executor=executor,
-            )
-            _maybe_split_log(sci_log)
-            if not sci_result.success:
-                log.warning(f"Science failed for {night}: {sci_result.error}")
-                return (False, False, None)
-            if sci_result.fallback_used:
-                log.info(
-                    f"  Note: {night} used fallback config: {sci_result.config_used}"
+            band_groups = _split_band_groups(bands)
+            any_success = False
+            last_fallback_used = False
+            last_config_used = None
+            for group in band_groups:
+                group_tag = "_".join(group)
+                log.info(f"Running science for {night} bands={group}...")
+                sci_log = _get_step_log_file("science", night=night, band=group_tag)
+                sci_result = science.run(
+                    night,
+                    config,
+                    jobs=run_cfg.jobs,
+                    object_filter=run_cfg.object_name,
+                    skip_coadds=True,
+                    science_cfg=science_cfg,
+                    use_fallbacks=run_cfg.use_fallbacks,
+                    bands=group,
+                    target_ra=run_cfg.ra,
+                    target_dec=run_cfg.dec,
+                    log_file=sci_log,
+                    executor=executor,
                 )
-            return (True, sci_result.fallback_used, sci_result.config_used)
+                _maybe_split_log(sci_log)
+                if sci_result.success:
+                    any_success = True
+                    if sci_result.fallback_used:
+                        last_fallback_used = True
+                        last_config_used = sci_result.config_used
+                        log.info(
+                            f"  Note: {night} bands={group} used fallback config: "
+                            f"{sci_result.config_used}"
+                        )
+                else:
+                    log.warning(
+                        f"Science failed for {night} bands={group}: {sci_result.error}"
+                    )
+            if not any_success:
+                return (False, False, None)
+            return (any_success, last_fallback_used, last_config_used)
 
         outcomes = _dispatch_concurrent(
             _science_one,
@@ -1044,35 +1090,49 @@ def _run_science_step(
                 log.info(f"Skipping science for {night} (no bands configured)")
                 continue
 
-            log.info(f"Running science for {night}...")
+            # Process band groups independently so a failure in one group
+            # (e.g. missing OIII flat) doesn't block broadband processing.
+            band_groups = _split_band_groups(bands_for_night)
+            any_group_success = False
 
-            sci_log = _get_step_log_file("science", night=night)
-            sci_result = science.run(
-                night,
-                config,
-                jobs=run_cfg.jobs,
-                object_filter=run_cfg.object_name,
-                skip_coadds=True,
-                science_cfg=science_cfg,
-                use_fallbacks=run_cfg.use_fallbacks,
-                bands=bands_for_night,
-                target_ra=run_cfg.ra,
-                target_dec=run_cfg.dec,
-                log_file=sci_log,
-                executor=executor,
-            )
-            _maybe_split_log(sci_log)
-            if not sci_result.success:
+            for group in band_groups:
+                group_tag = "_".join(group)
+                log.info(f"Running science for {night} bands={group}...")
+
+                sci_log = _get_step_log_file("science", night=night, band=group_tag)
+                sci_result = science.run(
+                    night,
+                    config,
+                    jobs=run_cfg.jobs,
+                    object_filter=run_cfg.object_name,
+                    skip_coadds=True,
+                    science_cfg=science_cfg,
+                    use_fallbacks=run_cfg.use_fallbacks,
+                    bands=group,
+                    target_ra=run_cfg.ra,
+                    target_dec=run_cfg.dec,
+                    log_file=sci_log,
+                    executor=executor,
+                )
+                _maybe_split_log(sci_log)
+                if sci_result.success:
+                    any_group_success = True
+                    if sci_result.fallback_used:
+                        log.info(
+                            f"  Note: {night} bands={group} used fallback config: "
+                            f"{sci_result.config_used}"
+                        )
+                else:
+                    log.warning(
+                        f"Science failed for {night} bands={group}: {sci_result.error}"
+                    )
+
+            if not any_group_success:
                 result.failed_science.append(night)
-                log.warning(f"Science failed for {night}: {sci_result.error}")
                 if not run_cfg.continue_on_error:
                     result.success = False
                     result.error = f"Science failed for {night}"
                     return result
-            elif sci_result.fallback_used:
-                log.info(
-                    f"  Note: {night} used fallback config: {sci_result.config_used}"
-                )
 
     return None
 
@@ -1827,8 +1887,9 @@ def run(
     result = RunResult(success=True, log_dir=str(run_log_dir))
     all_nights = list(run_cfg.nights)
 
-    log.info(f"Pipeline run for {run_cfg.object_name}")
-    log.info(f"  Target: RA={run_cfg.ra:.4f}, Dec={run_cfg.dec:.4f}")
+    log.info(f"Pipeline run for {run_cfg.object_name or '(survey mode)'}")
+    if run_cfg.ra is not None and run_cfg.dec is not None:
+        log.info(f"  Target: RA={run_cfg.ra:.4f}, Dec={run_cfg.dec:.4f}")
     log.info(f"  Bands: {run_cfg.bands}")
     log.info(f"  Template type: {run_cfg.template_type}")
     log.info(f"  Nights: {len(all_nights)}")
@@ -1992,10 +2053,15 @@ def run(
         len(_get_bands_for_night(night, run_cfg)) for night in all_nights
     )
     n_dia_ok = total_dia_pairs - len(result.failed_dia)
-    log.info(
-        f"  Calibs: {n_calibs_ok}/{total_nights}, Science: {n_science_ok}/{total_nights}, "
-        f"DIA: {n_dia_ok}/{total_dia_pairs}, Fphot: {n_fphot_ok}/{total_nights}"
-    )
+    info_parts = [
+        f"Calibs: {n_calibs_ok}/{total_nights}",
+        f"Science: {n_science_ok}/{total_nights}",
+    ]
+    if not run_cfg.skip_dia:
+        info_parts.append(f"DIA: {n_dia_ok}/{total_dia_pairs}")
+    if run_cfg.forced_phot:
+        info_parts.append(f"Fphot: {n_fphot_ok}/{total_nights}")
+    log.info("  " + ", ".join(info_parts))
     if result.differential_phot_success is not None:
         dp_status = "OK" if result.differential_phot_success else "FAILED"
         log.info(f"  Differential phot: {dp_status}")
@@ -2014,15 +2080,17 @@ def run(
         f.write(f"Nights: {total_nights}\n")
         f.write(f"Calibs OK: {n_calibs_ok}/{total_nights}\n")
         f.write(f"Science OK: {n_science_ok}/{total_nights}\n")
-        f.write(f"DIA OK: {n_dia_ok}/{total_dia_pairs}\n")
-        f.write(f"Fphot OK: {n_fphot_ok}/{total_nights}\n")
+        if not run_cfg.skip_dia:
+            f.write(f"DIA OK: {n_dia_ok}/{total_dia_pairs}\n")
+        if run_cfg.forced_phot:
+            f.write(f"Fphot OK: {n_fphot_ok}/{total_nights}\n")
         if result.failed_calibs:
             f.write(f"Failed calibs: {result.failed_calibs}\n")
         if result.failed_science:
             f.write(f"Failed science: {result.failed_science}\n")
-        if result.failed_dia:
+        if not run_cfg.skip_dia and result.failed_dia:
             f.write(f"Failed DIA: {result.failed_dia}\n")
-        if result.failed_fphot:
+        if run_cfg.forced_phot and result.failed_fphot:
             f.write(f"Failed fphot: {result.failed_fphot}\n")
         if result.differential_phot_success is not None:
             dp_status = "OK" if result.differential_phot_success else "FAILED"
