@@ -651,24 +651,24 @@ BROADBAND = {"b", "v", "r", "i"}
 
 
 def _split_band_groups(bands: list[str]) -> list[list[str]]:
-    """Split bands into broadband and narrowband/Sloan groups.
+    """Split bands into broadband group + individual narrowband filters.
 
     Broadband filters (b, v, r, i) go in one quantum graph;
-    everything else (halpha, oiii, gp, rp, ...) goes in another.
-    This prevents a missing calibration for one group (e.g. no OIII flat)
-    from killing the entire night's science processing.
+    each narrowband/Sloan filter (halpha, oiii, gp, rp, ...) gets its
+    own group.  This prevents a missing calibration for one filter
+    (e.g. no OIII flat) from killing unrelated filters.
 
     Returns:
-        List of band groups (1 or 2 groups). Falls back to [bands]
-        if all bands belong to one group.
+        List of band groups. Falls back to [bands] if all bands
+        belong to one group.
     """
     bb = [b for b in bands if b in BROADBAND]
     other = [b for b in bands if b not in BROADBAND]
     groups: list[list[str]] = []
     if bb:
         groups.append(bb)
-    if other:
-        groups.append(other)
+    for nb in other:
+        groups.append([nb])
     return groups or [bands]
 
 
@@ -2053,10 +2053,15 @@ def run(
         len(_get_bands_for_night(night, run_cfg)) for night in all_nights
     )
     n_dia_ok = total_dia_pairs - len(result.failed_dia)
-    log.info(
-        f"  Calibs: {n_calibs_ok}/{total_nights}, Science: {n_science_ok}/{total_nights}, "
-        f"DIA: {n_dia_ok}/{total_dia_pairs}, Fphot: {n_fphot_ok}/{total_nights}"
-    )
+    info_parts = [
+        f"Calibs: {n_calibs_ok}/{total_nights}",
+        f"Science: {n_science_ok}/{total_nights}",
+    ]
+    if not run_cfg.skip_dia:
+        info_parts.append(f"DIA: {n_dia_ok}/{total_dia_pairs}")
+    if run_cfg.forced_phot:
+        info_parts.append(f"Fphot: {n_fphot_ok}/{total_nights}")
+    log.info("  " + ", ".join(info_parts))
     if result.differential_phot_success is not None:
         dp_status = "OK" if result.differential_phot_success else "FAILED"
         log.info(f"  Differential phot: {dp_status}")
@@ -2075,15 +2080,17 @@ def run(
         f.write(f"Nights: {total_nights}\n")
         f.write(f"Calibs OK: {n_calibs_ok}/{total_nights}\n")
         f.write(f"Science OK: {n_science_ok}/{total_nights}\n")
-        f.write(f"DIA OK: {n_dia_ok}/{total_dia_pairs}\n")
-        f.write(f"Fphot OK: {n_fphot_ok}/{total_nights}\n")
+        if not run_cfg.skip_dia:
+            f.write(f"DIA OK: {n_dia_ok}/{total_dia_pairs}\n")
+        if run_cfg.forced_phot:
+            f.write(f"Fphot OK: {n_fphot_ok}/{total_nights}\n")
         if result.failed_calibs:
             f.write(f"Failed calibs: {result.failed_calibs}\n")
         if result.failed_science:
             f.write(f"Failed science: {result.failed_science}\n")
-        if result.failed_dia:
+        if not run_cfg.skip_dia and result.failed_dia:
             f.write(f"Failed DIA: {result.failed_dia}\n")
-        if result.failed_fphot:
+        if run_cfg.forced_phot and result.failed_fphot:
             f.write(f"Failed fphot: {result.failed_fphot}\n")
         if result.differential_phot_success is not None:
             dp_status = "OK" if result.differential_phot_success else "FAILED"
