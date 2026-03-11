@@ -245,10 +245,14 @@ def run(
                     cols.cp_bias_run,
                     "--save-qgraph",
                     str(qg_bias),
-                    "--qgraph-datastore-records",
                     "-d",
                     "instrument='Nickel' AND exposure.observation_type='bias'",
-                ],
+                ]
+                + (
+                    ["--qgraph-datastore-records"]
+                    if executor.needs_datastore_records
+                    else []
+                ),
                 config,
                 log_file=log_file,
             )
@@ -334,14 +338,18 @@ def run(
                     cols.cp_flat_run,
                     "--save-qgraph",
                     str(qg_flat),
-                    "--qgraph-datastore-records",
                     "-d",
                     "instrument='Nickel' AND exposure.observation_type='flat'",
                     "-c",
                     "cpFlatIsr:doDark=False",
                     "-c",
                     "cpFlatIsr:doOverscan=True",
-                ],
+                ]
+                + (
+                    ["--qgraph-datastore-records"]
+                    if executor.needs_datastore_records
+                    else []
+                ),
                 config,
                 log_file=log_file,
             )

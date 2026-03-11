@@ -103,7 +103,7 @@ options:
 # Lightcurve configuration
 lightcurve:
   enabled: true
-  dataset_type: forced_phot_visit_radec   # Total flux for transit depth
+  dataset_type: forced_phot_radec   # Total flux for transit depth
   min_snr: 0                              # Keep all points for BLS
   y_axis: flux_nJy
   x_axis: mjd

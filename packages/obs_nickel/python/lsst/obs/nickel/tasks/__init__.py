@@ -5,6 +5,10 @@ from .diaLightcurveCombinedPlot import (
     DiaLightcurveCombinedPlotTask,
 )
 from .diaLightcurvePlot import DiaLightcurvePlotConfig, DiaLightcurvePlotTask
+from .differentialPhot import (
+    DifferentialPhotConfig,
+    DifferentialPhotTask,
+)
 from .forcedPhotDiffimLightcurveBand import (
     ForcedPhotDiffimLightcurveBandConfig,
     ForcedPhotDiffimLightcurveBandTask,
@@ -45,4 +49,7 @@ __all__ = [
     "DiaLightcurvePlotConfig",
     "DiaLightcurveCombinedPlotTask",
     "DiaLightcurveCombinedPlotConfig",
+    # Differential aperture photometry
+    "DifferentialPhotTask",
+    "DifferentialPhotConfig",
 ]

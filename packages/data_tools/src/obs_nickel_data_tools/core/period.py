@@ -214,8 +214,26 @@ def _phase_fold(df: pd.DataFrame, period: float) -> dict[str, dict[str, np.ndarr
     return result
 
 
-def _save_results(result: PeriodResult, output_dir: Path) -> None:
-    """Write JSON summary, periodogram PNG, and phase-folded PNG.
+def _flux_to_mag(
+    flux: np.ndarray, flux_err: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
+    """Convert nJy flux to AB magnitude, returning NaN for non-positive flux."""
+    mag = np.full_like(flux, np.nan)
+    mag_err = np.full_like(flux_err, np.nan)
+    pos = flux > 0
+    mag[pos] = -2.5 * np.log10(flux[pos]) + 31.4
+    mag_err[pos] = 2.5 / np.log(10) * flux_err[pos] / flux[pos]
+    return mag, mag_err
+
+
+def _save_results(result: PeriodResult, output_dir: Path, df: pd.DataFrame) -> None:
+    """Write JSON summary, plots (periodogram, lightcurve, phase-folded).
+
+    Produces five output files:
+    - period_results.json: best period, power, FAP
+    - periodogram.png: Lomb-Scargle power vs period
+    - lightcurve.png: non-folded time series (flux + apparent mag)
+    - phase_folded.png: phase-folded at best period (flux + apparent mag)
 
     Parameters
     ----------
@@ -223,6 +241,8 @@ def _save_results(result: PeriodResult, output_dir: Path) -> None:
         Completed period result (phase_folded must be populated).
     output_dir : Path
         Destination directory (created if absent).
+    df : pd.DataFrame
+        Lightcurve DataFrame with mjd, band, flux, flux_err columns.
     """
     import matplotlib
 
@@ -267,15 +287,67 @@ def _save_results(result: PeriodResult, output_dir: Path) -> None:
     plt.close(fig)
     log.info("Periodogram saved to %s", periodogram_path)
 
-    # --- Phase-folded -------------------------------------------------------
-    fig2, ax2 = plt.subplots(figsize=(8, 4))
+    # --- Non-folded lightcurve (flux + apparent mag) ------------------------
+    fig_lc, (ax_flux, ax_mag) = plt.subplots(2, 1, figsize=(10, 7), sharex=True)
+    for band in sorted(df["band"].unique()):
+        mask = df["band"] == band
+        color = _BAND_COLORS.get(band, "black")
+        bdf = df[mask]
+        mjd = bdf["mjd"].to_numpy(dtype=float)
+        flux = bdf["flux"].to_numpy(dtype=float)
+        flux_err = bdf["flux_err"].to_numpy(dtype=float)
+        mag, mag_err = _flux_to_mag(flux, flux_err)
+
+        ax_flux.errorbar(
+            mjd,
+            flux,
+            yerr=flux_err,
+            fmt="o",
+            color=color,
+            label=f"{band.upper()}-band",
+            markersize=4,
+            capsize=2,
+            alpha=0.8,
+        )
+        valid = np.isfinite(mag)
+        ax_mag.errorbar(
+            mjd[valid],
+            mag[valid],
+            yerr=mag_err[valid],
+            fmt="o",
+            color=color,
+            label=f"{band.upper()}-band",
+            markersize=4,
+            capsize=2,
+            alpha=0.8,
+        )
+
+    ax_flux.set_ylabel("Flux (nJy)")
+    ax_flux.legend(loc="best")
+    ax_flux.set_title("Lightcurve (non-folded)")
+    ax_mag.set_ylabel("Apparent Magnitude")
+    ax_mag.set_xlabel("MJD")
+    ax_mag.invert_yaxis()
+    fig_lc.tight_layout()
+    lc_path = output_dir / "lightcurve.png"
+    fig_lc.savefig(lc_path)
+    plt.close(fig_lc)
+    log.info("Lightcurve plot saved to %s", lc_path)
+
+    # --- Phase-folded (flux + apparent mag) ---------------------------------
+    fig2, (ax_pf, ax_pm) = plt.subplots(2, 1, figsize=(10, 7), sharex=True)
     for band in sorted(result.phase_folded.keys()):
         data = result.phase_folded[band]
         color = _BAND_COLORS.get(band, "black")
-        ax2.errorbar(
-            data["phase"],
-            data["flux"],
-            yerr=data["flux_err"],
+        phase = data["phase"]
+        flux = data["flux"]
+        flux_err = data["flux_err"]
+        mag, mag_err = _flux_to_mag(flux, flux_err)
+
+        ax_pf.errorbar(
+            phase,
+            flux,
+            yerr=flux_err,
             fmt="o",
             color=color,
             label=f"{band.upper()}-band",
@@ -283,10 +355,25 @@ def _save_results(result: PeriodResult, output_dir: Path) -> None:
             capsize=2,
             alpha=0.8,
         )
-    ax2.set_xlabel("Phase")
-    ax2.set_ylabel("Flux")
-    ax2.set_title(f"Phase-folded at P = {result.best_period:.4f} d")
-    ax2.legend(loc="best")
+        valid = np.isfinite(mag)
+        ax_pm.errorbar(
+            phase[valid],
+            mag[valid],
+            yerr=mag_err[valid],
+            fmt="o",
+            color=color,
+            label=f"{band.upper()}-band",
+            markersize=5,
+            capsize=2,
+            alpha=0.8,
+        )
+
+    ax_pf.set_ylabel("Flux (nJy)")
+    ax_pf.legend(loc="best")
+    ax_pf.set_title(f"Phase-folded at P = {result.best_period:.4f} d")
+    ax_pm.set_ylabel("Apparent Magnitude")
+    ax_pm.set_xlabel("Phase")
+    ax_pm.invert_yaxis()
     fig2.tight_layout()
     phase_path = output_dir / "phase_folded.png"
     fig2.savefig(phase_path)
@@ -378,6 +465,6 @@ def run(
     result.phase_folded = _phase_fold(df, result.best_period)
 
     log.info("Saving results to %s", output_dir)
-    _save_results(result, output_dir)
+    _save_results(result, output_dir, df)
 
     return result

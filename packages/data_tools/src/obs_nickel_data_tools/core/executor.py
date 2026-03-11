@@ -34,6 +34,17 @@ class PipetaskExecutor(Protocol):
     subprocess vs BPS submission).
     """
 
+    @property
+    def needs_datastore_records(self) -> bool:
+        """Whether qgraphs need --qgraph-datastore-records.
+
+        BPS run-qbb requires datastore records embedded in the qgraph.
+        Local pipetask run resolves records from the Butler directly,
+        and embedding records can strip columns from non-standard
+        catalogs (e.g. MONSTER refcat loads only 3 fields instead of 82).
+        """
+        ...
+
     def run_pipetask(
         self,
         args: list[str],
@@ -47,6 +58,8 @@ class LocalExecutor:
 
     This is a passthrough to stack.run_pipetask() with zero behavior change.
     """
+
+    needs_datastore_records = False
 
     # kwargs accepted by stack.run_pipetask()
     _PASSTHROUGH_KWARGS = {"capture_output", "check", "log_file", "log_level"}
@@ -250,6 +263,8 @@ class BPSExecutor:
         poll_interval: Initial seconds between status checks (grows with backoff)
         timeout: Maximum seconds to wait for a single BPS job
     """
+
+    needs_datastore_records = True
 
     def __init__(
         self,
