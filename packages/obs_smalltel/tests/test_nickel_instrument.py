@@ -48,3 +48,24 @@ class TestNickelInstrument:
         fmt_cls = inst.getRawFormatter({})
         assert fmt_cls is not None
         assert "NickelRawFormatter" in fmt_cls.__name__
+
+
+class TestPackageImports:
+    def test_import_from_package_root(self):
+        from lsst.obs.smalltel import Nickel, NickelTranslator
+
+        assert Nickel.getName() == "Nickel"
+        assert NickelTranslator.supported_instrument == "Nickel"
+
+    def test_import_from_nickel_subpackage(self):
+        from lsst.obs.smalltel.nickel import Nickel, NickelTranslator
+
+        assert Nickel is not None
+        assert NickelTranslator is not None
+
+    def test_import_base_classes(self):
+        from lsst.obs.smalltel.base_instrument import GenericSmallTelInstrument
+        from lsst.obs.smalltel.base_translator import ConfigurableTranslator
+
+        assert GenericSmallTelInstrument is not None
+        assert ConfigurableTranslator is not None
