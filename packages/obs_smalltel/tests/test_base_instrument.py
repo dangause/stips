@@ -83,3 +83,25 @@ class TestGenericSmallTelInstrumentLSST:
     def test_is_lsst_instrument(self):
         cls = self._make_nickel_subclass()
         assert issubclass(cls, obs_base.Instrument)
+
+
+class TestGenericRawFormatter:
+    """Test GenericRawFormatter base class."""
+
+    def test_requires_instrument_class(self):
+        try:
+            import lsst.obs.base  # noqa: F401
+        except ImportError:
+            pytest.skip("LSST stack not available")
+        from lsst.obs.smalltel.base_formatter import GenericRawFormatter
+
+        assert hasattr(GenericRawFormatter, "instrument_class")
+
+    def test_requires_translator_class(self):
+        try:
+            import lsst.obs.base  # noqa: F401
+        except ImportError:
+            pytest.skip("LSST stack not available")
+        from lsst.obs.smalltel.base_formatter import GenericRawFormatter
+
+        assert hasattr(GenericRawFormatter, "translatorClass")
