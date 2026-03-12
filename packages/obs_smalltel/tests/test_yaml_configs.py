@@ -49,3 +49,23 @@ class TestNickelCameraYaml:
     def test_single_detector(self, config):
         """Small telescopes have a single CCD."""
         assert len(config["CCDs"]) == 1
+
+
+class TestNickelFiltersYaml:
+    @pytest.fixture
+    def config(self):
+        with open(INSTRUMENTS_DIR / "nickel" / "filters.yaml") as f:
+            return yaml.safe_load(f)
+
+    def test_has_filters(self, config):
+        assert "filters" in config
+        assert len(config["filters"]) >= 4  # at minimum B, V, R, I
+
+    def test_filter_fields(self, config):
+        for f in config["filters"]:
+            assert "name" in f, f"Filter missing 'name': {f}"
+            assert "band" in f or f.get("band") is None
+
+    def test_standard_bvri_present(self, config):
+        names = {f["name"] for f in config["filters"]}
+        assert {"B", "V", "R", "I"}.issubset(names)

@@ -1,0 +1,30 @@
+# Filter definitions for the Nickel 1-meter telescope.
+# Each entry becomes an lsst.obs.base.FilterDefinition.
+filters:
+  - name: B
+    band: b
+    doc: "Johnson/Bessell B"
+  - name: V
+    band: v
+    doc: "Johnson/Bessell V"
+  - name: R
+    band: r
+    doc: "Cousins R"
+  - name: I
+    band: i
+    doc: "Cousins I"
+  - name: clear
+    band: null
+    doc: "Unfiltered / open wheel"
+  - name: gp
+    band: gp
+    doc: "Sloan g-prime"
+  - name: rp
+    band: rp
+    doc: "Sloan r-prime"
+  - name: Halpha
+    band: halpha
+    doc: "H-alpha 6563A narrowband"
+  - name: OIII
+    band: oiii
+    doc: "[OIII] 5007A narrowband"
