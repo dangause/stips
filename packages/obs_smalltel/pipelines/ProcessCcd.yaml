@@ -1,0 +1,75 @@
+# pipelines/ProcessCcd.yaml
+description: ISR + Image Calibration
+tasks:
+  isr:
+    class: lsst.ip.isr.IsrTask
+    config:
+      doOverscan: True
+      doBias: True
+      doFlat: True
+      doDark: False
+      doDefect: True
+      doFringe: False
+      doLinearize: False
+      doSuspect: True
+      doWrite: True
+      doVignette: True
+      fluxMag0T1:
+        B: 2e8
+        V: 2e8
+        R: 2e8
+        I: 2e8
+
+  calibrateImage:
+    class: lsst.pipe.tasks.calibrateImage.CalibrateImageTask
+    config:
+
+      # --- initial PSF used by first-pass detection ---
+      install_simple_psf.fwhm: 7.0
+      install_simple_psf.width: 35
+
+      # ---- Source Detection Config Parameters ----
+      psf_detection.thresholdType: "stdev" # default value is 5
+      psf_detection.thresholdValue: 6.5     # try 6–7σ to cull faint junk
+      psf_detection.minPixels: 7            # require a larger footprint
+      psf_detection.includeThresholdMultiplier: 1.0
+      psf_detection.reEstimateBackground: true
+      psf_detection.doTempLocalBackground: true
+      psf_detection.doTempWideBackground: false
+      psf_detection.excludeMaskPlanes: ["EDGE","SAT","CR","BAD","NO_DATA","SUSPECT"]
+      psf_detection.statsMask: ["BAD","SAT","EDGE","NO_DATA","SUSPECT"]
+      psf_detection.isotropicGrow: true
+      psf_detection.nSigmaToGrow: 2.0
+      psf_detection.combinedGrow: true
+
+      # ---- Astrometry Config Parameters ----
+      connections.astrometry_ref_cat: gaia_dr3
+      astrometry.forceKnownWcs: False
+
+      # match search‐radius: 60″ ≃ 300 pix @ 0.      # match search‐radius: 60″ ≃ 300 pix @ 0.2″/pix
+      astrometry.matcher.maxOffsetPix: 300
+      astrometry.matcher.maxRotationDeg: 5.0
+      astrometry.matcher.matcherIterations: 12
+
+      # accept a sloppy initial fit up to 60″ mean, then refine
+      astrometry.maxMeanDistanceArcsec: 60.0
+      astrometry.matchDistanceSigma: 8.0
+      astrometry.maxIter: 12
+
+      # --- Photometry Config Parameters ---
+      connections.photometry_ref_cat: panstarrs1_dr2
+      # connections.photometry_ref_cat: panstarrs1_dr2_20250730
+
+      photometry_ref_loader.filterMap: {"b": "gMeanPSFMag", "v": "gMeanPSFMag", "r": "rMeanPSFMag", "i": "iMeanPSFMag", "u": "gMeanPSFMag"}
+      photometry.match.matchRadius: 1.5
+
+      photometry.applyColorTerms: false
+
+subsets:
+  processCcd:
+    - isr
+    - calibrateImage
+
+steps:
+  - label: processCcd
+    dimensions: [instrument, exposure, detector]

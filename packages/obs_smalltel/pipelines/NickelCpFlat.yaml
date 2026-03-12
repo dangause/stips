@@ -1,0 +1,22 @@
+description: >
+  Nickel telescope flat calibration construction.
+  Uses NickelCalibCombineByFilterTask to handle missing VisitInfo dates
+  in ISR outputs (the standard CalibCombineByFilterTask crashes on invalid dates).
+imports:
+  - location: $CP_PIPE_DIR/pipelines/_ingredients/cpFlat.yaml
+tasks:
+  cpFlatIsr:
+    class: lsst.ip.isr.IsrTask
+    config:
+      # Nickel CCD is linear — skip linearization which crashes when
+      # detector info is unavailable (BPS run-qbb on compute nodes).
+      doLinearize: false
+  cpFlatCombine:
+    class: lsst.obs.smalltel.tasks.calibCombine.NickelCalibCombineByFilterTask
+    config:
+      connections.inputExpHandles: "cpFlatIsrExp"
+      connections.inputScales: "cpFlatNormalizeScales"
+      connections.outputData: "flat"
+      calibrationType: "flat"
+      exposureScaling: InputList
+      scalingLevel: AMP
