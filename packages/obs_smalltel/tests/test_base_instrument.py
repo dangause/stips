@@ -1,5 +1,7 @@
 """Tests for GenericSmallTelInstrument base class."""
 
+import pytest
+
 
 class TestConfigLoading:
     """Test YAML config loading helpers (no LSST stack needed)."""
@@ -34,3 +36,50 @@ class TestConfigLoading:
         data = inst._load_yaml("instrument.yaml")
         assert isinstance(data, dict)
         assert data["name"] == "Nickel"
+
+
+# LSST-dependent tests — skip if stack not available
+try:
+    import lsst.obs.base as obs_base
+
+    _HAS_LSST = True
+except ImportError:
+    _HAS_LSST = False
+
+
+@pytest.mark.skipif(not _HAS_LSST, reason="LSST stack not available")
+class TestGenericSmallTelInstrumentLSST:
+    """Tests that require the LSST stack."""
+
+    def _make_nickel_subclass(self):
+        from lsst.obs.smalltel.base_instrument import GenericSmallTelInstrument
+
+        class TestNickel(GenericSmallTelInstrument):
+            instrument_name = "Nickel"
+            config_dir = "nickel"
+
+            def getRawFormatter(self, dataId):
+                return None
+
+        return TestNickel
+
+    def test_get_name(self):
+        cls = self._make_nickel_subclass()
+        assert cls.getName() == "Nickel"
+
+    def test_get_camera_returns_camera(self):
+        cls = self._make_nickel_subclass()
+        inst = cls()
+        camera = inst.getCamera()
+        assert len(camera) == 1  # single CCD
+
+    def test_filter_definitions_loaded_from_yaml(self):
+        cls = self._make_nickel_subclass()
+        inst = cls()
+        filt_defs = inst.filterDefinitions
+        names = {f.physical_filter for f in filt_defs}
+        assert {"B", "V", "R", "I", "clear"}.issubset(names)
+
+    def test_is_lsst_instrument(self):
+        cls = self._make_nickel_subclass()
+        assert issubclass(cls, obs_base.Instrument)
