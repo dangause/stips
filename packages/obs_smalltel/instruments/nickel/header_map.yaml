@@ -1,0 +1,58 @@
+# FITS header keyword mappings for the Nickel 1-meter telescope.
+# Used by ConfigurableTranslator to build _const_map and _trivial_map.
+
+const_map:
+  boresight_rotation_angle: 0.0  # degrees
+  boresight_rotation_coord: sky
+
+trivial_map:
+  exposure_time:
+    key: EXPTIME
+    unit: s
+    default: 0.0
+  dark_time:
+    key: EXPTIME
+    unit: s
+    default: 0.0
+  boresight_airmass:
+    key: AIRMASS
+    default: NaN
+  object:
+    key: OBJECT
+    default: UNKNOWN
+  telescope:
+    key: TELESCOP
+    default: "Nickel 1m"
+  science_program:
+    key: PROGRAM
+    default: unknown
+  relative_humidity:
+    key: HUMIDITY
+    default: 0.0
+
+# Filter name normalization (raw FITS FILTNAM value -> canonical name)
+filter_name_map:
+  B: B
+  V: V
+  R: R
+  I: I
+  OPEN: clear
+  C: clear
+  CLEAR: clear
+  GP: gp
+  "G'": gp
+  RP: rp
+  "R'": rp
+  HALPHA: Halpha
+  OIII: OIII
+
+# Observation type classification (raw FITS OBSTYPE -> standard type)
+# Note: Nickel's to_observation_type() uses multi-keyword logic (OBSTYPE + OBJECT)
+# and overrides the simple lookup. This map serves as a fallback reference.
+observation_type_map:
+  object: science
+  bias: bias
+  dark: dark
+  dflat: flat
+  flat: flat
+  focus: focus

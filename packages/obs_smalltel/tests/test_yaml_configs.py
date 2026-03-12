@@ -69,3 +69,36 @@ class TestNickelFiltersYaml:
     def test_standard_bvri_present(self, config):
         names = {f["name"] for f in config["filters"]}
         assert {"B", "V", "R", "I"}.issubset(names)
+
+
+class TestNickelHeaderMapYaml:
+    @pytest.fixture
+    def config(self):
+        with open(INSTRUMENTS_DIR / "nickel" / "header_map.yaml") as f:
+            return yaml.safe_load(f)
+
+    def test_has_required_sections(self, config):
+        assert "const_map" in config
+        assert "trivial_map" in config
+
+    def test_const_map_has_rotation(self, config):
+        cm = config["const_map"]
+        assert "boresight_rotation_angle" in cm
+        assert "boresight_rotation_coord" in cm
+
+    def test_trivial_map_has_exposure_time(self, config):
+        tm = config["trivial_map"]
+        assert "exposure_time" in tm
+
+    def test_filter_name_map(self, config):
+        assert "filter_name_map" in config
+        fnm = config["filter_name_map"]
+        # OPEN and C should map to clear
+        assert fnm.get("OPEN") == "clear"
+        assert fnm.get("C") == "clear"
+
+    def test_observation_type_map(self, config):
+        assert "observation_type_map" in config
+        otm = config["observation_type_map"]
+        assert otm.get("object") == "science"
+        assert otm.get("bias") == "bias"
