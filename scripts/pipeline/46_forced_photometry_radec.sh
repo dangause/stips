@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# LEGACY: This script is superseded by `nickel fphot` (Python CLI).
+# Paths below are site-specific and must be updated for your environment.
+#
 # 46_forced_photometry_radec.sh - Forced photometry at specified RA/Dec coordinates
 #
 # Performs forced photometry at arbitrary sky positions on:

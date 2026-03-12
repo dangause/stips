@@ -430,6 +430,7 @@ def run(
         output_dir = Path(output_dir)
 
     # Optionally wire a file handler so callers can capture log output
+    fh = None
     if log_file is not None:
         log_file = Path(log_file)
         log_file.parent.mkdir(parents=True, exist_ok=True)
@@ -437,34 +438,41 @@ def run(
         fh.setLevel(logging.DEBUG)
         log.addHandler(fh)
 
-    log.info("Reading lightcurve from %s", csv_path)
-    df = _read_lightcurve(csv_path)
-    log.info("Loaded %d rows across bands: %s", len(df), sorted(df["band"].unique()))
+    try:
+        log.info("Reading lightcurve from %s", csv_path)
+        df = _read_lightcurve(csv_path)
+        log.info(
+            "Loaded %d rows across bands: %s", len(df), sorted(df["band"].unique())
+        )
 
-    log.info(
-        "Running Lomb-Scargle (period_min=%.2f d, period_max=%.2f d, n_samples=%d)",
-        period_min,
-        period_max,
-        n_samples,
-    )
-    result = _run_lomb_scargle(
-        df,
-        period_min=period_min,
-        period_max=period_max,
-        n_samples=n_samples,
-    )
-    log.info(
-        "Best period = %.4f d (f = %.4f /d), power = %.4f, FAP = %.2e",
-        result.best_period,
-        result.best_frequency,
-        result.power,
-        result.fap,
-    )
+        log.info(
+            "Running Lomb-Scargle (period_min=%.2f d, period_max=%.2f d, n_samples=%d)",
+            period_min,
+            period_max,
+            n_samples,
+        )
+        result = _run_lomb_scargle(
+            df,
+            period_min=period_min,
+            period_max=period_max,
+            n_samples=n_samples,
+        )
+        log.info(
+            "Best period = %.4f d (f = %.4f /d), power = %.4f, FAP = %.2e",
+            result.best_period,
+            result.best_frequency,
+            result.power,
+            result.fap,
+        )
 
-    log.info("Phase-folding at P = %.4f d", result.best_period)
-    result.phase_folded = _phase_fold(df, result.best_period)
+        log.info("Phase-folding at P = %.4f d", result.best_period)
+        result.phase_folded = _phase_fold(df, result.best_period)
 
-    log.info("Saving results to %s", output_dir)
-    _save_results(result, output_dir, df)
+        log.info("Saving results to %s", output_dir)
+        _save_results(result, output_dir, df)
 
-    return result
+        return result
+    finally:
+        if fh is not None:
+            log.removeHandler(fh)
+            fh.close()

@@ -17,8 +17,8 @@ Example YAML format:
       RAW_PARENT_DIR: "/path/to/raw/data"
 
     object: "SN2023ixf"   # Must match target_name in FITS (case-insensitive partial match)
-    ra: 210.910833
-    dec: 54.316389
+    ra: 210.910750
+    dec: 54.311694
     bands: ["r", "i"]
 
     template:
@@ -315,7 +315,6 @@ def _setup_run_logging(run_id: str, config: Config) -> Path:
         f.write(f"Repository: {config.repo}\n")
         f.write(f"Pipeline log: {pipeline_log}\n")
         f.write(f"Log directory: {run_log_dir}\n")
-        f.write("")
 
     return run_log_dir
 

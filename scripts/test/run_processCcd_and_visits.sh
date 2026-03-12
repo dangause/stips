@@ -1,3 +1,5 @@
+# LEGACY: This test script is superseded by `nickel science` (Python CLI).
+# Paths below are site-specific and must be updated for your environment.
 STACK_DIR="/Users/dangause/Developer/lick/lsst/lsst_stack"
 REPO="/Users/dangause/Developer/lick/lsst/data/nickel/062424"
 OBS="${HOME}/Developer/lick/lsst/lsst_stack/stack/nickel_processing_suite/packages/obs_nickel"

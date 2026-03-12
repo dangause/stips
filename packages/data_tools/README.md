@@ -200,8 +200,8 @@ nickel run pipeline.yaml --dry-run
 Example YAML format:
 ```yaml
 object: "2023ixf"
-ra: 210.910833
-dec: 54.316389
+ra: 210.910750
+dec: 54.311694
 bands: ["r", "i"]
 
 template:

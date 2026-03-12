@@ -1,4 +1,4 @@
-#!/opt/anaconda3/envs/lsst-scipipe-12.0.0/bin/python
+#!/usr/bin/env python
 """
 assess_dia_quality.py - Assess quality of difference imaging results
 

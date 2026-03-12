@@ -1,25 +1,22 @@
 """Pipeline task for generating lightcurves from forced photometry outputs.
 
+.. deprecated::
+    For scientifically accurate magnitudes from difference images, use the
+    production lightcurve extraction tool::
+
+        pipeline_tools/extract_lightcurve.py
+
+    which fetches per-visit photoCalib from the Butler and applies proper
+    ADU -> nJy -> AB magnitude calibration. See also ``nickel lightcurve``.
+
 This task consolidates per-visit forced photometry measurements into a single
 lightcurve table and generates plots. It works with outputs from either
 ForcedPhotRaDecTask (visit images) or ForcedPhotDiffimRaDecTask (difference images).
-
-WARNING: Photometric Calibration Issue (difference images only)
-----------------------------------------------------------------
-When used with difference image forced photometry, the hardcoded zeroPoint
-(31.4) assumes flux is in nanojansky, but diffim forced photometry produces
-instrumental flux (ADU). This results in magnitudes ~10-11 mag fainter than
-correct values.
-
-For scientifically accurate magnitudes from difference images, use the
-extract_lightcurve.py tool instead, which fetches photoCalib from the
-science exposure and applies proper ADU → nJy → AB magnitude calibration.
 """
 
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
 
 import lsst.pex.config as pexConfig
 import lsst.pipe.base as pipeBase
@@ -29,9 +26,6 @@ from astropy.table import Table
 from lsst.daf.butler import DeferredDatasetHandle
 from lsst.pipe.base import connectionTypes as ct
 
-if TYPE_CHECKING:
-    pass
-
 __all__ = [
     "ForcedPhotLightcurveConfig",
     "ForcedPhotLightcurveTask",
@@ -40,6 +34,9 @@ __all__ = [
 ]
 
 _LOG = logging.getLogger(__name__)
+
+# AB magnitude zeropoint for nanojansky: m_AB = -2.5 * log10(f_nJy) + 31.4
+_AB_NJY_ZEROPOINT = 31.4
 
 
 class ForcedPhotLightcurveConnections(
@@ -316,8 +313,9 @@ class ForcedPhotLightcurveTask(pipeBase.PipelineTask):
                     if np.any(negative):
                         flux_err_neg = table["flux_err"][negative]
                         upper_flux = 3 * flux_err_neg
+                        # AB magnitude zeropoint for nJy: m = -2.5*log10(f_nJy) + 31.4
                         with np.errstate(divide="ignore", invalid="ignore"):
-                            upper_mag = -2.5 * np.log10(upper_flux) + 31.4
+                            upper_mag = -2.5 * np.log10(upper_flux) + _AB_NJY_ZEROPOINT
                             upper_mag = np.where(
                                 np.isfinite(upper_mag),
                                 upper_mag,

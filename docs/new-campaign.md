@@ -31,8 +31,8 @@ Before creating your configuration, collect:
 | Field | Example | Where to Find |
 |-------|---------|---------------|
 | Object name | `2023ixf` | TNS, IAU Circulars |
-| RA (degrees) | `210.910833` | TNS, Simbad |
-| Dec (degrees) | `54.316389` | TNS, Simbad |
+| RA (degrees) | `210.910750` | TNS, Simbad |
+| Dec (degrees) | `54.311694` | TNS, Simbad |
 | Observation nights | `20230519, 20230521, ...` | Lick archive, observing logs |
 
 ### Template Strategy

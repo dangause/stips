@@ -1,4 +1,4 @@
-#!/opt/anaconda3/envs/lsst-scipipe-12.0.0/bin/python
+#!/usr/bin/env python
 """
 query_night_metadata.py - Query Butler for exposure metadata for a specific night
 

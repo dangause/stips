@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# LEGACY: This script is superseded by `nickel fphot` (Python CLI).
+# Paths below are site-specific and must be updated for your environment.
+#
 # 45_forced_photometry.sh - Run forced photometry at catalog positions on science exposures
 #
 # This script performs forced photometry on calibrated science images (preliminary_visit_image)

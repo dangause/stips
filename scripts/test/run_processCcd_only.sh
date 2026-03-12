@@ -1,3 +1,5 @@
+# LEGACY: This test script is superseded by `nickel science` (Python CLI).
+# Paths below are site-specific and must be updated for your environment.
 REPO="/Users/dangause/Developer/lick/lsst/data/nickel/062424"
 RUN="Nickel/raw/all"
 CALIB_CHAIN="Nickel/calib/current"

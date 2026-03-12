@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# LEGACY: This test script is superseded by `nickel run` (Python CLI).
+# Paths below are site-specific and must be updated for your environment.
+#
 # Nickel reduction pipeline — persistent repo, nightly certification
 
 # set -euo pipefail

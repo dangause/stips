@@ -6,27 +6,18 @@ computes the HTM7 shard IDs needed to cover those positions, and reports
 which shards are missing from the local MONSTER refcat directory.
 
 Usage (run inside LSST stack environment):
-    python scripts/utilities/recompute_missing_shards.py
-
-Or via run_with_stack:
-    nickel run-script scripts/utilities/recompute_missing_shards.py
+    python scripts/utilities/recompute_missing_shards.py --repo /path/to/repo \\
+        --shard-dir /path/to/refcats/the_monster_20250219_afw \\
+        --plan-dir /path/to/monster_plan
 """
 
 from __future__ import annotations
 
+import argparse
 import re
 import sys
 from pathlib import Path
 
-# Configuration
-REPO = "/Users/dangause/Developer/lick/lsst/data/nickel/extended_objects_repo"
-SHARD_DIR = Path(
-    "/Users/dangause/Developer/lick/lsst/lsst_stack/stack/refcats"
-    "/data/refcats/the_monster_20250219_afw"
-)
-PLAN_DIR = Path(
-    "/Users/dangause/Developer/lick/lsst/lsst_stack/stack/refcats/data/monster_plan"
-)
 CONE_RADIUS_DEG = 6.0 / 60.0  # 6 arcmin in degrees
 HTM_DEPTH = 7
 
@@ -106,6 +97,20 @@ def get_existing_shard_ids(shard_dir: Path) -> set[int]:
 
 def main() -> None:
     import numpy as np
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--repo", required=True, help="Butler repository path")
+    parser.add_argument(
+        "--shard-dir", required=True, type=Path, help="MONSTER refcat shard directory"
+    )
+    parser.add_argument(
+        "--plan-dir", required=True, type=Path, help="Output plan directory"
+    )
+    args = parser.parse_args()
+
+    REPO = args.repo
+    SHARD_DIR = args.shard_dir
+    PLAN_DIR = args.plan_dir
 
     print(f"Butler repo: {REPO}")
     print(f"Shard dir:   {SHARD_DIR}")

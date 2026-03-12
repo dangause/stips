@@ -1,4 +1,4 @@
-#!/opt/anaconda3/envs/lsst-scipipe-12.0.0/bin/python
+#!/usr/bin/env python
 """
 extract_lightcurve.py - Extract light curve from DIA source catalogs
 
