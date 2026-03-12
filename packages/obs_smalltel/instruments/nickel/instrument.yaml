@@ -1,0 +1,14 @@
+name: Nickel
+policyName: Nickel
+obsDataPackage: obs_nickel_data
+visit_system: ONE_TO_ONE
+detector_count: 1
+
+location:
+  name: "Lick Observatory"
+  latitude: 37.3414
+  longitude: -121.6429
+  elevation: 1283.0
+
+# Western hemisphere: observing night crosses into next UT day
+day_obs_offset: 1
