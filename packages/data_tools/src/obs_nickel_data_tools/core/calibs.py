@@ -24,7 +24,17 @@ log = logging.getLogger(__name__)
 
 @dataclass
 class CalibsResult:
-    """Result of calibration processing."""
+    """Result of nightly calibration processing.
+
+    Attributes:
+        success: Whether at least one of bias/flat succeeded.
+        night: Observing night (YYYYMMDD).
+        raw_run: Butler RUN collection for ingested raw frames.
+        calib_chain: Unified calibration CHAINED collection.
+        cp_bias: Bias calibration collection name.
+        cp_flat: Flat calibration collection name.
+        error: Error message if processing failed, None on success.
+    """
 
     success: bool
     night: str

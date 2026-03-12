@@ -72,11 +72,10 @@ max-doc-length = 79
 convention = "numpy"
 
 [tool.pytest.ini_options]
-# Run tests from all packages
+# All tests (including data_tools unit tests) live in obs_nickel/tests/
 # Add additional packages here as they add tests/ directories
 testpaths = [
     "packages/obs_nickel/tests",
-    # Uncomment when tests are added:
     # "packages/data_tools/tests",
     # "packages/defects/tests",
     # "packages/refcats/tests",
