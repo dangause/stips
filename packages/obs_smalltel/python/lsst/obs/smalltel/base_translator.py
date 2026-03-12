@@ -37,6 +37,7 @@ class ConfigurableTranslator(FitsTranslator):
                 cls._trivial_map = cls._build_trivial_map(
                     mappings.get("trivial_map", {})
                 )
+                cls._filter_name_map = mappings.get("filter_name_map", {})
             except FileNotFoundError:
                 # Config not yet created — allow class definition to proceed
                 pass
@@ -115,9 +116,11 @@ class ConfigurableTranslator(FitsTranslator):
     # --- Default to_* methods from YAML ---
 
     def to_physical_filter(self) -> str:
-        """Map FITS filter keyword to canonical name via filter_name_map."""
-        mappings = self._load_header_map()
-        filter_map = mappings.get("filter_name_map", {})
+        """Map FITS filter keyword to canonical name via filter_name_map.
+
+        Uses the filter_name_map cached at class definition time (no disk I/O).
+        """
+        filter_map = getattr(self.__class__, "_filter_name_map", {})
         raw_filter = str(self._header.get("FILTNAM", "UNKNOWN")).strip()
         # Try exact match, then uppercase match
         if raw_filter in filter_map:

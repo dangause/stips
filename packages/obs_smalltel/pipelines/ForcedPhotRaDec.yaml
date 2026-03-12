@@ -12,14 +12,14 @@
 #
 #   # Using an input coordinate catalog:
 #   pipetask run -b $REPO \
-#     -p $OBS_NICKEL/pipelines/ForcedPhotRaDec.yaml#visit-image \
+#     -p $OBS_SMALLTEL/pipelines/ForcedPhotRaDec.yaml#visit-image \
 #     -i Nickel/runs/20201207/processCcd/...,my_targets \
 #     -o Nickel/runs/20201207/forcedPhot/run \
 #     -d "instrument='Nickel' AND visit=12345"
 #
 #   # Using config coordinates (single target):
 #   pipetask run -b $REPO \
-#     -p $OBS_NICKEL/pipelines/ForcedPhotRaDec.yaml#visit-image \
+#     -p $OBS_SMALLTEL/pipelines/ForcedPhotRaDec.yaml#visit-image \
 #     -i Nickel/runs/20201207/processCcd/... \
 #     -o Nickel/runs/20201207/forcedPhot/run \
 #     -d "instrument='Nickel' AND visit=12345" \
@@ -29,7 +29,7 @@
 #
 #   # Forced photometry on difference images:
 #   pipetask run -b $REPO \
-#     -p $OBS_NICKEL/pipelines/ForcedPhotRaDec.yaml#diffim \
+#     -p $OBS_SMALLTEL/pipelines/ForcedPhotRaDec.yaml#diffim \
 #     -i Nickel/runs/20201207/diff/...,my_targets \
 #     -o Nickel/runs/20201207/forcedPhotDiffim/run \
 #     -d "instrument='Nickel' AND visit=12345"

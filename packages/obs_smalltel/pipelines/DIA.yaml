@@ -1,4 +1,4 @@
-# DIA.yaml - Production Difference Image Analysis Pipeline for obs_nickel
+# DIA.yaml - Production Difference Image Analysis Pipeline for obs_smalltel
 #
 # This pipeline performs image subtraction for transient/variable source detection
 # using deep coadd templates. It includes:
@@ -15,7 +15,7 @@
 #
 # Usage:
 #   pipetask run -b $REPO \
-#     -p $OBS_NICKEL/pipelines/DIA.yaml \
+#     -p $OBS_SMALLTEL/pipelines/DIA.yaml \
 #     -i <raw>,<calib>,<refcats>,<skymaps>,<templates> \
 #     -o <output_run> \
 #     -d "instrument='Nickel' AND visit=12345"
@@ -25,8 +25,8 @@ description: >
   Optimized for transient and variable source detection.
 
 imports:
-  - location: $OBS_NICKEL/pipelines/nickel-analysis-dia-detector.yaml
-  - location: $OBS_NICKEL/pipelines/nickel-analysis-dia-lightcurve.yaml
+  - location: $OBS_SMALLTEL/pipelines/nickel-analysis-dia-detector.yaml
+  - location: $OBS_SMALLTEL/pipelines/nickel-analysis-dia-lightcurve.yaml
 
 parameters:
   release_id: 0
