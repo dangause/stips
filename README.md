@@ -98,11 +98,14 @@ nickel_processing_suite/
 │   ├── data_tools/           # Python CLI and pipeline tools
 │   ├── defects/              # Defect mask generation
 │   ├── refcats/              # Reference catalog scripts
-│   └── colorterms/           # Color term fitting
+│   ├── colorterms/           # Color term fitting
+│   ├── testdata/             # Test fixtures and data
+│   └── tuning/               # Pipeline tuning utilities
 ├── scripts/
 │   ├── config/               # Per-target YAML configs (2023ixf, 2020wnt)
-│   ├── pipeline/             # Shell scripts for pipeline stages
+│   ├── pipeline/             # Bootstrap script
 │   └── utilities/            # Helper scripts
+├── docs/                     # User guides, architecture docs, diagrams
 ├── docker/
 │   ├── Dockerfile            # Standard Docker image
 │   ├── Dockerfile.hpc        # HPC-optimized image
@@ -135,7 +138,9 @@ The unified command-line interface for all pipeline operations.
 | `nickel ps1-template` | Download and ingest PS1 template |
 | `nickel fphot NIGHT` | Run forced photometry at RA/Dec |
 | `nickel lightcurve` | Extract light curve from sources |
+| `nickel clean CONFIG.yaml` | Remove processing outputs for re-runs |
 | `nickel run CONFIG.yaml` | Run full pipeline from YAML config |
+| `nickel dashboard` | Launch browser-based pipeline monitoring |
 | `nickel bps submit` | Submit pipeline to BPS cluster |
 | `nickel bps status` | Check BPS run status |
 | `nickel bps cancel` | Cancel BPS run |
@@ -232,22 +237,40 @@ bands: ["r", "i"]
 
 template:
   type: ps1
-  degrade_seeing: 2.0
+  size: 0.4               # Cutout size in degrees
 
-nights:
-  20230519:
-    r: []
-    i: []
-  20230521:
-    r: []
-    i: []
+science:
+  nights:
+    - 20230519
+    - 20230521
+    - 20230523
+
+configs:
+  science:
+    calibrate_image: calibrateImage/tuned_configs/dense_strict.py
+    calibrate_image_fallbacks:
+      - calibrateImage/tuned_configs/dense_relaxed.py
+      - calibrateImage/tuned_configs/sparse_relaxed.py
+    colorterms: apply_colorterms.py
+  dia:
+    subtract_images: dia/subtractImages_ps1.py
+    detect_and_measure: dia/detectAndMeasure.py
 
 options:
-  jobs: 8
+  jobs: 6
+  concurrent_nights: 3
   forced_phot: true
-  lightcurve: true
   continue_on_error: true
   use_fallbacks: true
+
+lightcurve:
+  enabled: true
+  dataset_type: forced_phot_diffim_radec
+  min_snr: 1
+  max_mag_err: 1.0
+  y_axis: apparent_mag
+  x_axis: days_since_explosion
+  explosion_mjd: 60082.75
 ```
 
 ### Environment File Configuration
@@ -351,6 +374,15 @@ nickel lightcurve --ra 210.91 --dec 54.32 \
     --collections "Nickel/runs/*/forcedPhotRaDec/*/run" \
     --dataset-type forced_phot_diffim_radec \
     --name "SN 2023ixf"
+
+# With display options (absolute magnitude, days since explosion)
+nickel lightcurve --ra 210.91 --dec 54.32 \
+    --collections "Nickel/runs/*/forcedPhotRaDec/*/run" \
+    --dataset-type forced_phot_diffim_radec \
+    --name "SN 2023ixf" \
+    --y-axis absolute_mag --distance-modulus 29.05 \
+    --x-axis days_since_explosion --explosion-mjd 60082.75 \
+    --max-mag-err 1.0
 ```
 
 ---
@@ -384,15 +416,28 @@ template:
     - "20231211"
 ```
 
+**Transit Pipelines** (differential aperture photometry):
+```yaml
+template:
+  type: ps1
+
+options:
+  pipeline_type: transit
+  forced_phot_image_type: visit
+  transit_search: true
+  search_method: bls
+```
+
+### Fallback Configs
+
+Set `use_fallbacks: true` in `options:` to automatically try progressively relaxed `calibrateImage` configs when the primary config fails (e.g., dense_strict → dense_relaxed → sparse_relaxed). Each fallback writes to its own RUN collection (`/run_fb1`, `/run_fb2`).
+
 ### Processing Logs
 
-The pipeline creates JSON logs in `{repo}/processing_log/` to track:
-- Which configs were attempted for each step
-- Whether fallback configs were used
-- Failed quanta and their error messages
-- Overall success/failure status
+Pipeline runs create a unified log directory at `logs/{RUN_ID}/` with subdirectories for each step (`calibs/`, `science/`, `dia/`, `fphot/`, `lightcurve/`). Logs are automatically split by exposure for easier debugging.
 
-Example log path: `{repo}/processing_log/20230519_science_20240101T120000.json`
+- `logs/{RUN_ID}/pipeline.log` — Python-level orchestration log
+- `logs/{RUN_ID}/summary.txt` — Final success/failure counts
 
 ---
 
@@ -571,9 +616,15 @@ Nickel/
 │           └── flat/
 ├── runs/
 │   └── YYYYMMDD/                    # Processing outputs
-│       ├── processCcd/TIMESTAMP/run
+│       ├── processCcd/TIMESTAMP/    # CHAINED parent (use this)
+│       │   ├── run                  # Primary config outputs
+│       │   ├── run_fb1              # Fallback 1 outputs
+│       │   └── run_fb2              # Fallback 2 outputs
 │       ├── diff/TIMESTAMP/run
-│       └── forcedPhotRaDec/TIMESTAMP/run
+│       ├── forcedPhotRaDec/TIMESTAMP/
+│       │   ├── diffim_{band}        # Forced phot on difference images
+│       │   └── visit_{band}         # Forced phot on visit images
+│       └── differentialPhot/        # Differential aperture photometry
 ├── templates/
 │   ├── ps1/{band}                   # PS1 external templates
 │   └── deep/tract{N}/{band}         # Nickel coadd templates
@@ -655,7 +706,7 @@ nickel bootstrap scripts/config/2023ixf/pipeline_ps1_template.yaml
 ### Forced photometry finds no processCcd collection
 
 The science processing step may have failed. Check:
-1. Processing logs in `{repo}/processing_log/`
+1. Processing logs in `logs/{RUN_ID}/`
 2. That science processing completed successfully
 3. That collections match the expected pattern
 

@@ -122,7 +122,7 @@ def _get_step_log_file(step: str, night: str = "", band: str = "") -> Path | Non
 
     # Map step names to subdirectories
     # Template-related steps go into templates/{band}/
-    # Matches the shell script (30_coadds.sh) directory structure
+    # Template logs go into templates/{band}/
     if step in ("ps1_template", "coadd_template"):
         if band:
             step_dir = base_dir / "templates" / band

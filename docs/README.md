@@ -22,6 +22,10 @@ docs/
 ├── cli-reference.md       # Complete command reference
 ├── configuration.md       # YAML & environment options
 ├── architecture.md        # System design & internals
+├── architecture-bps-docker-slurm.md  # BPS/Docker/Slurm deployment
+├── science-configs.md     # CalibrateImage tuning & fallbacks
+├── logging.md             # Log directory structure
+├── logging-improvements.md  # Log splitting & improvements
 └── diagrams/
     ├── architecture.mmd   # Component diagram
     ├── pipeline-flow.mmd  # Data flow diagram
@@ -76,6 +80,23 @@ docs/
 - Data flow
 - Design patterns
 - Extension points
+
+### [BPS/Docker/Slurm Deployment](architecture-bps-docker-slurm.md)
+
+**Running pipelines on HPC clusters.**
+
+- Docker container architecture
+- Slurm cluster setup
+- BPS configuration and submission
+- Troubleshooting HPC deployments
+
+### [Science Configs](science-configs.md)
+
+**Tuning calibrateImage and fallback strategies.**
+
+- Primary vs fallback configurations
+- Dense/sparse star field tuning
+- Strict/relaxed thresholds
 
 ## Diagrams
 
@@ -132,7 +153,7 @@ nickel bps status RUN_ID
 
 1. Check the relevant guide above
 2. Look at example configs in `scripts/config/`
-3. Check processing logs in `{REPO}/processing_log/`
+3. Check processing logs in `logs/{RUN_ID}/`
 4. Open an issue on GitHub
 
 ## Contributing to Docs

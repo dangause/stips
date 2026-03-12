@@ -49,6 +49,10 @@ _setup_local "$${TESTDATA_NICKEL_DIR}" testdata_nickel; \
 export PYTHONPATH="$${OBS_NICKEL_LOCAL}/python:$${OBS_NICKEL_DATA_LOCAL}/python:$${PYTHONPATH:-}";
 endef
 
+# =============================================================================
+# Development targets
+# =============================================================================
+
 .PHONY: setup-dev
 setup-dev: ## Install all packages in editable mode with dev tools
 	uv sync --group dev
@@ -57,81 +61,17 @@ setup-dev: ## Install all packages in editable mode with dev tools
 setup-dev-full: ## Install all packages + notebooks + analysis tools
 	uv sync --all-groups
 
+# =============================================================================
+# LSST stack targets
+# =============================================================================
+
 .PHONY: bootstrap
 bootstrap: ## Bootstrap Butler repo + refcats + skymap
 	$(SHELL) -lc '$(setup_stack) ./scripts/pipeline/00_bootstrap_repo.sh'
 
-.PHONY: archive-night
-archive-night: ## Download a night from the archive (NIGHT=YYYYMMDD)
-ifndef NIGHT
-	$(error NIGHT is required, e.g. NIGHT=20201207)
-endif
-	$(SHELL) -lc '$(envsource) ./scripts/pipeline/01_download_archive.sh --night $(NIGHT)'
-
-.PHONY: calibs
-calibs: ## Run nightly calibrations (bias/flat/defects). NIGHT=YYYYMMDD
-ifndef NIGHT
-	$(error NIGHT is required, e.g. NIGHT=20201207)
-endif
-	$(SHELL) -lc '$(setup_stack) ./scripts/pipeline/10_calibs.sh --night $(NIGHT)'
-
-.PHONY: science
-science: ## Run single-night science processing. NIGHT=YYYYMMDD
-ifndef NIGHT
-	$(error NIGHT is required, e.g. NIGHT=20201207)
-endif
-	$(SHELL) -lc '$(setup_stack) ./scripts/pipeline/20_science.sh --night $(NIGHT) $(SCIENCE_ARGS)'
-
-.PHONY: coadds
-coadds: ## Build coadds/templates. Requires TRACT and BAND (e.g. BAND=r).
-ifndef TRACT
-	$(error TRACT is required, e.g. TRACT=1099)
-endif
-ifndef BAND
-	$(error BAND is required, e.g. BAND=r)
-endif
-	$(SHELL) -lc '$(setup_stack) ./scripts/pipeline/30_coadds.sh --tract $(TRACT) --band $(BAND) $(COADD_ARGS)'
-
-.PHONY: dia
-dia: ## Run DIA for a night. NIGHT=YYYYMMDD
-ifndef NIGHT
-	$(error NIGHT is required, e.g. NIGHT=20201207)
-endif
-	$(SHELL) -lc '$(setup_stack) ./scripts/pipeline/40_diff_imaging.sh --night $(NIGHT) $(DIA_ARGS)'
-
-.PHONY: dia-multiband
-dia-multiband: ## Run multi-band DIA helper (wraps run_dia_multi_band.sh)
-	$(SHELL) -lc '$(setup_stack) ./scripts/pipeline/run_dia_multi_band.sh $(ARGS)'
-
-.PHONY: forced-phot
-forced-phot: ## Run forced photometry for a night. NIGHT=YYYYMMDD [BAND=r]
-ifndef NIGHT
-	$(error NIGHT is required, e.g. NIGHT=20201207)
-endif
-	$(SHELL) -lc '$(setup_stack) ./scripts/pipeline/45_forced_photometry.sh --night $(NIGHT) $(if $(BAND),--band $(BAND),) $(FORCED_PHOT_ARGS)'
-
-.PHONY: forced-phot-radec
-forced-phot-radec: ## Forced photometry at RA/Dec. NIGHT=YYYYMMDD RA=deg DEC=deg [IMAGE_TYPE=both|visit|diffim]
-ifndef NIGHT
-	$(error NIGHT is required, e.g. NIGHT=20201207)
-endif
-ifndef RA
-	$(error RA is required in degrees, e.g. RA=185.7285)
-endif
-ifndef DEC
-	$(error DEC is required in degrees, e.g. DEC=15.8225)
-endif
-	$(SHELL) -lc '$(setup_stack) ./scripts/pipeline/46_forced_photometry_radec.sh --night $(NIGHT) --ra $(RA) --dec $(DEC) $(if $(IMAGE_TYPE),--image-type $(IMAGE_TYPE),) $(if $(BAND),--band $(BAND),) $(FORCED_PHOT_RADEC_ARGS)'
-
-.PHONY: forced-phot-radec-file
-forced-phot-radec-file: ## Forced photometry from coordinate file. NIGHT=YYYYMMDD COORDS_FILE=targets.csv
-ifndef NIGHT
-	$(error NIGHT is required, e.g. NIGHT=20201207)
-endif
-ifndef COORDS_FILE
-	$(error COORDS_FILE is required, e.g. COORDS_FILE=targets.csv)
-endif
-	$(SHELL) -lc '$(setup_stack) ./scripts/pipeline/46_forced_photometry_radec.sh --night $(NIGHT) --coords-file $(COORDS_FILE) $(if $(IMAGE_TYPE),--image-type $(IMAGE_TYPE),) $(if $(BAND),--band $(BAND),) $(FORCED_PHOT_RADEC_ARGS)'
+# Pipeline operations (calibs, science, DIA, fphot, lightcurve) are handled
+# by the `nickel` CLI. Run `nickel --help` for usage, or use YAML-driven
+# orchestration with `nickel run <config.yaml>`.
 
 .PHONY: refcat-cones
 refcat-cones: ## Generate cones.csv + htm7_list.txt via nickel-refcats (pass ARGS="--ras ... --decs ...")
@@ -148,17 +88,6 @@ declare-eups: ## Declare obs_nickel, obs_nickel_data, and testdata_nickel in the
 	  cd "$(PWD)/packages/obs_nickel_data" && eups declare obs_nickel_data git -r . -t current || true; \
 	  cd "$(PWD)/packages/testdata" && eups declare testdata_nickel git -r . -t current 2>/dev/null || true'
 
-.PHONY: batch
-batch: ## Batch process nights file. NIGHTS_FILE=path/to/nights.txt
-ifndef NIGHTS_FILE
-	$(error NIGHTS_FILE is required)
-endif
-	$(SHELL) -lc '$(setup_stack) ./scripts/pipeline/batch_process_nights.sh --nights-file $(NIGHTS_FILE) $(BATCH_ARGS)'
-
-.PHONY: transient-pipeline
-transient-pipeline: ## Run the full transient pipeline wrapper (run_full_transient_pipeline.sh)
-	$(SHELL) -lc '$(setup_stack) ./scripts/pipeline/run_full_transient_pipeline.sh $(ARGS)'
-
 .PHONY: stack-install
 stack-install: ## Install an LSST stack release (TAG=w_2025_10 or r_28_0_0). Does not touch existing stack.
 ifndef TAG
@@ -169,6 +98,10 @@ endif
 	  if [[ -z "$$prefix" && -n "$$STACK_DIR" ]]; then prefix="$$STACK_DIR"; fi; \
 	  if [[ -z "$$prefix" ]]; then prefix="$$HOME/lsst_stacks"; fi; \
 	  ./scripts/utilities/install_stack_version.sh --release $(TAG) --prefix "$$prefix" $(if $(INSTALL_DISTRIB),--install-distrib,)'
+
+# =============================================================================
+# Linting & testing
+# =============================================================================
 
 .PHONY: lint
 lint: ## Ruff lint across the workspace
@@ -249,5 +182,7 @@ singularity-build: docker-build ## Build Singularity image from Docker
 .PHONY: help
 help: ## Show this help message
 	@echo "Nickel Processing Suite - Available targets:"
+	@echo ""
+	@echo "  Pipeline operations use the 'nickel' CLI. Run: nickel --help"
 	@echo ""
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'

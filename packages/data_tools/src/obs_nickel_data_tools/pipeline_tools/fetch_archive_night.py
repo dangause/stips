@@ -10,7 +10,7 @@ Usage:
   python -m obs_nickel_data_tools.pipeline_tools.fetch_archive_night --night YYYYMMDD [--raw-root PATH] [--archive-url URL]
 
 Environment defaults:
-  RAW_PARENT_DIR      root for raw data (same as used by 10_calibs.sh)
+  RAW_PARENT_DIR      root for raw data (same as used by nickel calibs)
   LICK_ARCHIVE_URL    archive API base (default https://archive.ucolick.org/archive)
   LICK_ARCHIVE_DIR    path to the lick_searchable_archive repo to put on PYTHONPATH
   LICK_ARCHIVE_INSTR  instrument filter to pass to the API (default NICKEL)
