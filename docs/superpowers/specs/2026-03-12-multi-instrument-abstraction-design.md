@@ -772,6 +772,8 @@ All routed through `CollectionNames(prefix, night)`. The prefix comes from `plug
 | `run.py` | `f"Nickel/runs/{night}/processCcd/*"` | `f"{plugin.collection_prefix}/runs/{night}/processCcd/*"` |
 | `run.py` | `f"Nickel/runs/{night}/differentialPhot"` | `f"{plugin.collection_prefix}/runs/{night}/differentialPhot"` |
 | `run.py` | `f"Nickel/calib/current,refcats,skymaps/nickelRings"` | `f"{plugin.collection_prefix}/calib/current,refcats,{plugin.skymaps_chain}"` |
+| `run.py` | `_discover_fphot_collections`: `f"Nickel/runs/{night}/forcedPhotRaDec/*/{suffix}*"` | Uses `plugin.collection_prefix` |
+| `run.py` | `_discover_dia_collections`: `prefix_filter="Nickel/runs/"`, `f"Nickel/runs/{night}/diff/*/run"` | Uses `plugin.collection_prefix` |
 | `clean.py` | `"Nickel/runs/*/processCcd/*"` (6+ patterns) | `f"{plugin.collection_prefix}/runs/*/processCcd/*"` |
 | `fphot.py` | `f"Nickel/runs/{night}/forcedPhotRaDec/..."` | Via `CollectionNames` |
 
@@ -788,6 +790,7 @@ All replaced with `instrument='{plugin.name}'`.
 | `coadd.py` | 218 | `"instrument='Nickel'"` |
 | `pipeline.py` | 179, 209 | `"instrument='Nickel'"` in coordinate validation |
 | `extract_lightcurve.py` | 396 | `"instrument='Nickel'"` |
+| `assess_dia_quality.py` | 97, 118 | `"instrument='Nickel'"` |
 | `run.py` | multiple | collection discovery functions |
 
 ### Category 3: Instrument class path constant (1 definition, ~10 usages)
