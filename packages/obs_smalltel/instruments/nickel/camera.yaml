@@ -1,0 +1,56 @@
+name: Nickel
+
+AMP: &AMP
+  perAmpData: true
+  dataExtent: [1056, 1024]                 # 1024 imaging + 32 col overscan (2x2 binning)
+  readCorner: LL
+  rawBBox: [[0, 0], [1056, 1024]]
+  rawDataBBox: [[0, 0], [1024, 1024]]
+  rawSerialPrescanBBox: [[0, 0], [0, 0]]
+  rawSerialOverscanBBox: [[1024, 0], [32, 1024]]   # right-side overscan
+  rawParallelPrescanBBox: [[0, 0], [0, 0]]
+  rawParallelOverscanBBox: [[0, 0], [0, 0]]
+  gain: 1.8                                 # 2x2 slow mode
+  readNoise: 10.7                           # 2x2 slow mode
+  saturation: 65535                         # DN (~118k e- full well / 1.8 e-/DN ≈ 65.6k DN)
+  linearityType: PROPORTIONAL
+  linearityThreshold: 0
+  linearityMax: 60000
+  linearityCoeffs: [0.0, 1.0]
+  hdu: 0
+  ixy: [0, 0]
+  flipXY: [false, true]
+
+CCD: &CCD
+  detectorType: 0
+  physicalType: SCIENCE
+  refpos: [512.0, 512.0]                    # center of 1024×1024 binned imaging
+  offset: [0.0, 0.0, 0.0]
+  bbox: [[0, 0], [1024, 1024]]
+  pixelSize: [0.030, 0.030]                 # mm (2×2 binned effective pixel = 30 µm)
+  transformDict:
+    nativeSys: 'Pixels'
+    transforms: {}
+  transposeDetector: false
+  pitch: 0.0
+  yaw: 0.0
+  roll: 0.0
+  amplifiers:
+    A00:
+      <<: *AMP
+
+# Optical plate scale (unbinned): 0.184"/15µm => 12.267 arcsec/mm
+plateScale: 12.267
+
+transforms:
+  nativeSys: 'FocalPlane'
+  FieldAngle:
+    transformType: radial
+    coeffs: [0.0, 1.0, 0.0]
+
+CCDs:
+  CCD0:
+    <<: *CCD
+    id: 0
+    name: CCD0
+    serial: Nickel-1

@@ -30,3 +30,22 @@ class TestNickelInstrumentYaml:
 
     def test_day_obs_offset(self, config):
         assert config["day_obs_offset"] in (0, 1)
+
+
+class TestNickelCameraYaml:
+    @pytest.fixture
+    def config(self):
+        with open(INSTRUMENTS_DIR / "nickel" / "camera.yaml") as f:
+            return yaml.safe_load(f)
+
+    def test_has_ccds(self, config):
+        assert "CCDs" in config
+        assert len(config["CCDs"]) >= 1
+
+    def test_has_plate_scale(self, config):
+        assert "plateScale" in config
+        assert config["plateScale"] > 0
+
+    def test_single_detector(self, config):
+        """Small telescopes have a single CCD."""
+        assert len(config["CCDs"]) == 1
