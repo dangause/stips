@@ -50,7 +50,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/repo_paths.sh"
 : "${LOG_ROOT:=${REPO_ROOT}/logs}"
 
 # Current run ID (shared across all scripts in a single pipeline execution)
-# This can be set externally (e.g., by run_dia_multi_band.sh) or auto-generated
+# This can be set externally or auto-generated
 : "${RUN_ID:=$(date -u +%Y%m%d_%H%M%S)_$$}"
 
 # Top-level run directory for this execution

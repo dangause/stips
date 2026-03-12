@@ -7,7 +7,7 @@ Convert pre-fetched Gaia DR3 and PS1 DR2 CSVs into tiled refcats
 Typical flow:
   1) Fetch catalogs (gaia_fetch.py, ps1_fetch_mast.py)
   2) Run this script to convert both into tiles under data/
-  3) Let run_full.sh ingest the tiles into your Butler repo
+  3) Use nickel bootstrap to ingest the tiles into your Butler repo
 
 Examples
 --------
@@ -152,8 +152,8 @@ def main():
     if ps1_map:
         print(f"[PS1 ] map: {ps1_map}")
 
-    # Print ingest hints (BUTLER happens later in run_full.sh)
-    print("\nUse run_full.sh to ingest the latest maps into Butler.")
+    # Print ingest hints (Butler ingest happens during bootstrap)
+    print("\nUse 'nickel bootstrap' to ingest the latest maps into Butler.")
 
 
 if __name__ == "__main__":
