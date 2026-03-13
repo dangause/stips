@@ -151,6 +151,8 @@ def find_bad_coord_exposures(
     *,
     object_filter: str | None = None,
     tolerance_deg: float = 5.0,
+    instrument_name: str = "Nickel",
+    day_obs_offset: int = 1,
 ) -> list[int]:
     """Find exposures with coordinates far from the expected target.
 
@@ -169,17 +171,21 @@ def find_bad_coord_exposures(
         target_dec: Expected target Dec in degrees
         object_filter: Optional object name to restrict query
         tolerance_deg: Max offset in degrees before flagging (default: 5.0)
+        instrument_name: Butler instrument name to use in WHERE clause
+            (default: "Nickel")
+        day_obs_offset: Days to add to the observing night to get UT day_obs
+            (default: 1, for western-hemisphere observatories like Lick)
 
     Returns:
         Sorted list of exposure IDs with bad coordinates
     """
     from obs_nickel_data_tools.core.stack import run_butler_python_json
 
-    day_obs = night_to_day_obs(night)
+    day_obs = night_to_day_obs(night, day_obs_offset=day_obs_offset)
 
     # Build WHERE clause
     where = (
-        f"instrument='Nickel' AND exposure.observation_type='science'"
+        f"instrument='{instrument_name}' AND exposure.observation_type='science'"
         f" AND exposure.day_obs={day_obs}"
     )
     if object_filter:

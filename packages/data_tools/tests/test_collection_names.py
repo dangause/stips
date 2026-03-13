@@ -71,3 +71,25 @@ class TestNightToDayObs:
     def test_offset_across_month_boundary(self):
         """Verify offset works across month boundaries."""
         assert night_to_day_obs("20230131", day_obs_offset=1) == "20230201"
+
+
+class TestFindBadCoordExposuresParam:
+    """Verify find_bad_coord_exposures accepts instrument_name."""
+
+    def test_accepts_instrument_name_param(self):
+        """Function signature accepts instrument_name keyword arg."""
+        import inspect
+
+        from obs_nickel_data_tools.core.pipeline import find_bad_coord_exposures
+
+        sig = inspect.signature(find_bad_coord_exposures)
+        assert "instrument_name" in sig.parameters
+
+    def test_accepts_day_obs_offset_param(self):
+        """Function signature accepts day_obs_offset keyword arg."""
+        import inspect
+
+        from obs_nickel_data_tools.core.pipeline import find_bad_coord_exposures
+
+        sig = inspect.signature(find_bad_coord_exposures)
+        assert "day_obs_offset" in sig.parameters
