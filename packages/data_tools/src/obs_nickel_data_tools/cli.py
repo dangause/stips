@@ -86,9 +86,19 @@ def _resolve_env_file(env_file: Path | None, profile: str | None) -> Path | None
     is_flag=True,
     help="Enable verbose logging (DEBUG level)",
 )
+@click.option(
+    "-i",
+    "--instrument",
+    default="nickel",
+    help="Instrument name (default: nickel)",
+)
 @click.pass_context
 def cli(
-    ctx: click.Context, env_file: Path | None, profile: str | None, verbose: bool
+    ctx: click.Context,
+    env_file: Path | None,
+    profile: str | None,
+    verbose: bool,
+    instrument: str,
 ) -> None:
     """Nickel Processing Suite - LSST pipeline tools for Nickel telescope data.
 
@@ -123,6 +133,7 @@ def cli(
     resolved = _resolve_env_file(env_file, profile)
     ctx.obj["env_file"] = resolved
     ctx.obj["profile"] = profile
+    ctx.obj["instrument"] = instrument
 
 
 def _load_config(
@@ -251,9 +262,17 @@ def _load_lightcurve_config(
     return cfg_module.Config(
         repo=repo,
         stack_dir=stack_dir,
-        obs_nickel=obs_nickel,
+        obs_package=obs_nickel,
         raw_parent_dir=raw_parent_dir,
     )
+
+
+def _get_plugin(ctx: click.Context):
+    """Load instrument plugin from CLI context."""
+    from obs_nickel_data_tools.instruments import get_plugin
+
+    instrument = ctx.obj.get("instrument", "nickel")
+    return get_plugin(instrument)
 
 
 # =============================================================================
@@ -334,12 +353,13 @@ def calibs(ctx: click.Context, night: str, jobs: int) -> None:
         nickel calibs 20240625 --jobs 8
     """
     config = _load_config(ctx)
+    plugin = _get_plugin(ctx)
 
     _print_info(f"Running calibrations for {night}...")
 
     from obs_nickel_data_tools.core import calibs as calibs_module
 
-    result = calibs_module.run(night, config, jobs=jobs)
+    result = calibs_module.run(night, config, jobs=jobs, plugin=plugin)
 
     if result.success:
         _print_success(f"\n✓ Calibrations complete for {night}")
@@ -413,6 +433,7 @@ def science(
         sys.exit(1)
 
     config = _load_config(ctx)
+    plugin = _get_plugin(ctx)
 
     _print_info(f"Running science processing for {night}...")
 
@@ -429,6 +450,7 @@ def science(
         science_config=science_config,
         target_ra=ra,
         target_dec=dec,
+        plugin=plugin,
     )
 
     if result.success:
@@ -488,6 +510,7 @@ def dia(
         sys.exit(1)
 
     config = _load_config(ctx)
+    plugin = _get_plugin(ctx)
 
     _print_info(f"Running difference imaging for {night}...")
 
@@ -504,6 +527,7 @@ def dia(
         object_filter=object_filter,
         bad_exposures=bad,
         bad_file=bad_file,
+        plugin=plugin,
     )
 
     if result.success:
@@ -885,6 +909,7 @@ def clean(
     # When loading from YAML with inline env, prefer YAML values
     prefer_inline = inline_env is not None
     config = _load_config(ctx, inline_env=inline_env, prefer_inline=prefer_inline)
+    plugin = _get_plugin(ctx)
 
     nights_list = list(nights) if nights else None
     steps_list = list(steps) if steps else None
@@ -902,6 +927,7 @@ def clean(
         nights=nights_list,
         steps=steps_list,
         dry_run=True,
+        plugin=plugin,
     )
 
     if not preview.collections_removed:
@@ -929,6 +955,7 @@ def clean(
         nights=nights_list,
         steps=steps_list,
         dry_run=False,
+        plugin=plugin,
     )
 
     if result.success:
@@ -1061,6 +1088,7 @@ def fphot(
         nickel fphot 20230519 --ra 210.91 --dec 54.32 --band r --image-type both
     """
     config = _load_config(ctx)
+    plugin = _get_plugin(ctx)
 
     _print_info(
         f"Running forced photometry for {night} at RA={ra:.4f}, Dec={dec:.4f}..."
@@ -1075,6 +1103,7 @@ def fphot(
         config=config,
         band=band,
         image_type=image_type,
+        plugin=plugin,
     )
 
     if result.success:
