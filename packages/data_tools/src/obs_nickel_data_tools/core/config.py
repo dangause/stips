@@ -60,7 +60,7 @@ class Config:
     Attributes:
         repo: Path to Butler repository
         stack_dir: Path to LSST stack installation
-        obs_nickel: Path to obs_nickel package
+        obs_package: Path to instrument obs package (e.g. obs_nickel, obs_smalltel)
         raw_parent_dir: Parent directory for raw data
         refcat_repo: Path to reference catalog repository
         cp_pipe_dir: Path to cp_pipe pipelines
@@ -71,7 +71,7 @@ class Config:
 
     repo: Path
     stack_dir: Path
-    obs_nickel: Path
+    obs_package: Path
     raw_parent_dir: Path
     refcat_repo: Path | None = None
     cp_pipe_dir: Path | None = None
@@ -84,8 +84,13 @@ class Config:
     configs_dir: Path = field(init=False)
 
     def __post_init__(self):
-        self.pipelines_dir = self.obs_nickel / "pipelines"
-        self.configs_dir = self.obs_nickel / "configs"
+        self.pipelines_dir = self.obs_package / "pipelines"
+        self.configs_dir = self.obs_package / "configs"
+
+    @property
+    def obs_nickel(self) -> Path:
+        """Backward-compat alias for obs_package."""
+        return self.obs_package
 
     def validate(self) -> list[str]:
         """Check that required paths exist.
@@ -98,8 +103,8 @@ class Config:
             errors.append(f"REPO does not exist: {self.repo}")
         if not self.stack_dir.exists():
             errors.append(f"STACK_DIR does not exist: {self.stack_dir}")
-        if not self.obs_nickel.exists():
-            errors.append(f"OBS_NICKEL does not exist: {self.obs_nickel}")
+        if not self.obs_package.exists():
+            errors.append(f"OBS_SMALLTEL/OBS_NICKEL does not exist: {self.obs_package}")
         if not self.raw_parent_dir.exists():
             errors.append(f"RAW_PARENT_DIR does not exist: {self.raw_parent_dir}")
         if self.cp_pipe_dir and not self.cp_pipe_dir.exists():
@@ -194,6 +199,7 @@ def load(
     env_keys = [
         "REPO",
         "STACK_DIR",
+        "OBS_SMALLTEL",
         "OBS_NICKEL",
         "RAW_PARENT_DIR",
         "REFCAT_REPO",
@@ -235,8 +241,11 @@ def load(
                     merged[k] = _expand_env_vars(v, inline_env)
 
     # Validate required fields
-    required = ["REPO", "STACK_DIR", "OBS_NICKEL", "RAW_PARENT_DIR"]
+    # OBS_SMALLTEL (new) or OBS_NICKEL (legacy) — either is acceptable
+    required = ["REPO", "STACK_DIR", "RAW_PARENT_DIR"]
     missing = [k for k in required if not merged.get(k)]
+    if not merged.get("OBS_SMALLTEL") and not merged.get("OBS_NICKEL"):
+        missing.append("OBS_SMALLTEL/OBS_NICKEL")
     if missing:
         raise ValueError(
             f"Missing required configuration: {', '.join(missing)}. "
@@ -244,6 +253,10 @@ def load(
         )
 
     stack_dir = Path(merged["STACK_DIR"]).expanduser()
+
+    # Resolve obs_package: prefer OBS_SMALLTEL, fall back to OBS_NICKEL
+    obs_package_raw = merged.get("OBS_SMALLTEL") or merged.get("OBS_NICKEL", "")
+    obs_package_path = Path(obs_package_raw).expanduser()
 
     # Resolve CP_PIPE_DIR - use provided value if valid, otherwise auto-discover
     cp_pipe_dir: Path | None = None
@@ -259,7 +272,7 @@ def load(
     return Config(
         repo=Path(merged["REPO"]).expanduser(),
         stack_dir=stack_dir,
-        obs_nickel=Path(merged["OBS_NICKEL"]).expanduser(),
+        obs_package=obs_package_path,
         raw_parent_dir=Path(merged["RAW_PARENT_DIR"]).expanduser(),
         refcat_repo=(
             Path(merged["REFCAT_REPO"]).expanduser()

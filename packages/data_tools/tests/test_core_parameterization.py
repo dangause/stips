@@ -101,3 +101,44 @@ class TestRunConfigInstrument:
         for f in dataclasses.fields(RunConfig):
             if f.name == "instrument":
                 assert f.default == "nickel"
+
+
+class TestConfigObsPackage:
+    def test_config_has_obs_package(self):
+        """Config has obs_package field."""
+        import dataclasses
+
+        from obs_nickel_data_tools.core.config import Config
+
+        fields = {f.name for f in dataclasses.fields(Config)}
+        assert "obs_package" in fields
+
+    def test_obs_nickel_alias(self):
+        """config.obs_nickel is a backward-compat alias for obs_package."""
+        from pathlib import Path
+
+        from obs_nickel_data_tools.core.config import Config
+
+        config = Config(
+            repo=Path("/tmp/repo"),
+            stack_dir=Path("/tmp/stack"),
+            obs_package=Path("/tmp/obs_smalltel"),
+            raw_parent_dir=Path("/tmp/raw"),
+        )
+        assert config.obs_package == Path("/tmp/obs_smalltel")
+        assert config.obs_nickel == config.obs_package
+
+    def test_derived_paths_use_obs_package(self):
+        """pipelines_dir and configs_dir derive from obs_package."""
+        from pathlib import Path
+
+        from obs_nickel_data_tools.core.config import Config
+
+        config = Config(
+            repo=Path("/tmp/repo"),
+            stack_dir=Path("/tmp/stack"),
+            obs_package=Path("/tmp/obs_smalltel"),
+            raw_parent_dir=Path("/tmp/raw"),
+        )
+        assert config.pipelines_dir == Path("/tmp/obs_smalltel/pipelines")
+        assert config.configs_dir == Path("/tmp/obs_smalltel/configs")
