@@ -36,6 +36,7 @@
 # =============================================================================
 # Environment Configuration
 # =============================================================================
+instrument: nickel
 env:
   REPO: "/Users/dangause/Developer/lick/lsst/data/nickel/cy_aqr_repo"
   STACK_DIR: "/Users/dangause/Developer/lick/lsst/lsst_stack"

@@ -18,6 +18,7 @@
 # =============================================================================
 # Environment Configuration (self-contained)
 # =============================================================================
+instrument: nickel
 env:
   REPO: "/Users/dangause/Developer/lick/lsst/data/nickel/2020wnt_ps1_022226_repo"
   STACK_DIR: "/Users/dangause/Developer/lick/lsst/lsst_stack"

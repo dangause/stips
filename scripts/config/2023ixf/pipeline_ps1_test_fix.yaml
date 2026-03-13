@@ -3,6 +3,7 @@
 # (no single_visit_star_footprints: 20230523, 20230905, 20230910)
 # plus 2 control nights that should fully succeed (20230519, 20230521)
 
+instrument: nickel
 env:
   REPO: "/Users/dangause/Developer/lick/lsst/data/nickel/2023ixf_ps1_test_fix_repo"
   STACK_DIR: "/Users/dangause/Developer/lick/lsst/lsst_stack"

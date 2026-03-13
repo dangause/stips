@@ -24,6 +24,7 @@
 # =============================================================================
 # Environment Configuration (update paths for your system)
 # =============================================================================
+instrument: nickel
 env:
   REPO: "/path/to/butler/repo"
   STACK_DIR: "/path/to/lsst_stack"

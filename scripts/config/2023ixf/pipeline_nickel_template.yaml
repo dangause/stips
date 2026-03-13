@@ -22,6 +22,7 @@
 # =============================================================================
 # Environment Configuration (self-contained)
 # =============================================================================
+instrument: nickel
 env:
   REPO: "/Users/dangause/Developer/lick/lsst/data/nickel/2023ixf_nickel_template_022226b_repo"
   STACK_DIR: "/Users/dangause/Developer/lick/lsst/lsst_stack"

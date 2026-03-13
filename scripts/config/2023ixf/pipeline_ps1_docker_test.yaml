@@ -1,6 +1,7 @@
 # Docker Slurm cluster test config
 # Tests single night through science + DIA via BPS/Parsl/Slurm
 
+instrument: nickel
 env:
   REPO: "/data/repo"
   STACK_DIR: "/opt/lsst/software/stack"

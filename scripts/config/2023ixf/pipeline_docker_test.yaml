@@ -10,6 +10,7 @@
 # =============================================================================
 # Environment Configuration (container paths)
 # =============================================================================
+instrument: nickel
 env:
   REPO: "/data/repo"
   STACK_DIR: "/opt/lsst/software/stack"

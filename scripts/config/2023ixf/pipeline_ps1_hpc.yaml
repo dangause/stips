@@ -22,6 +22,7 @@
 # STACK_DIR and OBS_NICKEL use in-container paths (baked into the SIF image).
 # Data paths (REPO, RAW_PARENT_DIR, REFCAT_REPO) use host paths that get
 # bind-mounted into the container by the singularity-slurm commandPrefix.
+instrument: nickel
 env:
   REPO: "/scratch/nps/repo"
   STACK_DIR: "/opt/lsst/software/stack"
