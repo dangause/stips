@@ -33,3 +33,13 @@ class TestSciencePluginParam:
 
         sig = inspect.signature(resolve_object_filter)
         assert "instrument_name" in sig.parameters
+
+
+class TestDiaPluginParam:
+    """Verify dia.run() accepts plugin parameter."""
+
+    def test_run_accepts_plugin_param(self):
+        from obs_nickel_data_tools.core.dia import run
+
+        sig = inspect.signature(run)
+        assert "plugin" in sig.parameters

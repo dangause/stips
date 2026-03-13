@@ -8,9 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from obs_nickel_data_tools.core.pipeline import (
-    INSTRUMENT,
     REFCATS_CHAIN,
-    SKYMAPS_CHAIN,
     CollectionNames,
     build_exclusion_expr,
     is_empty_qgraph,
@@ -24,6 +22,7 @@ from obs_nickel_data_tools.core.stack import run_butler, run_butler_query
 
 if TYPE_CHECKING:
     from obs_nickel_data_tools.core.config import Config
+    from obs_nickel_data_tools.instruments.base import InstrumentPlugin
 
 log = logging.getLogger(__name__)
 
@@ -121,6 +120,7 @@ def run(
     detect_config_file: Path | None = None,
     log_file: Path | None = None,
     executor=None,
+    plugin: "InstrumentPlugin | None" = None,
 ) -> DIAResult:
     """Run difference imaging for a night.
 
@@ -136,19 +136,25 @@ def run(
         bad_exposures: Comma-separated exposure IDs to exclude
         bad_file: File with exposure IDs to exclude
         log_file: Optional path to write LSST pipeline logs
+        plugin: Instrument plugin (defaults to NickelPlugin for backward compat)
 
     Returns:
         DIAResult with collection names and counts
     """
     from obs_nickel_data_tools.core.executor import LocalExecutor
 
+    if plugin is None:
+        from obs_nickel_data_tools.instruments.nickel import NickelPlugin
+
+        plugin = NickelPlugin()
+
     if executor is None:
         executor = LocalExecutor()
 
     night = validate_night(night)
-    cols = CollectionNames(night)
+    cols = CollectionNames(night, prefix=plugin.collection_prefix)
     repo = str(config.repo)
-    day_obs = night_to_day_obs(night)
+    day_obs = night_to_day_obs(night, day_obs_offset=plugin.day_obs_offset)
 
     # Resolve template
     template_collection = template
@@ -169,12 +175,16 @@ def run(
     # CHAINED parent includes results from both primary and fallback configs.
     try:
         result = run_butler_query(
-            ["query-collections", repo, f"Nickel/runs/{night}/processCcd/*"],
+            [
+                "query-collections",
+                repo,
+                f"{plugin.collection_prefix}/runs/{night}/processCcd/*",
+            ],
             config,
             check=False,
         )
         sci_collections = parse_butler_query_output(
-            result.stdout, prefix_filter="Nickel/"
+            result.stdout, prefix_filter=f"{plugin.collection_prefix}/"
         )
         # Prefer CHAINED parents (no /run or /run_fb suffix) over individual RUNs.
         # Join ALL CHAINED parents so DIA sees science outputs from every
@@ -220,7 +230,7 @@ def run(
         band_expr = f" AND band='{band}'"
 
     data_query = (
-        f"instrument='Nickel' AND exposure.observation_type='science' "
+        f"instrument='{plugin.name}' AND exposure.observation_type='science' "
         f"AND day_obs={day_obs}{object_expr}{exclusion_expr}{band_expr}"
     )
 
@@ -236,7 +246,7 @@ def run(
     try:
         # Register instrument
         run_butler(
-            ["register-instrument", repo, INSTRUMENT],
+            ["register-instrument", repo, plugin.instrument_class],
             config,
             check=False,
             log_file=log_file,
@@ -250,19 +260,23 @@ def run(
         # Find raw collection (optional for DIA, targeted query)
         raw_run = ""
         raw_result = run_butler_query(
-            ["query-collections", repo, f"Nickel/raw/{night}/*"],
+            [
+                "query-collections",
+                repo,
+                f"{plugin.collection_prefix}/raw/{night}/*",
+            ],
             config,
             check=False,
         )
         raw_collections = parse_butler_query_output(
-            raw_result.stdout, prefix_filter="Nickel/"
+            raw_result.stdout, prefix_filter=f"{plugin.collection_prefix}/"
         )
         if raw_collections:
             raw_run = raw_collections[0]
 
-        input_collections = f"{sci_parents},{cols.calib_chain},{REFCATS_CHAIN},{SKYMAPS_CHAIN},{template_collection}"
+        input_collections = f"{sci_parents},{cols.calib_chain},{REFCATS_CHAIN},{plugin.skymaps_chain},{template_collection}"
         if raw_run:
-            input_collections = f"{sci_parents},{raw_run},{cols.calib_chain},{REFCATS_CHAIN},{SKYMAPS_CHAIN},{template_collection}"
+            input_collections = f"{sci_parents},{raw_run},{cols.calib_chain},{REFCATS_CHAIN},{plugin.skymaps_chain},{template_collection}"
 
         qgraph_args = [
             "qgraph",
@@ -410,7 +424,7 @@ def run(
                     "--collections",
                     cols.diff_run,
                     "--where",
-                    f"instrument='Nickel' AND day_obs={day_obs}",
+                    f"instrument='{plugin.name}' AND day_obs={day_obs}",
                 ],
                 config,
                 check=False,
@@ -428,7 +442,7 @@ def run(
                     "--collections",
                     cols.diff_run,
                     "--where",
-                    f"instrument='Nickel' AND day_obs={day_obs}",
+                    f"instrument='{plugin.name}' AND day_obs={day_obs}",
                 ],
                 config,
                 check=False,
