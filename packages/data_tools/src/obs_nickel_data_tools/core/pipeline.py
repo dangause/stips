@@ -71,7 +71,7 @@ def night_to_date_range(night: str) -> tuple[str, str]:
     )
 
 
-def night_to_day_obs(night: str) -> str:
+def night_to_day_obs(night: str, day_obs_offset: int = 1) -> str:
     """Convert observing night (local) to UT day_obs.
 
     Lick observations starting on local night YYYYMMDD have
@@ -79,6 +79,9 @@ def night_to_day_obs(night: str) -> str:
 
     Args:
         night: Local observing night (YYYYMMDD)
+        day_obs_offset: Days to add to the observing night to get the UT
+            day_obs (default 1, for western-hemisphere observatories like
+            Lick where observations cross midnight UT)
 
     Returns:
         UT day_obs (YYYYMMDD)
@@ -86,7 +89,7 @@ def night_to_day_obs(night: str) -> str:
     from datetime import timedelta
 
     dt = datetime.strptime(night, "%Y%m%d")
-    return (dt + timedelta(days=1)).strftime("%Y%m%d")
+    return (dt + timedelta(days=day_obs_offset)).strftime("%Y%m%d")
 
 
 def get_raw_dir(config: Config, night: str) -> Path:
