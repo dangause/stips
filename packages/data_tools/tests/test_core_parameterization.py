@@ -17,3 +17,19 @@ class TestCalibsPluginParam:
 
         sig = inspect.signature(write_curated_calibrations)
         assert "plugin" in sig.parameters
+
+
+class TestSciencePluginParam:
+    """Verify science.run() and resolve_object_filter() accept plugin parameter."""
+
+    def test_run_accepts_plugin_param(self):
+        from obs_nickel_data_tools.core.science import run
+
+        sig = inspect.signature(run)
+        assert "plugin" in sig.parameters
+
+    def test_resolve_object_filter_accepts_instrument_name(self):
+        from obs_nickel_data_tools.core.science import resolve_object_filter
+
+        sig = inspect.signature(resolve_object_filter)
+        assert "instrument_name" in sig.parameters

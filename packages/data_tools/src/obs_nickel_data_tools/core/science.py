@@ -9,10 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from obs_nickel_data_tools.core.pipeline import (
-    INSTRUMENT,
     REFCATS_CHAIN,
-    SKYMAP_NAME,
-    SKYMAPS_CHAIN,
     CollectionNames,
     build_exclusion_expr,
     find_bad_coord_exposures,
@@ -30,6 +27,7 @@ from obs_nickel_data_tools.core.stack import (
 
 if TYPE_CHECKING:
     from obs_nickel_data_tools.core.config import Config
+    from obs_nickel_data_tools.instruments.base import InstrumentPlugin
 
 log = logging.getLogger(__name__)
 
@@ -104,6 +102,7 @@ def resolve_object_filter(
     object_filter: str,
     config: "Config",
     night: str | None = None,
+    instrument_name: str = "Nickel",
 ) -> str | None:
     """Resolve object filter to exact target_name using flexible matching.
 
@@ -114,6 +113,7 @@ def resolve_object_filter(
         object_filter: User-provided object name (can be partial, any case)
         config: Pipeline configuration
         night: Optional night to restrict search
+        instrument_name: Butler instrument name (default: "Nickel")
 
     Returns:
         Exact target_name from FITS headers, or None if no match
@@ -121,7 +121,7 @@ def resolve_object_filter(
     from obs_nickel_data_tools.core.stack import run_butler_python_json
 
     # Query all unique target names from Butler directly.
-    where = "instrument='Nickel' AND exposure.observation_type='science'"
+    where = f"instrument='{instrument_name}' AND exposure.observation_type='science'"
     if night:
         from obs_nickel_data_tools.core.pipeline import night_to_day_obs
 
@@ -191,6 +191,7 @@ def run(
     target_dec: float | None = None,
     log_file: Path | None = None,
     executor=None,
+    plugin: "InstrumentPlugin | None" = None,
 ) -> ScienceResult:
     """Run science processing for a night.
 
@@ -217,13 +218,18 @@ def run(
     Returns:
         ScienceResult with collection names and status
     """
+    if plugin is None:
+        from obs_nickel_data_tools.instruments.nickel import NickelPlugin
+
+        plugin = NickelPlugin()
+
     from obs_nickel_data_tools.core.executor import LocalExecutor
 
     if executor is None:
         executor = LocalExecutor()
 
     night = validate_night(night)
-    cols = CollectionNames(night)
+    cols = CollectionNames(night, prefix=plugin.collection_prefix)
     repo = str(config.repo)
 
     # Build config chain: explicit > legacy > default
@@ -235,12 +241,12 @@ def run(
     # Find the raw collection for this night (targeted query)
     try:
         result = run_butler_query(
-            ["query-collections", repo, f"Nickel/raw/{night}/*"],
+            ["query-collections", repo, f"{plugin.collection_prefix}/raw/{night}/*"],
             config,
             check=False,
         )
         raw_collections = parse_butler_query_output(
-            result.stdout, prefix_filter="Nickel/"
+            result.stdout, prefix_filter=f"{plugin.collection_prefix}/"
         )
         raw_run = raw_collections[0] if raw_collections else None
         if not raw_run:
@@ -267,7 +273,9 @@ def run(
     object_expr = ""
     resolved_object = None
     if object_filter:
-        resolved_object = resolve_object_filter(object_filter, config, night)
+        resolved_object = resolve_object_filter(
+            object_filter, config, night, instrument_name=plugin.name
+        )
         if resolved_object:
             object_expr = f" AND exposure.target_name='{resolved_object}'"
         else:
@@ -288,6 +296,8 @@ def run(
             target_ra,
             target_dec,
             object_filter=coord_filter,
+            instrument_name=plugin.name,
+            day_obs_offset=plugin.day_obs_offset,
         )
         if coord_bad_ids:
             log.warning(
@@ -344,9 +354,9 @@ def run(
             error=f"No valid config files found. Tried: {science_cfg.calibrate_image}",
         )
 
-    day_obs = night_to_day_obs(night)
+    day_obs = night_to_day_obs(night, day_obs_offset=plugin.day_obs_offset)
     data_query = (
-        f"instrument='Nickel' AND exposure.observation_type='science'"
+        f"instrument='{plugin.name}' AND exposure.observation_type='science'"
         f" AND day_obs={day_obs}{object_expr}{band_expr}{exclusion_expr}"
     )
 
@@ -370,7 +380,7 @@ def run(
     # Register instrument
     try:
         run_butler(
-            ["register-instrument", repo, INSTRUMENT],
+            ["register-instrument", repo, plugin.instrument_class],
             config,
             check=False,
             log_file=log_file,
@@ -430,7 +440,7 @@ def run(
                 "-p",
                 f"{pipeline}#stage1-single-visit",
                 "-i",
-                f"{raw_run},{cols.calib_chain},{REFCATS_CHAIN},{SKYMAPS_CHAIN}",
+                f"{raw_run},{cols.calib_chain},{REFCATS_CHAIN},{plugin.skymaps_chain}",
                 "-o",
                 cols.science_parent,
                 "--output-run",
@@ -760,7 +770,7 @@ def run(
                     "-p",
                     f"{pipeline}#coadds-only",
                     "-i",
-                    f"{cols.science_parent},{cols.calib_chain},{REFCATS_CHAIN},{SKYMAPS_CHAIN}",
+                    f"{cols.science_parent},{cols.calib_chain},{REFCATS_CHAIN},{plugin.skymaps_chain}",
                     "-o",
                     cols.coadd_parent,
                     "--output-run",
@@ -768,7 +778,7 @@ def run(
                     "--save-qgraph",
                     str(qg_coadd),
                     "-d",
-                    f"instrument='Nickel' AND skymap='{SKYMAP_NAME}'",
+                    f"instrument='{plugin.name}' AND skymap='{plugin.skymap_name}'",
                 ]
                 + (
                     ["--qgraph-datastore-records"]
