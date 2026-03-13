@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from obs_nickel_data_tools.core.config import Config
+    from obs_nickel_data_tools.instruments.base import InstrumentPlugin
 
 log = logging.getLogger(__name__)
 
@@ -32,7 +33,10 @@ class BootstrapResult:
     skymap_registered: bool = False
 
 
-def needs_bootstrap(config: Config) -> bool:
+def needs_bootstrap(
+    config: Config,
+    plugin: InstrumentPlugin | None = None,
+) -> bool:
     """Check if the repository needs bootstrapping.
 
     Returns True if the repo doesn't exist, or if critical infrastructure
@@ -40,10 +44,15 @@ def needs_bootstrap(config: Config) -> bool:
 
     Args:
         config: Pipeline configuration
+        plugin: Instrument plugin (default: NickelPlugin)
 
     Returns:
         True if the repository needs (re-)bootstrapping
     """
+    if plugin is None:
+        from obs_nickel_data_tools.instruments.nickel import NickelPlugin
+
+        plugin = NickelPlugin()
     butler_yaml = config.repo / "butler.yaml"
     if not butler_yaml.exists():
         return True
@@ -103,6 +112,7 @@ def run(
     *,
     dry_run: bool = False,
     log_file: Path | None = None,
+    plugin: InstrumentPlugin | None = None,
 ) -> BootstrapResult:
     """Bootstrap a Butler repository.
 
@@ -113,16 +123,21 @@ def run(
         config: Pipeline configuration with REPO, STACK_DIR, etc.
         dry_run: Print commands without executing
         log_file: Optional path to write LSST pipeline logs
+        plugin: Instrument plugin (default: NickelPlugin)
 
     Returns:
         BootstrapResult with status
     """
+    if plugin is None:
+        from obs_nickel_data_tools.instruments.nickel import NickelPlugin
+
+        plugin = NickelPlugin()
     from obs_nickel_data_tools.core.stack import run_with_stack
 
     result = BootstrapResult(success=False)
 
     # Check if already bootstrapped
-    if not needs_bootstrap(config):
+    if not needs_bootstrap(config, plugin=plugin):
         log.info(f"Repository already initialized: {config.repo}")
         result.success = True
         result.repo_created = True

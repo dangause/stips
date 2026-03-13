@@ -142,3 +142,19 @@ class TestConfigObsPackage:
         )
         assert config.pipelines_dir == Path("/tmp/obs_smalltel/pipelines")
         assert config.configs_dir == Path("/tmp/obs_smalltel/configs")
+
+
+class TestBootstrapPluginParam:
+    """Verify bootstrap functions accept plugin parameter."""
+
+    def test_needs_bootstrap_accepts_plugin(self):
+        from obs_nickel_data_tools.core.bootstrap import needs_bootstrap
+
+        sig = inspect.signature(needs_bootstrap)
+        assert "plugin" in sig.parameters
+
+    def test_run_accepts_plugin(self):
+        from obs_nickel_data_tools.core.bootstrap import run
+
+        sig = inspect.signature(run)
+        assert "plugin" in sig.parameters
