@@ -43,3 +43,13 @@ class TestDiaPluginParam:
 
         sig = inspect.signature(run)
         assert "plugin" in sig.parameters
+
+
+class TestFphotPluginParam:
+    """Verify fphot.run() accepts plugin parameter."""
+
+    def test_run_accepts_plugin_param(self):
+        from obs_nickel_data_tools.core.fphot import run
+
+        sig = inspect.signature(run)
+        assert "plugin" in sig.parameters

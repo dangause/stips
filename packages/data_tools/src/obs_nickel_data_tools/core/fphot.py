@@ -9,7 +9,6 @@ from typing import TYPE_CHECKING
 
 from obs_nickel_data_tools.core.pipeline import (
     REFCATS_CHAIN,
-    SKYMAPS_CHAIN,
     butler_query_has_results,
     generate_run_timestamp,
     night_to_day_obs,
@@ -20,6 +19,7 @@ from obs_nickel_data_tools.core.stack import run_butler_query
 
 if TYPE_CHECKING:
     from obs_nickel_data_tools.core.config import Config
+    from obs_nickel_data_tools.instruments.base import InstrumentPlugin
 
 log = logging.getLogger(__name__)
 
@@ -40,9 +40,10 @@ def _collection_has_difference_images(
     config: Config,
     *,
     band: str | None,
+    instrument_name: str,
 ) -> bool:
     """Check whether a diff run has at least one difference_image for the band."""
-    query = "instrument='Nickel'"
+    query = f"instrument='{instrument_name}'"
     if band:
         query += f" AND band='{band}'"
 
@@ -73,10 +74,12 @@ def _select_diff_collection(
     config: Config,
     *,
     band: str | None,
+    collection_prefix: str,
+    instrument_name: str,
 ) -> tuple[str | None, list[str]]:
     """Select the newest diff collection that contains datasets for this band."""
     diff_result = run_butler_query(
-        ["query-collections", repo, f"Nickel/runs/{night}/diff/*/run"],
+        ["query-collections", repo, f"{collection_prefix}/runs/{night}/diff/*/run"],
         config,
         check=False,
     )
@@ -85,11 +88,15 @@ def _select_diff_collection(
         return None, []
 
     candidates = sorted(
-        parse_butler_query_output(diff_result.stdout, prefix_filter="Nickel/"),
+        parse_butler_query_output(
+            diff_result.stdout, prefix_filter=f"{collection_prefix}/"
+        ),
         reverse=True,
     )
     for coll in candidates:
-        if _collection_has_difference_images(repo, coll, config, band=band):
+        if _collection_has_difference_images(
+            repo, coll, config, band=band, instrument_name=instrument_name
+        ):
             return coll, candidates
     return None, candidates
 
@@ -105,6 +112,7 @@ def run(
     jobs: int = 1,
     log_file: Path | None = None,
     executor=None,
+    plugin: "InstrumentPlugin | None" = None,
 ) -> ForcedPhotResult:
     """Run forced photometry at specified coordinates.
 
@@ -120,11 +128,17 @@ def run(
         band: Filter by band (default: all bands)
         image_type: 'visit', 'diffim', or 'both' (default: diffim)
         log_file: Optional path to write LSST pipeline logs
+        plugin: Instrument plugin (defaults to NickelPlugin for backward compat)
 
     Returns:
         ForcedPhotResult with output collections
     """
     from obs_nickel_data_tools.core.executor import LocalExecutor
+
+    if plugin is None:
+        from obs_nickel_data_tools.instruments.nickel import NickelPlugin
+
+        plugin = NickelPlugin()
 
     if executor is None:
         executor = LocalExecutor()
@@ -142,12 +156,18 @@ def run(
     # over individual RUN collections.
     processccd_coll = None
     result = run_butler_query(
-        ["query-collections", repo, f"Nickel/runs/{night}/processCcd/*"],
+        [
+            "query-collections",
+            repo,
+            f"{plugin.collection_prefix}/runs/{night}/processCcd/*",
+        ],
         config,
         check=False,
     )
     if result.returncode == 0:
-        colls = parse_butler_query_output(result.stdout, prefix_filter="Nickel/")
+        colls = parse_butler_query_output(
+            result.stdout, prefix_filter=f"{plugin.collection_prefix}/"
+        )
         if colls:
             # Prefer CHAINED parents over individual RUNs
             chained = [
@@ -168,8 +188,8 @@ def run(
     log.info(f"Using processCcd collection: {processccd_coll}")
 
     # Build data query
-    day_obs = night_to_day_obs(night)
-    data_query = f"instrument='Nickel' AND day_obs={day_obs}"
+    day_obs = night_to_day_obs(night, day_obs_offset=plugin.day_obs_offset)
+    data_query = f"instrument='{plugin.name}' AND day_obs={day_obs}"
     if band:
         data_query += f" AND band='{band}'"
 
@@ -181,12 +201,10 @@ def run(
         # Run on visit images
         if image_type in ("visit", "both"):
             band_suffix = f"_{band}" if band else ""
-            output_coll = (
-                f"Nickel/runs/{night}/forcedPhotRaDec/{run_ts}/visit{band_suffix}"
-            )
+            output_coll = f"{plugin.collection_prefix}/runs/{night}/forcedPhotRaDec/{run_ts}/visit{band_suffix}"
             output_run = f"{output_coll}/run"
 
-            visit_input = f"{processccd_coll},Nickel/calib/current,{REFCATS_CHAIN},{SKYMAPS_CHAIN}"
+            visit_input = f"{processccd_coll},{plugin.collection_prefix}/calib/current,{REFCATS_CHAIN},{plugin.skymaps_chain}"
 
             log.info("Running forced photometry on visit images...")
             log.info(f"  Input: {visit_input}")
@@ -235,7 +253,12 @@ def run(
         if image_type in ("diffim", "both"):
             # Select a diff collection that actually contains the requested band.
             diff_coll, diff_candidates = _select_diff_collection(
-                repo, night, config, band=band
+                repo,
+                night,
+                config,
+                band=band,
+                collection_prefix=plugin.collection_prefix,
+                instrument_name=plugin.name,
             )
 
             if not diff_coll:
@@ -249,11 +272,9 @@ def run(
                 errors.append(err_msg)
 
             if diff_coll:
-                input_colls = f"{processccd_coll},{diff_coll},Nickel/calib/current,{REFCATS_CHAIN},{SKYMAPS_CHAIN}"
+                input_colls = f"{processccd_coll},{diff_coll},{plugin.collection_prefix}/calib/current,{REFCATS_CHAIN},{plugin.skymaps_chain}"
                 band_suffix = f"_{band}" if band else ""
-                output_coll = (
-                    f"Nickel/runs/{night}/forcedPhotRaDec/{run_ts}/diffim{band_suffix}"
-                )
+                output_coll = f"{plugin.collection_prefix}/runs/{night}/forcedPhotRaDec/{run_ts}/diffim{band_suffix}"
                 output_run = f"{output_coll}/run"
 
                 log.info("Running forced photometry on difference images...")
