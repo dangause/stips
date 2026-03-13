@@ -76,7 +76,7 @@ convention = "numpy"
 # Add additional packages here as they add tests/ directories
 testpaths = [
     "packages/obs_nickel/tests",
-    # "packages/data_tools/tests",
+    "packages/data_tools/tests",
     # "packages/defects/tests",
     # "packages/refcats/tests",
     # "packages/colorterms/tests",
