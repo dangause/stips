@@ -80,3 +80,24 @@ class TestCleanPluginParam:
 
         sig = inspect.signature(run)
         assert "plugin" in sig.parameters
+
+
+class TestRunConfigInstrument:
+    def test_run_config_has_instrument_field(self):
+        """RunConfig dataclass has an instrument field."""
+        import dataclasses
+
+        from obs_nickel_data_tools.core.run import RunConfig
+
+        fields = {f.name for f in dataclasses.fields(RunConfig)}
+        assert "instrument" in fields
+
+    def test_run_config_instrument_defaults_to_nickel(self):
+        """RunConfig.instrument defaults to 'nickel'."""
+        import dataclasses
+
+        from obs_nickel_data_tools.core.run import RunConfig
+
+        for f in dataclasses.fields(RunConfig):
+            if f.name == "instrument":
+                assert f.default == "nickel"

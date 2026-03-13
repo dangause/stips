@@ -353,6 +353,9 @@ class RunConfig:
     bands: list[str]
     nights: list[str] = field(default_factory=list)
 
+    # Instrument plugin name
+    instrument: str = "nickel"
+
     # Template configuration
     template_type: str = "ps1"  # "ps1" or "coadd"
     template_degrade_seeing: float | None = None
@@ -414,6 +417,14 @@ class RunConfig:
 
         with open(path) as f:
             data = yaml.safe_load(f)
+
+        # Extract instrument name
+        instrument = data.get("instrument", "nickel")
+        if "instrument" not in data:
+            log.warning(
+                "No 'instrument' field in YAML config. Defaulting to 'nickel'. "
+                "Add 'instrument: nickel' to your YAML config."
+            )
 
         # Extract template config
         template = data.get("template", {})
@@ -496,6 +507,7 @@ class RunConfig:
             dec=data.get("dec"),
             bands=data.get("bands", ["r"]),
             nights=nights,
+            instrument=instrument,
             template_type=template_type,
             template_degrade_seeing=template_degrade_seeing,
             template_size=template_size,
@@ -730,6 +742,8 @@ def _run_coadd_templates(
     result: RunResult,
     science_cfg: "ScienceConfig",
     dry_run: bool,
+    *,
+    plugin=None,
 ) -> RunResult | None:
     """Build coadd templates: process template nights, then coadd per band.
 
@@ -752,7 +766,7 @@ def _run_coadd_templates(
             if not dry_run:
                 calib_log = _get_step_log_file("calibs_template", night=night)
                 calib_result = calibs.run(
-                    night, config, jobs=run_cfg.jobs, log_file=calib_log
+                    night, config, jobs=run_cfg.jobs, log_file=calib_log, plugin=plugin
                 )
                 _maybe_split_log(calib_log)
                 if not calib_result.success:
@@ -795,6 +809,7 @@ def _run_coadd_templates(
                     target_ra=run_cfg.ra,
                     target_dec=run_cfg.dec,
                     log_file=sci_log,
+                    plugin=plugin,
                 )
                 _maybe_split_log(sci_log)
                 template_science_ran = True
@@ -843,6 +858,7 @@ def _run_coadd_templates(
                 overwrite=force_rebuild_templates,
                 config_files=coadd_config_files or None,
                 log_file=coadd_log,
+                plugin=plugin,
             )
             _maybe_split_log(coadd_log)
             if coadd_result.success:
@@ -879,6 +895,7 @@ def _run_calibs_step(
     dry_run: bool,
     *,
     executor=None,
+    plugin=None,
 ) -> RunResult | None:
     """Run calibrations for each science night.
 
@@ -905,7 +922,9 @@ def _run_calibs_step(
         log.info("Writing curated calibrations (one-time)...")
         curated_log = _get_step_log_file("calibs", night="curated")
         try:
-            calibs.write_curated_calibrations(first_night, config, log_file=curated_log)
+            calibs.write_curated_calibrations(
+                first_night, config, log_file=curated_log, plugin=plugin
+            )
         except Exception as e:
             log.warning(f"Curated calibrations write failed: {e}")
 
@@ -919,6 +938,7 @@ def _run_calibs_step(
                 log_file=calib_log,
                 executor=executor,
                 skip_curated=True,
+                plugin=plugin,
             )
             _maybe_split_log(calib_log)
             if not calib_result.success:
@@ -951,6 +971,7 @@ def _run_calibs_step(
                 jobs=run_cfg.jobs,
                 log_file=calib_log,
                 executor=executor,
+                plugin=plugin,
             )
             _maybe_split_log(calib_log)
             if not calib_result.success:
@@ -973,6 +994,7 @@ def _run_science_step(
     dry_run: bool,
     *,
     executor=None,
+    plugin=None,
 ) -> RunResult | None:
     """Run science processing for each night.
 
@@ -1044,6 +1066,7 @@ def _run_science_step(
                     target_dec=run_cfg.dec,
                     log_file=sci_log,
                     executor=executor,
+                    plugin=plugin,
                 )
                 _maybe_split_log(sci_log)
                 if sci_result.success:
@@ -1112,6 +1135,7 @@ def _run_science_step(
                     target_dec=run_cfg.dec,
                     log_file=sci_log,
                     executor=executor,
+                    plugin=plugin,
                 )
                 _maybe_split_log(sci_log)
                 if sci_result.success:
@@ -1144,6 +1168,7 @@ def _run_dia_step(
     dry_run: bool,
     *,
     executor=None,
+    plugin=None,
 ) -> RunResult | None:
     """Run DIA per night per band.
 
@@ -1226,6 +1251,7 @@ def _run_dia_step(
                     detect_config_file=detect_cfg,
                     log_file=dia_log,
                     executor=executor,
+                    plugin=plugin,
                 )
                 _maybe_split_log(dia_log)
                 if not dia_result.success:
@@ -1303,6 +1329,7 @@ def _run_dia_step(
                     detect_config_file=detect_cfg,
                     log_file=dia_log,
                     executor=executor,
+                    plugin=plugin,
                 )
                 _maybe_split_log(dia_log)
                 if not dia_result.success:
@@ -1324,6 +1351,7 @@ def _run_fphot_step(
     dry_run: bool,
     *,
     executor=None,
+    plugin=None,
 ) -> None:
     """Run forced photometry per night per successful DIA band."""
     from obs_nickel_data_tools.core import fphot
@@ -1395,6 +1423,7 @@ def _run_fphot_step(
                     jobs=run_cfg.jobs,
                     log_file=fphot_log,
                     executor=executor,
+                    plugin=plugin,
                 )
                 _maybe_split_log(fphot_log)
                 if not fphot_result.success:
@@ -1455,6 +1484,7 @@ def _run_fphot_step(
                     jobs=run_cfg.jobs,
                     log_file=fphot_log,
                     executor=executor,
+                    plugin=plugin,
                 )
                 _maybe_split_log(fphot_log)
                 if not fphot_result.success:
@@ -1477,6 +1507,8 @@ def _run_lightcurve_step(
     config: Config,
     result: RunResult,
     dry_run: bool,
+    *,
+    plugin=None,
 ) -> None:
     """Extract lightcurve from forced photometry or DIA sources."""
     from obs_nickel_data_tools.core import lightcurve
@@ -1485,11 +1517,11 @@ def _run_lightcurve_step(
 
     if use_forced_phot:
         collections_list = _discover_fphot_collections(
-            all_nights, run_cfg, config, result, dry_run
+            all_nights, run_cfg, config, result, dry_run, plugin=plugin
         )
     else:
         collections_list = _discover_dia_collections(
-            all_nights, run_cfg, config, result, dry_run
+            all_nights, run_cfg, config, result, dry_run, plugin=plugin
         )
 
     if not collections_list:
@@ -1597,6 +1629,8 @@ def _run_differential_phot_step(
     config: Config,
     result: RunResult,
     dry_run: bool,
+    *,
+    plugin=None,
 ) -> None:
     """Run LSST differential aperture photometry pipeline.
 
@@ -1611,16 +1645,21 @@ def _run_differential_phot_step(
     repo = str(config.repo)
     obs_nickel = str(config.obs_nickel)
 
+    prefix = plugin.collection_prefix if plugin else "Nickel"
+    skymaps_chain = plugin.skymaps_chain if plugin else "skymaps/nickelRings"
+
     # Discover science collection via Butler (consistent with fphot.py pattern)
     science_coll = None
     for night in all_nights:
         qresult = run_butler_query(
-            ["query-collections", repo, f"Nickel/runs/{night}/processCcd/*"],
+            ["query-collections", repo, f"{prefix}/runs/{night}/processCcd/*"],
             config,
             check=False,
         )
         if qresult.returncode == 0:
-            colls = parse_butler_query_output(qresult.stdout, prefix_filter="Nickel/")
+            colls = parse_butler_query_output(
+                qresult.stdout, prefix_filter=f"{prefix}/"
+            )
             if colls:
                 # Prefer CHAINED parents over individual RUNs
                 chained = [
@@ -1640,8 +1679,8 @@ def _run_differential_phot_step(
     log.info(f"Running LSST differential photometry on {science_coll}")
 
     pipeline_yaml = str(Path(obs_nickel) / "pipelines" / "DifferentialPhot.yaml")
-    input_colls = f"{science_coll},Nickel/calib/current,refcats,skymaps/nickelRings"
-    output_coll = f"Nickel/runs/{all_nights[0]}/differentialPhot"
+    input_colls = f"{science_coll},{prefix}/calib/current,refcats,{skymaps_chain}"
+    output_coll = f"{prefix}/runs/{all_nights[0]}/differentialPhot"
 
     bands = run_cfg.bands
     band_filter = bands[0] if len(bands) == 1 else ""
@@ -1704,10 +1743,14 @@ def _discover_fphot_collections(
     config: Config,
     result: RunResult,
     dry_run: bool,
+    *,
+    plugin=None,
 ) -> list[str]:
     """Gather forced photometry collections for lightcurve extraction."""
     from obs_nickel_data_tools.core.pipeline import parse_butler_query_output
     from obs_nickel_data_tools.core.stack import run_butler_query
+
+    prefix = plugin.collection_prefix if plugin else "Nickel"
 
     fphot_colls: list[str] = []
     for night in all_nights:
@@ -1730,7 +1773,7 @@ def _discover_fphot_collections(
                         [
                             "query-collections",
                             str(config.repo),
-                            f"Nickel/runs/{night}/forcedPhotRaDec/*/{fphot_suffix}*",
+                            f"{prefix}/runs/{night}/forcedPhotRaDec/*/{fphot_suffix}*",
                         ],
                         config,
                         check=False,
@@ -1739,7 +1782,7 @@ def _discover_fphot_collections(
                         fphot_colls.extend(
                             parse_butler_query_output(
                                 check_result.stdout,
-                                prefix_filter="Nickel/runs/",
+                                prefix_filter=f"{prefix}/runs/",
                             )
                         )
                 except Exception as e:
@@ -1748,7 +1791,7 @@ def _discover_fphot_collections(
                     )
     elif not fphot_colls and dry_run:
         for night in all_nights:
-            fphot_colls.append(f"Nickel/runs/{night}/forcedPhotRaDec/*/run")
+            fphot_colls.append(f"{prefix}/runs/{night}/forcedPhotRaDec/*/run")
 
     return sorted(set(fphot_colls))
 
@@ -1759,10 +1802,14 @@ def _discover_dia_collections(
     config: Config,
     result: RunResult,
     dry_run: bool,
+    *,
+    plugin=None,
 ) -> list[str]:
     """Gather DIA diff collections for lightcurve extraction."""
     from obs_nickel_data_tools.core.pipeline import parse_butler_query_output
     from obs_nickel_data_tools.core.stack import run_butler_query
+
+    prefix = plugin.collection_prefix if plugin else "Nickel"
 
     verified: list[str] = []
     failed_night_bands = set(result.failed_dia)
@@ -1781,7 +1828,7 @@ def _discover_dia_collections(
                     [
                         "query-collections",
                         str(config.repo),
-                        f"Nickel/runs/{night}/diff/*/run",
+                        f"{prefix}/runs/{night}/diff/*/run",
                     ],
                     config,
                     check=False,
@@ -1790,13 +1837,13 @@ def _discover_dia_collections(
                     verified.extend(
                         parse_butler_query_output(
                             check_result.stdout,
-                            prefix_filter="Nickel/runs/",
+                            prefix_filter=f"{prefix}/runs/",
                         )
                     )
             except Exception:
                 log.debug(f"Could not verify diff collection for {night}")
         else:
-            verified.append(f"Nickel/runs/{night}/diff/*/run")
+            verified.append(f"{prefix}/runs/{night}/diff/*/run")
 
     return verified
 
@@ -1865,6 +1912,12 @@ def run(
     if concurrent_override is not None:
         run_cfg.concurrent_nights = concurrent_override
 
+    # Load instrument plugin
+    from obs_nickel_data_tools.instruments import get_plugin
+
+    plugin = get_plugin(run_cfg.instrument)
+    log.info(f"Instrument plugin: {plugin.name}")
+
     executor = _create_executor(run_cfg)
     log.info(f"Execution: {run_cfg.execution} (site={run_cfg.site})")
 
@@ -1903,7 +1956,9 @@ def run(
         _run_ps1_templates(run_cfg, config, result, dry_run)
         _log_template_summary(run_cfg, result)
     elif run_cfg.template_type == "coadd":
-        early_exit = _run_coadd_templates(run_cfg, config, result, science_cfg, dry_run)
+        early_exit = _run_coadd_templates(
+            run_cfg, config, result, science_cfg, dry_run, plugin=plugin
+        )
         if early_exit is not None:
             log.error(f"Coadd template build failed: {early_exit.error}")
             return early_exit
@@ -1918,6 +1973,7 @@ def run(
             config,
             result,
             dry_run,
+            plugin=plugin,
         )
         if early_exit is not None:
             return early_exit
@@ -1932,6 +1988,7 @@ def run(
             science_cfg,
             dry_run,
             executor=executor,
+            plugin=plugin,
         )
         if early_exit is not None:
             return early_exit
@@ -1945,6 +2002,7 @@ def run(
             result,
             dry_run,
             executor=executor,
+            plugin=plugin,
         )
         if early_exit is not None:
             return early_exit
@@ -1958,17 +2016,22 @@ def run(
             result,
             dry_run,
             executor=executor,
+            plugin=plugin,
         )
 
     # Step 6: Lightcurve extraction
     if run_cfg.lc_config.enabled:
         log.info("Extracting lightcurve...")
-        _run_lightcurve_step(all_nights, run_cfg, config, result, dry_run)
+        _run_lightcurve_step(
+            all_nights, run_cfg, config, result, dry_run, plugin=plugin
+        )
 
     # Step 6b: Differential aperture photometry (transit targets)
     if run_cfg.pipeline_type == "transit":
         log.info("Running differential aperture photometry...")
-        _run_differential_phot_step(all_nights, run_cfg, config, result, dry_run)
+        _run_differential_phot_step(
+            all_nights, run_cfg, config, result, dry_run, plugin=plugin
+        )
 
     # Step 7a: Period analysis (variable stars)
     if run_cfg.period_search:
