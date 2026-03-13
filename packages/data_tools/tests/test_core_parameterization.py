@@ -70,3 +70,13 @@ class TestCoaddPluginParam:
         sig = inspect.signature(find_tract_for_coords)
         assert "skymap_name" in sig.parameters
         assert "skymaps_chain" in sig.parameters
+
+
+class TestCleanPluginParam:
+    """Verify clean.run() accepts plugin parameter."""
+
+    def test_run_accepts_plugin_param(self):
+        from obs_nickel_data_tools.core.clean import run
+
+        sig = inspect.signature(run)
+        assert "plugin" in sig.parameters

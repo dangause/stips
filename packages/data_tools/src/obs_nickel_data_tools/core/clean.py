@@ -18,33 +18,36 @@ from obs_nickel_data_tools.core.stack import run_butler, run_butler_query
 
 if TYPE_CHECKING:
     from obs_nickel_data_tools.core.config import Config
+    from obs_nickel_data_tools.instruments.base import InstrumentPlugin
 
 log = logging.getLogger(__name__)
 
-# Collection glob patterns for processing runs (safe to delete).
-# These are all under Nickel/runs/ and contain derived products.
-RUN_PATTERNS = [
-    "Nickel/runs/*/processCcd/*",
-    "Nickel/runs/*/diff/*",
-    "Nickel/runs/*/forcedPhotRaDec/*",
-    "Nickel/runs/*/coadd/*",
-    "Nickel/runs/*/science/*",
-]
 
-# Calibration collection patterns (cp_pipe outputs + certified calibs).
-CALIB_PATTERNS = [
-    "Nickel/cp/*",
-    "Nickel/calib/*",
-]
+def _run_patterns(prefix: str) -> list[str]:
+    """Return collection glob patterns for processing runs (safe to delete)."""
+    return [
+        f"{prefix}/runs/*/processCcd/*",
+        f"{prefix}/runs/*/diff/*",
+        f"{prefix}/runs/*/forcedPhotRaDec/*",
+        f"{prefix}/runs/*/coadd/*",
+        f"{prefix}/runs/*/science/*",
+    ]
 
-# Patterns that are always preserved (never touched by clean)
-PRESERVED_PATTERNS = [
-    "Nickel/raw/*",
-    "refcats/*",
-    "skymaps/*",
-    "skymaps",
-    "Nickel/calib/current",
-]
+
+def _calib_patterns(prefix: str) -> list[str]:
+    """Return collection glob patterns for calibration collections."""
+    return [f"{prefix}/cp/*", f"{prefix}/calib/*"]
+
+
+def _preserved_patterns(prefix: str) -> list[str]:
+    """Return patterns for collections that are never touched by clean."""
+    return [
+        f"{prefix}/raw/*",
+        "refcats/*",
+        "skymaps/*",
+        "skymaps",
+        f"{prefix}/calib/current",
+    ]
 
 
 @dataclass
@@ -56,11 +59,11 @@ class CleanResult:
     errors: list[str] = field(default_factory=list)
 
 
-def _is_preserved(name: str) -> bool:
+def _is_preserved(name: str, prefix: str = "Nickel") -> bool:
     """Check if a collection name should never be deleted."""
     import fnmatch
 
-    for pattern in PRESERVED_PATTERNS:
+    for pattern in _preserved_patterns(prefix):
         if fnmatch.fnmatch(name, pattern):
             return True
     # Also protect the top-level infrastructure names
@@ -72,6 +75,7 @@ def _is_preserved(name: str) -> bool:
 def _query_collections(
     config: Config,
     patterns: list[str],
+    prefix: str = "Nickel",
 ) -> dict[str, str]:
     """Query Butler for collections matching the given patterns.
 
@@ -107,7 +111,7 @@ def _query_collections(
                     col = parts[0]
                     col_type = parts[-1]  # Type is the last column
                     # Never touch preserved collections
-                    if _is_preserved(col):
+                    if _is_preserved(col, prefix):
                         continue
                     collections[col] = col_type
         except Exception as e:
@@ -119,16 +123,20 @@ def _query_collections(
 def _build_patterns(
     nights: list[str] | None = None,
     steps: list[str] | None = None,
+    prefix: str = "Nickel",
 ) -> list[str]:
     """Build collection glob patterns from filter options."""
     # Map step names to collection path components
     # Patterns with {night} are per-night; patterns without are global.
     step_to_patterns = {
-        "calibs": ["Nickel/cp/{night}/*", "Nickel/calib/{night}"],
-        "science": ["Nickel/runs/{night}/processCcd/*"],
-        "dia": ["Nickel/runs/{night}/diff/*"],
-        "fphot": ["Nickel/runs/{night}/forcedPhotRaDec/*"],
-        "coadd": ["Nickel/runs/{night}/coadd/*", "Nickel/runs/{night}/science/*"],
+        "calibs": [f"{prefix}/cp/{{night}}/*", f"{prefix}/calib/{{night}}"],
+        "science": [f"{prefix}/runs/{{night}}/processCcd/*"],
+        "dia": [f"{prefix}/runs/{{night}}/diff/*"],
+        "fphot": [f"{prefix}/runs/{{night}}/forcedPhotRaDec/*"],
+        "coadd": [
+            f"{prefix}/runs/{{night}}/coadd/*",
+            f"{prefix}/runs/{{night}}/science/*",
+        ],
     }
 
     # Determine which patterns to use
@@ -138,7 +146,7 @@ def _build_patterns(
             patterns.extend(step_to_patterns[step])
     else:
         # Default: processing runs only (not calibs — calibs must be explicit)
-        patterns = RUN_PATTERNS
+        patterns = _run_patterns(prefix)
 
     # Substitute night or use wildcard
     if nights:
@@ -159,6 +167,7 @@ def run(
     nights: list[str] | None = None,
     steps: list[str] | None = None,
     dry_run: bool = False,
+    plugin: InstrumentPlugin | None = None,
 ) -> CleanResult:
     """Remove processing runs from the Butler repository.
 
@@ -175,10 +184,17 @@ def run(
         steps: Only clean these steps, e.g. ["calibs", "science", "dia"]
             (default: all processing steps except calibs)
         dry_run: List what would be removed without deleting
+        plugin: Instrument plugin (default: NickelPlugin)
 
     Returns:
         CleanResult with removed collections and any errors
     """
+    if plugin is None:
+        from obs_nickel_data_tools.instruments.nickel import NickelPlugin
+
+        plugin = NickelPlugin()
+    prefix = plugin.collection_prefix
+
     valid_steps = {"calibs", "science", "dia", "fphot", "coadd"}
     if steps:
         bad = [s for s in steps if s not in valid_steps]
@@ -191,8 +207,8 @@ def run(
     repo = str(config.repo)
     result = CleanResult(success=True)
 
-    patterns = _build_patterns(nights, steps)
-    col_map = _query_collections(config, patterns)
+    patterns = _build_patterns(nights, steps, prefix)
+    col_map = _query_collections(config, patterns, prefix)
 
     if not col_map:
         log.info("No collections found to remove")
