@@ -2,6 +2,7 @@
 
 import pytest
 from obs_nickel_data_tools.instruments.base import InstrumentPlugin
+from obs_nickel_data_tools.instruments.nickel import NickelPlugin
 
 
 class TestInstrumentPluginABC:
@@ -60,3 +61,40 @@ class TestInstrumentPluginABC:
         assert plugin.default_pipeline_configs() == {}
         assert plugin.curated_calibrations_path() is None
         assert plugin.refcat_path() is None
+
+
+class TestNickelPlugin:
+    """Verify NickelPlugin provides correct Nickel-specific values."""
+
+    def test_identity_attributes(self):
+        plugin = NickelPlugin()
+        assert plugin.name == "Nickel"
+        assert plugin.instrument_class == "lsst.obs.smalltel.nickel.Nickel"
+        assert plugin.collection_prefix == "Nickel"
+
+    def test_skymap_attributes(self):
+        plugin = NickelPlugin()
+        assert plugin.skymap_name == "nickelRings-v1"
+        assert plugin.skymaps_chain == "skymaps/nickelRings"
+
+    def test_day_obs_offset(self):
+        """Lick Observatory is UTC-8, so observing night crosses into next UT day."""
+        plugin = NickelPlugin()
+        assert plugin.day_obs_offset == 1
+
+    def test_is_instrument_plugin(self):
+        """NickelPlugin is a proper InstrumentPlugin subclass."""
+        plugin = NickelPlugin()
+        assert isinstance(plugin, InstrumentPlugin)
+
+    def test_lick_archive_fields(self):
+        """NickelPlugin exposes Lick archive URL and instrument filter."""
+        plugin = NickelPlugin()
+        assert "ucolick.org" in plugin.archive_url
+        assert plugin.archive_instrument == "NICKEL_DIR"
+
+    def test_default_pipeline_configs_not_empty(self):
+        """NickelPlugin provides default config overrides."""
+        plugin = NickelPlugin()
+        defaults = plugin.default_pipeline_configs()
+        assert isinstance(defaults, dict)
