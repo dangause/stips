@@ -53,3 +53,20 @@ class TestFphotPluginParam:
 
         sig = inspect.signature(run)
         assert "plugin" in sig.parameters
+
+
+class TestCoaddPluginParam:
+    """Verify coadd.run() and find_tract_for_coords() accept plugin parameters."""
+
+    def test_run_accepts_plugin_param(self):
+        from obs_nickel_data_tools.core.coadd import run
+
+        sig = inspect.signature(run)
+        assert "plugin" in sig.parameters
+
+    def test_find_tract_accepts_skymap_params(self):
+        from obs_nickel_data_tools.core.coadd import find_tract_for_coords
+
+        sig = inspect.signature(find_tract_for_coords)
+        assert "skymap_name" in sig.parameters
+        assert "skymaps_chain" in sig.parameters

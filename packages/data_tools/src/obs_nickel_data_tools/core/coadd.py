@@ -18,10 +18,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from obs_nickel_data_tools.core.pipeline import (
-    INSTRUMENT,
     REFCATS_CHAIN,
-    SKYMAP_NAME,
-    SKYMAPS_CHAIN,
     butler_query_has_results,
     generate_run_timestamp,
     parse_butler_query_output,
@@ -36,6 +33,7 @@ from obs_nickel_data_tools.core.stack import (
 
 if TYPE_CHECKING:
     from obs_nickel_data_tools.core.config import Config
+    from obs_nickel_data_tools.instruments.base import InstrumentPlugin
 
 log = logging.getLogger(__name__)
 
@@ -57,6 +55,8 @@ def find_tract_for_coords(
     dec: float,
     config: Config,
     skymap: str = "nickelRings-v1",
+    skymap_name: str | None = None,
+    skymaps_chain: str | None = None,
 ) -> int | None:
     """Find the tract ID that contains the given coordinates.
 
@@ -64,17 +64,25 @@ def find_tract_for_coords(
         ra: Right ascension in degrees
         dec: Declination in degrees
         config: Pipeline configuration
-        skymap: Skymap name
+        skymap: Skymap name (deprecated alias for skymap_name; skymap_name takes precedence)
+        skymap_name: Skymap dataset name to look up (overrides skymap)
+        skymaps_chain: Butler collection chain that holds the skymap dataset
 
     Returns:
         Tract ID or None if not found
     """
+    # skymap_name overrides the legacy positional-keyword `skymap`
+    effective_skymap_name = skymap_name if skymap_name is not None else skymap
+    effective_skymaps_chain = (
+        skymaps_chain if skymaps_chain is not None else "skymaps/nickelRings"
+    )
+
     script = f"""
 import lsst.daf.butler as dafButler
 from lsst.geom import SpherePoint, degrees
 
 butler = dafButler.Butler('{config.repo}')
-skymap = butler.get('skyMap', skymap='{skymap}', collections='skymaps/nickelRings')
+skymap = butler.get('skyMap', skymap='{effective_skymap_name}', collections='{effective_skymaps_chain}')
 coord = SpherePoint({ra}, {dec}, degrees)
 tract_info = skymap.findTract(coord)
 print(tract_info.getId())
@@ -134,6 +142,7 @@ def find_science_collections_for_nights(
     nights: list[str],
     band: str,
     config: Config,
+    collection_prefix: str = "Nickel",
 ) -> list[str]:
     """Find science run collections for the given nights and band.
 
@@ -141,6 +150,7 @@ def find_science_collections_for_nights(
         nights: List of nights (YYYYMMDD format)
         band: Filter band
         config: Pipeline configuration
+        collection_prefix: Butler collection prefix for this instrument
 
     Returns:
         List of collection names with science outputs for this band
@@ -151,7 +161,11 @@ def find_science_collections_for_nights(
     for night in nights:
         try:
             result = run_butler_query(
-                ["query-collections", repo, f"Nickel/runs/{night}/processCcd/*"],
+                [
+                    "query-collections",
+                    repo,
+                    f"{collection_prefix}/runs/{night}/processCcd/*",
+                ],
                 config,
                 check=False,
             )
@@ -160,7 +174,7 @@ def find_science_collections_for_nights(
                 continue
 
             night_colls = parse_butler_query_output(
-                result.stdout, prefix_filter="Nickel/"
+                result.stdout, prefix_filter=f"{collection_prefix}/"
             )
             if not night_colls:
                 log.info(
@@ -302,8 +316,9 @@ def run(
     overwrite: bool = False,
     config_files: list[str] | None = None,
     log_file: Path | None = None,
+    plugin: InstrumentPlugin | None = None,
 ) -> CoaddResult:
-    """Build coadd template from multiple nights of Nickel observations.
+    """Build coadd template from multiple nights of observations.
 
     This runs the LSST coaddition pipeline to create a deep template
     from processed science images.
@@ -319,10 +334,17 @@ def run(
         overwrite: Replace existing template if present
         config_files: Config override files for pipetask (e.g., ["makeDirectWarp:path/to/config.py"])
         log_file: Optional path to write LSST pipeline logs
+        plugin: InstrumentPlugin providing instrument-specific names and paths.
+            Defaults to NickelPlugin() when not provided.
 
     Returns:
         CoaddResult with collection and status
     """
+    if plugin is None:
+        from obs_nickel_data_tools.instruments.nickel import NickelPlugin
+
+        plugin = NickelPlugin()
+
     if not nights:
         return CoaddResult(
             success=False,
@@ -333,7 +355,13 @@ def run(
     # Determine tract
     if tract is None:
         if ra is not None and dec is not None:
-            tract = find_tract_for_coords(ra, dec, config)
+            tract = find_tract_for_coords(
+                ra,
+                dec,
+                config,
+                skymap_name=plugin.skymap_name,
+                skymaps_chain=plugin.skymaps_chain,
+            )
             if tract is None:
                 return CoaddResult(
                     success=False,
@@ -386,7 +414,9 @@ def run(
 
     # Find science collections for the template nights
     log.info("Finding science collections for template nights...")
-    input_collections = find_science_collections_for_nights(nights, band, config)
+    input_collections = find_science_collections_for_nights(
+        nights, band, config, collection_prefix=plugin.collection_prefix
+    )
 
     if not input_collections:
         return CoaddResult(
@@ -427,7 +457,7 @@ def run(
     try:
         # Register instrument (idempotent)
         run_butler(
-            ["register-instrument", repo, INSTRUMENT],
+            ["register-instrument", repo, plugin.instrument_class],
             config,
             check=False,
             log_file=log_file,
@@ -452,11 +482,12 @@ def run(
         # Build input chain
         input_chain = ",".join(input_collections)
         full_input = (
-            f"{input_chain},Nickel/calib/current," f"{REFCATS_CHAIN},{SKYMAPS_CHAIN}"
+            f"{input_chain},{plugin.collection_prefix}/calib/current,"
+            f"{REFCATS_CHAIN},{plugin.skymaps_chain}"
         )
 
         data_query = (
-            f"instrument='Nickel' AND skymap='{SKYMAP_NAME}' "
+            f"instrument='{plugin.name}' AND skymap='{plugin.skymap_name}' "
             f"AND tract={tract} AND band='{band}'"
         )
 
