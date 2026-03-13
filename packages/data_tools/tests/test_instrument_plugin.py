@@ -1,6 +1,7 @@
 """Tests for InstrumentPlugin ABC and NickelPlugin."""
 
 import pytest
+from obs_nickel_data_tools.instruments import get_plugin, list_plugins
 from obs_nickel_data_tools.instruments.base import InstrumentPlugin
 from obs_nickel_data_tools.instruments.nickel import NickelPlugin
 
@@ -98,3 +99,28 @@ class TestNickelPlugin:
         plugin = NickelPlugin()
         defaults = plugin.default_pipeline_configs()
         assert isinstance(defaults, dict)
+
+
+class TestPluginRegistry:
+    """Verify plugin discovery and lookup."""
+
+    def test_get_plugin_nickel(self):
+        """get_plugin('nickel') returns NickelPlugin."""
+        plugin = get_plugin("nickel")
+        assert isinstance(plugin, NickelPlugin)
+        assert plugin.name == "Nickel"
+
+    def test_get_plugin_case_insensitive(self):
+        """Plugin lookup is case-insensitive."""
+        plugin = get_plugin("Nickel")
+        assert isinstance(plugin, NickelPlugin)
+
+    def test_get_plugin_unknown_raises(self):
+        """Unknown instrument raises ValueError."""
+        with pytest.raises(ValueError, match="Unknown instrument"):
+            get_plugin("nonexistent")
+
+    def test_list_plugins(self):
+        """list_plugins() includes at least 'nickel'."""
+        plugins = list_plugins()
+        assert "nickel" in plugins

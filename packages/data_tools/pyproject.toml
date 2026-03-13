@@ -45,5 +45,8 @@ obsn-skymap-make = "obs_nickel_data_tools.skymap.make_skymap_from_datasets:main"
 obsn-eda-archive = "obs_nickel_data_tools.eda.archive_query:main"
 obsn-eda-butler = "obs_nickel_data_tools.eda.butler_inspect:main"
 
+[project.entry-points."obs_nickel_data_tools.instruments"]
+nickel = "obs_nickel_data_tools.instruments.nickel:NickelPlugin"
+
 [tool.setuptools.packages.find]
 where = ["src"]
