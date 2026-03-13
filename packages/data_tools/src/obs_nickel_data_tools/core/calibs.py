@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from obs_nickel_data_tools.core.pipeline import (
-    INSTRUMENT,
     CollectionNames,
     get_raw_dir,
     night_to_date_range,
@@ -18,6 +17,7 @@ from obs_nickel_data_tools.core.stack import run_butler
 
 if TYPE_CHECKING:
     from obs_nickel_data_tools.core.config import Config
+    from obs_nickel_data_tools.instruments.base import InstrumentPlugin
 
 log = logging.getLogger(__name__)
 
@@ -50,6 +50,7 @@ def write_curated_calibrations(
     config: Config,
     *,
     log_file: Path | None = None,
+    plugin: InstrumentPlugin | None = None,
 ) -> None:
     """Write curated calibrations (defects, crosstalk) for a night.
 
@@ -61,16 +62,22 @@ def write_curated_calibrations(
         night: Any observing night (used for raw_run collection reference)
         config: Pipeline configuration
         log_file: Optional log file path
+        plugin: Instrument plugin (defaults to NickelPlugin for backward compat)
     """
+    if plugin is None:
+        from obs_nickel_data_tools.instruments.nickel import NickelPlugin
+
+        plugin = NickelPlugin()
+
     night = validate_night(night)
-    cols = CollectionNames(night)
+    cols = CollectionNames(night, prefix=plugin.collection_prefix)
     repo = str(config.repo)
 
     # Ingest raws for this night first (needed for write-curated-calibrations)
     raw_dir = get_raw_dir(config, night)
     if raw_dir.exists():
         run_butler(
-            ["register-instrument", repo, INSTRUMENT],
+            ["register-instrument", repo, plugin.instrument_class],
             config,
             check=False,
             log_file=log_file,
@@ -89,13 +96,13 @@ def write_curated_calibrations(
             check=False,
             log_file=log_file,
         )
-        run_butler(["define-visits", repo, "Nickel"], config, log_file=log_file)
+        run_butler(["define-visits", repo, plugin.name], config, log_file=log_file)
 
     run_butler(
         [
             "write-curated-calibrations",
             repo,
-            "Nickel",
+            plugin.name,
             cols.raw_run,
             "--collection",
             cols.curated_run,
@@ -125,6 +132,7 @@ def run(
     log_file: Path | None = None,
     executor=None,
     skip_curated: bool = False,
+    plugin: InstrumentPlugin | None = None,
 ) -> CalibsResult:
     """Run nightly calibration processing.
 
@@ -141,17 +149,23 @@ def run(
         jobs: Number of parallel jobs
         log_file: Optional path to write LSST pipeline logs
         skip_curated: Skip curated calibrations write (already done externally)
+        plugin: Instrument plugin (defaults to NickelPlugin for backward compat)
 
     Returns:
         CalibsResult with collection names and status
     """
+    if plugin is None:
+        from obs_nickel_data_tools.instruments.nickel import NickelPlugin
+
+        plugin = NickelPlugin()
+
     from obs_nickel_data_tools.core.executor import LocalExecutor
 
     if executor is None:
         executor = LocalExecutor()
 
     night = validate_night(night)
-    cols = CollectionNames(night)
+    cols = CollectionNames(night, prefix=plugin.collection_prefix)
 
     raw_dir = get_raw_dir(config, night)
     if not raw_dir.exists():
@@ -182,7 +196,7 @@ def run(
     try:
         # Register instrument (idempotent)
         run_butler(
-            ["register-instrument", repo, INSTRUMENT],
+            ["register-instrument", repo, plugin.instrument_class],
             config,
             check=False,
             log_file=log_file,
@@ -205,7 +219,7 @@ def run(
         )
 
         # Define visits
-        run_butler(["define-visits", repo, "Nickel"], config, log_file=log_file)
+        run_butler(["define-visits", repo, plugin.name], config, log_file=log_file)
 
         # Write curated calibrations (skip if already done by orchestrator)
         if not skip_curated:
@@ -213,7 +227,7 @@ def run(
                 [
                     "write-curated-calibrations",
                     repo,
-                    "Nickel",
+                    plugin.name,
                     cols.raw_run,
                     "--collection",
                     cols.curated_run,
@@ -256,7 +270,7 @@ def run(
                     "--save-qgraph",
                     str(qg_bias),
                     "-d",
-                    "instrument='Nickel' AND exposure.observation_type='bias'",
+                    f"instrument='{plugin.name}' AND exposure.observation_type='bias'",
                 ]
                 + (
                     ["--qgraph-datastore-records"]
@@ -349,7 +363,7 @@ def run(
                     "--save-qgraph",
                     str(qg_flat),
                     "-d",
-                    "instrument='Nickel' AND exposure.observation_type='flat'",
+                    f"instrument='{plugin.name}' AND exposure.observation_type='flat'",
                     "-c",
                     "cpFlatIsr:doDark=False",
                     "-c",
