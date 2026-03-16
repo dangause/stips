@@ -25,6 +25,7 @@ class NickelPlugin(InstrumentPlugin):
     # Lick Observatory archive connection details
     archive_url: str = "https://archive.ucolick.org/archive"
     archive_instrument: str = "NICKEL_DIR"
+    archive_dir: str | None = None  # Path to lick_searchable_archive client
 
     def fetch_data(self, night: str, dest_dir: Path) -> None:
         """Download raw Nickel data for *night* from the Lick Observatory archive.

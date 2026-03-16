@@ -302,15 +302,16 @@ def env(ctx: click.Context) -> None:
 
     click.echo(f"\n{'REPO:':<20} {config.repo}")
     click.echo(f"{'STACK_DIR:':<20} {config.stack_dir}")
-    click.echo(f"{'OBS_NICKEL:':<20} {config.obs_nickel}")
+    click.echo(f"{'OBS_SMALLTEL:':<20} {config.obs_package}")
     click.echo(f"{'RAW_PARENT_DIR:':<20} {config.raw_parent_dir}")
 
     if config.cp_pipe_dir:
         click.echo(f"{'CP_PIPE_DIR:':<20} {config.cp_pipe_dir}")
     if config.refcat_repo:
         click.echo(f"{'REFCAT_REPO:':<20} {config.refcat_repo}")
-    if config.lick_archive_dir:
-        click.echo(f"{'LICK_ARCHIVE_DIR:':<20} {config.lick_archive_dir}")
+    plugin = _get_plugin(ctx)
+    if plugin.archive_dir:
+        click.echo(f"{'ARCHIVE_DIR:':<20} {plugin.archive_dir}")
 
     # Validate paths
     errors = config.validate()
@@ -682,8 +683,9 @@ def download(
             "--raw-root",
             str(config.raw_parent_dir),
         ]
-        if config.lick_archive_dir:
-            sys.argv.extend(["--client-path", str(config.lick_archive_dir)])
+        plugin = _get_plugin(ctx)
+        if plugin.archive_dir:
+            sys.argv.extend(["--client-path", str(plugin.archive_dir)])
         if overwrite:
             sys.argv.append("--overwrite")
 
@@ -1635,7 +1637,7 @@ def dashboard(
         # Try loading config to find repo root
         try:
             config = _load_config(ctx)
-            repo_root = config.obs_nickel.parent.parent
+            repo_root = config.obs_package.parent.parent
             logs_dir = repo_root / "logs"
         except (SystemExit, Exception):
             # Fallback: look for logs/ in current directory

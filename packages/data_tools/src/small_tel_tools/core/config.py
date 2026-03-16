@@ -64,9 +64,6 @@ class Config:
         raw_parent_dir: Parent directory for raw data
         refcat_repo: Path to reference catalog repository
         cp_pipe_dir: Path to cp_pipe pipelines
-        lick_archive_dir: Path to lick_searchable_archive (optional)
-        lick_archive_url: Lick archive API URL
-        lick_archive_instr: Instrument filter for archive queries
     """
 
     repo: Path
@@ -75,9 +72,6 @@ class Config:
     raw_parent_dir: Path
     refcat_repo: Path | None = None
     cp_pipe_dir: Path | None = None
-    lick_archive_dir: Path | None = None
-    lick_archive_url: str = "https://archive.ucolick.org/archive"
-    lick_archive_instr: str = "NICKEL_DIR"
 
     # Derived paths (set in __post_init__)
     pipelines_dir: Path = field(init=False)
@@ -86,11 +80,6 @@ class Config:
     def __post_init__(self):
         self.pipelines_dir = self.obs_package / "pipelines"
         self.configs_dir = self.obs_package / "configs"
-
-    @property
-    def obs_nickel(self) -> Path:
-        """Backward-compat alias for obs_package."""
-        return self.obs_package
 
     def validate(self) -> list[str]:
         """Check that required paths exist.
@@ -104,7 +93,7 @@ class Config:
         if not self.stack_dir.exists():
             errors.append(f"STACK_DIR does not exist: {self.stack_dir}")
         if not self.obs_package.exists():
-            errors.append(f"OBS_SMALLTEL/OBS_NICKEL does not exist: {self.obs_package}")
+            errors.append(f"OBS_SMALLTEL does not exist: {self.obs_package}")
         if not self.raw_parent_dir.exists():
             errors.append(f"RAW_PARENT_DIR does not exist: {self.raw_parent_dir}")
         if self.cp_pipe_dir and not self.cp_pipe_dir.exists():
@@ -204,9 +193,6 @@ def load(
         "RAW_PARENT_DIR",
         "REFCAT_REPO",
         "CP_PIPE_DIR",
-        "LICK_ARCHIVE_DIR",
-        "LICK_ARCHIVE_URL",
-        "LICK_ARCHIVE_INSTR",
     ]
     for key in env_keys:
         if key in os.environ:
@@ -280,13 +266,4 @@ def load(
             else None
         ),
         cp_pipe_dir=cp_pipe_dir,
-        lick_archive_dir=(
-            Path(merged["LICK_ARCHIVE_DIR"]).expanduser()
-            if merged.get("LICK_ARCHIVE_DIR")
-            else None
-        ),
-        lick_archive_url=merged.get(
-            "LICK_ARCHIVE_URL", "https://archive.ucolick.org/archive"
-        ),
-        lick_archive_instr=merged.get("LICK_ARCHIVE_INSTR", "NICKEL_DIR"),
     )
