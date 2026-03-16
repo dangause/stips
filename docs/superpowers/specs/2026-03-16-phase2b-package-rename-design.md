@@ -41,6 +41,29 @@ Updated in `pyproject.toml`:
 stt = "small_tel_tools.cli:main"
 ```
 
+### Auxiliary `obsn-*` Script Entry Points
+
+The 10 `obsn-*` entry points in `pyproject.toml` are renamed to `stt-*` with updated import paths:
+
+| Before | After |
+|--------|-------|
+| `obsn-archive-fetch-night` | `stt-archive-fetch-night` |
+| `obsn-archive-nights` | `stt-archive-nights` |
+| `obsn-archive-ingest-ps1` | `stt-archive-ingest-ps1` |
+| `obsn-archive-template-meta` | `stt-archive-template-meta` |
+| `obsn-dia-assess` | `stt-dia-assess` |
+| `obsn-dia-lightcurve` | `stt-dia-lightcurve` |
+| `obsn-skymap-build-config` | `stt-skymap-build-config` |
+| `obsn-skymap-make` | `stt-skymap-make` |
+| `obsn-eda-archive` | `stt-eda-archive` |
+| `obsn-eda-butler` | `stt-eda-butler` |
+
+All import paths change from `obs_nickel_data_tools.*` to `small_tel_tools.*`.
+
+### pyproject.toml Metadata
+
+Update `project.name` from `"obs-nickel-data-tools"` to `"small-tel-tools"` and update `project.description` to reflect multi-telescope scope.
+
 ### Plugin Entry Point Group
 
 | Before | After |
@@ -77,7 +100,10 @@ The `Config` dataclass currently has three Lick-specific fields:
 
 These move to `NickelPlugin` as attributes. The plugin already has `archive_url` and `archive_instrument` — `lick_archive_dir` joins them as `archive_dir`.
 
-Code that currently reads `config.lick_archive_dir` will instead call `plugin.archive_dir`.
+Code that currently reads `config.lick_archive_dir` will instead call `plugin.archive_dir`. Specific migration points:
+- `cli.py` download command (line 685-686): passes `plugin.archive_dir` instead of `config.lick_archive_dir`
+- `core/stack.py` (line 76-77): the `export LICK_ARCHIVE_DIR=...` line is removed from the generic shell template. Archive-specific env vars are handled by the plugin's `fetch_data()` method, not by the stack activation wrapper.
+- `cli.py` env display (line 312-313): archive info displayed via plugin, not Config
 
 ### Remove `obs_nickel` Backward-Compat Alias
 
@@ -100,15 +126,14 @@ Config currently reads `OBS_SMALLTEL` first, falls back to `OBS_NICKEL`. With cl
 
 ### What Gets Deleted
 
-- `Config.from_env()` class method
-- `Config.from_env_file()` class method
+- The module-level `config.load()` function's `.env` file parsing logic (env_file/extra_env parameters, dotenv reading)
 - `-p`/`--profile` CLI option
 - `--env-file` CLI option
-- All `.env.*` files in the repo root
+- `.env.example` in the repo root (the only remaining `.env*` file)
 
 ### What Replaces It
 
-**Pipeline runs (primary path):** YAML `env:` section already provides all configuration — no change needed.
+**Pipeline runs (primary path):** YAML `env:` section already provides all configuration — no change needed. `RunConfig.from_yaml()` in `core/run.py` calls `config.load(inline_env=..., prefer_inline=True)`.
 
 **Ad-hoc CLI commands:** Environment variables set in the user's shell:
 ```bash
@@ -120,14 +145,22 @@ export RAW_PARENT_DIR=/data/nickel/raw
 stt calibs 20230519
 ```
 
-### Config Constructors
+### Config Loading
+
+The current `config.load()` function (module-level, not a class method) handles both `.env` file parsing and env var reading. It is refactored:
 
 | Before | After |
 |--------|-------|
-| `Config.from_env()` | Deleted |
-| `Config.from_env_file(path)` | Deleted |
-| `Config.from_yaml(yaml_dict)` | Stays (primary constructor for pipeline runs) |
-| — | `Config.from_env_vars()` (new — reads from environment variables for ad-hoc CLI) |
+| `config.load(env_file=path)` | Deleted — no `.env` file support |
+| `config.load(inline_env=dict, prefer_inline=True)` | Stays — used by `RunConfig.from_yaml()` for YAML `env:` section |
+| `config.load()` (no args, reads env vars + default `.env`) | Simplified to `config.load()` reading only `os.environ` (no dotenv) |
+
+The `load()` function signature simplifies to:
+```python
+def load(inline_env: dict[str, str] | None = None) -> Config:
+```
+
+When `inline_env` is provided (YAML pipeline runs), it merges with `os.environ` (inline wins). When not provided (ad-hoc CLI), it reads only from `os.environ`.
 
 ---
 
@@ -135,23 +168,44 @@ stt calibs 20230519
 
 Every reference to `config.obs_nickel` becomes `config.obs_package`. The backward-compat `@property` is deleted (Section 2), so any missed references become immediate `AttributeError`s.
 
-Primary locations:
-- `core/stack.py` — LSST stack activation (`setup -r {config.obs_package}`)
-- `core/calibs.py` — calibration pipeline setup
-- `core/science.py` — science processing setup
-- `core/bootstrap.py` — repository initialization
+**Complete reference list (26 occurrences across 10 files):**
+
+| File | Count | Usage pattern |
+|------|-------|---------------|
+| `core/run.py` | 5 | Pipeline/config path resolution |
+| `core/science.py` | 3 | DRP.yaml pipeline path, config paths |
+| `core/dia.py` | 2 | DIA.yaml pipeline path, config paths |
+| `core/stack.py` | 4 | Shell env export, eups setup, data_tools_src path |
+| `core/calibs.py` | 2 | NickelCpBias.yaml, NickelCpFlat.yaml paths |
+| `core/bootstrap.py` | 2 | Bootstrap script path |
+| `core/bps.py` | 2 | BPS pipeline dir, template vars |
+| `core/coadd.py` | 1 | DRP.yaml pipeline path |
+| `core/fphot.py` | 1 | ForcedPhotRaDec.yaml path |
+| `cli.py` | 3 | Env display, dashboard repo_root, lightcurve config |
+
+**Special case — `core/stack.py` shell template:**
+
+The shell template has LSST eups-specific references:
+```bash
+export OBS_NICKEL="{config.obs_nickel}"     # → export OBS_SMALLTEL="{config.obs_package}"
+setup -r "{config.obs_nickel}" obs_nickel   # → setup -r "{config.obs_package}" obs_smalltel
+OBS_NICKEL_DATA="..."                       # → OBS_SMALLTEL_DATA="..."
+setup -r "$OBS_NICKEL_DATA" obs_nickel_data # → setup -r "$OBS_SMALLTEL_DATA" obs_smalltel_data
+```
+
+The eups package names (`obs_nickel` → `obs_smalltel`, `obs_nickel_data` → `obs_smalltel_data`) match the Phase 1 LSST package rename.
 
 ---
 
 ## Section 5: Testing Strategy
 
-**Approach:** Run existing 38+ test suite after each rename/cleanup step.
+**Approach:** Run existing 47 tests (across 4 test files) after each rename/cleanup step.
 
 **Validation sequence:**
 1. After package rename → all tests pass with new import paths
 2. After CLI rename → `stt --help` works, old `nickel` entry point removed
 3. After Config cleanup → tests construct Config via `obs_package` field
-4. After .env removal → tests updated from `Config.from_env()` to `Config.from_yaml()` or `Config.from_env_vars()`
+4. After .env removal → tests updated to use `config.load(inline_env=...)` or `config.load()` (env vars only)
 5. Final: dry-run one pipeline YAML to confirm end-to-end orchestration
 
 **No pipeline re-runs needed** — all 7 pipelines validated the current code. Phase 2B is a rename/cleanup refactor that doesn't change pipeline logic.
