@@ -36,7 +36,7 @@ instrument: nickel
 env:
   REPO: "/Users/dangause/Developer/lick/lsst/data/nickel/ac_and_repo"
   STACK_DIR: "/Users/dangause/Developer/lick/lsst/lsst_stack"
-  OBS_NICKEL: "/Users/dangause/Developer/lick/lsst/lsst_stack/stack/nickel_processing_suite/packages/obs_nickel"
+  OBS_SMALLTEL: "/Users/dangause/Developer/lick/lsst/lsst_stack/stack/nickel_processing_suite/packages/obs_nickel"
   RAW_PARENT_DIR: "/Users/dangause/Developer/lick/data"
   REFCAT_REPO: "/Users/dangause/Developer/lick/lsst/lsst_stack/stack/refcats"
   CP_PIPE_DIR: "${STACK_DIR}/cp_pipe"

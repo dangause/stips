@@ -14,7 +14,7 @@ instrument: nickel
 env:
   REPO: "/data/repo"
   STACK_DIR: "/opt/lsst/software/stack"
-  OBS_NICKEL: "/opt/nps/packages/obs_nickel"
+  OBS_SMALLTEL: "/opt/nps/packages/obs_nickel"
   RAW_PARENT_DIR: "/data/raw"
   REFCAT_REPO: "/data/refcats"
 
