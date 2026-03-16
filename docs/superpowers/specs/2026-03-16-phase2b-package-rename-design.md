@@ -161,6 +161,7 @@ The current `config.load()` function (module-level, not a class method) handles 
 | Before | After |
 |--------|-------|
 | `config.load(env_file=path)` | Deleted — no `.env` file support |
+| `config.load(extra_env=[...])` | Deleted — no multi-file layering |
 | `config.load(inline_env=dict, prefer_inline=True)` | Stays — used by `RunConfig.from_yaml()` for YAML `env:` section |
 | `config.load()` (no args, reads env vars + default `.env`) | Simplified to `config.load()` reading only `os.environ` (no dotenv) |
 
@@ -168,6 +169,8 @@ The `load()` function signature simplifies to:
 ```python
 def load(inline_env: dict[str, str] | None = None) -> Config:
 ```
+
+The `env_file`, `extra_env`, and `prefer_inline` parameters are all removed.
 
 When `inline_env` is provided (YAML pipeline runs), it merges with `os.environ` (inline wins). When not provided (ad-hoc CLI), it reads only from `os.environ`.
 
@@ -215,7 +218,7 @@ The eups package names (`obs_nickel` → `obs_smalltel`, `obs_nickel_data` → `
 2. After CLI rename → `stt --help` works, old `nickel` entry point removed
 3. After Config cleanup → tests construct Config via `obs_package` field
 4. After .env removal → tests updated to use `config.load(inline_env=...)` or `config.load()` (env vars only)
-5. Final: dry-run `scripts/config/2023ixf/pipeline_ps1_template.yaml` to confirm end-to-end orchestration
+5. Final: `stt run scripts/config/2023ixf/pipeline_ps1_template.yaml --dry-run` to confirm end-to-end orchestration
 
 **No pipeline re-runs needed** — all 7 pipelines validated the current code. Phase 2B is a rename/cleanup refactor that doesn't change pipeline logic.
 
