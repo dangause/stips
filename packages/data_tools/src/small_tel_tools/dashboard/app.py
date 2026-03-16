@@ -11,8 +11,6 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from sse_starlette.sse import EventSourceResponse
-
 from obs_nickel_data_tools.dashboard.collector import (
     PHASE_ORDER,
     LogTailer,
@@ -22,6 +20,7 @@ from obs_nickel_data_tools.dashboard.collector import (
     get_run,
     get_slurm_jobs,
 )
+from sse_starlette.sse import EventSourceResponse
 
 _HERE = Path(__file__).parent
 

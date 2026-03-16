@@ -3,9 +3,9 @@ requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "obs-nickel-data-tools"
+name = "small-tel-tools"
 version = "0.1.0"
-description = "Data access, exploration, and pipeline tools for obs_nickel: archive queries, Butler inspection, template ingest, and skymap helpers."
+description = "Pipeline orchestration and data tools for small telescope astronomy with LSST Science Pipelines."
 authors = [{ name = "Dan Gause" }]
 requires-python = ">=3.12"
 dependencies = [
@@ -25,28 +25,28 @@ readme = "README.md"
 
 [project.scripts]
 # Main CLI
-nickel = "obs_nickel_data_tools.cli:main"
+stt = "small_tel_tools.cli:main"
 
 # Archive tools
-obsn-archive-fetch-night = "obs_nickel_data_tools.pipeline_tools.fetch_archive_night:main"
-obsn-archive-nights = "obs_nickel_data_tools.pipeline_tools.generate_nights_list:main"
-obsn-archive-ingest-ps1 = "obs_nickel_data_tools.pipeline_tools.ingest_ps1_template:main"
-obsn-archive-template-meta = "obs_nickel_data_tools.pipeline_tools.template_metadata:main"
+stt-archive-fetch-night = "small_tel_tools.pipeline_tools.fetch_archive_night:main"
+stt-archive-nights = "small_tel_tools.pipeline_tools.generate_nights_list:main"
+stt-archive-ingest-ps1 = "small_tel_tools.pipeline_tools.ingest_ps1_template:main"
+stt-archive-template-meta = "small_tel_tools.pipeline_tools.template_metadata:main"
 
 # DIA tools
-obsn-dia-assess = "obs_nickel_data_tools.pipeline_tools.assess_dia_quality:main"
-obsn-dia-lightcurve = "obs_nickel_data_tools.pipeline_tools.extract_lightcurve:main"
+stt-dia-assess = "small_tel_tools.pipeline_tools.assess_dia_quality:main"
+stt-dia-lightcurve = "small_tel_tools.pipeline_tools.extract_lightcurve:main"
 
 # Skymap tools
-obsn-skymap-build-config = "obs_nickel_data_tools.skymap.build_discrete_skymap_config:main"
-obsn-skymap-make = "obs_nickel_data_tools.skymap.make_skymap_from_datasets:main"
+stt-skymap-build-config = "small_tel_tools.skymap.build_discrete_skymap_config:main"
+stt-skymap-make = "small_tel_tools.skymap.make_skymap_from_datasets:main"
 
 # EDA tools
-obsn-eda-archive = "obs_nickel_data_tools.eda.archive_query:main"
-obsn-eda-butler = "obs_nickel_data_tools.eda.butler_inspect:main"
+stt-eda-archive = "small_tel_tools.eda.archive_query:main"
+stt-eda-butler = "small_tel_tools.eda.butler_inspect:main"
 
-[project.entry-points."obs_nickel_data_tools.instruments"]
-nickel = "obs_nickel_data_tools.instruments.nickel:NickelPlugin"
+[project.entry-points."small_tel_tools.instruments"]
+nickel = "small_tel_tools.instruments.nickel:NickelPlugin"
 
 [tool.setuptools.packages.find]
 where = ["src"]

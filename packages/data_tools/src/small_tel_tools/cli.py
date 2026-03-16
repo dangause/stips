@@ -21,7 +21,6 @@ import sys
 from pathlib import Path
 
 import click
-
 from obs_nickel_data_tools.core import config as cfg_module
 
 
@@ -1665,7 +1664,6 @@ def dashboard(
 
     # Import and run
     import uvicorn
-
     from obs_nickel_data_tools.dashboard import create_app
 
     app = create_app(logs_dir)
