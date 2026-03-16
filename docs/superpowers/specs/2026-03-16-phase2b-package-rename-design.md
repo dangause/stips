@@ -98,12 +98,21 @@ The `Config` dataclass currently has three Lick-specific fields:
 - `lick_archive_url`
 - `lick_archive_instr`
 
-These move to `NickelPlugin` as attributes. The plugin already has `archive_url` and `archive_instrument` — `lick_archive_dir` joins them as `archive_dir`.
+These move to `NickelPlugin` as class attributes. The plugin already has `archive_url` and `archive_instrument` — a new `archive_dir` class attribute is added:
 
-Code that currently reads `config.lick_archive_dir` will instead call `plugin.archive_dir`. Specific migration points:
-- `cli.py` download command (line 685-686): passes `plugin.archive_dir` instead of `config.lick_archive_dir`
-- `core/stack.py` (line 76-77): the `export LICK_ARCHIVE_DIR=...` line is removed from the generic shell template. Archive-specific env vars are handled by the plugin's `fetch_data()` method, not by the stack activation wrapper.
-- `cli.py` env display (line 312-313): archive info displayed via plugin, not Config
+```python
+class NickelPlugin(InstrumentPlugin):
+    archive_url: str = "https://archive.ucolick.org/archive"
+    archive_instrument: str = "NICKEL_DIR"
+    archive_dir: str | None = None  # new — set from LICK_ARCHIVE_DIR env var
+```
+
+`NickelPlugin.fetch_data()` already reads `LICK_ARCHIVE_DIR` from `os.environ` (line 43 of `nickel.py`) — this stays as-is. The `archive_dir` attribute provides a programmatic API for commands that need the value without going through env vars.
+
+**Specific migration points:**
+- `cli.py` download command (line 685-686): gets plugin via `_get_plugin(ctx)`, passes `plugin.archive_dir` instead of `config.lick_archive_dir`
+- `core/stack.py` (line 76-77): the `export LICK_ARCHIVE_DIR=...` line is removed from the generic shell template. `NickelPlugin.fetch_data()` already reads this env var directly when needed.
+- `cli.py` env command (line 312-313): add `plugin = _get_plugin(ctx)` call to the `env` command (currently missing), display archive info via plugin attributes instead of Config fields
 
 ### Remove `obs_nickel` Backward-Compat Alias
 
@@ -129,7 +138,7 @@ Config currently reads `OBS_SMALLTEL` first, falls back to `OBS_NICKEL`. With cl
 - The module-level `config.load()` function's `.env` file parsing logic (env_file/extra_env parameters, dotenv reading)
 - `-p`/`--profile` CLI option
 - `--env-file` CLI option
-- `.env.example` in the repo root (the only remaining `.env*` file)
+- `.env.example` in the repo root (deleted — serves no purpose without `.env` file support)
 
 ### What Replaces It
 
@@ -168,11 +177,11 @@ When `inline_env` is provided (YAML pipeline runs), it merges with `os.environ` 
 
 Every reference to `config.obs_nickel` becomes `config.obs_package`. The backward-compat `@property` is deleted (Section 2), so any missed references become immediate `AttributeError`s.
 
-**Complete reference list (26 occurrences across 10 files):**
+**Complete reference list (26 occurrences across 10 files, verified by grep):**
 
 | File | Count | Usage pattern |
 |------|-------|---------------|
-| `core/run.py` | 5 | Pipeline/config path resolution |
+| `core/run.py` | 6 | Pipeline/config path resolution |
 | `core/science.py` | 3 | DRP.yaml pipeline path, config paths |
 | `core/dia.py` | 2 | DIA.yaml pipeline path, config paths |
 | `core/stack.py` | 4 | Shell env export, eups setup, data_tools_src path |
@@ -181,7 +190,7 @@ Every reference to `config.obs_nickel` becomes `config.obs_package`. The backwar
 | `core/bps.py` | 2 | BPS pipeline dir, template vars |
 | `core/coadd.py` | 1 | DRP.yaml pipeline path |
 | `core/fphot.py` | 1 | ForcedPhotRaDec.yaml path |
-| `cli.py` | 3 | Env display, dashboard repo_root, lightcurve config |
+| `cli.py` | 2 | Env display, dashboard repo_root |
 
 **Special case — `core/stack.py` shell template:**
 
@@ -206,7 +215,7 @@ The eups package names (`obs_nickel` → `obs_smalltel`, `obs_nickel_data` → `
 2. After CLI rename → `stt --help` works, old `nickel` entry point removed
 3. After Config cleanup → tests construct Config via `obs_package` field
 4. After .env removal → tests updated to use `config.load(inline_env=...)` or `config.load()` (env vars only)
-5. Final: dry-run one pipeline YAML to confirm end-to-end orchestration
+5. Final: dry-run `scripts/config/2023ixf/pipeline_ps1_template.yaml` to confirm end-to-end orchestration
 
 **No pipeline re-runs needed** — all 7 pipelines validated the current code. Phase 2B is a rename/cleanup refactor that doesn't change pipeline logic.
 
