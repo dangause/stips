@@ -1,7 +1,7 @@
-"""Core pipeline functionality for obs_nickel.
+"""Core pipeline functionality for small_tel_tools.
 
-This module provides Python APIs for running LSST pipelines on Nickel data.
-All functions can be used programmatically or via the `nickel` CLI.
+This module provides Python APIs for running LSST pipelines on small telescope data.
+All functions can be used programmatically or via the `stt` CLI.
 
 Example:
     from small_tel_tools.core import config, calibs, science, dia

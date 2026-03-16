@@ -181,12 +181,12 @@ def _load_lightcurve_config(
     if "OBS_SMALLTEL" in os.environ:
         obs_package = Path(os.environ["OBS_SMALLTEL"])
     else:
-        # Check if we're in the nickel_processing_suite directory
+        # Check if we're in the processing suite directory
         cwd = Path.cwd()
         candidates = [
-            cwd / "packages" / "obs_nickel",
-            cwd.parent / "packages" / "obs_nickel",
-            cwd,  # If cwd is obs_nickel itself
+            cwd / "packages" / "obs_smalltel",
+            cwd.parent / "packages" / "obs_smalltel",
+            cwd,  # If cwd is obs_smalltel itself
         ]
         for candidate in candidates:
             if (candidate / "pipelines").exists():
@@ -285,8 +285,8 @@ def calibs(ctx: click.Context, night: str, jobs: int) -> None:
 
     \b
     Example:
-        nickel calibs 20240625
-        nickel calibs 20240625 --jobs 8
+        stt calibs 20240625
+        stt calibs 20240625 --jobs 8
     """
     config = _load_config(ctx)
     plugin = _get_plugin(ctx)
@@ -359,10 +359,10 @@ def science(
 
     \b
     Example:
-        nickel science 20240625
-        nickel science 20240625 --object 2020wnt --skip-coadds
-        nickel science 20240625 --bad 12345,12346
-        nickel science 20240625 --object 2023ixf --ra 210.91 --dec 54.32
+        stt science 20240625
+        stt science 20240625 --object 2020wnt --skip-coadds
+        stt science 20240625 --bad 12345,12346
+        stt science 20240625 --object 2023ixf --ra 210.91 --dec 54.32
     """
     if (ra is None) != (dec is None):
         _print_error("--ra and --dec must be provided together")
@@ -437,9 +437,9 @@ def dia(
 
     \b
     Example:
-        nickel dia 20240625 --auto
-        nickel dia 20240625 --template templates/deep/r
-        nickel dia 20240625 --auto --band r --object 2020wnt
+        stt dia 20240625 --auto
+        stt dia 20240625 --template templates/deep/r
+        stt dia 20240625 --auto --band r --object 2020wnt
     """
     if not template and not auto_template:
         _print_error("Specify --template or --auto")
@@ -508,10 +508,10 @@ def download(
     \b
     Examples:
         # Download all nights from a pipeline config
-        nickel download scripts/config/2023ixf/pipeline_ps1_template.yaml
+        stt download scripts/config/2023ixf/pipeline_ps1_template.yaml
 
         # Download only missing nights from config
-        nickel download scripts/config/2023ixf/pipeline_ps1_template.yaml --missing-only
+        stt download scripts/config/2023ixf/pipeline_ps1_template.yaml --missing-only
 
         # Download specific nights (requires REPO env var or inline YAML env)
         stt download 20240625
@@ -612,7 +612,7 @@ def download(
         # Use existing fetch_archive_night module
         old_argv = sys.argv
         sys.argv = [
-            "obsn-archive-fetch-night",
+            "stt-archive-fetch-night",
             "--night",
             night,
             "--raw-root",
@@ -908,8 +908,8 @@ def ps1_template(
 
     \b
     Example:
-        nickel ps1-template --ra 210.91 --dec 54.32 --band r
-        nickel ps1-template --ra 210.91 --dec 54.32 --band i --degrade-seeing 2.0
+        stt ps1-template --ra 210.91 --dec 54.32 --band r
+        stt ps1-template --ra 210.91 --dec 54.32 --band i --degrade-seeing 2.0
     """
     config = _load_config(ctx)
 
@@ -979,8 +979,8 @@ def fphot(
 
     \b
     Example:
-        nickel fphot 20230519 --ra 210.91 --dec 54.32
-        nickel fphot 20230519 --ra 210.91 --dec 54.32 --band r --image-type both
+        stt fphot 20230519 --ra 210.91 --dec 54.32
+        stt fphot 20230519 --ra 210.91 --dec 54.32 --band r --image-type both
     """
     config = _load_config(ctx)
     plugin = _get_plugin(ctx)
@@ -1294,10 +1294,10 @@ def bps(ctx: click.Context) -> None:
 
     \b
     Example:
-        nickel bps submit calibs 20230519 --site slurm
-        nickel bps submit dia 20230519 --site slurm --band r
-        nickel bps status RUN_ID
-        nickel bps cancel RUN_ID
+        stt bps submit calibs 20230519 --site slurm
+        stt bps submit dia 20230519 --site slurm --band r
+        stt bps status RUN_ID
+        stt bps cancel RUN_ID
     """
     pass
 
@@ -1337,9 +1337,9 @@ def bps_submit(
 
     \b
     Example:
-        nickel bps submit calibs 20230519 --site slurm
-        nickel bps submit science 20230519 --site local --dry-run
-        nickel bps submit dia 20230519 --site slurm --band r
+        stt bps submit calibs 20230519 --site slurm
+        stt bps submit science 20230519 --site local --dry-run
+        stt bps submit dia 20230519 --site slurm --band r
     """
     # Validate DIA requires band
     if pipeline == "dia" and not band:
@@ -1378,7 +1378,7 @@ def bps_submit(
             click.echo(f"  Submit dir: {result.submit_dir}")
         if result.run_id:
             click.echo(f"  Run ID: {result.run_id}")
-            click.echo(f"\n  Check status: nickel bps status {result.run_id}")
+            click.echo(f"\n  Check status: stt bps status {result.run_id}")
     else:
         _print_error(f"BPS submission failed: {result.error}")
         if result.stderr:
@@ -1396,7 +1396,7 @@ def bps_status(ctx: click.Context, run_id: str) -> None:
 
     \b
     Example:
-        nickel bps status 12345
+        stt bps status 12345
     """
     config = _load_config(ctx)
 
@@ -1424,7 +1424,7 @@ def bps_cancel(ctx: click.Context, run_id: str, force: bool) -> None:
 
     \b
     Example:
-        nickel bps cancel 12345
+        stt bps cancel 12345
     """
     config = _load_config(ctx)
 
@@ -1451,7 +1451,7 @@ def bps_list(ctx: click.Context) -> None:
 
     \b
     Example:
-        nickel bps list
+        stt bps list
     """
     config = _load_config(ctx)
 

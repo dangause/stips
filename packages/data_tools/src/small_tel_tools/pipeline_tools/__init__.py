@@ -1,4 +1,4 @@
-"""Pipeline helper CLIs and utilities for obs_nickel workflows."""
+"""Pipeline helper CLIs and utilities for small telescope workflows."""
 
 __all__ = [
     "assess_dia_quality",

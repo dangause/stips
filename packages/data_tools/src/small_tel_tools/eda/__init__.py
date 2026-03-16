@@ -1,4 +1,4 @@
-"""Exploratory Data Analysis (EDA) tools for obs_nickel.
+"""Exploratory Data Analysis (EDA) tools for small telescopes.
 
 This module provides tools for exploring and understanding:
 - Lick Observatory archive data availability

@@ -1,4 +1,4 @@
-"""Configuration loading and validation for Nickel pipelines."""
+"""Configuration loading and validation for small telescope pipelines."""
 
 from __future__ import annotations
 

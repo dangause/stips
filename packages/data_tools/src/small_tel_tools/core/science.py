@@ -62,7 +62,7 @@ print(sum(1 for _ in rows))
 class ScienceConfig:
     """Configuration for science processing."""
 
-    # Config file paths (relative to obs_nickel or absolute)
+    # Config file paths (relative to obs_package or absolute)
     calibrate_image: Path | None = None
     colorterms: Path | None = None
 
@@ -70,9 +70,9 @@ class ScienceConfig:
     calibrate_image_fallbacks: list[Path] = field(default_factory=list)
 
     @classmethod
-    def default(cls, obs_nickel: Path) -> "ScienceConfig":
+    def default(cls, obs_package: Path) -> "ScienceConfig":
         """Create default config with standard paths."""
-        configs = obs_nickel / "configs"
+        configs = obs_package / "configs"
         return cls(
             calibrate_image=configs / "calibrateImage/tuned_configs/2023ixf_relaxed.py",
             colorterms=configs / "apply_colorterms.py",

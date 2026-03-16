@@ -29,7 +29,7 @@ Example YAML format:
         - 20230519
         - 20230521
 
-    # Pipeline configuration files (paths relative to obs_nickel/configs/)
+    # Pipeline configuration files (paths relative to obs_package/configs/)
     configs:
       science:
         calibrate_image: calibrateImage/tuned_configs/2023ixf_relaxed.py
@@ -277,7 +277,7 @@ def _setup_run_logging(run_id: str, config: Config) -> Path:
         Path to the run log directory
     """
     # Use the same LOG_ROOT as logging.sh: {REPO_ROOT}/logs
-    # REPO_ROOT is the monorepo root (obs_nickel.parent.parent)
+    # REPO_ROOT is the monorepo root (obs_package.parent.parent)
     repo_root = config.obs_package.parent.parent
     log_root = repo_root / "logs"
     run_log_dir = log_root / run_id
