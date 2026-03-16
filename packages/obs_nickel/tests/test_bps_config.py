@@ -41,14 +41,14 @@ class TestCustomTemplate:
 class TestBPSConfigQgraphField:
     def test_qgraph_file_default_none(self):
         """BPSConfig.qgraph_file defaults to None."""
-        from obs_nickel_data_tools.core.bps import BPSConfig
+        from small_tel_tools.core.bps import BPSConfig
 
         cfg = BPSConfig(pipeline="custom", night="20230519")
         assert cfg.qgraph_file is None
 
     def test_qgraph_file_accepts_path(self):
         """BPSConfig.qgraph_file accepts a string path."""
-        from obs_nickel_data_tools.core.bps import BPSConfig
+        from small_tel_tools.core.bps import BPSConfig
 
         cfg = BPSConfig(
             pipeline="custom",
@@ -59,7 +59,7 @@ class TestBPSConfigQgraphField:
 
     def test_custom_pipeline_without_qgraph_is_valid(self):
         """pipeline='custom' is valid even without qgraph_file (render will handle it)."""
-        from obs_nickel_data_tools.core.bps import BPSConfig
+        from small_tel_tools.core.bps import BPSConfig
 
         cfg = BPSConfig(pipeline="custom", night="20230519")
         assert cfg.pipeline == "custom"
@@ -82,7 +82,7 @@ class TestRenderBpsConfigQgraph:
 
     def test_render_custom_injects_qgraph_file(self, tmp_path):
         """render_bps_config with custom pipeline substitutes {qgraph_file}."""
-        from obs_nickel_data_tools.core.bps import BPSConfig, render_bps_config
+        from small_tel_tools.core.bps import BPSConfig, render_bps_config
 
         config = self._make_mock_config(tmp_path)
         bps_cfg = BPSConfig(
@@ -103,7 +103,7 @@ class TestRenderBpsConfigQgraph:
 
     def test_render_custom_has_no_pipeline_yaml(self, tmp_path):
         """Rendered custom config must not have pipelineYaml."""
-        from obs_nickel_data_tools.core.bps import BPSConfig, render_bps_config
+        from small_tel_tools.core.bps import BPSConfig, render_bps_config
 
         config = self._make_mock_config(tmp_path)
         bps_cfg = BPSConfig(
@@ -121,7 +121,7 @@ class TestRenderBpsConfigQgraph:
 
     def test_render_non_custom_ignores_qgraph(self, tmp_path):
         """For non-custom pipelines, qgraph_file is ignored."""
-        from obs_nickel_data_tools.core.bps import BPSConfig, render_bps_config
+        from small_tel_tools.core.bps import BPSConfig, render_bps_config
 
         config = self._make_mock_config(tmp_path)
         bps_cfg = BPSConfig(
@@ -153,7 +153,7 @@ class TestFullBPSLifecycle:
 
     def test_custom_template_renders_and_lifecycle_succeeds(self, tmp_path):
         """Full lifecycle: render custom.yaml with qgraph_file -> submit -> poll -> success."""
-        from obs_nickel_data_tools.core.bps import BPSConfig, render_bps_config
+        from small_tel_tools.core.bps import BPSConfig, render_bps_config
 
         config = self._make_mock_config(tmp_path)
         qgraph_path = "/data/repo/bps/science_20230519/graph.qg"
@@ -184,13 +184,13 @@ class TestFullBPSLifecycle:
 
     def test_bps_executor_full_roundtrip(self, tmp_path):
         """BPSExecutor routes 'run' through custom pipeline with qgraph injection."""
-        from obs_nickel_data_tools.core.executor import BPSExecutor
+        from small_tel_tools.core.executor import BPSExecutor
 
         executor = BPSExecutor(site="local", poll_interval=0.01, timeout=1.0)
         config = self._make_mock_config(tmp_path)
 
         # Mock bps.submit to use real render_bps_config
-        from obs_nickel_data_tools.core import bps as bps_mod
+        from small_tel_tools.core import bps as bps_mod
 
         submit_called_with = {}
 
@@ -251,7 +251,7 @@ class TestDockerSlurmSiteConfig:
 
     def test_docker_slurm_is_valid_site(self):
         """'docker-slurm' must be accepted as a valid BPS site."""
-        from obs_nickel_data_tools.core.bps import BPSConfig
+        from small_tel_tools.core.bps import BPSConfig
 
         cfg = BPSConfig(pipeline="science", night="20230519", site="docker-slurm")
         assert cfg.site == "docker-slurm"

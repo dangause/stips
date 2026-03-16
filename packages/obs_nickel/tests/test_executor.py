@@ -13,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "data_tools/src"))
 
 class TestLocalExecutor:
     def test_delegates_to_run_pipetask(self):
-        from obs_nickel_data_tools.core.executor import LocalExecutor
+        from small_tel_tools.core.executor import LocalExecutor
 
         executor = LocalExecutor()
         mock_config = MagicMock()
@@ -22,7 +22,7 @@ class TestLocalExecutor:
         )
 
         with patch(
-            "obs_nickel_data_tools.core.executor.run_pipetask", return_value=expected
+            "small_tel_tools.core.executor.run_pipetask", return_value=expected
         ) as mock_rp:
             result = executor.run_pipetask(
                 ["qgraph", "-b", "/repo"], mock_config, capture_output=True, check=False
@@ -34,7 +34,7 @@ class TestLocalExecutor:
         assert result.returncode == 0
 
     def test_passes_log_file_kwarg(self):
-        from obs_nickel_data_tools.core.executor import LocalExecutor
+        from small_tel_tools.core.executor import LocalExecutor
 
         executor = LocalExecutor()
         mock_config = MagicMock()
@@ -42,7 +42,7 @@ class TestLocalExecutor:
         log_path = Path("/tmp/test.log")
 
         with patch(
-            "obs_nickel_data_tools.core.executor.run_pipetask", return_value=expected
+            "small_tel_tools.core.executor.run_pipetask", return_value=expected
         ) as mock_rp:
             executor.run_pipetask(
                 ["run", "-b", "/repo"], mock_config, log_file=log_path, check=False
@@ -55,7 +55,7 @@ class TestLocalExecutor:
 
 class TestParsePipetaskArgs:
     def test_parses_qgraph_file(self):
-        from obs_nickel_data_tools.core.executor import _parse_pipetask_args
+        from small_tel_tools.core.executor import _parse_pipetask_args
 
         args = [
             "run",
@@ -74,7 +74,7 @@ class TestParsePipetaskArgs:
         assert parsed["jobs"] == "6"
 
     def test_parses_qgraph_subcommand(self):
-        from obs_nickel_data_tools.core.executor import _parse_pipetask_args
+        from small_tel_tools.core.executor import _parse_pipetask_args
 
         args = [
             "qgraph",
@@ -102,7 +102,7 @@ class TestParsePipetaskArgs:
         assert parsed["data_query"] == "exposure.day_obs = 20230520"
 
     def test_handles_missing_optional_args(self):
-        from obs_nickel_data_tools.core.executor import _parse_pipetask_args
+        from small_tel_tools.core.executor import _parse_pipetask_args
 
         args = ["run", "-b", "/repo", "-g", "/path/to/graph.qg"]
         parsed = _parse_pipetask_args(args)
@@ -112,7 +112,7 @@ class TestParsePipetaskArgs:
 
 class TestParseBpsReport:
     def test_parses_succeeded_report(self):
-        from obs_nickel_data_tools.core.executor import _parse_bps_report
+        from small_tel_tools.core.executor import _parse_bps_report
 
         report = (
             "X_REPORT    STATE      EXPECTED    SUCCEEDED    FAILED"
@@ -129,7 +129,7 @@ class TestParseBpsReport:
         assert result["expected"] == 12
 
     def test_parses_failed_report(self):
-        from obs_nickel_data_tools.core.executor import _parse_bps_report
+        from small_tel_tools.core.executor import _parse_bps_report
 
         report = (
             "X_REPORT    STATE      EXPECTED    SUCCEEDED    FAILED"
@@ -145,7 +145,7 @@ class TestParseBpsReport:
         assert result["failed"] == 3
 
     def test_handles_empty_output(self):
-        from obs_nickel_data_tools.core.executor import _parse_bps_report
+        from small_tel_tools.core.executor import _parse_bps_report
 
         result = _parse_bps_report("")
         assert result["state"] == "UNKNOWN"
@@ -155,7 +155,7 @@ class TestParseBpsReport:
 
 class TestTranslateBpsResult:
     def test_succeeded_maps_to_returncode_zero(self):
-        from obs_nickel_data_tools.core.executor import (
+        from small_tel_tools.core.executor import (
             _translate_bps_to_completed_process,
         )
 
@@ -166,7 +166,7 @@ class TestTranslateBpsResult:
         assert "0 failed" in result.stdout
 
     def test_failed_maps_to_returncode_one(self):
-        from obs_nickel_data_tools.core.executor import (
+        from small_tel_tools.core.executor import (
             _translate_bps_to_completed_process,
         )
 
@@ -177,7 +177,7 @@ class TestTranslateBpsResult:
         assert "3 failed" in result.stdout
 
     def test_unknown_maps_to_returncode_one(self):
-        from obs_nickel_data_tools.core.executor import (
+        from small_tel_tools.core.executor import (
             _translate_bps_to_completed_process,
         )
 
@@ -187,7 +187,7 @@ class TestTranslateBpsResult:
 
     def test_stdout_matches_quanta_summary_format(self):
         """Verify stdout format is parseable by pipeline.parse_quanta_summary()."""
-        from obs_nickel_data_tools.core.executor import (
+        from small_tel_tools.core.executor import (
             _translate_bps_to_completed_process,
         )
 
@@ -200,7 +200,7 @@ class TestTranslateBpsResult:
 class TestBPSExecutor:
     def test_qgraph_runs_locally(self):
         """QGraph generation always runs via local pipetask."""
-        from obs_nickel_data_tools.core.executor import BPSExecutor
+        from small_tel_tools.core.executor import BPSExecutor
 
         executor = BPSExecutor(site="local")
         mock_config = MagicMock()
@@ -209,7 +209,7 @@ class TestBPSExecutor:
         )
 
         with patch(
-            "obs_nickel_data_tools.core.executor.run_pipetask",
+            "small_tel_tools.core.executor.run_pipetask",
             return_value=expected,
         ):
             result = executor.run_pipetask(
@@ -222,7 +222,7 @@ class TestBPSExecutor:
 
     def test_run_submits_to_bps(self):
         """Pipeline execution routes through BPS submit + poll."""
-        from obs_nickel_data_tools.core.executor import BPSExecutor
+        from small_tel_tools.core.executor import BPSExecutor
 
         executor = BPSExecutor(site="local", poll_interval=0.01, timeout=1.0)
         mock_config = MagicMock()
@@ -244,7 +244,7 @@ class TestBPSExecutor:
         )
         mock_status = {"success": True, "output": succeeded_report}
 
-        with patch("obs_nickel_data_tools.core.executor.bps") as mock_bps_mod:
+        with patch("small_tel_tools.core.executor.bps") as mock_bps_mod:
             mock_bps_mod.submit.return_value = mock_bps_result
             mock_bps_mod.status.return_value = mock_status
             mock_bps_mod.BPSConfig = MagicMock()
@@ -264,7 +264,7 @@ class TestBPSExecutor:
 
     def test_run_returns_failure_on_bps_submit_error(self):
         """If BPS submit fails, return non-zero CompletedProcess."""
-        from obs_nickel_data_tools.core.executor import BPSExecutor
+        from small_tel_tools.core.executor import BPSExecutor
 
         executor = BPSExecutor(site="local")
         mock_config = MagicMock()
@@ -275,7 +275,7 @@ class TestBPSExecutor:
         mock_bps_result.success = False
         mock_bps_result.error = "Config render failed"
 
-        with patch("obs_nickel_data_tools.core.executor.bps") as mock_bps_mod:
+        with patch("small_tel_tools.core.executor.bps") as mock_bps_mod:
             mock_bps_mod.submit.return_value = mock_bps_result
             mock_bps_mod.BPSConfig = MagicMock()
             mock_bps_mod.render_bps_config = MagicMock(
@@ -292,7 +292,7 @@ class TestBPSExecutor:
 
     def test_timeout_returns_failure(self):
         """If polling exceeds timeout, return failure."""
-        from obs_nickel_data_tools.core.executor import BPSExecutor
+        from small_tel_tools.core.executor import BPSExecutor
 
         executor = BPSExecutor(site="local", poll_interval=0.01, timeout=0.05)
         mock_config = MagicMock()
@@ -312,7 +312,7 @@ class TestBPSExecutor:
         )
         mock_status = {"success": True, "output": running_report}
 
-        with patch("obs_nickel_data_tools.core.executor.bps") as mock_bps_mod:
+        with patch("small_tel_tools.core.executor.bps") as mock_bps_mod:
             mock_bps_mod.submit.return_value = mock_bps_result
             mock_bps_mod.status.return_value = mock_status
             mock_bps_mod.BPSConfig = MagicMock()
@@ -338,7 +338,7 @@ class TestExecutorWiring:
     def test_calibs_accepts_executor(self):
         import inspect
 
-        from obs_nickel_data_tools.core import calibs
+        from small_tel_tools.core import calibs
 
         sig = inspect.signature(calibs.run)
         assert "executor" in sig.parameters
@@ -346,7 +346,7 @@ class TestExecutorWiring:
     def test_science_accepts_executor(self):
         import inspect
 
-        from obs_nickel_data_tools.core import science
+        from small_tel_tools.core import science
 
         sig = inspect.signature(science.run)
         assert "executor" in sig.parameters
@@ -354,7 +354,7 @@ class TestExecutorWiring:
     def test_dia_accepts_executor(self):
         import inspect
 
-        from obs_nickel_data_tools.core import dia
+        from small_tel_tools.core import dia
 
         sig = inspect.signature(dia.run)
         assert "executor" in sig.parameters
@@ -362,7 +362,7 @@ class TestExecutorWiring:
     def test_fphot_accepts_executor(self):
         import inspect
 
-        from obs_nickel_data_tools.core import fphot
+        from small_tel_tools.core import fphot
 
         sig = inspect.signature(fphot.run)
         assert "executor" in sig.parameters
@@ -370,7 +370,7 @@ class TestExecutorWiring:
 
 class TestDispatchConcurrent:
     def test_runs_all_items(self):
-        from obs_nickel_data_tools.core.run import _dispatch_concurrent
+        from small_tel_tools.core.run import _dispatch_concurrent
 
         results = _dispatch_concurrent(
             lambda x: x * 2,
@@ -380,7 +380,7 @@ class TestDispatchConcurrent:
         assert results == {1: 2, 2: 4, 3: 6, 4: 8}
 
     def test_handles_exceptions(self):
-        from obs_nickel_data_tools.core.run import _dispatch_concurrent
+        from small_tel_tools.core.run import _dispatch_concurrent
 
         def failing_fn(x):
             if x == 2:
@@ -394,7 +394,7 @@ class TestDispatchConcurrent:
 
     def test_runs_concurrently(self):
         """Items actually run in parallel, not sequentially."""
-        from obs_nickel_data_tools.core.run import _dispatch_concurrent
+        from small_tel_tools.core.run import _dispatch_concurrent
 
         def slow_fn(x):
             time.sleep(0.1)
@@ -409,7 +409,7 @@ class TestDispatchConcurrent:
         assert elapsed < 0.3
 
     def test_single_worker_runs_sequentially(self):
-        from obs_nickel_data_tools.core.run import _dispatch_concurrent
+        from small_tel_tools.core.run import _dispatch_concurrent
 
         order = []
 
@@ -424,7 +424,7 @@ class TestDispatchConcurrent:
 class TestIntegration:
     def test_executor_protocol_compliance(self):
         """Both executors satisfy the PipetaskExecutor protocol."""
-        from obs_nickel_data_tools.core.executor import (
+        from small_tel_tools.core.executor import (
             BPSExecutor,
             LocalExecutor,
             PipetaskExecutor,
@@ -437,7 +437,7 @@ class TestIntegration:
         """When no executor param, stage modules default to None."""
         import inspect
 
-        from obs_nickel_data_tools.core import calibs, dia, fphot, science
+        from small_tel_tools.core import calibs, dia, fphot, science
 
         for mod in [calibs, science, dia, fphot]:
             sig = inspect.signature(mod.run)
@@ -448,8 +448,8 @@ class TestIntegration:
 
     def test_create_executor_roundtrip(self):
         """RunConfig -> executor -> can be called."""
-        from obs_nickel_data_tools.core.executor import BPSExecutor, LocalExecutor
-        from obs_nickel_data_tools.core.run import RunConfig, _create_executor
+        from small_tel_tools.core.executor import BPSExecutor, LocalExecutor
+        from small_tel_tools.core.run import RunConfig, _create_executor
 
         # Local
         local_cfg = RunConfig(object_name="test", ra=100, dec=10, bands=["r"])

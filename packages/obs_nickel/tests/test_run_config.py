@@ -69,7 +69,7 @@ def variable_defaults_yaml(tmp_path):
 
 class TestRunConfigNewFields:
     def test_sn_config_has_defaults(self, sn_yaml):
-        from obs_nickel_data_tools.core.run import RunConfig
+        from small_tel_tools.core.run import RunConfig
 
         cfg = RunConfig.from_yaml(sn_yaml)
         assert cfg.pipeline_type == "supernova"
@@ -80,7 +80,7 @@ class TestRunConfigNewFields:
         assert cfg.forced_phot_image_type == "diffim"
 
     def test_variable_config_parses_all_fields(self, variable_yaml):
-        from obs_nickel_data_tools.core.run import RunConfig
+        from small_tel_tools.core.run import RunConfig
 
         cfg = RunConfig.from_yaml(variable_yaml)
         assert cfg.pipeline_type == "variable"
@@ -91,14 +91,14 @@ class TestRunConfigNewFields:
         assert cfg.forced_phot_image_type == "both"
 
     def test_variable_type_defaults_forced_phot_to_both(self, variable_defaults_yaml):
-        from obs_nickel_data_tools.core.run import RunConfig
+        from small_tel_tools.core.run import RunConfig
 
         cfg = RunConfig.from_yaml(variable_defaults_yaml)
         assert cfg.pipeline_type == "variable"
         assert cfg.forced_phot_image_type == "both"
 
     def test_explicit_forced_phot_overrides_variable_default(self, tmp_path):
-        from obs_nickel_data_tools.core.run import RunConfig
+        from small_tel_tools.core.run import RunConfig
 
         cfg = {
             "object": "test",
@@ -164,7 +164,7 @@ class TestRunConfigTransitFields:
     """Test transit extension fields in RunConfig."""
 
     def test_transit_config_parses_all_fields(self, transit_yaml):
-        from obs_nickel_data_tools.core.run import RunConfig
+        from small_tel_tools.core.run import RunConfig
 
         cfg = RunConfig.from_yaml(transit_yaml)
         assert cfg.pipeline_type == "transit"
@@ -176,28 +176,28 @@ class TestRunConfigTransitFields:
         assert cfg.transit_duration_max == 4.0
 
     def test_transit_type_defaults_forced_phot_to_visit(self, transit_defaults_yaml):
-        from obs_nickel_data_tools.core.run import RunConfig
+        from small_tel_tools.core.run import RunConfig
 
         cfg = RunConfig.from_yaml(transit_defaults_yaml)
         assert cfg.pipeline_type == "transit"
         assert cfg.forced_phot_image_type == "visit"
 
     def test_transit_type_defaults_search_method_to_bls(self, transit_defaults_yaml):
-        from obs_nickel_data_tools.core.run import RunConfig
+        from small_tel_tools.core.run import RunConfig
 
         cfg = RunConfig.from_yaml(transit_defaults_yaml)
         assert cfg.search_method == "bls"
         assert cfg.transit_search is True
 
     def test_transit_type_defaults_duration_range(self, transit_defaults_yaml):
-        from obs_nickel_data_tools.core.run import RunConfig
+        from small_tel_tools.core.run import RunConfig
 
         cfg = RunConfig.from_yaml(transit_defaults_yaml)
         assert cfg.transit_duration_min == 0.5
         assert cfg.transit_duration_max == 6.0
 
     def test_explicit_search_method_overrides_transit_default(self, tmp_path):
-        from obs_nickel_data_tools.core.run import RunConfig
+        from small_tel_tools.core.run import RunConfig
 
         cfg = {
             "object": "test",
@@ -217,7 +217,7 @@ class TestRunConfigTransitFields:
         assert rc.search_method == "both"
 
     def test_sn_config_has_transit_defaults(self, sn_yaml):
-        from obs_nickel_data_tools.core.run import RunConfig
+        from small_tel_tools.core.run import RunConfig
 
         cfg = RunConfig.from_yaml(sn_yaml)
         assert cfg.search_method == "lomb_scargle"
@@ -250,7 +250,7 @@ def bps_yaml(tmp_path):
 
 class TestRunConfigExecutionFields:
     def test_parses_bps_execution_fields(self, bps_yaml):
-        from obs_nickel_data_tools.core.run import RunConfig
+        from small_tel_tools.core.run import RunConfig
 
         cfg = RunConfig.from_yaml(bps_yaml)
         assert cfg.execution == "bps"
@@ -260,7 +260,7 @@ class TestRunConfigExecutionFields:
         assert cfg.bps_timeout == 3600
 
     def test_default_execution_is_local(self, sn_yaml):
-        from obs_nickel_data_tools.core.run import RunConfig
+        from small_tel_tools.core.run import RunConfig
 
         cfg = RunConfig.from_yaml(sn_yaml)
         assert cfg.execution == "local"
@@ -270,7 +270,7 @@ class TestRunConfigExecutionFields:
         assert cfg.bps_timeout == 7200.0
 
     def test_concurrent_nights_without_bps(self, tmp_path):
-        from obs_nickel_data_tools.core.run import RunConfig
+        from small_tel_tools.core.run import RunConfig
 
         cfg_data = {
             "object": "test",
@@ -290,16 +290,16 @@ class TestRunConfigExecutionFields:
 
 class TestExecutorFactory:
     def test_local_config_creates_local_executor(self, sn_yaml):
-        from obs_nickel_data_tools.core.executor import LocalExecutor
-        from obs_nickel_data_tools.core.run import RunConfig, _create_executor
+        from small_tel_tools.core.executor import LocalExecutor
+        from small_tel_tools.core.run import RunConfig, _create_executor
 
         cfg = RunConfig.from_yaml(sn_yaml)
         executor = _create_executor(cfg)
         assert isinstance(executor, LocalExecutor)
 
     def test_bps_config_creates_bps_executor(self, bps_yaml):
-        from obs_nickel_data_tools.core.executor import BPSExecutor
-        from obs_nickel_data_tools.core.run import RunConfig, _create_executor
+        from small_tel_tools.core.executor import BPSExecutor
+        from small_tel_tools.core.run import RunConfig, _create_executor
 
         cfg = RunConfig.from_yaml(bps_yaml)
         executor = _create_executor(cfg)

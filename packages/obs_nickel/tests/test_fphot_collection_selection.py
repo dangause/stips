@@ -18,7 +18,7 @@ def fphot_module():
         0,
         str(Path(__file__).resolve().parents[2] / "data_tools/src"),
     )
-    from obs_nickel_data_tools.core import fphot
+    from small_tel_tools.core import fphot
 
     return fphot
 

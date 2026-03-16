@@ -18,7 +18,7 @@ sys.path.insert(
     str(Path(__file__).resolve().parents[2] / "data_tools/src"),
 )
 
-from obs_nickel_data_tools.core import transit as transit_mod  # noqa: E402
+from small_tel_tools.core import transit as transit_mod  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Shared fixtures

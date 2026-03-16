@@ -44,7 +44,7 @@ def ps1_ingestion_module():
             0,
             str(Path(__file__).resolve().parents[2] / "data_tools/src"),
         )
-        from obs_nickel_data_tools.pipeline_tools import ingest_ps1_template
+        from small_tel_tools.pipeline_tools import ingest_ps1_template
 
         return ingest_ps1_template
     except ImportError as e:
@@ -229,7 +229,7 @@ class TestMetadataTracking:
 
     def test_record_ps1_metadata(self, temp_dir):
         """Test recording PS1 template metadata."""
-        from obs_nickel_data_tools.pipeline_tools.template_metadata import (
+        from small_tel_tools.pipeline_tools.template_metadata import (
             TemplateMetadata,
         )
 
@@ -262,7 +262,7 @@ class TestMetadataTracking:
 
     def test_query_ps1_templates(self, temp_dir):
         """Test querying for PS1 templates."""
-        from obs_nickel_data_tools.pipeline_tools.template_metadata import (
+        from small_tel_tools.pipeline_tools.template_metadata import (
             TemplateMetadata,
         )
 
