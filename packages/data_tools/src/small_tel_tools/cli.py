@@ -1,17 +1,17 @@
-"""Nickel Processing Suite CLI.
+"""Small Telescope Tools CLI.
 
-Unified command-line interface for processing Nickel telescope data
+Unified command-line interface for processing small telescope data
 with the LSST Science Pipelines.
 
 Usage:
-    nickel calibs 20240625
-    nickel science 20240625
-    nickel dia 20240625 --auto-template
-    nickel env
+    stt calibs 20240625
+    stt science 20240625
+    stt dia 20240625 --auto-template
+    stt env
 
-Profiles:
-    nickel -p 2023ixf dia 20230519 --auto   # Uses .env.2023ixf
-    nickel -p 2020wnt calibs 20201207       # Uses .env.2020wnt
+Configuration:
+    Set REPO, STACK_DIR, OBS_SMALLTEL, and RAW_PARENT_DIR as environment
+    variables, or use the 'env:' section in a pipeline YAML config file.
 """
 
 from __future__ import annotations
@@ -40,46 +40,7 @@ def _print_info(msg: str) -> None:
     click.echo(msg)
 
 
-def _resolve_env_file(env_file: Path | None, profile: str | None) -> Path | None:
-    """Resolve environment file from --env-file or --profile."""
-    if env_file:
-        return env_file
-
-    if profile:
-        # Try common patterns for profile env files
-        candidates = [
-            Path(f".env.{profile}"),
-            Path(f".env.{profile}.ps1"),
-            Path(f"envs/{profile}.env"),
-            Path(f".env-{profile}"),
-        ]
-        for candidate in candidates:
-            if candidate.exists():
-                return candidate
-
-        # If no match found, default to .env.{profile}
-        default = Path(f".env.{profile}")
-        if not default.exists():
-            _print_error(
-                f"Profile '{profile}' not found. Tried: {', '.join(str(c) for c in candidates)}"
-            )
-            sys.exit(1)
-        return default
-
-    return None
-
-
 @click.group()
-@click.option(
-    "--env-file",
-    type=click.Path(path_type=Path),
-    help="Environment file to load (default: .env)",
-)
-@click.option(
-    "-p",
-    "--profile",
-    help="Profile name (loads .env.{profile})",
-)
 @click.option(
     "-v",
     "--verbose",
@@ -95,27 +56,25 @@ def _resolve_env_file(env_file: Path | None, profile: str | None) -> Path | None
 @click.pass_context
 def cli(
     ctx: click.Context,
-    env_file: Path | None,
-    profile: str | None,
     verbose: bool,
     instrument: str,
 ) -> None:
-    """Nickel Processing Suite - LSST pipeline tools for Nickel telescope data.
+    """Small Telescope Tools - LSST pipeline tools for small telescope data.
 
-    Process Nickel 1-meter telescope observations using LSST Science Pipelines.
-    Configure your environment with a .env file or environment variables.
+    Process small telescope observations using LSST Science Pipelines.
+    Configure your environment with environment variables or a YAML 'env:' section.
 
     \b
     Quick start:
-        nickel env                    # Check configuration
-        nickel calibs 20240625        # Run calibrations
-        nickel science 20240625       # Process science frames
-        nickel dia 20240625 --auto    # Difference imaging
+        stt env                    # Check configuration
+        stt calibs 20240625        # Run calibrations
+        stt science 20240625       # Process science frames
+        stt dia 20240625 --auto    # Difference imaging
 
     \b
-    Using profiles (shorthand for --env-file):
-        nickel -p 2023ixf env         # Uses .env.2023ixf
-        nickel -p 2020wnt calibs ...  # Uses .env.2020wnt
+    Configuration:
+        Set REPO, STACK_DIR, OBS_SMALLTEL, RAW_PARENT_DIR as environment variables,
+        or embed them in a pipeline YAML config using the 'env:' section.
     """
     # Configure logging for all core modules
     log_level = logging.DEBUG if verbose else logging.INFO
@@ -125,34 +84,21 @@ def cli(
     )
 
     ctx.ensure_object(dict)
-
-    if env_file and profile:
-        _print_error("Cannot use both --env-file and --profile")
-        sys.exit(1)
-
-    resolved = _resolve_env_file(env_file, profile)
-    ctx.obj["env_file"] = resolved
-    ctx.obj["profile"] = profile
     ctx.obj["instrument"] = instrument
 
 
 def _load_config(
     ctx: click.Context,
     inline_env: dict[str, str] | None = None,
-    prefer_inline: bool = False,
 ) -> cfg_module.Config:
     """Load configuration from context.
 
     Args:
         ctx: Click context
         inline_env: Inline environment variables (from YAML)
-        prefer_inline: If True, inline_env overrides os.environ (for YAML configs)
     """
-    env_file = ctx.obj.get("env_file")
     try:
-        return cfg_module.load(
-            env_file=env_file, inline_env=inline_env, prefer_inline=prefer_inline
-        )
+        return cfg_module.load(inline_env=inline_env)
     except ValueError as e:
         _print_error(str(e))
         sys.exit(1)
@@ -165,12 +111,12 @@ def _load_lightcurve_config(
 ) -> cfg_module.Config:
     """Load configuration for lightcurve command with CLI overrides.
 
-    This allows running lightcurve without any .env file by providing
+    This allows running lightcurve without environment variables by providing
     --repo and optionally --stack-dir on the command line.
 
     Args:
         ctx: Click context
-        repo: Butler repository path (required if no .env)
+        repo: Butler repository path (required if no environment config)
         stack_dir: LSST stack directory (auto-detected if not provided)
 
     Returns:
@@ -179,13 +125,11 @@ def _load_lightcurve_config(
     import os
     from dataclasses import replace
 
-    # Try to load config from env/profile first
-    env_file = ctx.obj.get("env_file")
+    # Try to load config from environment first
     config = None
 
-    # Try loading from env file or environment
     try:
-        config = cfg_module.load(env_file=env_file)
+        config = cfg_module.load()
     except ValueError:
         # Config loading failed - we'll build from CLI options
         pass
@@ -203,8 +147,7 @@ def _load_lightcurve_config(
         _print_error(
             "No configuration found. Either:\n"
             "  1. Provide --repo (and optionally --stack-dir)\n"
-            "  2. Use -p PROFILE to load from .env.PROFILE\n"
-            "  3. Set REPO, STACK_DIR, OBS_SMALLTEL in environment"
+            "  2. Set REPO, STACK_DIR, OBS_SMALLTEL in environment"
         )
         sys.exit(1)
 
@@ -289,16 +232,8 @@ def env(ctx: click.Context) -> None:
     except SystemExit:
         return
 
-    click.echo("\nNickel Processing Suite Configuration")
+    click.echo("\nSmall Telescope Tools Configuration")
     click.echo("=" * 40)
-
-    # Show profile/env file if set
-    profile = ctx.obj.get("profile")
-    env_file = ctx.obj.get("env_file")
-    if profile:
-        click.echo(f"\n{'Profile:':<20} {profile}")
-    if env_file:
-        click.echo(f"{'Env file:':<20} {env_file}")
 
     click.echo(f"\n{'REPO:':<20} {config.repo}")
     click.echo(f"{'STACK_DIR:':<20} {config.stack_dir}")
@@ -578,9 +513,9 @@ def download(
         # Download only missing nights from config
         nickel download scripts/config/2023ixf/pipeline_ps1_template.yaml --missing-only
 
-        # Download specific nights (requires -p profile or --env-file)
-        nickel -p 2023ixf download 20240625
-        nickel -p 2023ixf download 20240416 20240429 20240516
+        # Download specific nights (requires REPO env var or inline YAML env)
+        stt download 20240625
+        stt download 20240416 20240429 20240516
     """
     from small_tel_tools.core import run as run_module
     from small_tel_tools.pipeline_tools import fetch_archive_night
@@ -637,7 +572,7 @@ def download(
             _print_info(f"Including {len(extra)} additional nights from command line")
 
         # Load config with inline env
-        config = _load_config(ctx, inline_env=yaml_env, prefer_inline=True)
+        config = _load_config(ctx, inline_env=yaml_env)
     else:
         # All arguments are night dates
         nights = list(config_or_nights)
@@ -752,25 +687,13 @@ def bootstrap(ctx: click.Context, config_file: Path | None) -> None:
     Creates the Butler repo, registers the instrument, ingests reference
     catalogs, and sets up the skymap. Run this once before processing data.
 
-    Configuration can be provided in three ways (in order of precedence):
-
-    \b
-    1. Pipeline YAML file with 'env' section (recommended):
-       nickel bootstrap scripts/config/2023ixf/pipeline_ps1_template.yaml
-
-    \b
-    2. Profile flag:
-       nickel -p 2023ixf bootstrap
-
-    \b
-    3. Environment file:
-       nickel --env-file .env.2023ixf bootstrap
+    Configuration can be provided via environment variables or a pipeline
+    YAML file with an 'env:' section (recommended for reproducibility).
 
     \b
     Examples:
-        nickel bootstrap scripts/config/2023ixf/pipeline_ps1_template.yaml
-        nickel bootstrap scripts/config/2020wnt/pipeline_nickel_template.yaml
-        nickel -p 2023ixf bootstrap
+        stt bootstrap scripts/config/2023ixf/pipeline_ps1_template.yaml
+        stt bootstrap scripts/config/2020wnt/pipeline_nickel_template.yaml
     """
     from small_tel_tools.core import bootstrap as bootstrap_module
     from small_tel_tools.core import run as run_module
@@ -783,23 +706,8 @@ def bootstrap(ctx: click.Context, config_file: Path | None) -> None:
         if yaml_env:
             inline_env = yaml_env
             _print_info(f"Using environment from: {config_file}")
-        else:
-            # Check for profile in YAML
-            cli_profile = ctx.obj.get("profile")
-            if not cli_profile:
-                yaml_profile = run_module.get_profile_from_yaml(config_file)
-                if yaml_profile:
-                    resolved = _resolve_env_file(None, yaml_profile)
-                    if resolved:
-                        ctx.obj["env_file"] = resolved
-                        ctx.obj["profile"] = yaml_profile
-                        _print_info(
-                            f"Using profile '{yaml_profile}' from: {config_file}"
-                        )
 
-    # When loading from YAML with inline env, prefer YAML values
-    prefer_inline = inline_env is not None
-    config = _load_config(ctx, inline_env=inline_env, prefer_inline=prefer_inline)
+    config = _load_config(ctx, inline_env=inline_env)
 
     _print_info("Bootstrapping Butler repository...")
     _print_info(f"  Repo: {config.repo}")
@@ -860,33 +768,29 @@ def clean(
     coadd runs. Calibrations (cp, calib) are only removed when explicitly
     requested via --step calibs. Preserves raws, reference catalogs, and skymaps.
 
-    Configuration can come from a pipeline YAML, profile, or env file
-    (same as other commands).
+    Configuration can come from a pipeline YAML (via its 'env:' section) or
+    from environment variables.
 
     \b
     Examples:
         # Preview what would be removed
-        nickel clean pipeline.yaml --dry-run
+        stt clean pipeline.yaml --dry-run
 
     \b
         # Remove all processing runs (not calibs)
-        nickel clean pipeline.yaml -y
+        stt clean pipeline.yaml -y
 
     \b
         # Remove calibs and all processing runs
-        nickel clean pipeline.yaml --step calibs --step science --step dia --step fphot --step coadd -y
+        stt clean pipeline.yaml --step calibs --step science --step dia --step fphot --step coadd -y
 
     \b
         # Remove only DIA and forced phot runs
-        nickel clean pipeline.yaml --step dia --step fphot
+        stt clean pipeline.yaml --step dia --step fphot
 
     \b
         # Remove runs for specific nights only
-        nickel clean pipeline.yaml --night 20201207 --night 20201219
-
-    \b
-        # Using profile instead of YAML
-        nickel -p 2020wnt clean --dry-run
+        stt clean pipeline.yaml --night 20201207 --night 20201219
     """
     from small_tel_tools.core import clean as clean_module
     from small_tel_tools.core import run as run_module
@@ -898,19 +802,8 @@ def clean(
         yaml_env = run_module.get_env_from_yaml(config_file)
         if yaml_env:
             inline_env = yaml_env
-        else:
-            cli_profile = ctx.obj.get("profile")
-            if not cli_profile:
-                yaml_profile = run_module.get_profile_from_yaml(config_file)
-                if yaml_profile:
-                    resolved = _resolve_env_file(None, yaml_profile)
-                    if resolved:
-                        ctx.obj["env_file"] = resolved
-                        ctx.obj["profile"] = yaml_profile
 
-    # When loading from YAML with inline env, prefer YAML values
-    prefer_inline = inline_env is not None
-    config = _load_config(ctx, inline_env=inline_env, prefer_inline=prefer_inline)
+    config = _load_config(ctx, inline_env=inline_env)
     plugin = _get_plugin(ctx)
 
     nights_list = list(nights) if nights else None
@@ -1210,21 +1103,21 @@ def lightcurve(
     and generates a lightcurve CSV and optional plot.
 
     \b
-    Example (standalone - no .env needed):
-        nickel lightcurve \\
+    Example (standalone - provide --repo):
+        stt lightcurve \\
             --repo /path/to/butler_repo \\
             --ra 210.91 --dec 54.32 \\
             --collections "Nickel/runs/*/diff/*/run" \\
             --name "SN 2023ixf"
 
     \b
-    Example (with profile):
-        nickel -p 2023ixf lightcurve --ra 210.91 --dec 54.32 \\
+    Example (with environment variables set):
+        stt lightcurve --ra 210.91 --dec 54.32 \\
             --collections "Nickel/runs/20230519/diff/*/run" --name "SN 2023ixf"
 
     \b
     Example (forced photometry):
-        nickel lightcurve --repo /path/to/repo --ra 210.91 --dec 54.32 \\
+        stt lightcurve --repo /path/to/repo --ra 210.91 --dec 54.32 \\
             --collections "Nickel/runs/*/forcedPhotRaDec/*/run" \\
             --dataset-type forced_phot_diffim_radec --name "SN 2023ixf"
     """
@@ -1314,20 +1207,11 @@ def run_pipeline(
     """Run full pipeline from YAML configuration file.
 
     CONFIG_FILE is a YAML file specifying target, nights, bands, and options.
-    The YAML can include environment configuration in two ways:
+    Include environment configuration via the 'env:' section (self-contained),
+    or set REPO, STACK_DIR, OBS_SMALLTEL, RAW_PARENT_DIR in the environment.
 
     \b
-    1. 'profile' field - loads .env.{profile}
-    2. 'env' section - inline environment variables (self-contained)
-
-    \b
-    Example with profile:
-        profile: "2023ixf"    # Loads .env.2023ixf
-        object: "2023ixf"
-        ...
-
-    \b
-    Example with inline env (self-contained):
+    Example YAML with inline env (self-contained):
         env:
           REPO: "/path/to/repo"
           STACK_DIR: "/path/to/stack"
@@ -1338,8 +1222,8 @@ def run_pipeline(
 
     \b
     Example:
-        nickel run scripts/config/2023ixf/pipeline.yaml
-        nickel run pipeline.yaml --dry-run
+        stt run scripts/config/2023ixf/pipeline.yaml
+        stt run pipeline.yaml --dry-run
     """
     from small_tel_tools.core import run as run_module
 
@@ -1350,22 +1234,8 @@ def run_pipeline(
     if yaml_env:
         inline_env = yaml_env
         _print_info("Using inline environment from pipeline YAML")
-    else:
-        # Check if the YAML specifies a profile and no -p flag was given
-        cli_profile = ctx.obj.get("profile")
-        if not cli_profile:
-            yaml_profile = run_module.get_profile_from_yaml(config_file)
-            if yaml_profile:
-                # Resolve and use the YAML-specified profile
-                resolved = _resolve_env_file(None, yaml_profile)
-                if resolved:
-                    ctx.obj["env_file"] = resolved
-                    ctx.obj["profile"] = yaml_profile
-                    _print_info(f"Using profile '{yaml_profile}' from pipeline YAML")
 
-    # When loading from YAML with inline env, prefer YAML values over shell environment
-    prefer_inline = inline_env is not None
-    config = _load_config(ctx, inline_env=inline_env, prefer_inline=prefer_inline)
+    config = _load_config(ctx, inline_env=inline_env)
 
     _print_info(f"Running pipeline from {config_file}...")
 
@@ -1627,10 +1497,9 @@ def dashboard(
 
     \b
     Example:
-        nickel dashboard
-        nickel dashboard --port 9000
-        nickel dashboard --logs-dir ./logs --no-browser
-        nickel -p 2023ixf dashboard
+        stt dashboard
+        stt dashboard --port 9000
+        stt dashboard --logs-dir ./logs --no-browser
     """
     # Determine logs directory
     if logs_dir is None:

@@ -4,17 +4,13 @@ This module reads a YAML configuration file and orchestrates the full pipeline:
 calibs → science → DIA → forced photometry → lightcurve → period/transit analysis.
 
 Example YAML format:
-    # Environment configuration (choose one approach):
-    #
-    # Option 1: Reference a profile (loads .env.{profile})
-    profile: "2023ixf"
-    #
-    # Option 2: Inline environment variables (self-contained config)
+    # Environment configuration via inline 'env:' section (self-contained config):
     env:
       REPO: "/path/to/butler/repo"
       STACK_DIR: "/path/to/lsst_stack"
       OBS_SMALLTEL: "/path/to/obs_smalltel"
       RAW_PARENT_DIR: "/path/to/raw/data"
+    # Alternatively, set REPO, STACK_DIR, OBS_SMALLTEL, RAW_PARENT_DIR as environment variables.
 
     object: "SN2023ixf"   # Must match target_name in FITS (case-insensitive partial match)
     ra: 210.910750
@@ -407,9 +403,6 @@ class RunConfig:
     # HPC container options
     container_image: str | None = None  # Path to Singularity/Apptainer SIF image
 
-    # Environment profile (optional - embedded in YAML instead of -p flag)
-    profile: str | None = None
-
     @classmethod
     def from_yaml(cls, path: Path) -> RunConfig:
         """Load configuration from YAML file."""
@@ -543,25 +536,7 @@ class RunConfig:
             bps_poll_interval=float(options.get("bps_poll_interval", 5.0)),
             bps_timeout=float(options.get("bps_timeout", 7200.0)),
             container_image=options.get("container_image"),
-            profile=data.get("profile"),
         )
-
-
-def get_profile_from_yaml(path: Path) -> str | None:
-    """Extract just the profile field from a pipeline YAML file.
-
-    This is a lightweight function to get the profile before loading
-    the full environment configuration.
-
-    Args:
-        path: Path to pipeline YAML file
-
-    Returns:
-        Profile name if specified, None otherwise
-    """
-    with open(path) as f:
-        data = yaml.safe_load(f)
-    return data.get("profile")
 
 
 def get_env_from_yaml(path: Path) -> dict[str, str] | None:
