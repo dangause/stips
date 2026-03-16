@@ -7,13 +7,13 @@ class TestCalibsPluginParam:
     """Verify calibs.run() accepts and uses plugin parameter."""
 
     def test_run_accepts_plugin_param(self):
-        from obs_nickel_data_tools.core.calibs import run
+        from small_tel_tools.core.calibs import run
 
         sig = inspect.signature(run)
         assert "plugin" in sig.parameters
 
     def test_write_curated_accepts_plugin_param(self):
-        from obs_nickel_data_tools.core.calibs import write_curated_calibrations
+        from small_tel_tools.core.calibs import write_curated_calibrations
 
         sig = inspect.signature(write_curated_calibrations)
         assert "plugin" in sig.parameters
@@ -23,13 +23,13 @@ class TestSciencePluginParam:
     """Verify science.run() and resolve_object_filter() accept plugin parameter."""
 
     def test_run_accepts_plugin_param(self):
-        from obs_nickel_data_tools.core.science import run
+        from small_tel_tools.core.science import run
 
         sig = inspect.signature(run)
         assert "plugin" in sig.parameters
 
     def test_resolve_object_filter_accepts_instrument_name(self):
-        from obs_nickel_data_tools.core.science import resolve_object_filter
+        from small_tel_tools.core.science import resolve_object_filter
 
         sig = inspect.signature(resolve_object_filter)
         assert "instrument_name" in sig.parameters
@@ -39,7 +39,7 @@ class TestDiaPluginParam:
     """Verify dia.run() accepts plugin parameter."""
 
     def test_run_accepts_plugin_param(self):
-        from obs_nickel_data_tools.core.dia import run
+        from small_tel_tools.core.dia import run
 
         sig = inspect.signature(run)
         assert "plugin" in sig.parameters
@@ -49,7 +49,7 @@ class TestFphotPluginParam:
     """Verify fphot.run() accepts plugin parameter."""
 
     def test_run_accepts_plugin_param(self):
-        from obs_nickel_data_tools.core.fphot import run
+        from small_tel_tools.core.fphot import run
 
         sig = inspect.signature(run)
         assert "plugin" in sig.parameters
@@ -59,13 +59,13 @@ class TestCoaddPluginParam:
     """Verify coadd.run() and find_tract_for_coords() accept plugin parameters."""
 
     def test_run_accepts_plugin_param(self):
-        from obs_nickel_data_tools.core.coadd import run
+        from small_tel_tools.core.coadd import run
 
         sig = inspect.signature(run)
         assert "plugin" in sig.parameters
 
     def test_find_tract_accepts_skymap_params(self):
-        from obs_nickel_data_tools.core.coadd import find_tract_for_coords
+        from small_tel_tools.core.coadd import find_tract_for_coords
 
         sig = inspect.signature(find_tract_for_coords)
         assert "skymap_name" in sig.parameters
@@ -76,7 +76,7 @@ class TestCleanPluginParam:
     """Verify clean.run() accepts plugin parameter."""
 
     def test_run_accepts_plugin_param(self):
-        from obs_nickel_data_tools.core.clean import run
+        from small_tel_tools.core.clean import run
 
         sig = inspect.signature(run)
         assert "plugin" in sig.parameters
@@ -87,7 +87,7 @@ class TestRunConfigInstrument:
         """RunConfig dataclass has an instrument field."""
         import dataclasses
 
-        from obs_nickel_data_tools.core.run import RunConfig
+        from small_tel_tools.core.run import RunConfig
 
         fields = {f.name for f in dataclasses.fields(RunConfig)}
         assert "instrument" in fields
@@ -96,7 +96,7 @@ class TestRunConfigInstrument:
         """RunConfig.instrument defaults to 'nickel'."""
         import dataclasses
 
-        from obs_nickel_data_tools.core.run import RunConfig
+        from small_tel_tools.core.run import RunConfig
 
         for f in dataclasses.fields(RunConfig):
             if f.name == "instrument":
@@ -108,16 +108,16 @@ class TestConfigObsPackage:
         """Config has obs_package field."""
         import dataclasses
 
-        from obs_nickel_data_tools.core.config import Config
+        from small_tel_tools.core.config import Config
 
         fields = {f.name for f in dataclasses.fields(Config)}
         assert "obs_package" in fields
 
-    def test_obs_nickel_alias(self):
-        """config.obs_nickel is a backward-compat alias for obs_package."""
+    def test_obs_package_value(self):
+        """config.obs_package holds the instrument obs package path."""
         from pathlib import Path
 
-        from obs_nickel_data_tools.core.config import Config
+        from small_tel_tools.core.config import Config
 
         config = Config(
             repo=Path("/tmp/repo"),
@@ -126,13 +126,12 @@ class TestConfigObsPackage:
             raw_parent_dir=Path("/tmp/raw"),
         )
         assert config.obs_package == Path("/tmp/obs_smalltel")
-        assert config.obs_nickel == config.obs_package
 
     def test_derived_paths_use_obs_package(self):
         """pipelines_dir and configs_dir derive from obs_package."""
         from pathlib import Path
 
-        from obs_nickel_data_tools.core.config import Config
+        from small_tel_tools.core.config import Config
 
         config = Config(
             repo=Path("/tmp/repo"),
@@ -148,13 +147,13 @@ class TestBootstrapPluginParam:
     """Verify bootstrap functions accept plugin parameter."""
 
     def test_needs_bootstrap_accepts_plugin(self):
-        from obs_nickel_data_tools.core.bootstrap import needs_bootstrap
+        from small_tel_tools.core.bootstrap import needs_bootstrap
 
         sig = inspect.signature(needs_bootstrap)
         assert "plugin" in sig.parameters
 
     def test_run_accepts_plugin(self):
-        from obs_nickel_data_tools.core.bootstrap import run
+        from small_tel_tools.core.bootstrap import run
 
         sig = inspect.signature(run)
         assert "plugin" in sig.parameters

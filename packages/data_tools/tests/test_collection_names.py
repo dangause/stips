@@ -1,6 +1,6 @@
 """Tests for parameterized CollectionNames and night_to_day_obs."""
 
-from obs_nickel_data_tools.core.pipeline import CollectionNames, night_to_day_obs
+from small_tel_tools.core.pipeline import CollectionNames, night_to_day_obs
 
 
 class TestCollectionNamesParameterized:
@@ -80,7 +80,7 @@ class TestFindBadCoordExposuresParam:
         """Function signature accepts instrument_name keyword arg."""
         import inspect
 
-        from obs_nickel_data_tools.core.pipeline import find_bad_coord_exposures
+        from small_tel_tools.core.pipeline import find_bad_coord_exposures
 
         sig = inspect.signature(find_bad_coord_exposures)
         assert "instrument_name" in sig.parameters
@@ -89,7 +89,7 @@ class TestFindBadCoordExposuresParam:
         """Function signature accepts day_obs_offset keyword arg."""
         import inspect
 
-        from obs_nickel_data_tools.core.pipeline import find_bad_coord_exposures
+        from small_tel_tools.core.pipeline import find_bad_coord_exposures
 
         sig = inspect.signature(find_bad_coord_exposures)
         assert "day_obs_offset" in sig.parameters

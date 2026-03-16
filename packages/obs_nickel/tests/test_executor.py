@@ -227,7 +227,7 @@ class TestBPSExecutor:
         executor = BPSExecutor(site="local", poll_interval=0.01, timeout=1.0)
         mock_config = MagicMock()
         mock_config.repo = Path("/repo")
-        mock_config.obs_nickel = Path("/obs_nickel")
+        mock_config.obs_package = Path("/obs_smalltel")
 
         mock_bps_result = MagicMock()
         mock_bps_result.success = True
@@ -269,7 +269,7 @@ class TestBPSExecutor:
         executor = BPSExecutor(site="local")
         mock_config = MagicMock()
         mock_config.repo = Path("/repo")
-        mock_config.obs_nickel = Path("/obs_nickel")
+        mock_config.obs_package = Path("/obs_smalltel")
 
         mock_bps_result = MagicMock()
         mock_bps_result.success = False
@@ -297,7 +297,7 @@ class TestBPSExecutor:
         executor = BPSExecutor(site="local", poll_interval=0.01, timeout=0.05)
         mock_config = MagicMock()
         mock_config.repo = Path("/repo")
-        mock_config.obs_nickel = Path("/obs_nickel")
+        mock_config.obs_package = Path("/obs_smalltel")
 
         mock_bps_result = MagicMock()
         mock_bps_result.success = True

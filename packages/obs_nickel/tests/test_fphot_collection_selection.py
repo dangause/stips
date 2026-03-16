@@ -77,7 +77,12 @@ def test_select_diff_collection_prefers_matching_band(fphot_module, monkeypatch)
     monkeypatch.setattr(fphot_module, "run_butler_query", fake_run_butler_query)
 
     selected, candidates = fphot_module._select_diff_collection(
-        repo, night, config=object(), band="r"
+        repo,
+        night,
+        config=object(),
+        band="r",
+        collection_prefix="Nickel",
+        instrument_name="Nickel",
     )
     assert candidates == [i_run, r_run]
     assert selected == r_run
@@ -111,7 +116,12 @@ def test_select_diff_collection_uses_latest_when_band_unspecified(
     monkeypatch.setattr(fphot_module, "run_butler_query", fake_run_butler_query)
 
     selected, candidates = fphot_module._select_diff_collection(
-        repo, night, config=object(), band=None
+        repo,
+        night,
+        config=object(),
+        band=None,
+        collection_prefix="Nickel",
+        instrument_name="Nickel",
     )
     assert candidates == [i_run, r_run]
     assert selected == i_run

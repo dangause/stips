@@ -1,9 +1,9 @@
 """Tests for InstrumentPlugin ABC and NickelPlugin."""
 
 import pytest
-from obs_nickel_data_tools.instruments import get_plugin, list_plugins
-from obs_nickel_data_tools.instruments.base import InstrumentPlugin
-from obs_nickel_data_tools.instruments.nickel import NickelPlugin
+from small_tel_tools.instruments import get_plugin, list_plugins
+from small_tel_tools.instruments.base import InstrumentPlugin
+from small_tel_tools.instruments.nickel import NickelPlugin
 
 
 class TestInstrumentPluginABC:

@@ -3,9 +3,9 @@
 import dataclasses
 import inspect
 
-from obs_nickel_data_tools.core.pipeline import CollectionNames
-from obs_nickel_data_tools.instruments import get_plugin
-from obs_nickel_data_tools.instruments.base import InstrumentPlugin
+from small_tel_tools.core.pipeline import CollectionNames
+from small_tel_tools.instruments import get_plugin
+from small_tel_tools.instruments.base import InstrumentPlugin
 
 
 class TestPluginFlowIntegration:
@@ -53,7 +53,7 @@ class TestPluginFlowIntegration:
 
     def test_all_core_modules_accept_plugin(self):
         """Every core module's run() function accepts a plugin parameter."""
-        from obs_nickel_data_tools.core import (
+        from small_tel_tools.core import (
             bootstrap,
             calibs,
             clean,
@@ -71,14 +71,14 @@ class TestPluginFlowIntegration:
 
     def test_run_config_has_instrument(self):
         """RunConfig has an instrument field."""
-        from obs_nickel_data_tools.core.run import RunConfig
+        from small_tel_tools.core.run import RunConfig
 
         fields = {f.name for f in dataclasses.fields(RunConfig)}
         assert "instrument" in fields
 
     def test_night_to_day_obs_with_offset(self):
         """night_to_day_obs respects day_obs_offset from plugin."""
-        from obs_nickel_data_tools.core.pipeline import night_to_day_obs
+        from small_tel_tools.core.pipeline import night_to_day_obs
 
         plugin = get_plugin("nickel")
         result = night_to_day_obs("20230519", day_obs_offset=plugin.day_obs_offset)
@@ -86,16 +86,16 @@ class TestPluginFlowIntegration:
 
     def test_zero_offset_same_day(self):
         """day_obs_offset=0 means same day (e.g. Hawaiian observatory)."""
-        from obs_nickel_data_tools.core.pipeline import night_to_day_obs
+        from small_tel_tools.core.pipeline import night_to_day_obs
 
         result = night_to_day_obs("20230519", day_obs_offset=0)
         assert result == "20230519"
 
-    def test_config_obs_package_alias(self):
-        """Config.obs_nickel property aliases obs_package for backward compat."""
+    def test_config_obs_package_field(self):
+        """Config.obs_package holds the instrument obs package path."""
         from pathlib import Path
 
-        from obs_nickel_data_tools.core.config import Config
+        from small_tel_tools.core.config import Config
 
         config = Config(
             repo=Path("/tmp/repo"),
@@ -103,4 +103,6 @@ class TestPluginFlowIntegration:
             obs_package=Path("/tmp/obs_smalltel"),
             raw_parent_dir=Path("/tmp/raw"),
         )
-        assert config.obs_nickel == config.obs_package
+        assert config.obs_package == Path("/tmp/obs_smalltel")
+        assert config.pipelines_dir == Path("/tmp/obs_smalltel/pipelines")
+        assert config.configs_dir == Path("/tmp/obs_smalltel/configs")
