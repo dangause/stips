@@ -55,12 +55,12 @@ eups list -d cp_pipe 2>/dev/null | head -1 | awk '{{print $1}}'
 
 @dataclass
 class Config:
-    """Pipeline configuration loaded from environment/.env files.
+    """Pipeline configuration loaded from environment variables or YAML env section.
 
     Attributes:
         repo: Path to Butler repository
         stack_dir: Path to LSST stack installation
-        obs_package: Path to instrument obs package (e.g. obs_nickel, obs_smalltel)
+        obs_package: Path to instrument obs package (e.g. obs_smalltel)
         raw_parent_dir: Parent directory for raw data
         refcat_repo: Path to reference catalog repository
         cp_pipe_dir: Path to cp_pipe pipelines
@@ -121,75 +121,26 @@ def _expand_env_vars(value: str, local_env: dict[str, str] | None = None) -> str
     return value
 
 
-def _parse_env_file(path: Path) -> dict[str, str]:
-    """Parse a .env file into a dict."""
-    env = {}
-    if not path.exists():
-        return env
-
-    with open(path) as f:
-        for line in f:
-            line = line.strip()
-            # Skip comments and empty lines
-            if not line or line.startswith("#"):
-                continue
-            # Handle KEY=VALUE (with optional quotes)
-            if "=" in line:
-                key, _, value = line.partition("=")
-                key = key.strip()
-                value = value.strip()
-                # Remove surrounding quotes
-                if (value.startswith('"') and value.endswith('"')) or (
-                    value.startswith("'") and value.endswith("'")
-                ):
-                    value = value[1:-1]
-                # Expand ${VAR} references
-                value = _expand_env_vars(value, env)
-                env[key] = value
-    return env
-
-
-def load(
-    env_file: str | Path | None = None,
-    extra_env: list[str | Path] | None = None,
-    inline_env: dict[str, str] | None = None,
-    prefer_inline: bool = False,
-) -> Config:
-    """Load configuration from environment and .env files.
+def load(inline_env: dict[str, str] | None = None) -> Config:
+    """Load configuration from environment variables or inline YAML env section.
 
     Args:
-        env_file: Primary .env file (default: .env or $ENV_FILE)
-        extra_env: Additional .env files to layer on top
-        inline_env: Dict of environment variables (from YAML 'env' section)
-        prefer_inline: If True, inline_env overrides os.environ (for nickel run YAML configs)
+        inline_env: Dict of environment variables (from YAML 'env' section).
+                    When provided, these override os.environ values.
 
     Returns:
         Validated Config object
 
     Raises:
         ValueError: If required configuration is missing
-
-    Priority (when prefer_inline=False, default):
-        1. os.environ (highest)
-        2. inline_env
-        3. env_file
-        4. extra_env (lowest)
-
-    Priority (when prefer_inline=True, for YAML configs):
-        1. inline_env (highest - YAML 'env' section)
-        2. env_file (if keys not in inline_env)
-        3. extra_env
-        4. os.environ (lowest - only for keys not in inline_env)
     """
-    # Load env files in order (later files override earlier)
     merged: dict[str, str] = {}
 
-    # Start with OS environment as base (will be overridden if prefer_inline=True)
+    # Start with OS environment
     env_keys = [
         "REPO",
         "STACK_DIR",
         "OBS_SMALLTEL",
-        "OBS_NICKEL",
         "RAW_PARENT_DIR",
         "REFCAT_REPO",
         "CP_PIPE_DIR",
@@ -198,51 +149,21 @@ def load(
         if key in os.environ:
             merged[key] = os.environ[key]
 
-    # Determine primary env file
-    if env_file is None and not inline_env:
-        env_file = os.environ.get("ENV_FILE", ".env")
-
-    if env_file:
-        env_file = Path(env_file)
-        if env_file.exists():
-            file_env = _parse_env_file(env_file)
-            merged.update(file_env)
-
-    if extra_env:
-        for extra in extra_env:
-            extra_path = Path(extra)
-            if extra_path.exists():
-                merged.update(_parse_env_file(extra_path))
-
-    # Handle inline_env based on priority mode
+    # Inline env (from YAML) overrides os.environ
     if inline_env:
-        if prefer_inline:
-            # For YAML configs: inline_env has highest priority
-            for k, v in inline_env.items():
-                merged[k] = _expand_env_vars(v, inline_env)
-        else:
-            # For CLI: only use inline_env for keys not in os.environ
-            for k, v in inline_env.items():
-                if k not in os.environ:
-                    merged[k] = _expand_env_vars(v, inline_env)
+        for k, v in inline_env.items():
+            merged[k] = _expand_env_vars(v, inline_env)
 
     # Validate required fields
-    # OBS_SMALLTEL (new) or OBS_NICKEL (legacy) — either is acceptable
-    required = ["REPO", "STACK_DIR", "RAW_PARENT_DIR"]
+    required = ["REPO", "STACK_DIR", "OBS_SMALLTEL", "RAW_PARENT_DIR"]
     missing = [k for k in required if not merged.get(k)]
-    if not merged.get("OBS_SMALLTEL") and not merged.get("OBS_NICKEL"):
-        missing.append("OBS_SMALLTEL/OBS_NICKEL")
     if missing:
         raise ValueError(
             f"Missing required configuration: {', '.join(missing)}. "
-            f"Set these in your .env file or environment."
+            f"Set these as environment variables or in your YAML env: section."
         )
 
     stack_dir = Path(merged["STACK_DIR"]).expanduser()
-
-    # Resolve obs_package: prefer OBS_SMALLTEL, fall back to OBS_NICKEL
-    obs_package_raw = merged.get("OBS_SMALLTEL") or merged.get("OBS_NICKEL", "")
-    obs_package_path = Path(obs_package_raw).expanduser()
 
     # Resolve CP_PIPE_DIR - use provided value if valid, otherwise auto-discover
     cp_pipe_dir: Path | None = None
@@ -258,7 +179,7 @@ def load(
     return Config(
         repo=Path(merged["REPO"]).expanduser(),
         stack_dir=stack_dir,
-        obs_package=obs_package_path,
+        obs_package=Path(merged["OBS_SMALLTEL"]).expanduser(),
         raw_parent_dir=Path(merged["RAW_PARENT_DIR"]).expanduser(),
         refcat_repo=(
             Path(merged["REFCAT_REPO"]).expanduser()
