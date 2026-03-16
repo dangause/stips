@@ -4,7 +4,7 @@ This module provides functionality for submitting pipelines to HPC clusters
 using LSST's BPS (Batch Processing Service) with Parsl or HTCondor backends.
 
 Example usage:
-    from obs_nickel_data_tools.core.bps import BPSConfig, submit
+    from small_tel_tools.core.bps import BPSConfig, submit
 
     bps_cfg = BPSConfig(
         pipeline="science",
@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from obs_nickel_data_tools.core.config import Config
+    from small_tel_tools.core.config import Config
 
 
 # Valid pipeline names
@@ -275,7 +275,7 @@ def submit(
     Returns:
         BPSResult with submission status and details
     """
-    from obs_nickel_data_tools.core.stack import run_with_stack
+    from small_tel_tools.core.stack import run_with_stack
 
     # Create submit directory
     submit_dir = config.repo / "bps" / f"{bps_cfg.pipeline}_{bps_cfg.night}"
@@ -358,7 +358,7 @@ def status(run_id: str, config: Config) -> dict:
     Returns:
         Dictionary with status information
     """
-    from obs_nickel_data_tools.core.stack import run_with_stack
+    from small_tel_tools.core.stack import run_with_stack
 
     try:
         result = run_with_stack(
@@ -391,7 +391,7 @@ def cancel(run_id: str, config: Config) -> bool:
     Returns:
         True if cancellation succeeded, False otherwise
     """
-    from obs_nickel_data_tools.core.stack import run_with_stack
+    from small_tel_tools.core.stack import run_with_stack
 
     try:
         result = run_with_stack(
@@ -414,7 +414,7 @@ def list_runs(config: Config) -> list[dict]:
     Returns:
         List of run information dictionaries
     """
-    from obs_nickel_data_tools.core.stack import run_with_stack
+    from small_tel_tools.core.stack import run_with_stack
 
     try:
         result = run_with_stack(

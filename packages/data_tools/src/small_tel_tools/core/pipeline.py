@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from obs_nickel_data_tools.core.config import Config
+    from small_tel_tools.core.config import Config
 
 log = logging.getLogger(__name__)
 
@@ -179,7 +179,7 @@ def find_bad_coord_exposures(
     Returns:
         Sorted list of exposure IDs with bad coordinates
     """
-    from obs_nickel_data_tools.core.stack import run_butler_python_json
+    from small_tel_tools.core.stack import run_butler_python_json
 
     day_obs = night_to_day_obs(night, day_obs_offset=day_obs_offset)
 

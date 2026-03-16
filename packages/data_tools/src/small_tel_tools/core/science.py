@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from obs_nickel_data_tools.core.pipeline import (
+from small_tel_tools.core.pipeline import (
     REFCATS_CHAIN,
     CollectionNames,
     build_exclusion_expr,
@@ -20,14 +20,14 @@ from obs_nickel_data_tools.core.pipeline import (
     read_log_delta,
     validate_night,
 )
-from obs_nickel_data_tools.core.stack import (
+from small_tel_tools.core.stack import (
     run_butler,
     run_butler_query,
 )
 
 if TYPE_CHECKING:
-    from obs_nickel_data_tools.core.config import Config
-    from obs_nickel_data_tools.instruments.base import InstrumentPlugin
+    from small_tel_tools.core.config import Config
+    from small_tel_tools.instruments.base import InstrumentPlugin
 
 log = logging.getLogger(__name__)
 
@@ -37,7 +37,7 @@ def _count_matching_exposures(config: "Config", where: str) -> int | None:
 
     Returns None if the query fails.
     """
-    from obs_nickel_data_tools.core.stack import run_butler_python
+    from small_tel_tools.core.stack import run_butler_python
 
     script = f"""
 from lsst.daf.butler import Butler
@@ -118,12 +118,12 @@ def resolve_object_filter(
     Returns:
         Exact target_name from FITS headers, or None if no match
     """
-    from obs_nickel_data_tools.core.stack import run_butler_python_json
+    from small_tel_tools.core.stack import run_butler_python_json
 
     # Query all unique target names from Butler directly.
     where = f"instrument='{instrument_name}' AND exposure.observation_type='science'"
     if night:
-        from obs_nickel_data_tools.core.pipeline import night_to_day_obs
+        from small_tel_tools.core.pipeline import night_to_day_obs
 
         day_obs = night_to_day_obs(night)
         where += f" AND day_obs={day_obs}"
@@ -219,11 +219,11 @@ def run(
         ScienceResult with collection names and status
     """
     if plugin is None:
-        from obs_nickel_data_tools.instruments.nickel import NickelPlugin
+        from small_tel_tools.instruments.nickel import NickelPlugin
 
         plugin = NickelPlugin()
 
-    from obs_nickel_data_tools.core.executor import LocalExecutor
+    from small_tel_tools.core.executor import LocalExecutor
 
     if executor is None:
         executor = LocalExecutor()
@@ -393,7 +393,7 @@ def run(
     qg_dir.mkdir(parents=True, exist_ok=True)
 
     # Import processing log for tracking
-    from obs_nickel_data_tools.core import processing_log
+    from small_tel_tools.core import processing_log
 
     # Create processing log for this night
     plog = processing_log.create_log(night, "science")

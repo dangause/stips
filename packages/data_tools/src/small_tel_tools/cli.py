@@ -21,7 +21,8 @@ import sys
 from pathlib import Path
 
 import click
-from obs_nickel_data_tools.core import config as cfg_module
+
+from small_tel_tools.core import config as cfg_module
 
 
 def _print_error(msg: str) -> None:
@@ -268,7 +269,7 @@ def _load_lightcurve_config(
 
 def _get_plugin(ctx: click.Context):
     """Load instrument plugin from CLI context."""
-    from obs_nickel_data_tools.instruments import get_plugin
+    from small_tel_tools.instruments import get_plugin
 
     instrument = ctx.obj.get("instrument", "nickel")
     return get_plugin(instrument)
@@ -323,7 +324,7 @@ def env(ctx: click.Context) -> None:
 
     # Check stack
     click.echo("\nChecking LSST stack...", nl=False)
-    from obs_nickel_data_tools.core.stack import check_stack
+    from small_tel_tools.core.stack import check_stack
 
     if check_stack(config):
         click.echo(click.style(" ✓ available", fg="green"))
@@ -356,7 +357,7 @@ def calibs(ctx: click.Context, night: str, jobs: int) -> None:
 
     _print_info(f"Running calibrations for {night}...")
 
-    from obs_nickel_data_tools.core import calibs as calibs_module
+    from small_tel_tools.core import calibs as calibs_module
 
     result = calibs_module.run(night, config, jobs=jobs, plugin=plugin)
 
@@ -436,7 +437,7 @@ def science(
 
     _print_info(f"Running science processing for {night}...")
 
-    from obs_nickel_data_tools.core import science as science_module
+    from small_tel_tools.core import science as science_module
 
     result = science_module.run(
         night,
@@ -513,7 +514,7 @@ def dia(
 
     _print_info(f"Running difference imaging for {night}...")
 
-    from obs_nickel_data_tools.core import dia as dia_module
+    from small_tel_tools.core import dia as dia_module
 
     result = dia_module.run(
         night,
@@ -580,8 +581,8 @@ def download(
         nickel -p 2023ixf download 20240625
         nickel -p 2023ixf download 20240416 20240429 20240516
     """
-    from obs_nickel_data_tools.core import run as run_module
-    from obs_nickel_data_tools.pipeline_tools import fetch_archive_night
+    from small_tel_tools.core import run as run_module
+    from small_tel_tools.pipeline_tools import fetch_archive_night
 
     if not config_or_nights:
         _print_error("Must provide either a config file or night dates")
@@ -769,8 +770,8 @@ def bootstrap(ctx: click.Context, config_file: Path | None) -> None:
         nickel bootstrap scripts/config/2020wnt/pipeline_nickel_template.yaml
         nickel -p 2023ixf bootstrap
     """
-    from obs_nickel_data_tools.core import bootstrap as bootstrap_module
-    from obs_nickel_data_tools.core import run as run_module
+    from small_tel_tools.core import bootstrap as bootstrap_module
+    from small_tel_tools.core import run as run_module
 
     inline_env = None
 
@@ -885,8 +886,8 @@ def clean(
         # Using profile instead of YAML
         nickel -p 2020wnt clean --dry-run
     """
-    from obs_nickel_data_tools.core import clean as clean_module
-    from obs_nickel_data_tools.core import run as run_module
+    from small_tel_tools.core import clean as clean_module
+    from small_tel_tools.core import run as run_module
 
     inline_env = None
 
@@ -1019,7 +1020,7 @@ def ps1_template(
 
     _print_info(f"Ingesting PS1 {band}-band template at RA={ra:.4f}, Dec={dec:.4f}...")
 
-    from obs_nickel_data_tools.core import ps1_template as ps1_module
+    from small_tel_tools.core import ps1_template as ps1_module
 
     # Check if already exists
     target_collection = collection or f"templates/ps1/{band}"
@@ -1093,7 +1094,7 @@ def fphot(
         f"Running forced photometry for {night} at RA={ra:.4f}, Dec={dec:.4f}..."
     )
 
-    from obs_nickel_data_tools.core import fphot as fphot_module
+    from small_tel_tools.core import fphot as fphot_module
 
     result = fphot_module.run(
         night=night,
@@ -1238,8 +1239,8 @@ def lightcurve(
 
     _print_info(f"Extracting lightcurve at RA={ra:.4f}, Dec={dec:.4f}...")
 
-    from obs_nickel_data_tools.core import lightcurve as lc_module
-    from obs_nickel_data_tools.core.lightcurve import LightcurveConfig
+    from small_tel_tools.core import lightcurve as lc_module
+    from small_tel_tools.core.lightcurve import LightcurveConfig
 
     lc_config = LightcurveConfig(
         dataset_type=dataset_type,
@@ -1338,7 +1339,7 @@ def run_pipeline(
         nickel run scripts/config/2023ixf/pipeline.yaml
         nickel run pipeline.yaml --dry-run
     """
-    from obs_nickel_data_tools.core import run as run_module
+    from small_tel_tools.core import run as run_module
 
     inline_env = None
 
@@ -1475,7 +1476,7 @@ def bps_submit(
 
     config = _load_config(ctx)
 
-    from obs_nickel_data_tools.core import bps as bps_module
+    from small_tel_tools.core import bps as bps_module
 
     bps_cfg = bps_module.BPSConfig(
         pipeline=pipeline,
@@ -1527,7 +1528,7 @@ def bps_status(ctx: click.Context, run_id: str) -> None:
     """
     config = _load_config(ctx)
 
-    from obs_nickel_data_tools.core import bps as bps_module
+    from small_tel_tools.core import bps as bps_module
 
     _print_info(f"Checking status of run {run_id}...")
 
@@ -1555,7 +1556,7 @@ def bps_cancel(ctx: click.Context, run_id: str, force: bool) -> None:
     """
     config = _load_config(ctx)
 
-    from obs_nickel_data_tools.core import bps as bps_module
+    from small_tel_tools.core import bps as bps_module
 
     if not force:
         if not click.confirm(f"Cancel run {run_id}?"):
@@ -1582,7 +1583,7 @@ def bps_list(ctx: click.Context) -> None:
     """
     config = _load_config(ctx)
 
-    from obs_nickel_data_tools.core import bps as bps_module
+    from small_tel_tools.core import bps as bps_module
 
     runs = bps_module.list_runs(config)
 
@@ -1664,7 +1665,8 @@ def dashboard(
 
     # Import and run
     import uvicorn
-    from obs_nickel_data_tools.dashboard import create_app
+
+    from small_tel_tools.dashboard import create_app
 
     app = create_app(logs_dir)
     uvicorn.run(app, host=host, port=port, log_level="warning")

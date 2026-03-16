@@ -7,17 +7,17 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from obs_nickel_data_tools.core.pipeline import (
+from small_tel_tools.core.pipeline import (
     CollectionNames,
     get_raw_dir,
     night_to_date_range,
     validate_night,
 )
-from obs_nickel_data_tools.core.stack import run_butler
+from small_tel_tools.core.stack import run_butler
 
 if TYPE_CHECKING:
-    from obs_nickel_data_tools.core.config import Config
-    from obs_nickel_data_tools.instruments.base import InstrumentPlugin
+    from small_tel_tools.core.config import Config
+    from small_tel_tools.instruments.base import InstrumentPlugin
 
 log = logging.getLogger(__name__)
 
@@ -65,7 +65,7 @@ def write_curated_calibrations(
         plugin: Instrument plugin (defaults to NickelPlugin for backward compat)
     """
     if plugin is None:
-        from obs_nickel_data_tools.instruments.nickel import NickelPlugin
+        from small_tel_tools.instruments.nickel import NickelPlugin
 
         plugin = NickelPlugin()
 
@@ -155,11 +155,11 @@ def run(
         CalibsResult with collection names and status
     """
     if plugin is None:
-        from obs_nickel_data_tools.instruments.nickel import NickelPlugin
+        from small_tel_tools.instruments.nickel import NickelPlugin
 
         plugin = NickelPlugin()
 
-    from obs_nickel_data_tools.core.executor import LocalExecutor
+    from small_tel_tools.core.executor import LocalExecutor
 
     if executor is None:
         executor = LocalExecutor()

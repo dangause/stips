@@ -17,13 +17,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from obs_nickel_data_tools.core.pipeline import (
+from small_tel_tools.core.pipeline import (
     REFCATS_CHAIN,
     butler_query_has_results,
     generate_run_timestamp,
     parse_butler_query_output,
 )
-from obs_nickel_data_tools.core.stack import (
+from small_tel_tools.core.stack import (
     run_butler,
     run_butler_python,
     run_butler_python_json,
@@ -32,8 +32,8 @@ from obs_nickel_data_tools.core.stack import (
 )
 
 if TYPE_CHECKING:
-    from obs_nickel_data_tools.core.config import Config
-    from obs_nickel_data_tools.instruments.base import InstrumentPlugin
+    from small_tel_tools.core.config import Config
+    from small_tel_tools.instruments.base import InstrumentPlugin
 
 log = logging.getLogger(__name__)
 
@@ -341,7 +341,7 @@ def run(
         CoaddResult with collection and status
     """
     if plugin is None:
-        from obs_nickel_data_tools.instruments.nickel import NickelPlugin
+        from small_tel_tools.instruments.nickel import NickelPlugin
 
         plugin = NickelPlugin()
 

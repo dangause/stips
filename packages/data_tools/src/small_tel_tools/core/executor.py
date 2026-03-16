@@ -15,12 +15,12 @@ import subprocess
 import time
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
-from obs_nickel_data_tools.core import bps
-from obs_nickel_data_tools.core.stack import run_butler_query, run_pipetask
+from small_tel_tools.core import bps
+from small_tel_tools.core.stack import run_butler_query, run_pipetask
 
 if TYPE_CHECKING:
 
-    from obs_nickel_data_tools.core.config import Config
+    from small_tel_tools.core.config import Config
 
 log = logging.getLogger(__name__)
 

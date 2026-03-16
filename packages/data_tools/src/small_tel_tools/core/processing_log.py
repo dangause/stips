@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from obs_nickel_data_tools.core.config import Config
+    from small_tel_tools.core.config import Config
 
 log = logging.getLogger(__name__)
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from obs_nickel_data_tools.instruments.base import InstrumentPlugin
+from small_tel_tools.instruments.base import InstrumentPlugin
 
 __all__ = ("NickelPlugin",)
 
@@ -45,7 +45,7 @@ class NickelPlugin(InstrumentPlugin):
             sys.path.insert(0, archive_dir)
 
         # Import the module and delegate to its download machinery
-        from obs_nickel_data_tools.pipeline_tools import fetch_archive_night as _mod
+        from small_tel_tools.pipeline_tools import fetch_archive_night as _mod
 
         raw_dir = dest_dir / "raw"
         raw_dir.mkdir(parents=True, exist_ok=True)

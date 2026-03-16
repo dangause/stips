@@ -1421,7 +1421,7 @@ Examples:
 
     # Record PS1 template metadata
     try:
-        from obs_nickel_data_tools.pipeline_tools.template_metadata import (
+        from small_tel_tools.pipeline_tools.template_metadata import (
             TemplateMetadata,
         )
 

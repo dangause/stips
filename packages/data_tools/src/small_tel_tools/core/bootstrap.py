@@ -15,8 +15,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from obs_nickel_data_tools.core.config import Config
-    from obs_nickel_data_tools.instruments.base import InstrumentPlugin
+    from small_tel_tools.core.config import Config
+    from small_tel_tools.instruments.base import InstrumentPlugin
 
 log = logging.getLogger(__name__)
 
@@ -50,7 +50,7 @@ def needs_bootstrap(
         True if the repository needs (re-)bootstrapping
     """
     if plugin is None:
-        from obs_nickel_data_tools.instruments.nickel import NickelPlugin
+        from small_tel_tools.instruments.nickel import NickelPlugin
 
         plugin = NickelPlugin()
     butler_yaml = config.repo / "butler.yaml"
@@ -59,7 +59,7 @@ def needs_bootstrap(
 
     # Repo exists — verify critical collections are present.
     # A clean bug could remove skymaps/refcats while leaving butler.yaml.
-    from obs_nickel_data_tools.core.stack import run_butler_query
+    from small_tel_tools.core.stack import run_butler_query
 
     for collection in ("skymaps", "refcats"):
         try:
@@ -129,10 +129,10 @@ def run(
         BootstrapResult with status
     """
     if plugin is None:
-        from obs_nickel_data_tools.instruments.nickel import NickelPlugin
+        from small_tel_tools.instruments.nickel import NickelPlugin
 
         plugin = NickelPlugin()
-    from obs_nickel_data_tools.core.stack import run_with_stack
+    from small_tel_tools.core.stack import run_with_stack
 
     result = BootstrapResult(success=False)
 

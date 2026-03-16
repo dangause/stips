@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from obs_nickel_data_tools.core.config import Config
+    from small_tel_tools.core.config import Config
 
 
 def _find_stack_loader(stack_dir: Path) -> Path:
@@ -98,7 +98,7 @@ if [ -d "$OBS_NICKEL_DATA" ]; then
     setup -r "$OBS_NICKEL_DATA" obs_nickel_data 2>/dev/null || true
 fi
 
-# Add data_tools to PYTHONPATH so obs_nickel_data_tools is importable
+# Add data_tools to PYTHONPATH so small_tel_tools is importable
 DATA_TOOLS_SRC="{data_tools_src}"
 if [ -d "$DATA_TOOLS_SRC" ]; then
     export PYTHONPATH="${{DATA_TOOLS_SRC}}:${{PYTHONPATH:-}}"

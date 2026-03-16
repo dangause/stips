@@ -80,9 +80,9 @@ from typing import TYPE_CHECKING
 import yaml
 
 if TYPE_CHECKING:
-    from obs_nickel_data_tools.core.config import Config
-    from obs_nickel_data_tools.core.lightcurve import LightcurveConfig
-    from obs_nickel_data_tools.core.science import ScienceConfig
+    from small_tel_tools.core.config import Config
+    from small_tel_tools.core.lightcurve import LightcurveConfig
+    from small_tel_tools.core.science import ScienceConfig
 
 log = logging.getLogger(__name__)
 
@@ -377,7 +377,7 @@ class RunConfig:
     forced_phot_image_type: str = "diffim"  # visit, diffim, or both
     lc_config: "LightcurveConfig" = field(
         default_factory=lambda: __import__(
-            "obs_nickel_data_tools.core.lightcurve", fromlist=["LightcurveConfig"]
+            "small_tel_tools.core.lightcurve", fromlist=["LightcurveConfig"]
         ).LightcurveConfig()
     )
     rebuild_templates: bool = False
@@ -413,7 +413,7 @@ class RunConfig:
     @classmethod
     def from_yaml(cls, path: Path) -> RunConfig:
         """Load configuration from YAML file."""
-        from obs_nickel_data_tools.core.lightcurve import LightcurveConfig
+        from small_tel_tools.core.lightcurve import LightcurveConfig
 
         with open(path) as f:
             data = yaml.safe_load(f)
@@ -613,7 +613,7 @@ def _create_executor(run_cfg: RunConfig):
     Returns:
         LocalExecutor for local execution, BPSExecutor for BPS execution
     """
-    from obs_nickel_data_tools.core.executor import BPSExecutor, LocalExecutor
+    from small_tel_tools.core.executor import BPSExecutor, LocalExecutor
 
     if run_cfg.execution == "bps":
         return BPSExecutor(
@@ -703,7 +703,7 @@ def _run_ps1_templates(
     dry_run: bool,
 ) -> None:
     """Ingest PS1 templates for each band."""
-    from obs_nickel_data_tools.core import ps1_template
+    from small_tel_tools.core import ps1_template
 
     for band in run_cfg.bands:
         if band not in ("r", "i"):
@@ -750,7 +750,7 @@ def _run_coadd_templates(
     Returns a RunResult early-exit if continue_on_error is False and a step fails,
     or None to continue normally.
     """
-    from obs_nickel_data_tools.core import calibs, coadd, science
+    from small_tel_tools.core import calibs, coadd, science
 
     if not run_cfg.template_nights:
         log.error("Coadd template type requires template.nights in YAML")
@@ -901,7 +901,7 @@ def _run_calibs_step(
 
     Returns a RunResult for early exit if continue_on_error is False, else None.
     """
-    from obs_nickel_data_tools.core import calibs
+    from small_tel_tools.core import calibs
 
     if dry_run:
         for night in all_nights:
@@ -1000,7 +1000,7 @@ def _run_science_step(
 
     Returns a RunResult for early exit if continue_on_error is False, else None.
     """
-    from obs_nickel_data_tools.core import science
+    from small_tel_tools.core import science
 
     if dry_run:
         for night in all_nights:
@@ -1174,7 +1174,7 @@ def _run_dia_step(
 
     Returns a RunResult for early exit if continue_on_error is False, else None.
     """
-    from obs_nickel_data_tools.core import dia
+    from small_tel_tools.core import dia
 
     if dry_run:
         for night in all_nights:
@@ -1354,7 +1354,7 @@ def _run_fphot_step(
     plugin=None,
 ) -> None:
     """Run forced photometry per night per successful DIA band."""
-    from obs_nickel_data_tools.core import fphot
+    from small_tel_tools.core import fphot
 
     failed_dia_set = set(result.failed_dia)
 
@@ -1511,7 +1511,7 @@ def _run_lightcurve_step(
     plugin=None,
 ) -> None:
     """Extract lightcurve from forced photometry or DIA sources."""
-    from obs_nickel_data_tools.core import lightcurve
+    from small_tel_tools.core import lightcurve
 
     use_forced_phot = run_cfg.lc_config.dataset_type.startswith("forced_phot")
 
@@ -1569,7 +1569,7 @@ def _run_period_step(
         return
 
     if not dry_run:
-        from obs_nickel_data_tools.core import period
+        from small_tel_tools.core import period
 
         period_log = _get_step_log_file("period")
         period_result = period.run(
@@ -1600,7 +1600,7 @@ def _run_transit_step(
         return
 
     if not dry_run:
-        from obs_nickel_data_tools.core import transit
+        from small_tel_tools.core import transit
 
         transit_log = _get_step_log_file("transit")
         transit_result = transit.run(
@@ -1639,8 +1639,8 @@ def _run_differential_phot_step(
     calibrateImage star catalogs, selects comparison stars, and computes
     differential flux ratios.
     """
-    from obs_nickel_data_tools.core.pipeline import parse_butler_query_output
-    from obs_nickel_data_tools.core.stack import run_butler_query, run_pipetask
+    from small_tel_tools.core.pipeline import parse_butler_query_output
+    from small_tel_tools.core.stack import run_butler_query, run_pipetask
 
     repo = str(config.repo)
     obs_nickel = str(config.obs_nickel)
@@ -1747,8 +1747,8 @@ def _discover_fphot_collections(
     plugin=None,
 ) -> list[str]:
     """Gather forced photometry collections for lightcurve extraction."""
-    from obs_nickel_data_tools.core.pipeline import parse_butler_query_output
-    from obs_nickel_data_tools.core.stack import run_butler_query
+    from small_tel_tools.core.pipeline import parse_butler_query_output
+    from small_tel_tools.core.stack import run_butler_query
 
     prefix = plugin.collection_prefix if plugin else "Nickel"
 
@@ -1806,8 +1806,8 @@ def _discover_dia_collections(
     plugin=None,
 ) -> list[str]:
     """Gather DIA diff collections for lightcurve extraction."""
-    from obs_nickel_data_tools.core.pipeline import parse_butler_query_output
-    from obs_nickel_data_tools.core.stack import run_butler_query
+    from small_tel_tools.core.pipeline import parse_butler_query_output
+    from small_tel_tools.core.stack import run_butler_query
 
     prefix = plugin.collection_prefix if plugin else "Nickel"
 
@@ -1878,8 +1878,8 @@ def run(
     Returns:
         RunResult with status and any failures
     """
-    from obs_nickel_data_tools.core import bootstrap
-    from obs_nickel_data_tools.core.science import ScienceConfig
+    from small_tel_tools.core import bootstrap
+    from small_tel_tools.core.science import ScienceConfig
 
     # Set up unified logging directory for this pipeline run
     run_id = _generate_run_id()
@@ -1913,7 +1913,7 @@ def run(
         run_cfg.concurrent_nights = concurrent_override
 
     # Load instrument plugin
-    from obs_nickel_data_tools.instruments import get_plugin
+    from small_tel_tools.instruments import get_plugin
 
     plugin = get_plugin(run_cfg.instrument)
     log.info(f"Instrument plugin: {plugin.name}")

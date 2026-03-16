@@ -5,12 +5,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from obs_nickel_data_tools.core.stack import run_with_stack
+from small_tel_tools.core.stack import run_with_stack
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from obs_nickel_data_tools.core.config import Config
+    from small_tel_tools.core.config import Config
 
 
 @dataclass
@@ -81,7 +81,7 @@ def run(
     args = [
         "python",
         "-m",
-        "obs_nickel_data_tools.pipeline_tools.ingest_ps1_template",
+        "small_tel_tools.pipeline_tools.ingest_ps1_template",
         "--repo",
         str(config.repo),
         "--ra",

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from obs_nickel_data_tools.instruments.base import InstrumentPlugin
+from small_tel_tools.instruments.base import InstrumentPlugin
 
 __all__ = ("get_plugin", "list_plugins", "InstrumentPlugin")
 
@@ -13,7 +13,7 @@ _BUILTIN_PLUGINS: dict[str, type[InstrumentPlugin]] = {}
 def _ensure_builtins() -> None:
     """Lazily populate builtin plugins on first access."""
     if not _BUILTIN_PLUGINS:
-        from obs_nickel_data_tools.instruments.nickel import NickelPlugin
+        from small_tel_tools.instruments.nickel import NickelPlugin
 
         _BUILTIN_PLUGINS["nickel"] = NickelPlugin
 
@@ -23,7 +23,7 @@ def get_plugin(name: str) -> InstrumentPlugin:
 
     Discovery order:
     1. Builtin plugins (hardcoded in this module)
-    2. Entry points (``obs_nickel_data_tools.instruments`` group)
+    2. Entry points (``small_tel_tools.instruments`` group)
 
     Args:
         name: Instrument name (e.g. "nickel", "Nickel")
@@ -45,7 +45,7 @@ def get_plugin(name: str) -> InstrumentPlugin:
     try:
         from importlib.metadata import entry_points
 
-        eps = entry_points(group="obs_nickel_data_tools.instruments")
+        eps = entry_points(group="small_tel_tools.instruments")
         for ep in eps:
             if ep.name.lower() == key:
                 cls = ep.load()
@@ -65,7 +65,7 @@ def list_plugins() -> list[str]:
     try:
         from importlib.metadata import entry_points
 
-        eps = entry_points(group="obs_nickel_data_tools.instruments")
+        eps = entry_points(group="small_tel_tools.instruments")
         for ep in eps:
             names.add(ep.name.lower())
     except Exception:

@@ -11,6 +11,6 @@ Usage:
 
 from __future__ import annotations
 
-from obs_nickel_data_tools.dashboard.app import create_app
+from small_tel_tools.dashboard.app import create_app
 
 __all__ = ["create_app"]
