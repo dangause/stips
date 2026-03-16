@@ -13,7 +13,7 @@ Example YAML format:
     env:
       REPO: "/path/to/butler/repo"
       STACK_DIR: "/path/to/lsst_stack"
-      OBS_NICKEL: "/path/to/obs_nickel"
+      OBS_SMALLTEL: "/path/to/obs_smalltel"
       RAW_PARENT_DIR: "/path/to/raw/data"
 
     object: "SN2023ixf"   # Must match target_name in FITS (case-insensitive partial match)
@@ -282,7 +282,7 @@ def _setup_run_logging(run_id: str, config: Config) -> Path:
     """
     # Use the same LOG_ROOT as logging.sh: {REPO_ROOT}/logs
     # REPO_ROOT is the monorepo root (obs_nickel.parent.parent)
-    repo_root = config.obs_nickel.parent.parent
+    repo_root = config.obs_package.parent.parent
     log_root = repo_root / "logs"
     run_log_dir = log_root / run_id
 
@@ -841,7 +841,7 @@ def _run_coadd_templates(
             coadd_config_files = []
             if run_cfg.coadd_configs.make_direct_warp:
                 cfg_path = (
-                    config.obs_nickel
+                    config.obs_package
                     / "configs"
                     / run_cfg.coadd_configs.make_direct_warp
                 )
@@ -1194,7 +1194,7 @@ def _run_dia_step(
         return None
 
     # Resolve DIA config file paths from YAML (shared across all nights)
-    configs_dir = config.obs_nickel / "configs"
+    configs_dir = config.obs_package / "configs"
     subtract_cfg = None
     if run_cfg.dia_configs.subtract_images:
         subtract_cfg = configs_dir / run_cfg.dia_configs.subtract_images
@@ -1643,7 +1643,7 @@ def _run_differential_phot_step(
     from small_tel_tools.core.stack import run_butler_query, run_pipetask
 
     repo = str(config.repo)
-    obs_nickel = str(config.obs_nickel)
+    obs_package = str(config.obs_package)
 
     prefix = plugin.collection_prefix if plugin else "Nickel"
     skymaps_chain = plugin.skymaps_chain if plugin else "skymaps/nickelRings"
@@ -1678,7 +1678,7 @@ def _run_differential_phot_step(
 
     log.info(f"Running LSST differential photometry on {science_coll}")
 
-    pipeline_yaml = str(Path(obs_nickel) / "pipelines" / "DifferentialPhot.yaml")
+    pipeline_yaml = str(Path(obs_package) / "pipelines" / "DifferentialPhot.yaml")
     input_colls = f"{science_coll},{prefix}/calib/current,refcats,{skymaps_chain}"
     output_coll = f"{prefix}/runs/{all_nights[0]}/differentialPhot"
 
@@ -1922,8 +1922,8 @@ def run(
     log.info(f"Execution: {run_cfg.execution} (site={run_cfg.site})")
 
     # Build ScienceConfig from YAML paths
-    configs_dir = config.obs_nickel / "configs"
-    science_cfg = ScienceConfig.default(config.obs_nickel)
+    configs_dir = config.obs_package / "configs"
+    science_cfg = ScienceConfig.default(config.obs_package)
 
     if run_cfg.science_configs.calibrate_image:
         science_cfg.calibrate_image = (

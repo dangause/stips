@@ -132,7 +132,7 @@ def find_bps_config(pipeline: str, config: Config) -> Path:
         FileNotFoundError: If config file doesn't exist
     """
     # Look in the bps/pipelines directory relative to obs_nickel
-    bps_dir = config.obs_nickel.parent.parent / "bps" / "pipelines"
+    bps_dir = config.obs_package.parent.parent / "bps" / "pipelines"
     config_file = bps_dir / f"{pipeline}.yaml"
 
     if not config_file.exists():
@@ -183,7 +183,7 @@ def render_bps_config(
         "repo": str(config.repo),
         "night": bps_cfg.night,
         "timestamp": timestamp,
-        "obs_nickel": str(config.obs_nickel),
+        "obs_package": str(config.obs_package),
         "stack_dir": str(config.stack_dir),
         "cp_pipe_dir": str(config.cp_pipe_dir) if config.cp_pipe_dir else "",
         "raw_parent_dir": str(config.raw_parent_dir),

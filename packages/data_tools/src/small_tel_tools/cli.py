@@ -204,7 +204,7 @@ def _load_lightcurve_config(
             "No configuration found. Either:\n"
             "  1. Provide --repo (and optionally --stack-dir)\n"
             "  2. Use -p PROFILE to load from .env.PROFILE\n"
-            "  3. Set REPO, STACK_DIR, OBS_NICKEL in environment"
+            "  3. Set REPO, STACK_DIR, OBS_SMALLTEL in environment"
         )
         sys.exit(1)
 
@@ -233,10 +233,10 @@ def _load_lightcurve_config(
             )
             sys.exit(1)
 
-    # Auto-detect obs_nickel
-    obs_nickel = None
-    if "OBS_NICKEL" in os.environ:
-        obs_nickel = Path(os.environ["OBS_NICKEL"])
+    # Auto-detect obs_package
+    obs_package = None
+    if "OBS_SMALLTEL" in os.environ:
+        obs_package = Path(os.environ["OBS_SMALLTEL"])
     else:
         # Check if we're in the nickel_processing_suite directory
         cwd = Path.cwd()
@@ -247,12 +247,12 @@ def _load_lightcurve_config(
         ]
         for candidate in candidates:
             if (candidate / "pipelines").exists():
-                obs_nickel = candidate
+                obs_package = candidate
                 break
 
-    if obs_nickel is None:
+    if obs_package is None:
         _print_error(
-            "Could not auto-detect obs_nickel package. Set OBS_NICKEL in environment"
+            "Could not auto-detect obs_smalltel package. Set OBS_SMALLTEL in environment"
         )
         sys.exit(1)
 
@@ -262,7 +262,7 @@ def _load_lightcurve_config(
     return cfg_module.Config(
         repo=repo,
         stack_dir=stack_dir,
-        obs_package=obs_nickel,
+        obs_package=obs_package,
         raw_parent_dir=raw_parent_dir,
     )
 
@@ -1331,7 +1331,7 @@ def run_pipeline(
         env:
           REPO: "/path/to/repo"
           STACK_DIR: "/path/to/stack"
-          OBS_NICKEL: "/path/to/obs_nickel"
+          OBS_SMALLTEL: "/path/to/obs_smalltel"
           RAW_PARENT_DIR: "/path/to/raw"
         object: "2023ixf"
         ...

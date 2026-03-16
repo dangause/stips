@@ -234,7 +234,7 @@ def run(
 
     # Build config chain: explicit > legacy > default
     if science_cfg is None:
-        science_cfg = ScienceConfig.default(config.obs_nickel)
+        science_cfg = ScienceConfig.default(config.obs_package)
     if science_config is not None:
         science_cfg.calibrate_image = science_config
 
@@ -331,9 +331,9 @@ def run(
     exclusion_expr = build_exclusion_expr(bad_ids)
 
     # Pipeline and config paths
-    pipeline = config.obs_nickel / "pipelines" / "DRP.yaml"
+    pipeline = config.obs_package / "pipelines" / "DRP.yaml"
     colorterms_config = (
-        science_cfg.colorterms or config.obs_nickel / "configs/apply_colorterms.py"
+        science_cfg.colorterms or config.obs_package / "configs/apply_colorterms.py"
     )
 
     # Build list of configs to try (primary + fallbacks)

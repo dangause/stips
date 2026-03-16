@@ -146,7 +146,7 @@ def run(
     night = validate_night(night)
     run_ts = generate_run_timestamp()
     repo = str(config.repo)
-    obs_nickel = str(config.obs_nickel)
+    obs_package = str(config.obs_package)
 
     output_collections: list[str] = []
     errors: list[str] = []
@@ -225,7 +225,7 @@ def run(
                     str(jobs),
                     "--register-dataset-types",
                     "--pipeline",
-                    f"{obs_nickel}/pipelines/ForcedPhotRaDec.yaml#visit-image",
+                    f"{obs_package}/pipelines/ForcedPhotRaDec.yaml#visit-image",
                     "--data-query",
                     data_query,
                     "-c",
@@ -296,7 +296,7 @@ def run(
                         str(jobs),
                         "--register-dataset-types",
                         "--pipeline",
-                        f"{obs_nickel}/pipelines/ForcedPhotRaDec.yaml#diffim",
+                        f"{obs_package}/pipelines/ForcedPhotRaDec.yaml#diffim",
                         "--data-query",
                         data_query,
                         "-c",

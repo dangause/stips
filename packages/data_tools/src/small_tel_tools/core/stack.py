@@ -66,15 +66,13 @@ def run_with_stack(
     env_exports = f"""
 export REPO="{config.repo}"
 export STACK_DIR="{config.stack_dir}"
-export OBS_NICKEL="{config.obs_nickel}"
+export OBS_SMALLTEL="{config.obs_package}"
 export RAW_PARENT_DIR="{config.raw_parent_dir}"
 """
     if config.cp_pipe_dir:
         env_exports += f'export CP_PIPE_DIR="{config.cp_pipe_dir}"\n'
     if config.refcat_repo:
         env_exports += f'export REFCAT_REPO="{config.refcat_repo}"\n'
-    if config.lick_archive_dir:
-        env_exports += f'export LICK_ARCHIVE_DIR="{config.lick_archive_dir}"\n'
 
     # Pass through RUN_ID so shell scripts log to the same directory
     run_id = os.environ.get("RUN_ID")
@@ -82,7 +80,7 @@ export RAW_PARENT_DIR="{config.raw_parent_dir}"
         env_exports += f'export RUN_ID="{run_id}"\n'
 
     # Path to data_tools package (this package)
-    data_tools_src = config.obs_nickel.parent / "data_tools" / "src"
+    data_tools_src = config.obs_package.parent / "data_tools" / "src"
 
     script = f"""
 set -e
@@ -90,12 +88,12 @@ set -e
 cd "{config.stack_dir}"
 source "{loader}"
 setup lsst_distrib
-setup -r "{config.obs_nickel}" obs_nickel 2>/dev/null || true
+setup -r "{config.obs_package}" obs_smalltel 2>/dev/null || true
 
-# Check for obs_nickel_data
-OBS_NICKEL_DATA="{config.obs_nickel.parent / 'obs_nickel_data'}"
-if [ -d "$OBS_NICKEL_DATA" ]; then
-    setup -r "$OBS_NICKEL_DATA" obs_nickel_data 2>/dev/null || true
+# Check for obs_smalltel_data
+OBS_SMALLTEL_DATA="{config.obs_package.parent / 'obs_smalltel_data'}"
+if [ -d "$OBS_SMALLTEL_DATA" ]; then
+    setup -r "$OBS_SMALLTEL_DATA" obs_smalltel_data 2>/dev/null || true
 fi
 
 # Add data_tools to PYTHONPATH so small_tel_tools is importable
