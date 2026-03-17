@@ -15,10 +15,10 @@ class TestCtio0m9Filters(unittest.TestCase):
         self.assertIsNotNone(CTIO0M9_FILTER_DEFINITIONS)
 
     def test_filter_count(self):
-        """Should have 14 filters defined (UBVRI + calibration + combos)."""
+        """Should have 18 filters defined (UBVRI + calibration + combos)."""
         from lsst.obs.ctio0m9.ctio0m9Filters import CTIO0M9_FILTER_DEFINITIONS
 
-        self.assertEqual(len(CTIO0M9_FILTER_DEFINITIONS), 14)
+        self.assertEqual(len(CTIO0M9_FILTER_DEFINITIONS), 18)
 
     def test_broadband_filters(self):
         """Should have UBVRI broadband filters."""
