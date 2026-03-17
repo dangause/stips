@@ -1,0 +1,54 @@
+# Camera geometry for CTIO/SMARTS 0.9m with Tek2K CCD
+# Single-amplifier readout mode only
+#
+# Detector: SITE2K (Tek2K_3)
+# Pixels: 2048 x 2048 active, 24μm pitch
+# Plate scale: 0.401"/px (16.0 arcsec/mm)
+#
+# Note: Overscan dimensions are approximate.
+# Verify against real FITS headers (DATASEC, BIASSEC) and adjust.
+
+name: ctio0m9
+
+AMP: &AMP
+  perAmpData: true
+  dataExtent: [2098, 2048]           # 2048 active + ~50 overscan columns
+  readCorner: LL
+  rawBBox: [[0, 0], [2098, 2048]]
+  rawDataBBox: [[10, 0], [2048, 2048]]         # Skip 10-col prescan
+  rawSerialPrescanBBox: [[0, 0], [10, 2048]]   # 10-column prescan
+  rawSerialOverscanBBox: [[2058, 0], [40, 2048]]  # 40-column overscan
+  rawParallelPrescanBBox: [[0, 0], [0, 0]]     # No parallel prescan
+  rawParallelOverscanBBox: [[0, 0], [0, 0]]    # No parallel overscan
+  gain: 2.8                          # e-/ADU (average of quad-mode gains)
+  readNoise: 15.0                    # ADU
+  saturation: 30000                  # Conservative (digital max 65535)
+  linearityType: PROPORTIONAL
+  linearityThreshold: 0
+  linearityMax: 30000
+  linearityCoeffs: [0.0, 1.0]
+  hdu: 0
+  ixy: [0, 0]
+  flipXY: [false, false]
+
+CCD: &CCD
+  detectorType: 0                    # SCIENCE
+  physicalType: SCIENCE
+  refpos: [1023.5, 1023.5]           # Center of 2048×2048 active area
+  offset: [0.0, 0.0, 0.0]
+  bbox: [[0, 0], [2048, 2048]]
+  pixelSize: [0.024, 0.024]          # mm (24μm)
+  transposeDetector: false
+  pitch: 0.0
+  yaw: 0.0
+  roll: 0.0
+  amplifiers:
+    A00:
+      <<: *AMP
+
+CCDs:
+  SITE2K: &SITE2K
+    <<: *CCD
+    id: 0
+    serial: "Tek2K_3"
+    name_in_raft: "S00"
