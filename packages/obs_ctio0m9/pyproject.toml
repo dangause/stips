@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "obs-ctio0m9"
+version = "0.1.0"
+description = "LSST obs package for the CTIO/SMARTS 0.9m telescope"
+authors = [{ name = "Dan Gause" }]
+requires-python = ">=3.12"
+dependencies = [
+    "astro_metadata_translator>=0.11.0",
+    "astropy",
+]
+readme = "README.md"
+
+[project.entry-points."astro_metadata_translator.translators"]
+ctio0m9 = "lsst.obs.ctio0m9.translator:Ctio0m9Translator"
+
+[tool.setuptools.packages.find]
+where = ["python"]
