@@ -3,12 +3,21 @@
 #
 # Detector: SITE2K (Tek2K_3)
 # Pixels: 2048 x 2048 active, 24μm pitch
-# Plate scale: 0.401"/px (16.0 arcsec/mm)
+# Plate scale: 0.401"/px (16.7 arcsec/mm)
 #
 # Note: Overscan dimensions are approximate.
 # Verify against real FITS headers (DATASEC, BIASSEC) and adjust.
 
 name: ctio0m9
+
+# Plate scale: 0.401"/24µm = 16.71 arcsec/mm
+plateScale: 16.71
+
+transforms:
+  nativeSys: 'FocalPlane'
+  FieldAngle:
+    transformType: radial
+    coeffs: [0.0, 1.0, 0.0]
 
 AMP: &AMP
   perAmpData: true
@@ -38,6 +47,9 @@ CCD: &CCD
   offset: [0.0, 0.0, 0.0]
   bbox: [[0, 0], [2048, 2048]]
   pixelSize: [0.024, 0.024]          # mm (24μm)
+  transformDict:
+    nativeSys: 'Pixels'
+    transforms: {}
   transposeDetector: false
   pitch: 0.0
   yaw: 0.0

@@ -41,6 +41,8 @@ class Ctio0m9Translator(FitsTranslator):
         "boresight_airmass": ("AIRMASS", {"default": float("nan")}),
         "object": ("OBJECT", {"default": "UNKNOWN"}),
         "telescope": ("TELESCOP", {"default": "CTIO 0.9m"}),
+        "science_program": ("PROPID", {"default": "unknown"}),
+        "relative_humidity": ("HUMIDITY", {"default": 0.0}),
     }
 
     @classmethod
