@@ -15,8 +15,9 @@ from astropy.coordinates import Angle, EarthLocation, SkyCoord
 
 log = logging.getLogger(__name__)
 
-# Epoch for exposure ID calculation (2010-01-01)
-EPOCH_MJD = 55197.0
+# Epoch for exposure ID calculation (2000-01-01)
+# Using 2000-01-01 to handle archive data back to 2004B
+EPOCH_MJD = 51544.0
 
 
 class Ctio0m9Translator(FitsTranslator):
@@ -147,8 +148,8 @@ class Ctio0m9Translator(FitsTranslator):
         f1 = str(self._header.get("FILTER1", "OPEN")).strip().upper()
         f2 = str(self._header.get("FILTER2", "OPEN")).strip().upper()
 
-        # Normalize empty/open values
-        open_values = {"OPEN", "NONE", "CLEAR", ""}
+        # Normalize empty/open values (OV = open variant used in archive)
+        open_values = {"OPEN", "NONE", "CLEAR", "OV", ""}
         filters = sorted([f for f in [f1, f2] if f not in open_values])
 
         return "+".join(filters) if filters else "OPEN"

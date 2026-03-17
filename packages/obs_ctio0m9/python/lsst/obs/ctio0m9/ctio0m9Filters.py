@@ -15,4 +15,17 @@ CTIO0M9_FILTER_DEFINITIONS = FilterDefinitionCollection(
     FilterDefinition(
         physical_filter="OPEN", band=None, doc="Open filter wheel position"
     ),
+    # Calibration blocking filter (blocks light for bias/dark)
+    FilterDefinition(
+        physical_filter="CB", band=None, doc="Calibration blocking filter"
+    ),
+    # Dichroic filter variants found in archive
+    FilterDefinition(physical_filter="DIA", band=None, doc="Dichroic filter"),
+    # Combination filters from dual wheel (dynamically generated)
+    FilterDefinition(physical_filter="CB+B", band="b", lambdaEff=420.2),
+    FilterDefinition(physical_filter="CB+V", band="v", lambdaEff=547.5),
+    FilterDefinition(physical_filter="CB+R", band="r", lambdaEff=640.0),
+    FilterDefinition(physical_filter="CB+I", band="i", lambdaEff=811.8),
+    FilterDefinition(physical_filter="DIA+R", band="r", lambdaEff=640.0),
+    FilterDefinition(physical_filter="DIA+I", band="i", lambdaEff=811.8),
 )
