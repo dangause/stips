@@ -15,10 +15,10 @@ class TestCtio0m9Filters(unittest.TestCase):
         self.assertIsNotNone(CTIO0M9_FILTER_DEFINITIONS)
 
     def test_filter_count(self):
-        """Should have 6 filters defined."""
+        """Should have 14 filters defined (UBVRI + calibration + combos)."""
         from lsst.obs.ctio0m9.ctio0m9Filters import CTIO0M9_FILTER_DEFINITIONS
 
-        self.assertEqual(len(CTIO0M9_FILTER_DEFINITIONS), 6)
+        self.assertEqual(len(CTIO0M9_FILTER_DEFINITIONS), 14)
 
     def test_broadband_filters(self):
         """Should have UBVRI broadband filters."""
@@ -97,6 +97,23 @@ class TestCtio0m9Translator(unittest.TestCase):
         header["FILTER2"] = "OPEN"
         translator = Ctio0m9Translator(header)
         self.assertEqual(translator.to_physical_filter(), "OPEN")
+
+    def test_to_physical_filter_ov_variant(self):
+        """OV (open variant) should be treated as open."""
+        from lsst.obs.ctio0m9.translator import Ctio0m9Translator
+
+        # OV alone = OPEN
+        header = dict(self.header)
+        header["FILTER1"] = "ov"
+        header["FILTER2"] = "ov"
+        translator = Ctio0m9Translator(header)
+        self.assertEqual(translator.to_physical_filter(), "OPEN")
+
+        # CB + OV = CB (OV is ignored as open)
+        header["FILTER1"] = "cb"
+        header["FILTER2"] = "ov"
+        translator = Ctio0m9Translator(header)
+        self.assertEqual(translator.to_physical_filter(), "CB")
 
     def test_to_observation_type(self):
         """Should map IMAGETYP to observation type."""
