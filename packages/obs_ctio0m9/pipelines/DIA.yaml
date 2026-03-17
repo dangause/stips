@@ -1,0 +1,3 @@
+description: CTIO 0.9m Difference Imaging Pipeline
+imports:
+  - $AP_PIPE_DIR/pipelines/ApPipe.yaml

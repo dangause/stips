@@ -1,0 +1,9 @@
+# NOTE: Requires LSST environment with PIPE_TASKS_DIR set.
+# Will be expanded via 'pipetask build-workflow' when executed.
+description: CTIO 0.9m Forced Photometry at RA/Dec
+imports:
+  - $PIPE_TASKS_DIR/pipelines/ForcedPhotCoadd.yaml
+
+tasks:
+  forcedPhotCoadd:
+    class: lsst.pipe.tasks.forcedPhotCoadd.ForcedPhotCoaddTask
