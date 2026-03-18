@@ -2,11 +2,13 @@
 # Single-amplifier readout mode only
 #
 # Detector: SITE2K (Tek2K_3)
-# Pixels: 2048 x 2048 active, 24μm pitch
+# Actual raw image: 2216 x 2046 pixels (column x row)
+# Science region: 2048 x 2046 (columns 0-2047)
+# Serial overscan: columns 2150-2215 (66 columns)
+# Columns 2048-2149: transition region (excluded)
 # Plate scale: 0.401"/px (16.7 arcsec/mm)
 #
-# Note: Overscan dimensions are approximate.
-# Verify against real FITS headers (DATASEC, BIASSEC) and adjust.
+# Measured from NOIRLab archive data (2009-05-27)
 
 name: ctio0m9
 
@@ -21,31 +23,31 @@ transforms:
 
 AMP: &AMP
   perAmpData: true
-  dataExtent: [2098, 2048]           # 2048 active + ~50 overscan columns
+  dataExtent: [2216, 2046]           # Full raw image size
   readCorner: LL
-  rawBBox: [[0, 0], [2098, 2048]]
-  rawDataBBox: [[10, 0], [2048, 2048]]         # Skip 10-col prescan
-  rawSerialPrescanBBox: [[0, 0], [10, 2048]]   # 10-column prescan
-  rawSerialOverscanBBox: [[2058, 0], [40, 2048]]  # 40-column overscan
-  rawParallelPrescanBBox: [[0, 0], [0, 0]]     # No parallel prescan
-  rawParallelOverscanBBox: [[0, 0], [0, 0]]    # No parallel overscan
-  gain: 2.8                          # e-/ADU (average of quad-mode gains)
-  readNoise: 15.0                    # ADU
-  saturation: 30000                  # Conservative (digital max 65535)
+  rawBBox: [[0, 0], [2216, 2046]]    # Full raw extent
+  rawDataBBox: [[0, 0], [2048, 2046]]   # Science region: first 2048 columns
+  rawSerialPrescanBBox: [[0, 0], [0, 0]]        # No prescan
+  rawSerialOverscanBBox: [[2150, 0], [66, 2046]]  # Serial overscan columns 2150-2215
+  rawParallelPrescanBBox: [[0, 0], [0, 0]]      # No parallel prescan
+  rawParallelOverscanBBox: [[0, 0], [0, 0]]     # No parallel overscan
+  gain: 1.55                         # e-/ADU (average of GTGAIN11-22)
+  readNoise: 5.0                     # e- (estimated)
+  saturation: 50000                  # Conservative (digital max 65535)
   linearityType: PROPORTIONAL
   linearityThreshold: 0
-  linearityMax: 30000
+  linearityMax: 50000
   linearityCoeffs: [0.0, 1.0]
-  hdu: 0
+  hdu: 1                             # Compressed FITS: image in HDU 1
   ixy: [0, 0]
   flipXY: [false, false]
 
 CCD: &CCD
   detectorType: 0                    # SCIENCE
   physicalType: SCIENCE
-  refpos: [1023.5, 1023.5]           # Center of 2048×2048 active area
+  refpos: [1023.5, 1022.5]           # Center of 2048×2046 science area
   offset: [0.0, 0.0, 0.0]
-  bbox: [[0, 0], [2048, 2048]]
+  bbox: [[0, 0], [2048, 2046]]       # Science region bounding box
   pixelSize: [0.024, 0.024]          # mm (24μm)
   transformDict:
     nativeSys: 'Pixels'

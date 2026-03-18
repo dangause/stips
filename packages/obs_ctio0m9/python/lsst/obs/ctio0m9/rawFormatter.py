@@ -38,7 +38,7 @@ class Ctio0m9RawFormatter(FitsRawFormatterBase):
         metadata : `~lsst.daf.base.PropertyList`
             Merged header metadata.
         """
-        file = self.fileDescriptor.location.path
+        file = self.file_descriptor.location.path
         metadata = PropertyList()
 
         with fits.open(file) as hdu_list:

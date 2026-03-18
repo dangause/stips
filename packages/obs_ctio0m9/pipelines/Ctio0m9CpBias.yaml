@@ -1,0 +1,14 @@
+description: >
+  CTIO 0.9m telescope bias calibration construction.
+  Disables variance calculation to avoid upstream ISR bug
+  (noiseProvenanceString UnboundLocalError when no overscan).
+imports:
+  - location: $CP_PIPE_DIR/pipelines/_ingredients/cpBias.yaml
+tasks:
+  cpBiasIsr:
+    class: lsst.ip.isr.IsrTask
+    config:
+      # Disable variance calculation to avoid defineEffectivePtc bug
+      # when camera has no overscan regions defined.
+      doVariance: false
+      doLinearize: false

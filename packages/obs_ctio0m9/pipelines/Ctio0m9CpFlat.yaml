@@ -1,0 +1,15 @@
+description: >
+  CTIO 0.9m telescope flat calibration construction.
+  Disables variance calculation and dark subtraction for
+  simple single-amplifier dome flat calibration.
+imports:
+  - location: $CP_PIPE_DIR/pipelines/_ingredients/cpFlat.yaml
+tasks:
+  cpFlatIsr:
+    class: lsst.ip.isr.IsrTask
+    config:
+      # Disable variance calculation to avoid defineEffectivePtc bug
+      doVariance: false
+      doLinearize: false
+      # Skip dark subtraction (not available for this dataset)
+      doDark: false
