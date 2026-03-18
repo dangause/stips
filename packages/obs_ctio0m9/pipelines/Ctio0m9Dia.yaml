@@ -1,0 +1,77 @@
+description: |
+  CTIO 0.9m Difference Image Analysis pipeline.
+  Performs image subtraction for transient/variable source detection.
+
+parameters:
+  release_id: 0
+
+tasks:
+  # ============================================================================
+  # Template Warping
+  # ============================================================================
+  rewarpTemplate:
+    class: lsst.ip.diffim.getTemplate.GetTemplateTask
+    config:
+      # Get bounding box and WCS from preliminary_visit_image
+      connections.bbox: preliminary_visit_image.bbox
+      connections.wcs: preliminary_visit_image.wcs
+      # Input template coadds
+      connections.coaddExposures: template_coadd
+      # Output warped template
+      connections.template: template_detector
+      # Use Lanczos warping for best quality
+      warp.warpingKernelName: "lanczos4"
+
+  # ============================================================================
+  # Image Subtraction
+  # ============================================================================
+  subtractImages:
+    class: lsst.ip.diffim.subtractImages.AlardLuptonSubtractTask
+    config:
+      # Input connections
+      connections.science: preliminary_visit_image
+      connections.sources: single_visit_star_footprints
+      connections.template: template_detector
+      # Output connections
+      connections.difference: difference_image_predetection
+      connections.matchedTemplate: template_matched
+      connections.psfMatchingKernel: difference_kernel
+      connections.kernelSources: difference_kernel_sources
+      # Use default AL kernel config - customization done via Python config files
+
+  # ============================================================================
+  # DIA Source Detection
+  # ============================================================================
+  detectAndMeasureDiaSource:
+    class: lsst.ip.diffim.detectAndMeasure.DetectAndMeasureTask
+    config:
+      # Input connections
+      connections.science: preliminary_visit_image
+      connections.matchedTemplate: template_matched
+      connections.difference: difference_image_predetection
+      connections.kernelSources: difference_kernel_sources
+      # Output connections
+      connections.outputSchema: dia_source_schema
+      connections.diaSources: dia_source_unfiltered
+      connections.subtractedMeasuredExposure: difference_image
+      connections.maskedStreaks: difference_streaks
+      # ID generator
+      idGenerator.release_id: parameters.release_id
+      # Detection parameters
+      detection.thresholdValue: 5.0
+      detection.thresholdType: "stdev"
+
+subsets:
+  dia-full:
+    subset:
+      - rewarpTemplate
+      - subtractImages
+      - detectAndMeasureDiaSource
+    description: Complete DIA pipeline
+
+  dia-subtract-only:
+    subset:
+      - rewarpTemplate
+      - subtractImages
+    description: Image subtraction only (no source detection)
+# ruff: noqa: F821

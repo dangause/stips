@@ -69,7 +69,7 @@ tasks:
       psf_detection.statsMask: ["BAD", "SAT", "EDGE", "NO_DATA"]
 
       # ----- Astrometry -----
-      connections.astrometry_ref_cat: gaia_dr3_v3
+      connections.astrometry_ref_cat: gaia_dr3_v4
       # Map all filters to Gaia G band (we only have g_flux in our refcat)
       astrometry_ref_loader.anyFilterMapsToThis: "g"
       # Relax matching parameters for historical data with imprecise WCS
@@ -90,10 +90,20 @@ tasks:
       astrometry_ref_loader.pixelMargin: 500
 
       # ----- Photometry -----
-      connections.photometry_ref_cat: gaia_dr3_v3
+      connections.photometry_ref_cat: gaia_dr3_v4
       photometry_ref_loader.anyFilterMapsToThis: "g"
       photometry.match.matchRadius: 3.0  # arcsec
       photometry.applyColorTerms: false  # no color terms defined yet
+
+  # ============================================================================
+  # consolidateVisitSummary - Build visit-level summary from detector outputs
+  # ============================================================================
+  consolidateVisitSummary:
+    class: lsst.pipe.tasks.postprocess.ConsolidateVisitSummaryTask
+    config:
+      connections.calexp: preliminary_visit_image
+      connections.visitSummary: preliminary_visit_summary
+      connections.visitSummarySchema: preliminary_visit_summary_schema
 
 subsets:
   processCcd:
