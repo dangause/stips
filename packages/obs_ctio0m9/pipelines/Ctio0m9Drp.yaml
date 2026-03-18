@@ -1,0 +1,105 @@
+description: |
+  CTIO 0.9m data release processing pipeline.
+  Runs ISR, astrometry, photometry, and source detection.
+
+parameters:
+  release_id: 0
+
+tasks:
+  # ============================================================================
+  # ISR - Instrument Signature Removal
+  # ============================================================================
+  isr:
+    class: lsst.ip.isr.IsrTask
+    config:
+      # Connection naming - match modern convention
+      connections.outputExposure: post_isr_image
+      # ISR operations enabled
+      doOverscan: true
+      doBias: true
+      doWrite: true
+      doSaturation: true
+      # Operations disabled for CTIO 0.9m (no calibs available yet)
+      doVariance: false
+      doLinearize: false
+      doFlat: false
+      doDark: false
+      doCrosstalk: false
+      doBrighterFatter: false
+      doFringe: false
+      doDefect: false
+      doInterpolate: false
+      doVignette: false
+      doSuspect: false
+
+  # ============================================================================
+  # calibrateImage - PSF modeling, astrometry, photometry
+  # ============================================================================
+  calibrateImage:
+    class: lsst.pipe.tasks.calibrateImage.CalibrateImageTask
+    config:
+      # ----- Connections -----
+      connections.exposures: post_isr_image
+      connections.exposure: preliminary_visit_image
+      connections.background: preliminary_visit_image_background
+      connections.stars_footprints: single_visit_star_footprints
+      connections.psf_stars_footprints: single_visit_psf_star_footprints
+      connections.psf_stars: single_visit_psf_star
+      connections.initial_stars_schema: single_visit_star_schema
+      connections.stars: single_visit_star_unstandardized
+      id_generator.release_id: parameters.release_id
+
+      # ----- Bootstrap PSF for initial detection -----
+      # CTIO 0.9m: plate scale ~0.4"/pix, typical seeing 1.5-2.5"
+      install_simple_psf.fwhm: 5.0  # pixels (~2" at 0.4"/pix)
+      install_simple_psf.width: 35
+
+      # ----- Source Detection -----
+      psf_detection.thresholdType: "stdev"
+      psf_detection.thresholdValue: 5.0  # 5-sigma detection threshold
+      psf_detection.minPixels: 5  # minimum pixels for a source
+      psf_detection.includeThresholdMultiplier: 1.0
+      psf_detection.reEstimateBackground: true
+      psf_detection.doTempLocalBackground: true
+      psf_detection.doTempWideBackground: false
+      psf_detection.isotropicGrow: true
+      psf_detection.nSigmaToGrow: 2.0
+      psf_detection.combinedGrow: true
+      psf_detection.excludeMaskPlanes: ["EDGE", "SAT", "CR", "BAD", "NO_DATA"]
+      psf_detection.statsMask: ["BAD", "SAT", "EDGE", "NO_DATA"]
+
+      # ----- Astrometry -----
+      connections.astrometry_ref_cat: gaia_dr3_v3
+      # Map all filters to Gaia G band (we only have g_flux in our refcat)
+      astrometry_ref_loader.anyFilterMapsToThis: "g"
+      # Relax matching parameters for historical data with imprecise WCS
+      astrometry.forceKnownWcs: false
+      astrometry.matcher.maxOffsetPix: 600  # allow large WCS offset
+      astrometry.matcher.maxRotationDeg: 5.0
+      astrometry.matcher.matcherIterations: 12
+      astrometry.matcher.minMatchedPairs: 6  # lower threshold for sparse fields
+      astrometry.matcher.numBrightStars: 100
+      astrometry.maxMeanDistanceArcsec: 10.0  # relaxed for historical data
+      astrometry.matchDistanceSigma: 5.0
+      astrometry.maxIter: 10
+      astrometry.doMagnitudeOutlierRejection: false
+      # Reference selection
+      astrometry.referenceSelector.doMagLimit: true
+      astrometry.referenceSelector.magLimit.maximum: 18.0
+      astrometry.referenceSelector.magLimit.fluxField: "g_flux"
+      astrometry_ref_loader.pixelMargin: 500
+
+      # ----- Photometry -----
+      connections.photometry_ref_cat: gaia_dr3_v3
+      photometry_ref_loader.anyFilterMapsToThis: "g"
+      photometry.match.matchRadius: 3.0  # arcsec
+      photometry.applyColorTerms: false  # no color terms defined yet
+
+subsets:
+  processCcd:
+    - isr
+    - calibrateImage
+
+steps:
+  - label: processCcd
+    dimensions: [instrument, exposure, detector]
