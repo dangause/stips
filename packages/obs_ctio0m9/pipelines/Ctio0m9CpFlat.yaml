@@ -2,6 +2,10 @@ description: >
   CTIO 0.9m telescope flat calibration construction.
   Disables variance calculation and dark subtraction for
   simple single-amplifier dome flat calibration.
+
+  Note: Overscan is disabled because the dome flat illumination
+  extends into the overscan columns (light leak), causing
+  over-subtraction if overscan correction is applied.
 imports:
   - location: $CP_PIPE_DIR/pipelines/_ingredients/cpFlat.yaml
 tasks:
@@ -13,3 +17,5 @@ tasks:
       doLinearize: false
       # Skip dark subtraction (not available for this dataset)
       doDark: false
+      # Disable overscan - dome flat light extends into overscan columns
+      doOverscan: false

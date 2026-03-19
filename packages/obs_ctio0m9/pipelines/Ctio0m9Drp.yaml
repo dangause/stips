@@ -19,10 +19,10 @@ tasks:
       doBias: true
       doWrite: true
       doSaturation: true
-      # Operations disabled for CTIO 0.9m (no calibs available yet)
+      # Operations disabled for CTIO 0.9m
       doVariance: false
       doLinearize: false
-      doFlat: false
+      doFlat: true  # Enable for bands with flats (B, Y) - ISR will skip if no flat available
       doDark: false
       doCrosstalk: false
       doBrighterFatter: false

@@ -23,7 +23,7 @@ class Ctio0m9(Instrument):
 
     name = "ctio0m9"
     policyName = "ctio0m9"
-    obsDataPackage = None  # No curated calibrations package
+    obsDataPackage = "obs_ctio0m9_data"  # Curated calibrations (defects)
     filterDefinitions = CTIO0M9_FILTER_DEFINITIONS
     translatorClass = Ctio0m9Translator
 

@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "obs_ctio0m9_data"
+version = "0.1.0"
+description = "Curated calibration data for CTIO 0.9m telescope"
+readme = "README.md"
+license = {text = "GPL-3.0-or-later"}
+requires-python = ">=3.11"
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["ctio0m9*"]
+
+[tool.setuptools.package-data]
+"ctio0m9.defects" = ["**/*.ecsv"]
