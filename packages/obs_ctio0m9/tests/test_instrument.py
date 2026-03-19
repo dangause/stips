@@ -177,14 +177,15 @@ class TestCtio0m9Camera(unittest.TestCase):
         self.assertEqual(det.getName(), "SITE2K")
 
     def test_detector_dimensions(self):
-        """Active area should be 2048x2048."""
+        """Active area should be 2049x2047 (2048x2046 science + 1 pixel LSST bbox convention)."""
         from lsst.obs.ctio0m9 import Ctio0m9
 
         camera = Ctio0m9().getCamera()
         det = camera[0]
         bbox = det.getBBox()
-        self.assertEqual(bbox.getWidth(), 2048)
-        self.assertEqual(bbox.getHeight(), 2048)
+        # Camera YAML defines 2048x2046 extent; LSST bbox is inclusive so adds 1
+        self.assertEqual(bbox.getWidth(), 2049)
+        self.assertEqual(bbox.getHeight(), 2047)
 
 
 class TestCtio0m9Instrument(unittest.TestCase):
@@ -196,11 +197,11 @@ class TestCtio0m9Instrument(unittest.TestCase):
 
         self.assertEqual(Ctio0m9.getName(), "ctio0m9")
 
-    def test_no_obs_data_package(self):
-        """Should have no curated calibrations package."""
+    def test_obs_data_package(self):
+        """Should have curated calibrations package for defects."""
         from lsst.obs.ctio0m9 import Ctio0m9
 
-        self.assertIsNone(Ctio0m9.obsDataPackage)
+        self.assertEqual(Ctio0m9.obsDataPackage, "obs_ctio0m9_data")
 
     def test_get_raw_formatter(self):
         """Should return Ctio0m9RawFormatter."""
