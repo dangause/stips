@@ -1,0 +1,34 @@
+# %ECSV 0.9
+# ---
+# datatype:
+# - name: x0
+#   unit: pix
+#   datatype: int32
+#   description: X coordinate of bottom left corner of box
+# - name: y0
+#   unit: pix
+#   datatype: int32
+#   description: Y coordinate of bottom left corner of box
+# - name: width
+#   unit: pix
+#   datatype: int32
+#   description: X extent of box
+# - name: height
+#   unit: pix
+#   datatype: int32
+#   description: Y extent of box
+# meta: !!omap
+# - OBSTYPE: defects
+# - INSTRUME: ctio0m9
+# - DETECTOR: 0
+# - CALIBDATE: '1970-01-01T00:00:00'
+# - CALIB_ID: raftName=R00 detectorName=site2k detector=0 calibDate=1970-01-01T00:00:00 ccd=0 ccdnum=0 filter=None
+# - DEFECTS_SCHEMA: Simple
+# - DEFECTS_SCHEMA_VERSION: 1
+# - DATE: '2026-03-19T00:00:00'
+# - CALIB_CREATION_DATE: '2026-03-19'
+# - CALIB_CREATION_TIME: '00:00:00'
+# schema: astropy-2.0
+x0 y0 width height
+293 0 1 2047
+1993 1734 1 1
