@@ -11,6 +11,7 @@ tasks:
       # Disable features not applicable or unavailable
       doVariance: false
       doLinearize: false
+      doBias: false
       doFlat: false
       doDark: false
       doCrosstalk: false
