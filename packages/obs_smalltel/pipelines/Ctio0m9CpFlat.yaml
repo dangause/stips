@@ -1,0 +1,30 @@
+description: >
+  CTIO 0.9m telescope flat calibration construction.
+  Disables variance calculation, dark subtraction, and overscan for
+  simple single-amplifier dome flat calibration.
+
+  Note: Overscan is disabled because the dome flat illumination
+  extends into the overscan columns (light leak), causing
+  over-subtraction if overscan correction is applied.
+imports:
+  - location: $CP_PIPE_DIR/pipelines/_ingredients/cpFlat.yaml
+tasks:
+  cpFlatIsr:
+    class: lsst.ip.isr.IsrTask
+    config:
+      # Disable variance calculation to avoid defineEffectivePtc bug
+      doVariance: false
+      doLinearize: false
+      # Skip dark subtraction (not available for this dataset)
+      doDark: false
+      # Disable overscan - dome flat light extends into overscan columns
+      doOverscan: false
+  cpFlatCombine:
+    class: lsst.obs.smalltel.tasks.calibCombine.NickelCalibCombineByFilterTask
+    config:
+      connections.inputExpHandles: "cpFlatIsrExp"
+      connections.inputScales: "cpFlatNormalizeScales"
+      connections.outputData: "flat"
+      calibrationType: "flat"
+      exposureScaling: InputList
+      scalingLevel: AMP

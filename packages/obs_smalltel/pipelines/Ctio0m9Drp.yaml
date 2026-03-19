@@ -1,0 +1,14 @@
+description: CTIO 0.9m Data Release Pipeline
+imports:
+  - $DRP_PIPE_DIR/pipelines/DRP.yaml
+
+tasks:
+  isr:
+    class: lsst.ip.isr.IsrTask
+    config:
+      # Single-amp, no need for crosstalk correction
+      doCrosstalk: false
+      # No linearity characterization available
+      doLinearize: false
+      # Enable overscan subtraction
+      doOverscan: true

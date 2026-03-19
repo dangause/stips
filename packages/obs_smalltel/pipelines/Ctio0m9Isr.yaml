@@ -1,0 +1,21 @@
+description: >
+  CTIO 0.9m basic ISR pipeline.
+  Runs minimal instrument signature removal for science frames.
+tasks:
+  isr:
+    class: lsst.ip.isr.IsrTask
+    config:
+      connections.ccdExposure: 'raw'
+      connections.outputExposure: 'postISRCCD'
+      doWrite: true
+      # Disable features not applicable or unavailable
+      doVariance: false
+      doLinearize: false
+      doFlat: false
+      doDark: false
+      doCrosstalk: false
+      doBrighterFatter: false
+      doFringe: false
+      doSaturation: true
+      doDefect: false
+      doInterpolate: false

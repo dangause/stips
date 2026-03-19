@@ -1,0 +1,109 @@
+description: |
+  CTIO 0.9m coadd pipeline.
+  Builds template coadds from calibrated visit images.
+
+parameters:
+  release_id: 0
+
+tasks:
+  # ============================================================================
+  # WARP CREATION
+  # ============================================================================
+  makeDirectWarp:
+    class: lsst.drp.tasks.make_direct_warp.MakeDirectWarpTask
+    config:
+      connections.calexp_list: preliminary_visit_image
+      connections.visit_summary: preliminary_visit_summary
+      connections.warp: direct_warp
+      connections.masked_fraction_warp: direct_warp_masked_fraction
+      idGenerator.release_id: parameters.release_id
+      useVisitSummaryPsf: false
+      useVisitSummaryWcs: false
+      useVisitSummaryPhotoCalib: false
+      # Relaxed selection thresholds for CTIO 0.9m historical data.
+      # Small telescope data has larger PSF variations than LSST defaults.
+      select.maxEllipResidual: 0.08
+      select.maxScaledSizeScatter: 0.08
+      doPreWarpInterpolation: true
+
+  makePsfMatchedWarp:
+    class: lsst.drp.tasks.make_psf_matched_warp.MakePsfMatchedWarpTask
+    config:
+      connections.direct_warp: direct_warp
+      connections.psf_matched_warp: psf_matched_warp
+
+  # ============================================================================
+  # VISIT SELECTION
+  # ============================================================================
+  selectDeepCoaddVisits:
+    class: lsst.pipe.tasks.selectImages.BestSeeingSelectVisitsTask
+    config:
+      connections.visitSummaries: preliminary_visit_summary
+      connections.goodVisits: deep_coadd_visit_selection
+      maxPsfFwhm: 5.0   # CTIO 0.9m: typical seeing 1.5-2.5 arcsec (3-6 pix)
+      nVisitsMax: -1
+
+  selectTemplateCoaddVisits:
+    class: lsst.pipe.tasks.selectImages.BestSeeingQuantileSelectVisitsTask
+    config:
+      connections.visitSummaries: preliminary_visit_summary
+      connections.goodVisits: template_coadd_visit_selection
+      qMax: 0.5         # Keep best 50% of visits by seeing
+      nVisitsMin: 1
+
+  # ============================================================================
+  # COADD ASSEMBLY
+  # ============================================================================
+  assembleDeepCoadd:
+    class: lsst.drp.tasks.assemble_coadd.CompareWarpAssembleCoaddTask
+    config:
+      connections.inputWarps: direct_warp
+      connections.psfMatchedWarps: psf_matched_warp
+      connections.selectedVisits: deep_coadd_visit_selection
+      connections.coaddExposure: deep_coadd_predetection
+      connections.nImage: deep_coadd_n_image
+      connections.inputMap: deep_coadd_input_map
+      connections.templateCoadd: deep_coadd_compare_template
+      doInputMap: true
+      doSelectVisits: true
+      doWriteArtifactMasks: true
+      assembleStaticSkyModel.doSelectVisits: true
+      doOnlineForMean: true
+
+  assembleTemplateCoadd:
+    class: lsst.drp.tasks.assemble_coadd.CompareWarpAssembleCoaddTask
+    config:
+      connections.inputWarps: direct_warp
+      connections.psfMatchedWarps: psf_matched_warp
+      connections.selectedVisits: template_coadd_visit_selection
+      connections.coaddExposure: template_coadd
+      connections.nImage: template_coadd_n_image
+      connections.inputMap: template_coadd_input_map
+      connections.templateCoadd: template_coadd_compare_template
+      doSelectVisits: true
+      assembleStaticSkyModel.doSelectVisits: true
+      doNImage: true
+      doOnlineForMean: true
+
+subsets:
+  makeWarps:
+    subset:
+      - makeDirectWarp
+      - makePsfMatchedWarp
+    description: Create direct and PSF-matched warps from visit images
+
+  templateCoadd:
+    subset:
+      - makeDirectWarp
+      - makePsfMatchedWarp
+      - selectTemplateCoaddVisits
+      - assembleTemplateCoadd
+    description: Build template coadd for DIA
+
+  deepCoadd:
+    subset:
+      - makeDirectWarp
+      - makePsfMatchedWarp
+      - selectDeepCoaddVisits
+      - assembleDeepCoadd
+    description: Build deep coadd from all visits
