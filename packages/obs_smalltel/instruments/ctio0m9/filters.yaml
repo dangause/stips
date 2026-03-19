@@ -1,0 +1,69 @@
+# Filter definitions for CTIO/SMARTS 0.9m telescope
+# Dual filter wheel system: DIA dichroic + Johnson-Cousins broadband
+
+filters:
+  # Johnson-Cousins broadband
+  - name: U
+    band: u
+    doc: "Johnson U"
+  - name: B
+    band: b
+    doc: "Johnson B"
+  - name: V
+    band: v
+    doc: "Johnson V"
+  - name: R
+    band: r
+    doc: "Cousins R"
+  - name: I
+    band: i
+    doc: "Cousins I"
+
+  # Open/clear for calibrations
+  - name: OPEN
+    band: null
+    doc: "Open filter wheel position"
+
+  # Calibration blocking filter (blocks light for bias/dark)
+  - name: CB
+    band: null
+    doc: "Calibration blocking filter"
+
+  # Dichroic filter
+  - name: DIA
+    band: null
+    doc: "Dichroic filter"
+
+  # Combination filters from dual wheel (CB + broadband)
+  - name: CB+B
+    band: b
+    doc: "CB + Johnson B"
+  - name: CB+V
+    band: v
+    doc: "CB + Johnson V"
+  - name: CB+R
+    band: r
+    doc: "CB + Cousins R"
+  - name: CB+I
+    band: i
+    doc: "CB + Cousins I"
+
+  # Combination filters from dual wheel (DIA + broadband)
+  - name: B+DIA
+    band: b
+    doc: "Johnson B + Dichroic"
+  - name: DIA+U
+    band: u
+    doc: "Dichroic + Johnson U"
+  - name: DIA+V
+    band: v
+    doc: "Dichroic + Johnson V"
+  - name: DIA+R
+    band: r
+    doc: "Dichroic + Cousins R"
+  - name: DIA+I
+    band: i
+    doc: "Dichroic + Cousins I"
+  - name: DIA+Y
+    band: y
+    doc: "Dichroic + Y-band"

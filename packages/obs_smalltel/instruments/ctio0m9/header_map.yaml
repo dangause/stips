@@ -1,0 +1,45 @@
+# FITS keyword mappings for CTIO 0.9m telescope
+# INSTRUME="cfccd" (Cassegrain Focus CCD)
+
+const_map:
+  boresight_rotation_angle: 0.0  # degrees
+  boresight_rotation_coord: sky
+
+trivial_map:
+  exposure_time:
+    key: EXPTIME
+    unit: s
+    default: 0.0
+  dark_time:
+    key: EXPTIME
+    unit: s
+    default: 0.0
+  boresight_airmass:
+    key: AIRMASS
+    default: null
+  object:
+    key: OBJECT
+    default: UNKNOWN
+  telescope:
+    key: TELESCOP
+    default: "CTIO 0.9m"
+  science_program:
+    key: PROPID
+    default: unknown
+  relative_humidity:
+    key: HUMIDITY
+    default: 0.0
+
+# Observation type classification (IMAGETYP value -> standard type)
+observation_type_map:
+  object: science
+  flat: flat
+  bias: bias
+  dark: dark
+  focus: focus
+  zero: bias
+  dome flat: flat
+  sky flat: flat
+
+# Not applicable for CTIO - uses dual filter wheel with programmatic handling
+# filter_name_map not used; FILTER1+FILTER2 combination handled in translator

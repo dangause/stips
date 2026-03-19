@@ -17,6 +17,7 @@ readme = "README.md"
 
 [project.entry-points."astro_metadata_translator.translators"]
 Nickel = "lsst.obs.smalltel.nickel.translator:NickelTranslator"
+Ctio0m9 = "lsst.obs.smalltel.ctio0m9.translator:Ctio0m9Translator"
 
 [tool.setuptools.packages.find]
 where = ["python"]

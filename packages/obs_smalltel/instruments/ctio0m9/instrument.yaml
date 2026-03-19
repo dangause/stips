@@ -1,0 +1,14 @@
+name: ctio0m9
+policyName: ctio0m9
+obsDataPackage: obs_ctio0m9_data
+visit_system: ONE_TO_ONE
+detector_count: 1
+
+location:
+  name: "Cerro Tololo Inter-American Observatory"
+  latitude: -30.169
+  longitude: -70.806
+  elevation: 2200.0
+
+# Western hemisphere: observing night crosses into next UT day
+day_obs_offset: 1

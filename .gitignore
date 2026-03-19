@@ -213,3 +213,4 @@ CLAUDE.md
 
 # Git worktrees
 .worktrees/
+gen3.sqlite3

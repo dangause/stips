@@ -1,0 +1,68 @@
+# Camera geometry for CTIO/SMARTS 0.9m with Tek2K CCD
+# Single-amplifier readout mode only
+#
+# Detector: SITE2K (Tek2K_3)
+# Actual raw image: 2216 x 2046 pixels (column x row)
+# Science region: 2048 x 2046 (columns 0-2047)
+# Serial overscan: columns 2150-2215 (66 columns)
+# Columns 2048-2149: transition region (excluded)
+# Plate scale: 0.401"/px (16.7 arcsec/mm)
+#
+# Measured from NOIRLab archive data (2009-05-27)
+
+name: ctio0m9
+
+# Plate scale: 0.401"/24µm = 16.71 arcsec/mm
+plateScale: 16.71
+
+transforms:
+  nativeSys: 'FocalPlane'
+  FieldAngle:
+    transformType: radial
+    coeffs: [0.0, 1.0, 0.0]
+
+AMP: &AMP
+  perAmpData: true
+  dataExtent: [2216, 2046]           # Full raw image size
+  readCorner: LL
+  rawBBox: [[0, 0], [2216, 2046]]    # Full raw extent
+  rawDataBBox: [[0, 0], [2048, 2046]]   # Science region: first 2048 columns
+  rawSerialPrescanBBox: [[0, 0], [0, 0]]        # No prescan
+  rawSerialOverscanBBox: [[2150, 0], [66, 2046]]  # Serial overscan columns 2150-2215
+  rawParallelPrescanBBox: [[0, 0], [0, 0]]      # No parallel prescan
+  rawParallelOverscanBBox: [[0, 0], [0, 0]]     # No parallel overscan
+  gain: 1.55                         # e-/ADU (average of GTGAIN11-22)
+  readNoise: 5.0                     # e- (estimated)
+  saturation: 50000                  # Conservative (digital max 65535)
+  linearityType: PROPORTIONAL
+  linearityThreshold: 0
+  linearityMax: 50000
+  linearityCoeffs: [0.0, 1.0]
+  hdu: 1                             # Compressed FITS: image in HDU 1
+  ixy: [0, 0]
+  flipXY: [false, false]
+
+CCD: &CCD
+  detectorType: 0                    # SCIENCE
+  physicalType: SCIENCE
+  refpos: [1023.5, 1022.5]           # Center of 2048×2046 science area
+  offset: [0.0, 0.0, 0.0]
+  bbox: [[0, 0], [2048, 2046]]       # Science region bounding box
+  pixelSize: [0.024, 0.024]          # mm (24μm)
+  transformDict:
+    nativeSys: 'Pixels'
+    transforms: {}
+  transposeDetector: false
+  pitch: 0.0
+  yaw: 0.0
+  roll: 0.0
+  amplifiers:
+    A00:
+      <<: *AMP
+
+CCDs:
+  SITE2K: &SITE2K
+    <<: *CCD
+    id: 0
+    serial: "Tek2K_3"
+    name_in_raft: "S00"
