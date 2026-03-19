@@ -1,8 +1,9 @@
-"""Tests for InstrumentPlugin ABC and NickelPlugin."""
+"""Tests for InstrumentPlugin ABC and instrument plugins."""
 
 import pytest
 from small_tel_tools.instruments import get_plugin, list_plugins
 from small_tel_tools.instruments.base import InstrumentPlugin
+from small_tel_tools.instruments.ctio0m9 import Ctio0m9Plugin
 from small_tel_tools.instruments.nickel import NickelPlugin
 
 
@@ -101,6 +102,44 @@ class TestNickelPlugin:
         assert isinstance(defaults, dict)
 
 
+class TestCtio0m9Plugin:
+    """Verify Ctio0m9Plugin provides correct CTIO-specific values."""
+
+    def test_identity_attributes(self):
+        plugin = Ctio0m9Plugin()
+        assert plugin.name == "ctio0m9"
+        assert plugin.instrument_class == "lsst.obs.smalltel.ctio0m9.Ctio0m9"
+        assert plugin.collection_prefix == "ctio0m9"
+
+    def test_skymap_attributes(self):
+        plugin = Ctio0m9Plugin()
+        assert plugin.skymap_name == "ctio0m9Rings-v1"
+        assert plugin.skymaps_chain == "skymaps/ctio0m9Rings"
+
+    def test_day_obs_offset(self):
+        """CTIO is UTC-4, so observing night crosses into next UT day."""
+        plugin = Ctio0m9Plugin()
+        assert plugin.day_obs_offset == 1
+
+    def test_is_instrument_plugin(self):
+        """Ctio0m9Plugin is a proper InstrumentPlugin subclass."""
+        plugin = Ctio0m9Plugin()
+        assert isinstance(plugin, InstrumentPlugin)
+
+    def test_fetch_data_not_implemented(self):
+        """CTIO archive download is not implemented."""
+        plugin = Ctio0m9Plugin()
+        with pytest.raises(NotImplementedError):
+            plugin.fetch_data("20090527", "/tmp")
+
+    def test_default_pipeline_configs_not_empty(self):
+        """Ctio0m9Plugin provides default config overrides."""
+        plugin = Ctio0m9Plugin()
+        defaults = plugin.default_pipeline_configs()
+        assert isinstance(defaults, dict)
+        assert "colorterms" in defaults
+
+
 class TestPluginRegistry:
     """Verify plugin discovery and lookup."""
 
@@ -120,7 +159,14 @@ class TestPluginRegistry:
         with pytest.raises(ValueError, match="Unknown instrument"):
             get_plugin("nonexistent")
 
+    def test_get_plugin_ctio0m9(self):
+        """get_plugin('ctio0m9') returns Ctio0m9Plugin."""
+        plugin = get_plugin("ctio0m9")
+        assert isinstance(plugin, Ctio0m9Plugin)
+        assert plugin.name == "ctio0m9"
+
     def test_list_plugins(self):
-        """list_plugins() includes at least 'nickel'."""
+        """list_plugins() includes both 'nickel' and 'ctio0m9'."""
         plugins = list_plugins()
         assert "nickel" in plugins
+        assert "ctio0m9" in plugins
