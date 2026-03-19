@@ -13,9 +13,11 @@ _BUILTIN_PLUGINS: dict[str, type[InstrumentPlugin]] = {}
 def _ensure_builtins() -> None:
     """Lazily populate builtin plugins on first access."""
     if not _BUILTIN_PLUGINS:
+        from small_tel_tools.instruments.ctio0m9 import Ctio0m9Plugin
         from small_tel_tools.instruments.nickel import NickelPlugin
 
         _BUILTIN_PLUGINS["nickel"] = NickelPlugin
+        _BUILTIN_PLUGINS["ctio0m9"] = Ctio0m9Plugin
 
 
 def get_plugin(name: str) -> InstrumentPlugin:
