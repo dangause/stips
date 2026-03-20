@@ -1,10 +1,15 @@
-# obs-nickel-data-tools
+# small-tel-tools
 
-Python CLIs for data access, exploration, and pipeline support for Nickel telescope workflows.
+Python CLI and operational tools for small telescope data processing with LSST Science Pipelines.
+
+Supports multiple telescopes via the **InstrumentPlugin** system:
+- **Nickel** - Lick Observatory 1-meter telescope (default)
+- **CTIO 0.9m** - Cerro Tololo 0.9-meter (SMARTS)
 
 This package provides:
 - **`nickel` CLI**: Unified command-line interface for all pipeline operations
-- **Archive tools**: Download and query Lick Observatory archive data
+- **InstrumentPlugin system**: Extensible multi-telescope support
+- **Archive tools**: Download and query observatory archive data
 - **EDA tools**: Explore archive and Butler repository contents
 - **Pipeline tools**: DIA quality assessment, light curve extraction
 - **Skymap utilities**: Skymap generation and configuration
@@ -22,6 +27,68 @@ Or install directly:
 ```bash
 python -m pip install -e packages/data_tools
 ```
+
+## Multi-Instrument Support
+
+The CLI supports multiple telescopes via the `-i/--instrument` flag:
+
+```bash
+# Default: Nickel telescope
+nickel calibs 20230519
+
+# Explicit instrument selection
+nickel -i nickel calibs 20230519
+nickel -i ctio0m9 calibs 20090527
+```
+
+### InstrumentPlugin Architecture
+
+Each telescope is supported by an `InstrumentPlugin` subclass that provides:
+- Observatory archive access (`fetch_data`)
+- Bootstrap orchestration (`bootstrap`)
+- Default pipeline configurations
+- Instrument-specific parameters (collection prefix, skymap, day_obs offset)
+
+```python
+from small_tel_tools.instruments import get_plugin, list_plugins
+
+# List available instruments
+print(list_plugins())  # ['ctio0m9', 'nickel']
+
+# Get a specific plugin
+plugin = get_plugin("ctio0m9")
+print(plugin.name)              # "ctio0m9"
+print(plugin.collection_prefix) # "ctio0m9"
+print(plugin.day_obs_offset)    # 1
+```
+
+### Adding a New Instrument
+
+1. Create a plugin class in `small_tel_tools/instruments/<name>.py`:
+
+```python
+from small_tel_tools.instruments.base import InstrumentPlugin
+
+class MyTelescopePlugin(InstrumentPlugin):
+    name = "mytelescope"
+    instrument_class = "lsst.obs.smalltel.mytelescope.MyTelescope"
+    collection_prefix = "MyTelescope"
+    skymap_name = "mytelescopeRings-v1"
+    skymaps_chain = "skymaps/mytelescopeRings"
+    day_obs_offset = 1  # Adjust for timezone
+
+    def fetch_data(self, night: str, dest_dir: Path) -> None:
+        # Implement archive download
+        ...
+
+    def bootstrap(self, repo: Path, config: dict) -> None:
+        # Implement repo initialization
+        ...
+```
+
+2. Register in `small_tel_tools/instruments/__init__.py`
+
+3. Optionally register as an entry point in `pyproject.toml`
 
 ## The `nickel` CLI
 
@@ -349,23 +416,34 @@ The package uses a standard setuptools layout:
 ```
 packages/data_tools/
 ├── src/
-│   └── obs_nickel_data_tools/
+│   └── small_tel_tools/
 │       ├── cli.py                # Main nickel CLI
+│       ├── instruments/          # Multi-telescope plugin system
+│       │   ├── base.py               # InstrumentPlugin ABC
+│       │   ├── nickel.py             # Nickel 1-m plugin
+│       │   └── ctio0m9.py            # CTIO 0.9m plugin
 │       ├── core/                 # Core pipeline modules
-│       │   ├── config.py         # Configuration loading
-│       │   ├── stack.py          # LSST stack execution
-│       │   ├── calibs.py         # Calibration pipeline
-│       │   ├── science.py        # Science processing
-│       │   ├── dia.py            # Difference imaging
-│       │   ├── ps1_template.py   # PS1 template ingestion
-│       │   ├── fphot.py          # Forced photometry
-│       │   ├── lightcurve.py     # Lightcurve extraction
-│       │   └── run.py            # YAML pipeline runner
+│       │   ├── config.py             # Configuration loading
+│       │   ├── stack.py              # LSST stack execution
+│       │   ├── calibs.py             # Calibration pipeline
+│       │   ├── science.py            # Science processing
+│       │   ├── dia.py                # Difference imaging
+│       │   ├── ps1_template.py       # PS1 template ingestion
+│       │   ├── fphot.py              # Forced photometry
+│       │   ├── lightcurve.py         # Lightcurve extraction
+│       │   └── run.py                # YAML pipeline runner
 │       ├── pipeline_tools/       # Archive download, PS1 ingest
 │       ├── skymap/               # Skymap utilities
 │       └── eda/                  # Exploratory data analysis
+├── tests/
+│   └── test_instrument_plugin.py # Plugin system tests
 ├── pyproject.toml
 └── README.md
 ```
 
 All CLI entry points are defined in `pyproject.toml` under `[project.scripts]`.
+
+## Related Packages
+
+- **obs_smalltel** - LSST instrument package with camera geometry, translators, pipelines
+- **obs_nickel_data** / **obs_ctio0m9_data** - Curated calibrations (defects, etc.)
