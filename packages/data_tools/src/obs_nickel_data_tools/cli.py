@@ -1253,6 +1253,196 @@ def lightcurve(
 
 
 # =============================================================================
+# calib-metrics - Dump astrometric/photometric calibration metrics to CSV
+# =============================================================================
+
+
+@cli.command("calib-metrics")
+@click.argument("config_file", type=click.Path(exists=True, path_type=Path))
+@click.option(
+    "--collection",
+    default="Nickel/runs/*/processCcd/*",
+    show_default=True,
+    help="Butler collection glob to query",
+)
+@click.option(
+    "-o",
+    "--output",
+    type=click.Path(path_type=Path),
+    required=True,
+    help="Output CSV path",
+)
+@click.option(
+    "--night",
+    help="Filter to a single night (YYYYMMDD). Omit to include all nights in the collection.",
+)
+@click.option(
+    "--include-refcat-metrics",
+    is_flag=True,
+    default=False,
+    help="Also pull single_visit_star_ref_match_{astrom,photom}_metrics (requires visit-quality pipeline)",
+)
+@click.pass_context
+def calib_metrics(
+    ctx: click.Context,
+    config_file: Path,
+    collection: str,
+    output: Path,
+    night: str | None,
+    include_refcat_metrics: bool,
+) -> None:
+    """Extract per-visit astrometric/photometric calibration metrics to CSV.
+
+    Reads REPO and STACK_DIR from the `env:` section of a pipeline YAML config
+    (same file you pass to `nickel run`), then queries the Butler for:
+
+    \b
+      - preliminary_visit_summary          (always)
+      - calibrateImage_metadata_metrics    (if present)
+      - single_visit_star_ref_match_*_metrics  (with --include-refcat-metrics)
+
+    \b
+    Example:
+        nickel calib-metrics \\
+            scripts/config/2023ixf/pipeline_ps1_template.yaml \\
+            -o calib_metrics_2023ixf_all.csv
+
+    \b
+    Filter to one night:
+        nickel calib-metrics \\
+            scripts/config/2023ixf/pipeline_ps1_template.yaml \\
+            --night 20230519 \\
+            --collection "Nickel/runs/20230519/processCcd/*" \\
+            -o calib_metrics_20230519.csv
+    """
+    from obs_nickel_data_tools.core import calib_metrics as cm_module
+    from obs_nickel_data_tools.core import run as run_module
+
+    yaml_env = run_module.get_env_from_yaml(config_file)
+    if not yaml_env:
+        _print_error(f"No env: section found in {config_file}")
+        sys.exit(1)
+
+    _print_info(f"Using environment from: {config_file}")
+    config = _load_config(ctx, inline_env=yaml_env, prefer_inline=True)
+
+    _print_info(f"Repo: {config.repo}")
+    _print_info(f"Extracting calibration metrics from {collection}")
+    if night:
+        _print_info(f"Filtering to night={night}")
+
+    result = cm_module.run(
+        config=config,
+        collection=collection,
+        output=output,
+        night=night,
+        include_refcat_metrics=include_refcat_metrics,
+    )
+
+    if result.success:
+        _print_success(f"\n✓ Wrote {result.n_rows} rows -> {result.csv_path}")
+    else:
+        _print_error(f"calib-metrics failed: {result.error}")
+        sys.exit(1)
+
+
+# =============================================================================
+# landolt-validate - Validate photometric calibration against Landolt standards
+# =============================================================================
+
+
+@cli.command("landolt-validate")
+@click.argument("config_file", type=click.Path(exists=True, path_type=Path))
+@click.option(
+    "--catalog",
+    type=click.Path(exists=True, path_type=Path),
+    required=True,
+    help="Path to landolt_catalog.csv with published magnitudes",
+)
+@click.option(
+    "--collection",
+    default="Nickel/runs/*/processCcd/*",
+    show_default=True,
+    help="Butler collection glob to query",
+)
+@click.option(
+    "-o",
+    "--output",
+    type=click.Path(path_type=Path),
+    required=True,
+    help="Output CSV path",
+)
+@click.option(
+    "--list-stars",
+    is_flag=True,
+    default=False,
+    help="Dry run: list matched stars per visit without extracting photometry",
+)
+@click.pass_context
+def landolt_validate(
+    ctx: click.Context,
+    config_file: Path,
+    catalog: Path,
+    collection: str,
+    output: Path,
+    list_stars: bool,
+) -> None:
+    """Validate photometric calibration against Landolt standard stars.
+
+    Cross-matches pipeline source catalogs against known Landolt star positions,
+    converts to the Vega system, and compares to published Landolt magnitudes.
+
+    \b
+    Example:
+        nickel landolt-validate \\
+            scripts/config/landolt_validation/pipeline_landolt.yaml \\
+            --catalog scripts/config/landolt_validation/landolt_catalog.csv \\
+            -o landolt_validation.csv
+
+    \b
+    Dry run (list expected matches):
+        nickel landolt-validate \\
+            scripts/config/landolt_validation/pipeline_landolt.yaml \\
+            --catalog scripts/config/landolt_validation/landolt_catalog.csv \\
+            --list-stars \\
+            -o /dev/null
+    """
+    from obs_nickel_data_tools.core import landolt as landolt_module
+    from obs_nickel_data_tools.core import run as run_module
+
+    yaml_env = run_module.get_env_from_yaml(config_file)
+    if not yaml_env:
+        _print_error(f"No env: section found in {config_file}")
+        sys.exit(1)
+
+    _print_info(f"Using environment from: {config_file}")
+    config = _load_config(ctx, inline_env=yaml_env, prefer_inline=True)
+
+    _print_info(f"Repo: {config.repo}")
+    mode = "listing stars" if list_stars else "validating photometry"
+    _print_info(f"Landolt validation: {mode}")
+
+    result = landolt_module.run(
+        config=config,
+        catalog=catalog,
+        output=output,
+        collection=collection,
+        list_stars=list_stars,
+    )
+
+    if result.success:
+        if list_stars:
+            _print_success("\n✓ Star listing complete")
+        else:
+            _print_success(
+                f"\n✓ {result.n_measurements} measurements -> {result.csv_path}"
+            )
+    else:
+        _print_error(f"landolt-validate failed: {result.error}")
+        sys.exit(1)
+
+
+# =============================================================================
 # run - YAML-driven pipeline orchestrator
 # =============================================================================
 
