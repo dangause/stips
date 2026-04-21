@@ -1,0 +1,29 @@
+# Landolt photometric validation pipeline
+# Processes Tier 1 standard star nights through calibrateImage only.
+# No DIA, no templates, no forced photometry.
+
+env:
+  REPO: "/Users/dangause/Developer/lick/lsst/data/nickel/landolt_validation_repo"
+  STACK_DIR: "/Users/dangause/Developer/lick/lsst/lsst_stack"
+  RAW_PARENT_DIR: "/Users/dangause/Developer/lick/data"
+  OBS_NICKEL: "/Users/dangause/Developer/lick/lsst/lsst_stack/stack/nickel_processing_suite/packages/obs_nickel"
+  REFCAT_REPO: "/Users/dangause/Developer/lick/lsst/lsst_stack/stack/refcats"
+
+object: "landolt_validation"
+bands: ["b", "v", "r", "i"]
+
+science:
+  nights:
+    - 20210208
+    - 20240624
+    - 20240905
+    - 20240906
+
+options:
+  jobs: 6
+  skip_calibs: false
+  skip_science: false
+  skip_dia: true
+  forced_phot: false
+  continue_on_error: true
+  use_fallbacks: true
