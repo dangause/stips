@@ -273,11 +273,33 @@ def load_visit_metadata(butler: Butler, collections: list[str]) -> dict[int, dic
             if band_val:
                 break
 
+        # Load PhotoCalib calibration factor to convert instrumental ADU -> nJy
+        # single_visit_star_unstandardized has instrumental fluxes, not calibrated nJy
+        photocalib_mean = None
+        try:
+            pcal_refs = list(
+                butler.registry.queryDatasets(
+                    "initial_photoCalib_detector",
+                    collections=collections,
+                    where=f"instrument='Nickel' AND visit={visit}",
+                    findFirst=True,
+                )
+            )
+            if pcal_refs:
+                photocalib = butler.get(pcal_refs[0])
+                photocalib_mean = photocalib.getCalibrationMean()
+        except Exception as exc:
+            print(
+                f"[warn] could not load PhotoCalib for visit {visit}: {exc}",
+                file=sys.stderr,
+            )
+
         meta[visit] = {
             "airmass": airmass,
             "exptime": exptime_val,
             "day_obs": int(day_obs),
             "band": band_val,
+            "photocalib_mean": photocalib_mean,
         }
 
     return meta
@@ -293,6 +315,7 @@ def cross_match_visit(
     stars: list[dict],
     band: str,
     match_radius_arcsec: float = MATCH_RADIUS_ARCSEC,
+    photocalib_mean: float | None = None,
 ) -> list[dict]:
     """Cross-match Landolt stars against one visit's source catalog.
 
@@ -355,8 +378,20 @@ def cross_match_visit(
         # Take the closest match
         best_idx = within[np.argmin(seps[within])]
         best_sep = seps[best_idx]
-        flux_nJy = float(fluxes[best_idx])
-        flux_err_nJy = float(flux_errs[best_idx]) if flux_errs is not None else None
+        flux_raw = float(fluxes[best_idx])
+        flux_err_raw = float(flux_errs[best_idx]) if flux_errs is not None else None
+
+        # Apply PhotoCalib to convert instrumental flux -> nJy
+        # single_visit_star_unstandardized has instrumental fluxes (ADU-like),
+        # not calibrated nJy. photocalib_mean is in nJy/ADU.
+        if photocalib_mean is not None and photocalib_mean > 0:
+            flux_nJy = flux_raw * photocalib_mean
+            flux_err_nJy = (
+                flux_err_raw * photocalib_mean if flux_err_raw is not None else None
+            )
+        else:
+            flux_nJy = flux_raw
+            flux_err_nJy = flux_err_raw
 
         # Look up Landolt magnitude for this band
         lmag = star.get(landolt_col) if landolt_col else None
@@ -492,7 +527,8 @@ def main() -> int:
                 print(f"[warn] failed to load visit {visit}: {exc}", file=sys.stderr)
                 continue
 
-            matches = cross_match_visit(table, stars, band)
+            pcal = visit_meta.get(visit, {}).get("photocalib_mean")
+            matches = cross_match_visit(table, stars, band, photocalib_mean=pcal)
             star_names = [m["star"] for m in matches]
             print(
                 f"  visit={visit}  band={band}  matched_stars={len(matches)}"
@@ -535,7 +571,8 @@ def main() -> int:
         day_obs = vmeta.get("day_obs")
 
         # Cross-match
-        matches = cross_match_visit(table, stars, band)
+        pcal = vmeta.get("photocalib_mean")
+        matches = cross_match_visit(table, stars, band, photocalib_mean=pcal)
 
         for match in matches:
             flux_nJy = match["flux_nJy"]
