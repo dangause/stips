@@ -246,10 +246,24 @@ def load_visit_metadata(butler: Butler, collections: list[str]) -> dict[int, dic
             if abs(zd_rad) < math.pi / 2:
                 airmass = 1.0 / math.cos(zd_rad)
 
+        # Get band from the visit_summary table row
+        band_val = None
+        for row in table:
+            try:
+                band_val = str(row["band"]).strip().lower()
+            except (KeyError, TypeError, ValueError):
+                try:
+                    band_val = str(row["physical_filter"]).strip().lower()
+                except (KeyError, TypeError, ValueError):
+                    pass
+            if band_val:
+                break
+
         meta[visit] = {
             "airmass": airmass,
             "exptime": exptime_val,
             "day_obs": int(day_obs),
+            "band": band_val,
         }
 
     return meta
@@ -451,8 +465,12 @@ def main() -> int:
     if args.list_stars:
         for ref in refs:
             visit = ref.dataId["visit"]
-            expanded = butler.registry.expandDataId(ref.dataId)
-            band = expanded.records["visit"].band.lower()
+            band = visit_meta.get(visit, {}).get("band")
+            if not band:
+                print(
+                    f"[warn] no band info for visit {visit}, skipping", file=sys.stderr
+                )
+                continue
 
             try:
                 table = butler.get(ref)
@@ -483,15 +501,10 @@ def main() -> int:
     for ref in refs:
         visit = ref.dataId["visit"]
 
-        # Get band from expanded dataId
-        try:
-            expanded = butler.registry.expandDataId(ref.dataId)
-            band = expanded.records["visit"].band.lower()
-        except Exception as exc:
-            print(
-                f"[warn] could not determine band for visit {visit}: {exc}",
-                file=sys.stderr,
-            )
+        # Get band from visit metadata
+        band = visit_meta.get(visit, {}).get("band")
+        if not band:
+            print(f"[warn] no band info for visit {visit}, skipping", file=sys.stderr)
             continue
 
         # Load source catalog
