@@ -101,16 +101,19 @@ def load_landolt_catalog(path: str) -> list[dict]:
             cleaned = {k.strip(): v.strip() for k, v in row.items()}
             # Convert numeric columns to float
             for col in (
-                "RA",
-                "Dec",
+                "ra_deg",
+                "dec_deg",
                 "B",
                 "V",
                 "R",
                 "I",
-                "B_err",
                 "V_err",
-                "R_err",
-                "I_err",
+                "BV_err",
+                "VR_err",
+                "VI_err",
+                "B_V",
+                "V_R",
+                "V_I",
             ):
                 if col in cleaned and cleaned[col] not in ("", "nan", "NaN", "N/A"):
                     try:
@@ -119,6 +122,17 @@ def load_landolt_catalog(path: str) -> list[dict]:
                         cleaned[col] = None
                 else:
                     cleaned[col] = None
+            # Normalize coordinate keys for cross-match
+            cleaned["RA"] = cleaned.get("ra_deg")
+            cleaned["Dec"] = cleaned.get("dec_deg")
+            # Derive per-band errors from color errors for R, I, B
+            v_err = cleaned.get("V_err") or 0.0
+            bv_err = cleaned.get("BV_err") or 0.0
+            vr_err = cleaned.get("VR_err") or 0.0
+            vi_err = cleaned.get("VI_err") or 0.0
+            cleaned["B_err"] = (v_err**2 + bv_err**2) ** 0.5
+            cleaned["R_err"] = (v_err**2 + vr_err**2) ** 0.5
+            cleaned["I_err"] = (v_err**2 + vi_err**2) ** 0.5
             stars.append(cleaned)
     return stars
 
@@ -359,7 +373,7 @@ def cross_match_visit(
 
         matches.append(
             {
-                "star": star.get("star", ""),
+                "star": star.get("star_name", star.get("star", "")),
                 "flux_nJy": flux_nJy,
                 "flux_err_nJy": flux_err_nJy,
                 "match_dist_arcsec": float(best_sep),
