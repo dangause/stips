@@ -45,13 +45,14 @@ from lsst.daf.butler.registry import MissingDatasetTypeError
 # Match radius in arcseconds
 MATCH_RADIUS_ARCSEC = 10.0
 
-# AB-to-Vega magnitude offsets per Nickel band
-# Positive offset: Vega mag = AB mag + offset  (Vega is brighter at longer lambda)
+# AB-to-Vega magnitude offsets: mVega = mAB + offset
+# Derived from Blanton & Roweis (2007, AJ 133, 734) where ΔmAB = mAB - mVega,
+# so offset = -ΔmAB.  Nickel uses Cousins Rc/Ic (confirmed in nickelFilters.py).
 AB_TO_VEGA = {
-    "b": -0.09,
-    "v": +0.02,
-    "r": +0.21,
-    "i": +0.45,
+    "b": +0.09,  # ΔmAB(B) = -0.09
+    "v": -0.02,  # ΔmAB(V) = +0.02
+    "r": -0.21,  # ΔmAB(Rc) = +0.21
+    "i": -0.45,  # ΔmAB(Ic) = +0.45
 }
 
 # Map Nickel band -> Landolt catalog column
