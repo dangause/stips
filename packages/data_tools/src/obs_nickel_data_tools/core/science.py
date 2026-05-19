@@ -100,6 +100,31 @@ class ScienceResult:
     quanta_failed: int = 0
 
 
+def _read_landolt_target_names() -> list[str]:
+    """Read fits_object names from scripts/config/landolt_validation/landolt_catalog.csv.
+
+    Used by run() when object='landolt_validation' to filter the science qgraph
+    to just Landolt-field exposures.
+    """
+    import csv
+
+    # core/science.py → core/ → data_tools/src/obs_nickel_data_tools/ → src/ → data_tools/
+    #   → packages/ → repo root
+    repo_root = Path(__file__).resolve().parents[5]
+    catalog = (
+        repo_root / "scripts" / "config" / "landolt_validation" / "landolt_catalog.csv"
+    )
+    if not catalog.exists():
+        return []
+    names: list[str] = []
+    with open(catalog, newline="") as fh:
+        for row in csv.DictReader(fh):
+            name = (row.get("fits_object") or "").strip()
+            if name:
+                names.append(name)
+    return names
+
+
 def resolve_object_filter(
     object_filter: str,
     config: "Config",
@@ -267,15 +292,30 @@ def run(
     object_expr = ""
     resolved_object = None
     if object_filter:
-        resolved_object = resolve_object_filter(object_filter, config, night)
-        if resolved_object:
-            object_expr = f" AND exposure.target_name='{resolved_object}'"
+        # Special case: "landolt_validation" resolves to the list of fits_object
+        # names from the Landolt reference catalog, so the science qgraph only
+        # includes Landolt-field visits (not other science targets observed the
+        # same night).
+        if object_filter.lower() == "landolt_validation":
+            names = _read_landolt_target_names()
+            if names:
+                quoted = ", ".join(f"'{n}'" for n in names)
+                object_expr = f" AND exposure.target_name IN ({quoted})"
+            else:
+                log.warning(
+                    "object='landolt_validation' but landolt_catalog.csv could not "
+                    "be read. Processing all science exposures for this night."
+                )
         else:
-            # No match found - coordinate filtering (below) can still prune by target position.
-            log.warning(
-                f"Could not resolve object '{object_filter}' to exact target_name. "
-                "Processing all science exposures for this night."
-            )
+            resolved_object = resolve_object_filter(object_filter, config, night)
+            if resolved_object:
+                object_expr = f" AND exposure.target_name='{resolved_object}'"
+            else:
+                # No match found - coordinate filtering (below) can still prune by target position.
+                log.warning(
+                    f"Could not resolve object '{object_filter}' to exact target_name. "
+                    "Processing all science exposures for this night."
+                )
 
     # Pre-flight coordinate validation: find exposures with bad coordinates.
     # If object resolution failed, validate against all science exposures for the
