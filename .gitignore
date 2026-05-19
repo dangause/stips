@@ -84,3 +84,7 @@ CLAUDE.md
 
 # Git worktrees
 .worktrees/
+
+# Poster/paper analysis outputs (override generic *.png/*.csv ignore)
+!analysis/**/*.png
+!analysis/**/*.csv
