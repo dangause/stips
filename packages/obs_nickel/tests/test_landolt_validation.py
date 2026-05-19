@@ -10,7 +10,8 @@ import pytest
 
 # --- AB-to-Vega offset constants (from spec) ---
 
-AB_TO_VEGA = {"b": -0.09, "v": 0.02, "r": 0.21, "i": 0.45}
+# mVega = mAB + offset; offset = -ΔmAB where ΔmAB from Blanton & Roweis (2007)
+AB_TO_VEGA = {"b": +0.09, "v": -0.02, "r": -0.21, "i": -0.45}
 
 
 def nJy_to_AB(flux_nJy: float) -> float:
@@ -32,17 +33,17 @@ class TestABToVega:
     def test_v_band_offset_near_zero(self):
         mag_ab = 12.0
         mag_vega = ab_to_vega(mag_ab, "v")
-        assert abs(mag_vega - 12.02) < 0.001
+        assert abs(mag_vega - 11.98) < 0.001  # V offset = -0.02
 
     def test_i_band_offset(self):
         mag_ab = 15.0
         mag_vega = ab_to_vega(mag_ab, "i")
-        assert abs(mag_vega - 15.45) < 0.001
+        assert abs(mag_vega - 14.55) < 0.001  # I offset = -0.45
 
-    def test_b_band_offset_negative(self):
+    def test_b_band_offset_positive(self):
         mag_ab = 14.0
         mag_vega = ab_to_vega(mag_ab, "b")
-        assert mag_vega < mag_ab  # B offset is negative
+        assert mag_vega > mag_ab  # B offset = +0.09 (Vega fainter than AB in B)
 
 
 class TestDerivedMagnitudes:

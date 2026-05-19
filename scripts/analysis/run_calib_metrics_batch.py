@@ -46,7 +46,8 @@ def run_one(target: dict) -> Path | None:
         print(f"[skip] config not found: {config}", file=sys.stderr)
         return None
 
-    cmd = ["nickel", "calib-metrics", str(config), "-o", str(output)]
+    nickel = str(Path(sys.executable).parent / "nickel")
+    cmd = [nickel, "calib-metrics", str(config), "-o", str(output)]
     print(f"\n{'='*60}", file=sys.stderr)
     print(f"[run] {name}: {' '.join(cmd)}", file=sys.stderr)
 
