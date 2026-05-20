@@ -195,39 +195,72 @@ Validate the absolute photometric accuracy of the LSST Science Pipelines' `calib
 
 ### Results
 
-From the 20240624 night (the only night with successful science processing in this initial run), 16 measurements were obtained across 3 Landolt stars and 4 bands.
+After expanding the local MONSTER refcat to cover all four Tier 1 nights (see "MONSTER refcat coverage expansion" below), 76 measurements were obtained across 10 Landolt standard stars and four BVRI bands, spanning the full Landolt B-V color range from -0.19 to +1.74.
 
 #### Per-Band Residuals
 
-| Band | N | Stars | Mean Residual (mag) | RMS (mag) | Median Residual (mag) |
-|------|---|-------|--------------------|-----------|-----------------------|
-| B | 4 | PG 1530+057, SA 109-199, SA 109-231 | -0.679 | 0.712 | -0.647 |
-| V | 4 | PG 1530+057, SA 109-199 | +0.222 | 0.228 | +0.220 |
-| R | 4 | PG 1530+057, SA 109-199 | **+0.028** | 0.085 | +0.028 |
-| I | 4 | PG 1530+057, SA 109-199 | **-0.076** | 0.123 | -0.096 |
-| **All** | **16** | **3 stars** | **-0.126** | **0.381** | **-0.037** |
+After excluding one V-band outlier (SA 110-340, residual = +10.6 mag — a clear source-match failure on a single visit, see Caveats):
 
-AB-to-Vega offsets: B=+0.09, V=-0.02, R=-0.21, I=-0.45 (from Blanton & Roweis 2007, AJ 133, 734; sign convention: mVega = mAB + offset, where offset = -(mAB - mVega)).
+| Band | N | Mean (mag) | Median (mag) | RMS (mag) | Std (mag) |
+|------|---|------------|--------------|-----------|-----------|
+| B | 17 | -0.388 | -0.442 | 0.453 | 0.243 |
+| V | 16 | +0.248 | +0.245 | 0.257 | 0.071 |
+| R | 19 | **-0.005** | -0.039 | **0.062** | 0.064 |
+| I | 23 | **-0.038** | -0.036 | **0.062** | 0.049 |
+| **All** | **75** | **-0.048** | -0.037 | 0.251 | 0.248 |
+
+AB-to-Vega offsets used: B=+0.09, V=-0.02, R=-0.21, I=-0.45 (Blanton & Roweis 2007, AJ 133, 734; sign convention: mVega = mAB + offset).
+
+#### Color-Term Linear Fits
+
+Per-band linear regression of residual vs Landolt B-V, across the full color range:
+
+| Band | Slope (mag/(B-V)) | Intercept (mag) | Fit RMS (mag) | B-V Range |
+|------|-------------------|-----------------|---------------|-----------|
+| B | +0.080 | -0.470 | 0.230 | [-0.19, +1.74] |
+| V | +0.099 | +0.137 | 0.026 | [-0.14, +1.74] |
+| R | +0.085 | -0.095 | 0.033 | [-0.19, +1.74] |
+| I | +0.042 | -0.087 | 0.043 | [-0.14, +1.74] |
+
+These slopes are the **Nickel-to-Landolt color terms**: shallow but non-zero (~0.04-0.10 mag per unit B-V), measurable now that the B-V baseline spans 1.93 magnitudes.
 
 #### Interpretation
 
-**R and I bands are validated to < 0.1 mag absolute accuracy.** The near-zero residuals in R (+0.028 mag) and I (-0.076 mag) confirm that the Nickel Cousins Rc and Ic filters closely match the standard Landolt system, and the pipeline's photometric calibration against the MONSTER reference catalog produces magnitudes consistent with Landolt standards.
+**R and I bands are validated to < 0.1 mag absolute accuracy.** Near-zero mean residuals in R (-0.005 mag) and I (-0.038 mag) with RMS of 0.06 mag confirm that the Nickel Cousins Rc and Ic filters closely match the standard Landolt system, and the pipeline's photometric calibration against the MONSTER reference catalog produces magnitudes consistent with Landolt standards.
 
-**B band shows a -0.68 mag systematic offset** (pipeline brighter than Landolt), indicating the Nickel B filter bandpass differs significantly from the standard Bessell B filter. This is a real filter mismatch, not a calibration failure — the pipeline correctly calibrates against the reference catalog, but the Nickel B filter transmits a different effective wavelength range than Bessell B.
+**B band shows a -0.39 mag mean offset** (pipeline brighter than Landolt) with a +0.080 mag/(B-V) color-dependent slope. The intercept of -0.47 mag, plus 0.23 mag scatter around the linear fit, indicates the Nickel B filter bandpass differs significantly from the standard Bessell B filter — a real filter mismatch, not a calibration failure.
 
-**V band has a +0.22 mag offset**, intermediate between the near-zero R/I and the large B offset. This suggests a moderate Nickel V filter mismatch with Bessell V.
+**V band has a +0.25 mag mean offset** with a +0.099 mag/(B-V) color term. After correcting for color, the V-band fit RMS is just 0.026 mag — among the tightest of the four bands, confirming that the V offset is dominated by a (correctable) bandpass mismatch.
 
-**Repeat measurement precision:** PG 1530+057, observed in two consecutive exposures per band, shows per-band scatter of < 2 mmag between repeat visits. This confirms that the pipeline's relative photometric precision is excellent; the systematic offsets are stable and correctable.
+**Stars covered (10 total):** PG 1633+099 (B-V=-0.19), PG 1323-086 (-0.14), PG 1530+057 (+0.15), SA 110-340 (+0.31), SA 113-342 (+1.02), SA 114-670 (+1.21), SA 107-458 (+1.21), SA 109-231 (+1.46), SA 92-311 (+1.64), SA 109-199 (+1.74).
 
-**Match quality:** All cross-matches had angular separations of 0.09-0.56 arcsec, well within the 10 arcsec search radius, confirming robust identification.
+**Match quality:** All cross-matches had angular separations of < 1 arcsec, well within the 10 arcsec search radius (chosen to accommodate Nickel's typical 5-7 arcsec WCS residuals).
 
 #### Caveats
 
-1. **Single-night data.** Only 1 of 4 Tier 1 nights produced successful science processing. The remaining 3 nights (20210208, 20240905, 20240906) failed during `calibrateImage` and should be retried with appropriate fallback configurations to increase the statistical sample.
+1. **V-band outlier.** One V-band measurement (SA 110-340, visit 90151051, residual +10.6 mag) was excluded from per-band statistics. The pipeline reported AB = 20.6 mag versus Landolt V = 10.0 mag — a clear source-association failure, likely the cross-match locked onto a faint background source rather than the standard. The other measurements of SA 110-340 V band were not in the sample (single failed visit).
 
-2. **AB-to-Vega offsets.** The offsets used are for standard Bessell/Cousins filters (Blanton & Roweis 2007). The residuals measure the combined effect of offset uncertainty and Nickel filter bandpass mismatch. Deriving Nickel-specific AB-Vega offsets from the actual filter transmission curves would isolate the calibration accuracy from the filter mismatch.
+2. **AB-to-Vega offsets.** The offsets used are for standard Bessell/Cousins filters (Blanton & Roweis 2007). The fit intercepts and slopes measure the combined effect of offset uncertainty and Nickel filter bandpass mismatch. Deriving Nickel-specific AB-Vega offsets from the actual filter transmission curves would isolate the calibration accuracy from the filter mismatch.
 
-3. **Color-term slope.** With only 3 stars (B-V range: 0.25 to 0.72), the color-term slope is not well-constrained. Processing additional Landolt nights would provide a wider B-V baseline for fitting Nickel-to-Landolt color terms per band.
+3. **Uneven star coverage per band.** Stars near the celestial equator with full BVRI coverage (PG 1323-086, PG 1530+057, SA 113-342, SA 92-311, SA 109-199) drive most of the fit. PG 1633+099 has only B and R; SA 114-670 has only I and R; SA 110-340 has only V; SA 109-231 has only B. The color-term slopes are most reliable for B/R/I, where ≥17 measurements span the full B-V range.
+
+### MONSTER Refcat Coverage Expansion
+
+The initial run processed only 1 of 4 Tier 1 nights because the local MONSTER refcat lacked HTM7 shards for most Landolt field positions, causing qgraph builds to abort with `FileNotFoundError: Not enough datasets (0) found for ... the_monster_20250219_local`. Recovery used existing nps tooling:
+
+1. **`scripts/utilities/recompute_missing_shards.py`** queried the Butler for visit centroids, computed the HTM7 cells overlapping a 6 arcmin radius per visit, and subtracted shards already on disk — yielding 34 missing IDs written to `scripts/config/landolt_validation/monster_plan/missing_htm7_ids.txt`.
+
+2. **`packages/refcats/scripts/dump_monster_shards.py`** (vendored from a standalone RSP utility) was run on the Rubin Science Platform to dump those 34 shards from the dp1 Butler — yielding 16.6 MB of new AFW-format FITS shards.
+
+3. **`nickel-refcats merge`** extracted the tarball into `$REFCAT_REPO/data/refcats/the_monster_20250219_afw/`, invalidating the stale ECSV manifest so the next bootstrap regenerates it.
+
+4. **Re-bootstrap** of the Landolt repo (after dropping the existing `refcats/the_monster_20250219_local` RUN collection) re-ingested all 387 shards, providing the qgraph builder with full coverage across the Landolt fields.
+
+The complete runbook is at `scripts/config/landolt_validation/EXPANDING_COVERAGE.md`.
+
+### Pipeline Fix: Lick Observing Nights Span Two UT Days
+
+A single Lick observing night (Pacific local date) can span two UT days: pre-Pacific-midnight exposures have `day_obs = night`, while post-midnight exposures have `day_obs = night + 1`. The original `core/science.py` and `core/pipeline.py` queried only `day_obs = night + 1`. For 20210208 this silently dropped every Landolt exposure (the standards were observed in the Pacific evening), while the SNe on the same observing night were post-midnight and visible. Fixed by querying `day_obs IN (night, night+1)`.
 
 ### Landolt Reference Catalog
 
@@ -235,7 +268,9 @@ Published magnitudes for 10 Tier 1 standard stars are stored in `scripts/config/
 
 ### Output Files
 
-- Validation CSV: `analysis/landolt_validation.csv`
+- Validation CSV: `analysis/landolt_validation_4nights.csv` (76 rows, all measurements)
+- Residual plot: `analysis/landolt_residuals.png`
+- Color-term plot: `analysis/landolt_color_terms.png`
 - Pipeline config: `scripts/config/landolt_validation/pipeline_landolt.yaml`
 - Reference catalog: `scripts/config/landolt_validation/landolt_catalog.csv`
 
