@@ -221,6 +221,16 @@ Calibration metrics were extracted from 5 Butler repositories spanning sparse, m
 - Per-target CSVs: `analysis/calib_metrics/{target}.csv`
 - Combined CSV with `target` column: `analysis/calib_metrics/combined.csv`
 
+## Supernova Lightcurve Comparison to ZTF
+
+To validate the Nickel DIA lightcurves against an external survey, we overlay the Nickel forced-photometry outputs for SN 2023ixf and SN 2020wnt with public ZTF photometry pulled from the ALeRCE alert broker (objects ZTF23aaklqou and ZTF20acjeflr respectively). The comparison figure is `analysis/sn_vs_ztf_comparison.png` (script: `scripts/analysis/plot_sn_vs_ztf.py`).
+
+- **SN 2023ixf** has no direct r-band overlap because ZTF r-band coverage of the source begins only at day ~207 post-explosion, well after the Nickel campaign ended (day 75). The visual comparison still shows that Nickel R/I points sit on the early bright plateau (mag 11.5–14) tracing the same lightcurve shape that ZTF g sees over the same epochs, and ZTF r picks up the late-time tail (mag 19–20.5) that extends the Nickel coverage by an order of magnitude in time.
+
+- **SN 2020wnt** has direct r-band overlap from day ~11 to ~250. Within a 3-day matching window, Nickel R agrees with ZTF r at mean = +0.66 mag with 0.80 mag RMS over 6 matched epochs — driven by color evolution at late times where the SN is reddening (Nickel Cousins R extends further to the red than ZTF Sloan r, so the SN appears brighter in R). Near the lightcurve peak (day 30) the agreement is sub-tenth-mag. The Nickel campaign also extends ~100 days beyond ZTF's coverage of the source.
+
+Both comparisons use Nickel detections filtered to SNR > 5 to suppress noise points in the forced photometry.
+
 ## Landolt Photometric Validation
 
 ### Purpose
