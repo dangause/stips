@@ -150,8 +150,9 @@ def resolve_object_filter(
     if night:
         from obs_nickel_data_tools.core.pipeline import night_to_day_obs
 
-        day_obs = night_to_day_obs(night)
-        where += f" AND day_obs={day_obs}"
+        # See run() — a Lick observing night spans two UT days.
+        day_obs_next = night_to_day_obs(night)
+        where += f" AND day_obs IN ({night}, {day_obs_next})"
 
     script = f"""
 import json
@@ -384,10 +385,14 @@ def run(
             error=f"No valid config files found. Tried: {science_cfg.calibrate_image}",
         )
 
-    day_obs = night_to_day_obs(night)
+    # A single Lick observing night can span two UT days: exposures taken
+    # before Pacific midnight have day_obs=night, and post-midnight exposures
+    # have day_obs=night+1 (what night_to_day_obs returns). Query both.
+    day_obs_next = night_to_day_obs(night)
     data_query = (
         f"instrument='Nickel' AND exposure.observation_type='science'"
-        f" AND day_obs={day_obs}{object_expr}{band_expr}{exclusion_expr}"
+        f" AND day_obs IN ({night}, {day_obs_next})"
+        f"{object_expr}{band_expr}{exclusion_expr}"
     )
 
     # Fail fast if this night has no matching exposures after filtering.

@@ -21,7 +21,9 @@ science:
 
 options:
   jobs: 6
-  skip_calibs: false
+  # Calibs already built in prior run (20260422); skip to focus on science
+  # re-run after MONSTER refcat expansion. Flip back to false to rebuild.
+  skip_calibs: true
   skip_science: false
   skip_dia: true
   forced_phot: false

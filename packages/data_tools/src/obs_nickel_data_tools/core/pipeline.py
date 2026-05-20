@@ -172,12 +172,14 @@ def find_bad_coord_exposures(
     """
     from obs_nickel_data_tools.core.stack import run_butler_python_json
 
-    day_obs = night_to_day_obs(night)
+    # A Lick observing night can span two UT days (Pacific evening = night,
+    # post-midnight = night+1). Query both.
+    day_obs_next = night_to_day_obs(night)
 
     # Build WHERE clause
     where = (
         f"instrument='Nickel' AND exposure.observation_type='science'"
-        f" AND exposure.day_obs={day_obs}"
+        f" AND exposure.day_obs IN ({night}, {day_obs_next})"
     )
     if object_filter:
         where += f" AND exposure.target_name='{object_filter}'"
