@@ -60,8 +60,8 @@ narrowband filters on emission nebulae and galaxies.
 | Dataset Type | Dimensions | Content |
 |---|---|---|
 | `preliminary_visit_summary` | (instrument, visit) | Per-detector summary statistics from `calibrateImage`: WCS residuals, PhotoCalib zero point, PSF model parameters, sky background. One row per detector per visit. |
-| `calibrateImage_metadata_metrics` | (instrument, visit, detector) | Task-level match counts and PSF statistics from `analysis_tools` visit-quality pipeline. Requires `nickel-visit-quality-detector.yaml` to have been run. Not present in this extraction. |
-| `single_visit_star_ref_match_{astrom,photom}_metrics` | (instrument, visit, detector) | Per-visit aggregated residuals from matching `single_visit_star` catalog against the reference catalog. Requires `nickel-analysis-visit-single-visit.yaml`. Not present in this extraction. |
+| `calibrateImage_metadata_metrics` | (instrument, visit, detector) | Task-level match counts and PSF statistics from `analysis_tools` visit-quality pipeline (`nickel-visit-quality-detector.yaml`). Present for all 1,457 visits; surfaced in the [Visit Quality](#visit-quality) section. |
+| `single_visit_star_ref_match_{astrom,photom}_metrics` | (instrument, visit, detector) | Per-visit aggregated residuals from matching `single_visit_star` catalog against the reference catalog. Requires `nickel-analysis-visit-single-visit.yaml`. Not run for this extraction. |
 
 ## Astrometric Calibration
 
@@ -159,6 +159,38 @@ No significant difference between bands, as expected for seeing-dominated PSFs a
 | `skyNoise` (nJy/pixel) | 373 | 10.6 | 12.1 | 11.8 | 6.9 | 231.2 |
 
 The `skyNoise` maximum of 231 nJy/pixel is a ~20-sigma outlier (compared to the median of 10.6) and likely corresponds to a visit taken through cloud or during twilight. The `skyBg` variation (25--580 nJy/pixel) reflects the range of lunar illumination, airmass, and atmospheric conditions across the 7-month campaign.
+
+### Sky Background vs. Zero Point
+
+`analysis/calib_metrics/sky_vs_zeropoint.png` (from `scripts/analysis/plot_sky_vs_zp.py`) plots `skyBg` against `zeroPoint` colored by target. The anti-correlation is clean: photometric visits cluster at high ZP (≥27 mag) and low sky (≤100 nJy/pix), while cloudy/moonlit visits drift to lower ZP and higher sky brightness. Each campaign occupies its own region of the plot because the bands differ (HD 189733 in B sits low and right; the SN campaigns in R/I sit middle; etc.).
+
+## Visit Quality
+
+Per-visit metrics from `calibrateImage_metadata_metrics` (produced by the `analysis_tools` visit-quality pipeline). Values are medians across all 1,457 visits.
+
+| Metric | Median | Mean | Std | Min | Max |
+|--------|-------:|-----:|----:|----:|----:|
+| `astrometry_matches_count`  | 21 | 30 | 41 | 2 | 596 |
+| `photometry_matches_count`  | 30 | 41 | 50 | 1 | 690 |
+| `psf_good_star_count`       | 21 | 33 | 39 | 4 | 286 |
+| `matched_psf_star_count`    | 22 | 32 | 36 | 1 | 329 |
+| `star_count`                | 26 | 42 | 51 | 1 | 480 |
+| `saturated_source_count`    |  3 |  5 |  8 | 0 |  59 |
+| `cosmic_ray_count`          | 10 | 57 | 627 | 1 | 16,908 |
+
+### Per-target Median Match Counts
+
+| Target | N | Astrometry matches | Photometry matches | PSF good stars |
+|--------|--:|-------------------:|-------------------:|---------------:|
+| SN 2020wnt        | 111 |  56 |  94 | 94 |
+| SN 2023ixf        | 373 |   8 |  11 | 12 |
+| AC And            | 194 |  24 |  47 | 23 |
+| HD 189733         | 398 |  24 |  34 | 23 |
+| Extended objects  | 381 |  27 |  29 | 28 |
+
+The dense M101 field around SN 2023ixf has by far the lowest match counts (median 8 astrometric matches, 11 photometric, 12 PSF stars) — galaxy surface brightness and crowding suppress clean stellar detections. The sparse 2020wnt field at the opposite extreme has 7× more astrometric matches and 8× more photometric matches per visit. This is consistent with the higher degenerate-WCS rate in the dense field (5.6% vs. 0% for sparse), where insufficient matches collapse the astrometric solution.
+
+The long tail in `cosmic_ray_count` (max 16,908) is concentrated in the longest exposures (≥600 s) where CR accumulation dominates; the median 10 CRs/visit is normal for ground-based 20-second frames.
 
 ## Field Density Comparison
 
@@ -290,9 +322,7 @@ Published magnitudes for 10 Tier 1 standard stars are stored in `scripts/config/
 
 ## Known Limitations
 
-1. **Reference catalog match counts not available.** The `calibrateImage_metadata_metrics` dataset (which includes `astrometry_matches_count` and `photometry_matches_count` per visit) was not present in this repository. These require running the visit-quality analysis pipeline (`nickel-visit-quality-detector.yaml`) as a post-processing step.
-
-2. **Per-source astrometric/photometric residuals not available.** The `single_visit_star_ref_match_{astrom,photom}_metrics` datasets (aggregated RMS, bias, and scatter from per-source catalog-to-refcat matching) require running `nickel-analysis-visit-single-visit.yaml`. These would provide more detailed characterization (e.g., astrometric residual vs. magnitude, photometric color terms).
+1. **Per-source astrometric/photometric residuals not available.** The `single_visit_star_ref_match_{astrom,photom}_metrics` datasets (aggregated RMS, bias, and scatter from per-source catalog-to-refcat matching) require running `nickel-analysis-visit-single-visit.yaml`. These would provide more detailed characterization (e.g., astrometric residual vs. magnitude, per-band photometric color terms derived directly from per-source matching). The `calibrateImage_metadata_metrics` is already in the dataset and is summarized above in [Visit Quality](#visit-quality).
 
 3. **Degenerate WCS fraction (5.6%).** These visits pass the pipeline but have unreliable astrometric solutions. They are automatically filtered from coadd construction but are included in per-visit DIA. Their forced photometry products should be treated with caution.
 
