@@ -82,6 +82,9 @@ packages/refcats/upstream/
 # Project docs (auto-generated)
 CLAUDE.md
 
+# Superpowers skill workflow artifacts (plans/specs from /brainstorm + /write-plan)
+docs/superpowers/
+
 # Git worktrees
 .worktrees/
 
