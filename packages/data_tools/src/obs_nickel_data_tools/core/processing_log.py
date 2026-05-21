@@ -217,17 +217,3 @@ def parse_pipetask_failures(stderr: str, stdout: str) -> list[dict]:
             current_error = None
 
     return failures
-
-
-def count_quanta_from_qgraph(qgraph_path: Path) -> int:
-    """Count quanta in a quantum graph file.
-
-    Args:
-        qgraph_path: Path to .qg file
-
-    Returns:
-        Number of quanta, or 0 if cannot determine
-    """
-    # This would require loading the qgraph, which needs Butler
-    # For now, return 0 and let caller estimate from exposures
-    return 0

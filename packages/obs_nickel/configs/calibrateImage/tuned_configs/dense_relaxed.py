@@ -25,7 +25,7 @@
 #   - Gain ~1.8 e-/ADU, read noise ~7 e-
 #
 # Intended fallback chain:
-#   dense_strict → dense_relaxed → (sparse_strict → sparse_relaxed)
+#   dense_strict → dense_relaxed → sparse_relaxed
 #
 # ruff: noqa: F821
 

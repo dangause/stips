@@ -9,18 +9,6 @@ from .differentialPhot import (
     DifferentialPhotConfig,
     DifferentialPhotTask,
 )
-from .forcedPhotDiffimLightcurveBand import (
-    ForcedPhotDiffimLightcurveBandConfig,
-    ForcedPhotDiffimLightcurveBandTask,
-    ForcedPhotDiffimLightcurveCombinedConfig,
-    ForcedPhotDiffimLightcurveCombinedTask,
-)
-from .forcedPhotLightcurve import (
-    ForcedPhotDiffimLightcurveConfig,
-    ForcedPhotDiffimLightcurveTask,
-    ForcedPhotLightcurveConfig,
-    ForcedPhotLightcurveTask,
-)
 from .forcedPhotRaDec import (
     ForcedPhotDiffimRaDecConfig,
     ForcedPhotDiffimRaDecTask,
@@ -34,16 +22,6 @@ __all__ = [
     "ForcedPhotRaDecConfig",
     "ForcedPhotDiffimRaDecTask",
     "ForcedPhotDiffimRaDecConfig",
-    # Forced photometry lightcurve tasks (instrument-level)
-    "ForcedPhotLightcurveTask",
-    "ForcedPhotLightcurveConfig",
-    "ForcedPhotDiffimLightcurveTask",
-    "ForcedPhotDiffimLightcurveConfig",
-    # Forced photometry lightcurve tasks (per-band + combined)
-    "ForcedPhotDiffimLightcurveBandTask",
-    "ForcedPhotDiffimLightcurveBandConfig",
-    "ForcedPhotDiffimLightcurveCombinedTask",
-    "ForcedPhotDiffimLightcurveCombinedConfig",
     # DIA lightcurve tasks
     "DiaLightcurvePlotTask",
     "DiaLightcurvePlotConfig",

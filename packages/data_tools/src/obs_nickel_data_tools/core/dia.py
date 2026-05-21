@@ -30,7 +30,17 @@ log = logging.getLogger(__name__)
 
 @dataclass
 class DIAResult:
-    """Result of difference imaging."""
+    """Result of difference imaging for a single night/band.
+
+    Attributes:
+        success: Whether DIA produced at least one difference image.
+        night: Observing night (YYYYMMDD).
+        diff_run: Butler RUN collection containing DIA outputs.
+        template_collection: Template collection used for subtraction.
+        diff_image_count: Number of difference images produced.
+        dia_source_count: Number of DIA sources detected.
+        error: Error message if processing failed, None on success.
+    """
 
     success: bool
     night: str

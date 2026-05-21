@@ -72,7 +72,9 @@ Profiles look for `.env.{profile}` or `.env.{profile}.ps1` files in the current 
 | `nickel ps1-template` | Download and ingest PS1 template for DIA |
 | `nickel fphot NIGHT` | Run forced photometry at RA/Dec |
 | `nickel lightcurve` | Extract lightcurve from DIA/forced phot sources |
+| `nickel clean CONFIG.yaml` | Remove processing outputs for re-runs |
 | `nickel run CONFIG.yaml` | Run full pipeline from YAML config |
+| `nickel dashboard` | Launch browser-based pipeline monitoring |
 
 ### Command Details
 
@@ -185,6 +187,22 @@ Options:
 - `--name`: Target name for plot title
 - `--output`: Output CSV file path
 - `--plot/--no-plot`: Generate plot (default: yes)
+- `--y-axis`: Y-axis mode: `apparent_mag` | `absolute_mag` | `flux_nJy` | `flux_adu`
+- `--x-axis`: X-axis mode: `mjd` | `days_since_explosion`
+- `--explosion-mjd`: Explosion MJD (required when `--x-axis days_since_explosion`)
+- `--distance-modulus`: Distance modulus (required when `--y-axis absolute_mag`)
+- `--max-mag-err`: Max magnitude error for plot filtering
+
+```bash
+# Example with display options
+nickel lightcurve --ra 210.91 --dec 54.32 \
+    --collections "Nickel/runs/*/forcedPhotRaDec/*/run" \
+    --dataset-type forced_phot_diffim_radec \
+    --name "SN 2023ixf" \
+    --y-axis absolute_mag --distance-modulus 29.05 \
+    --x-axis days_since_explosion --explosion-mjd 60082.75 \
+    --max-mag-err 1.0
+```
 
 Output files are saved to `{repo}/lightcurves/` by default.
 
@@ -200,23 +218,41 @@ nickel run pipeline.yaml --dry-run
 Example YAML format:
 ```yaml
 object: "2023ixf"
-ra: 210.910833
-dec: 54.316389
+ra: 210.910750
+dec: 54.311694
 bands: ["r", "i"]
 
 template:
   type: ps1
-  degrade_seeing: 2.0
+  size: 0.4
 
-nights:
-  20230519:
-    r: []
-    i: []
+science:
+  nights:
+    - 20230519
+    - 20230521
+
+configs:
+  science:
+    calibrate_image: calibrateImage/tuned_configs/dense_strict.py
+    calibrate_image_fallbacks:
+      - calibrateImage/tuned_configs/dense_relaxed.py
+    colorterms: apply_colorterms.py
+  dia:
+    subtract_images: dia/subtractImages_ps1.py
+    detect_and_measure: dia/detectAndMeasure.py
 
 options:
-  jobs: 8
+  jobs: 6
   forced_phot: true
-  lightcurve: true
+  continue_on_error: true
+  use_fallbacks: true
+
+lightcurve:
+  enabled: true
+  dataset_type: forced_phot_diffim_radec
+  y_axis: apparent_mag
+  x_axis: days_since_explosion
+  explosion_mjd: 60082.75
 ```
 
 ## Standalone CLI Tools
@@ -357,9 +393,13 @@ packages/data_tools/
 │       │   ├── calibs.py         # Calibration pipeline
 │       │   ├── science.py        # Science processing
 │       │   ├── dia.py            # Difference imaging
+│       │   ├── coadd.py          # Nickel coadd template building
 │       │   ├── ps1_template.py   # PS1 template ingestion
 │       │   ├── fphot.py          # Forced photometry
 │       │   ├── lightcurve.py     # Lightcurve extraction
+│       │   ├── pipeline.py       # Shared utilities (collections, validation)
+│       │   ├── executor.py       # LocalExecutor / BPSExecutor
+│       │   ├── bps.py            # BPS config rendering and submission
 │       │   └── run.py            # YAML pipeline runner
 │       ├── pipeline_tools/       # Archive download, PS1 ingest
 │       ├── skymap/               # Skymap utilities

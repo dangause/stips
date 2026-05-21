@@ -18,7 +18,7 @@
 #   - Johnson-Cousins BVRI filter set
 #
 # Intended fallback chain:
-#   dense_strict → dense_relaxed → (sparse_strict → sparse_relaxed)
+#   dense_strict → dense_relaxed → sparse_relaxed
 #
 # ruff: noqa: F821
 

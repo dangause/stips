@@ -549,6 +549,7 @@ def run(
     else:
         output_dir = Path(output_dir)
 
+    fh = None
     if log_file is not None:
         log_file = Path(log_file)
         log_file.parent.mkdir(parents=True, exist_ok=True)
@@ -556,46 +557,55 @@ def run(
         fh.setLevel(logging.DEBUG)
         log.addHandler(fh)
 
-    log.info("Reading lightcurve from %s", csv_path)
-    df = _read_lightcurve(csv_path)
-    log.info("Loaded %d rows across bands: %s", len(df), sorted(df["band"].unique()))
+    try:
+        log.info("Reading lightcurve from %s", csv_path)
+        df = _read_lightcurve(csv_path)
+        log.info(
+            "Loaded %d rows across bands: %s", len(df), sorted(df["band"].unique())
+        )
 
-    log.info(
-        "Running BLS (period_min=%.2f d, period_max=%.2f d, "
-        "duration=%.1f-%.1f h, n_samples=%d)",
-        period_min,
-        period_max,
-        duration_min,
-        duration_max,
-        n_samples,
-    )
-    result = _run_bls(
-        df,
-        period_min=period_min,
-        period_max=period_max,
-        duration_min=duration_min,
-        duration_max=duration_max,
-        n_samples=n_samples,
-    )
-    log.info(
-        "Best period = %.4f d, depth = %.4f%%, duration = %.2f h, SNR = %.1f",
-        result.best_period,
-        result.depth * 100,
-        result.duration,
-        result.transit_snr,
-    )
+        log.info(
+            "Running BLS (period_min=%.2f d, period_max=%.2f d, "
+            "duration=%.1f-%.1f h, n_samples=%d)",
+            period_min,
+            period_max,
+            duration_min,
+            duration_max,
+            n_samples,
+        )
+        result = _run_bls(
+            df,
+            period_min=period_min,
+            period_max=period_max,
+            duration_min=duration_min,
+            duration_max=duration_max,
+            n_samples=n_samples,
+        )
+        log.info(
+            "Best period = %.4f d, depth = %.4f%%, duration = %.2f h, SNR = %.1f",
+            result.best_period,
+            result.depth * 100,
+            result.duration,
+            result.transit_snr,
+        )
 
-    log.info("Phase-folding at P = %.4f d, T0 = %.4f", result.best_period, result.t0)
-    result.phase_folded = _phase_fold_transit(df, result.best_period, result.t0)
+        log.info(
+            "Phase-folding at P = %.4f d, T0 = %.4f", result.best_period, result.t0
+        )
+        result.phase_folded = _phase_fold_transit(df, result.best_period, result.t0)
 
-    log.info("Generating transit model")
-    result.transit_model = _make_transit_model(
-        result.best_period,
-        result.duration,
-        result.depth,
-    )
+        log.info("Generating transit model")
+        result.transit_model = _make_transit_model(
+            result.best_period,
+            result.duration,
+            result.depth,
+        )
 
-    log.info("Saving results to %s", output_dir)
-    _save_results(result, output_dir, df)
+        log.info("Saving results to %s", output_dir)
+        _save_results(result, output_dir, df)
 
-    return result
+        return result
+    finally:
+        if fh is not None:
+            log.removeHandler(fh)
+            fh.close()

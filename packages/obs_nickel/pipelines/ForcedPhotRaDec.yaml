@@ -33,15 +33,15 @@
 #     -i Nickel/runs/20201207/diff/...,my_targets \
 #     -o Nickel/runs/20201207/forcedPhotDiffim/run \
 #     -d "instrument='Nickel' AND visit=12345"
+#
+# For lightcurve extraction from forced photometry outputs, use:
+#   nickel lightcurve --collections <fphot_collection> --ra <ra> --dec <dec>
 
 description: |
   Forced photometry at user-specified RA/Dec coordinates.
   Supports both calibrated visit images and difference images.
 
 instrument: lsst.obs.nickel.Nickel
-
-imports:
-  - location: $OBS_NICKEL/pipelines/nickel-analysis-fphot-lightcurve.yaml
 
 tasks:
   # ============================================
@@ -108,35 +108,6 @@ tasks:
         - base_LocalBackground
         - base_PixelFlags
 
-  # ============================================
-  # Lightcurve consolidation tasks
-  # ============================================
-
-  # Build visit table for MJD lookup
-  makeVisitTable:
-    class: lsst.pipe.tasks.postprocess.MakeVisitTableTask
-    config:
-      connections.visitSummaries: preliminary_visit_summary
-      connections.outputCatalog: preliminary_visit_table
-
-  # Lightcurve from visit image forced photometry
-  forcedPhotLightcurve:
-    class: lsst.obs.nickel.tasks.ForcedPhotLightcurveTask
-    config:
-      # Template variables for connection names
-      connections.inputName: forced_phot_radec
-      connections.visitTableName: preliminary_visit_table
-      connections.outputName: forced_phot_lightcurve
-
-  # Lightcurve from difference image forced photometry
-  forcedPhotDiffimLightcurve:
-    class: lsst.obs.nickel.tasks.ForcedPhotDiffimLightcurveTask
-    config:
-      # Template variables for connection names
-      connections.inputName: forced_phot_diffim_radec
-      connections.visitTableName: preliminary_visit_table
-      connections.outputName: forced_phot_diffim_lightcurve
-
 # ============================================
 # Pipeline subsets
 # ============================================
@@ -164,47 +135,3 @@ subsets:
     description: |
       Run forced photometry on both visit images and difference images.
       Produces two output catalogs per visit.
-
-  # Lightcurve generation subsets
-  visit-lightcurve:
-    subset:
-      - makeVisitTable
-      - forcedPhotLightcurve
-    description: |
-      Generate lightcurve from existing visit image forced photometry outputs.
-      Requires forced_phot_radec datasets to exist.
-
-  diffim-lightcurve:
-    subset:
-      - makeVisitTable
-      - forcedPhotDiffimLightcurve
-    description: |
-      Generate lightcurve from existing difference image forced photometry outputs.
-      Requires forced_phot_diffim_radec datasets to exist.
-
-  all-lightcurves:
-    subset:
-      - makeVisitTable
-      - forcedPhotLightcurve
-      - forcedPhotDiffimLightcurve
-    description: |
-      Generate lightcurves from both visit and difference image forced photometry.
-      Requires both forced_phot_radec and forced_phot_diffim_radec datasets.
-
-  # Per-band + combined lightcurve generation subsets
-  diffim-lightcurve-band:
-    subset:
-      - makeFphotVisitTable
-      - plotForcedPhotDiffimLightcurveBand
-    description: |
-      Generate per-band lightcurves from existing difference image forced photometry.
-      Produces one table and plot per band.
-
-  diffim-lightcurve-combined:
-    subset:
-      - makeFphotVisitTable
-      - plotForcedPhotDiffimLightcurveBand
-      - plotForcedPhotDiffimLightcurveCombined
-    description: |
-      Generate per-band lightcurves and a combined multi-band plot from
-      difference image forced photometry. Requires forced_phot_diffim_radec datasets.

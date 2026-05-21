@@ -81,21 +81,6 @@ class NickelTranslator(FitsTranslator):
             raise ValueError(f"exposure_id {exposure_id} is out of 31-bit range")
         return exposure_id
 
-        # """Unique exposure integer for Nickel using only DATE and OBSNUM.
-
-        # exposure_id = day_obs + OBSNUM
-        # """
-        # day_obs = self._to_day_obs()
-        # obs_num = self._header.get("OBSNUM", 0)
-        # return day_obs * 10000 + obs_num
-
-    # @cache_translation
-    # def to_exposure_id(self) -> int:
-    #     obs_num = self._header.get("OBSNUM", 0)
-    #     dt = self.to_datetime_end()
-    #     return ""
-    #     # return int(self._header.get("OBSNUM", 0))
-
     @cache_translation
     def to_visit_id(self) -> int:
         return self.to_exposure_id()

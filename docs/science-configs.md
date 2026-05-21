@@ -4,10 +4,13 @@ This document describes the tuned `calibrateImage` configuration files for scien
 
 ## Overview
 
-Science processing quality depends heavily on field star density and observing conditions. A single configuration cannot optimally handle both star-rich fields at low galactic latitude and star-poor fields at high galactic latitude. We provide four configs organized along two axes:
+Science processing quality depends heavily on field star density and observing conditions. A single configuration cannot optimally handle both star-rich fields at low galactic latitude and star-poor fields at high galactic latitude. We provide three configs:
 
-- **Field density**: dense (>30 usable stars) vs. sparse (<25 usable stars)
-- **Strictness**: strict (maximize quality) vs. relaxed (maximize completion rate)
+- **`dense_strict`** — Best quality on star-rich fields with good conditions
+- **`dense_relaxed`** — Fallback for star-rich fields or moderate conditions
+- **`sparse_relaxed`** — Last resort for the most challenging, star-poor frames
+
+> **Note:** `sparse_strict` was removed — in practice it offered no advantage over `dense_relaxed` for similar field conditions, and the 3-config chain (dense_strict → dense_relaxed → sparse_relaxed) covers the full quality-vs-completion spectrum.
 
 ### Config Files
 
@@ -17,20 +20,18 @@ All configs live in `packages/obs_nickel/configs/calibrateImage/tuned_configs/`:
 |------|----------|
 | `dense_strict.py` | Best quality on star-rich fields with good conditions |
 | `dense_relaxed.py` | Fallback for star-rich fields with poor WCS or seeing |
-| `sparse_strict.py` | Quality processing on star-poor fields |
 | `sparse_relaxed.py` | Last resort for the most challenging frames |
 
 ### Inheritance
 
 All four configs inherit from `best_calib_t071.py`, which was derived from Optuna hyperparameter tuning (trial 71). The base config provides measurement plugin setup, aperture radii, and reasonable default values. Each tuned config then overrides specific parameters for its target regime.
 
-### Fallback Chains
+### Fallback Chain
 
 The configs are designed for sequential fallback — if one fails, the next is tried:
 
 ```
-Dense fields:   dense_strict → dense_relaxed → sparse_strict → sparse_relaxed
-Sparse fields:  sparse_strict → sparse_relaxed → dense_relaxed (last resort)
+dense_strict → dense_relaxed → sparse_relaxed
 ```
 
 Configure fallbacks in your pipeline YAML:
@@ -41,7 +42,6 @@ configs:
     calibrate_image: calibrateImage/tuned_configs/dense_strict.py
     calibrate_image_fallbacks:
       - calibrateImage/tuned_configs/dense_relaxed.py
-      - calibrateImage/tuned_configs/sparse_strict.py
       - calibrateImage/tuned_configs/sparse_relaxed.py
 ```
 
@@ -66,6 +66,8 @@ These configs are specifically tuned for the Nickel Direct Imaging Camera:
 ---
 
 ## Parameter Reference
+
+> **Note:** The tables below retain `sparse_strict` values for reference. This config has been removed from the active fallback chain — its parameter regime is covered by `dense_relaxed` and `sparse_relaxed`.
 
 ### PSF Detection (`config.psf_detection`)
 
@@ -197,7 +199,6 @@ A secondary aperture correction for the PSF-normalized calibration flux measurem
 | Config | S/N minimum |
 |--------|:-----------:|
 | dense_strict | 25.0 |
-| sparse_strict | 20.0 |
 | dense_relaxed | 18.0 |
 | sparse_relaxed | 12.0 |
 
@@ -211,9 +212,8 @@ A secondary aperture correction for the PSF-normalized calibration flux measurem
 |----------------|-------------------|
 | Low galactic latitude, good seeing | `dense_strict` |
 | Low galactic latitude, poor seeing or bad WCS | `dense_relaxed` |
-| High galactic latitude, moderate seeing | `sparse_strict` |
-| High galactic latitude, poor conditions | `sparse_relaxed` |
-| SN host with bright galaxy, few field stars | `sparse_strict` or `sparse_relaxed` |
+| High galactic latitude, any conditions | `sparse_relaxed` |
+| SN host with bright galaxy, few field stars | `sparse_relaxed` |
 | Crowded cluster field | `dense_strict` |
 | B/V band at high latitude | `sparse_relaxed` (fewer bright blue sources) |
 
@@ -224,9 +224,8 @@ As a rough guide based on the number of usable PSF candidates in the FOV:
 | Stars | Primary Config | Fallback |
 |-------|----------------|----------|
 | >30 | `dense_strict` | `dense_relaxed` |
-| 15-30 | `dense_relaxed` | `sparse_strict` |
-| 8-15 | `sparse_strict` | `sparse_relaxed` |
-| <8 | `sparse_relaxed` | — |
+| 15-30 | `dense_relaxed` | `sparse_relaxed` |
+| <15 | `sparse_relaxed` | — |
 
 ### Quality Expectations
 
@@ -234,7 +233,6 @@ As a rough guide based on the number of usable PSF candidates in the FOV:
 |--------|:---:|:---:|:---:|
 | dense_strict | <0.3" | <0.05 mag | Moderate — fails on poor data |
 | dense_relaxed | <0.5" | <0.10 mag | High |
-| sparse_strict | <0.5" | <0.10 mag | Moderate |
 | sparse_relaxed | <1.5" | <0.15 mag | Very high — rarely fails |
 
 Results from `sparse_relaxed` should be flagged for manual review due to degraded quality.

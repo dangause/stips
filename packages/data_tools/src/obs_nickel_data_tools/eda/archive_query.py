@@ -29,8 +29,6 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
-import pandas as pd
-
 try:
     from zoneinfo import ZoneInfo
 except ImportError:
@@ -283,16 +281,6 @@ def cmd_nights(args) -> int:
     return 0
 
 
-def _cmd_targets_not_implemented(args) -> int:
-    """Target catalog requires FITS header metadata not available in archive index."""
-    formatters.print_error(
-        "Target and filter analysis requires FITS header inspection.\\n"
-        "The archive index only provides filenames.\\n"
-        "Download files with 'obsn-archive-fetch-night' and analyze locally."
-    )
-    return 1
-
-
 def cmd_targets(args) -> int:
     """Show target/object catalog - not available via archive index."""
     formatters.print_error(
@@ -311,99 +299,6 @@ def cmd_plot_filters(args) -> int:
         "Download files with 'obsn-archive-fetch-night' and analyze FITS headers locally."
     )
     return 1
-
-
-def _cmd_plot_filters_original(args) -> int:
-    """Original implementation - kept for reference."""
-    _ensure_client_module(args.client_path)
-    LickArchiveClient, QueryTerm = _import_client()
-
-    start_dt, end_dt = _daterange_for_query(args.start, args.end, args.timezone)
-
-    client = LickArchiveClient(
-        args.archive_url,
-        rate_limit_delay=0.5,
-        retry_max_time=300,
-        retry_max_delay=60,
-    )
-
-    term = QueryTerm(field="obs_date", value=[start_dt, end_dt])
-    filters = {"instrument": args.instrument} if args.instrument else {}
-
-    results = _fetch_all_results(client, term, filters, args.page_size)
-
-    if not results:
-        formatters.print_warning("No results found")
-        return 1
-
-    # Extract data for plotting
-    df_data = []
-    for r in results:
-        night = _extract_night_from_filename(r.get("filename", ""))
-        if not night or not r.get("filter"):
-            continue
-
-        df_data.append(
-            {
-                "night": night,
-                "filter": r["filter"],
-            }
-        )
-
-    if not df_data:
-        formatters.print_warning("No filter data found for plotting")
-        return 1
-
-    df = pd.DataFrame(df_data)
-
-    # Create visualization
-    import matplotlib.pyplot as plt
-
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
-
-    # Plot 1: Filter distribution pie chart
-    filter_counts = df["filter"].value_counts()
-    ax1.pie(
-        filter_counts.values,
-        labels=filter_counts.index,
-        autopct="%1.1f%%",
-        startangle=90,
-    )
-    ax1.set_title("Filter Distribution")
-
-    # Plot 2: Filter usage over time
-    nights_sorted = sorted(df["night"].unique())
-    filter_by_night = df.groupby(["night", "filter"]).size().unstack(fill_value=0)
-
-    filter_by_night = filter_by_night.reindex(nights_sorted, fill_value=0)
-
-    # Stacked bar chart
-    filter_by_night.plot(kind="bar", stacked=True, ax=ax2)
-    ax2.set_title("Filter Usage Over Time")
-    ax2.set_xlabel("Observing Night")
-    ax2.set_ylabel("Number of Exposures")
-    ax2.legend(title="Filter", bbox_to_anchor=(1.05, 1), loc="upper left")
-
-    # Rotate x-axis labels for readability
-    ax2.tick_params(axis="x", rotation=45)
-
-    # Only show every Nth label if there are many nights
-    if len(nights_sorted) > 20:
-        step = len(nights_sorted) // 20
-        ax2.set_xticks(range(0, len(nights_sorted), step))
-        ax2.set_xticklabels(
-            [nights_sorted[i] for i in range(0, len(nights_sorted), step)]
-        )
-
-    plt.tight_layout()
-
-    if args.output:
-        plt.savefig(args.output, dpi=150, bbox_inches="tight")
-        formatters.print_info("Plot saved to", args.output)
-    else:
-        plt.show()
-
-    return 0
 
 
 def main() -> int:

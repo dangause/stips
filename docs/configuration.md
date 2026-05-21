@@ -103,8 +103,8 @@ env:
 # Target Information
 # =============================================================================
 object: "2023ixf"      # Object name for filtering (partial match, case-insensitive)
-ra: 210.910833         # J2000 Right Ascension in degrees
-dec: 54.316389         # J2000 Declination in degrees
+ra: 210.910750         # J2000 Right Ascension in degrees
+dec: 54.311694         # J2000 Declination in degrees
 bands: ["r", "i"]      # Bands to process: b, v, r, i
 
 # =============================================================================
@@ -209,8 +209,8 @@ J2000 coordinates in decimal degrees. These are used for:
 - **Coordinate validation** during science processing: exposures with `tracking_ra`/`tracking_dec` more than 5° from these coordinates are automatically excluded before qgraph construction (see [Stale DEC Headers](#stale-dec-headers))
 
 ```yaml
-ra: 210.910833    # RA = 14h 03m 38.6s
-dec: 54.316389    # Dec = +54° 18' 59"
+ra: 210.910750    # RA = 14h 03m 38.58s
+dec: 54.311694    # Dec = +54° 18' 42.1"
 ```
 
 #### `bands` Field
