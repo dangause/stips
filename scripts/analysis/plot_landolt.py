@@ -48,7 +48,7 @@ def plot_residuals(rows, out_path: Path) -> None:
     stds = [np.std(by_band[b], ddof=1) if len(by_band[b]) > 1 else 0 for b in BANDS]
     counts = [len(by_band[b]) for b in BANDS]
 
-    bars = ax.bar(
+    ax.bar(
         xs,
         means,
         yerr=stds,
@@ -87,7 +87,7 @@ def plot_residuals(rows, out_path: Path) -> None:
     ax.set_ylabel("Pipeline − Landolt residual (mag)")
     ax.set_title(
         "Landolt photometric validation — per-band residuals\n"
-        f"4 nights × 10 stars (B-V −0.19 to +1.74), 1 V-band outlier excluded"
+        "4 nights × 10 stars (B-V −0.19 to +1.74), 1 V-band outlier excluded"
     )
     ax.grid(True, alpha=0.3, axis="y")
     fig.tight_layout()

@@ -15,7 +15,6 @@ from pathlib import Path
 
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
-import numpy as np
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CSV_PATH = REPO_ROOT / "analysis" / "calib_metrics" / "combined.csv"
