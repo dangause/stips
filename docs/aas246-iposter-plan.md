@@ -146,6 +146,17 @@ TODO
 ## Panel 7
 
 TODO (GitHub URL + install + contact)
+
+## Credits / attributions
+
+Logos and any free-use images sourced for the poster:
+
+- NRAO logo — source URL + license
+- Lick Observatory logo — source URL + license
+- LSST / Rubin logo — source URL + license
+- CTIO 0.9m photo — source URL + license + photographer attribution
+- Docker logo — source URL + license
+- Slurm logo — source URL + license
 ```
 
 - [ ] **Step 3:** Create empty `.gitkeep` files:
@@ -868,16 +879,21 @@ Use these specific number callouts (already verified in the spec):
 
 - [ ] **Step 2:** Read the copy back end-to-end. Each panel should be tight (no filler) and readable in 30 seconds.
 
-- [ ] **Step 3:** Word-count check.
+- [ ] **Step 3:** Word-count check (counts words between each panel heading and the next).
 
 ```bash
-for panel in 1 2 3 4 5 6; do
-  echo "Panel $panel:"
-  awk "/^## Panel $panel/,/^## Panel /" posters/aas246/copy.md | grep -v "^##" | wc -w
-done
+.venv/bin/python -c "
+import re, pathlib
+text = pathlib.Path('posters/aas246/copy.md').read_text()
+parts = re.split(r'(?m)^## Panel (\d+)', text)
+# parts = ['', '1', body1, '2', body2, ...]
+for n, body in zip(parts[1::2], parts[2::2]):
+    words = len(re.findall(r'\b\w+\b', body))
+    print(f'Panel {n}: {words} words')
+"
 ```
 
-Expected: counts within ±10 of budgets.
+Expected: counts within ±10 of budgets in spec §7.
 
 - [ ] **Step 4:** Commit.
 
