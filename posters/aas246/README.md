@@ -12,7 +12,7 @@
 | Panel 2 | panel2_architecture.png | `scripts/make_architecture_diagram.py` |
 | Panel 3 | analysis/landolt_residuals.png + landolt_color_terms.png (popup) | (existing in `analysis/`) |
 | Panel 4 | analysis/sn_vs_ztf_comparison.png | (existing in `analysis/`) |
-| Panel 5 | logos/ctio.png + logos/docker.png + logos/slurm.png | `assets/logos/` |
+| Panel 5 | logos/ctio.png + logos/docker.png + styled-text "Slurm" | `assets/logos/` |
 | Panel 6 | panel6_{transients,exoplanets,variables,extended_objects}.png | `scripts/make_workflow_thumbnails.py` |
 | Panel 7 | panel7_qr.png | `scripts/make_qr_code.py` |
 
