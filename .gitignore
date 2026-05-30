@@ -91,3 +91,6 @@ docs/superpowers/
 # Poster/paper analysis outputs (override generic *.png/*.csv ignore)
 !analysis/**/*.png
 !analysis/**/*.csv
+
+# Poster assets (logos, figures) — override generic *.png ignore
+!posters/**/assets/**/*.png
