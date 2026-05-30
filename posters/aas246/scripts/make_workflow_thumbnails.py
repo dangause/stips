@@ -33,6 +33,8 @@ LC_PATHS = {
 
 BAND_COLOR = {"r": "#d62728", "i": "#8c564b", "b": "#1f77b4", "v": "#2ca02c"}
 
+P_CY_AQR_DAYS = 0.061038  # known fundamental period
+
 
 def load_csv(path: Path) -> list[dict] | None:
     if not path.exists():
@@ -96,9 +98,41 @@ def thumb_exoplanets(out: Path) -> None:
     print(f"wrote {out}")
 
 
+def thumb_variables(out: Path) -> None:
+    rows = load_csv(LC_PATHS["variables"])
+    if not rows:
+        return
+    pts = [r for r in rows if r.get("band", "").lower() == "v"
+           and r.get("mag") and r["mag"].lower() != "nan"
+           and float(r.get("snr") or 0) >= 5]
+    if not pts:
+        print(f"[warn] no usable rows for variables thumbnail")
+        return
+    mjd = np.array([float(r["mjd"]) for r in pts])
+    mag = np.array([float(r["mag"]) for r in pts])
+    phase = ((mjd - mjd.min()) % P_CY_AQR_DAYS) / P_CY_AQR_DAYS
+
+    fig, ax = plt.subplots(figsize=(5, 5))
+    # Plot two periods for clarity
+    ax.scatter(phase, mag, s=8, color="#2ca02c", alpha=0.6)
+    ax.scatter(phase + 1, mag, s=8, color="#2ca02c", alpha=0.6)
+    ax.invert_yaxis()
+    ax.set_xlabel("Phase (P = 0.061 d)")
+    ax.set_ylabel("V (AB mag)")
+    ax.set_title("Variable stars\nCY Aqr period folded",
+                 fontsize=12, fontweight="bold")
+    ax.set_xlim(0, 2)
+    ax.grid(True, alpha=0.3)
+    fig.tight_layout()
+    fig.savefig(out, dpi=200)
+    plt.close(fig)
+    print(f"wrote {out}")
+
+
 def main() -> None:
     thumb_transients(OUT_DIR / "panel6_transients.png")
     thumb_exoplanets(OUT_DIR / "panel6_exoplanets.png")
+    thumb_variables(OUT_DIR / "panel6_variables.png")
 
 
 if __name__ == "__main__":
