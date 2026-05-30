@@ -67,8 +67,38 @@ def thumb_transients(out: Path) -> None:
     print(f"wrote {out}")
 
 
+def thumb_exoplanets(out: Path) -> None:
+    rows = load_csv(LC_PATHS["exoplanets"])
+    if not rows:
+        return
+    # Filter to B band (HD 189733 was observed in B)
+    pts = [r for r in rows if r.get("band", "").lower() == "b"
+           and r.get("flux") and r["flux"].lower() != "nan"]
+    if not pts:
+        print(f"[warn] no usable rows for exoplanets thumbnail")
+        return
+    fig, ax = plt.subplots(figsize=(5, 5))
+    mjd = np.array([float(r["mjd"]) for r in pts])
+    # Center on the transit (use median MJD as t0 approximation)
+    t0 = np.median(mjd)
+    t_hours = (mjd - t0) * 24.0
+    y = np.array([float(r["flux"]) for r in pts])
+    y = y / np.median(y)  # normalize to median
+    ax.scatter(t_hours, y, s=8, color="#1f77b4", alpha=0.6)
+    ax.set_xlabel("Time from transit center (hours)")
+    ax.set_ylabel("Relative flux")
+    ax.set_title("Exoplanets\nHD 189733 b transit (differential phot)",
+                 fontsize=12, fontweight="bold")
+    ax.grid(True, alpha=0.3)
+    fig.tight_layout()
+    fig.savefig(out, dpi=200)
+    plt.close(fig)
+    print(f"wrote {out}")
+
+
 def main() -> None:
     thumb_transients(OUT_DIR / "panel6_transients.png")
+    thumb_exoplanets(OUT_DIR / "panel6_exoplanets.png")
 
 
 if __name__ == "__main__":
