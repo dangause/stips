@@ -38,60 +38,85 @@ def filter_outliers(rows):
 
 
 def plot_residuals(rows, out_path: Path) -> None:
-    by_band = {b: [] for b in BANDS}
-    for r in rows:
-        by_band[r["band"]].append(float(r["residual"]))
+    """Two-panel figure: per-band mean bar chart + individual measurements scatter.
 
-    fig, ax = plt.subplots(figsize=(7, 4.5))
-    xs = np.arange(len(BANDS))
-    means = [np.mean(by_band[b]) if by_band[b] else 0 for b in BANDS]
-    stds = [np.std(by_band[b], ddof=1) if len(by_band[b]) > 1 else 0 for b in BANDS]
-    counts = [len(by_band[b]) for b in BANDS]
+    Matches the style of cell 15 in analysis/calibration_assessment.ipynb.
+    Shows bar means with stat labels (left) and the individual residuals for
+    every measurement colored by band (right), so the per-band spread is
+    visible alongside the summary.
+    """
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
 
-    ax.bar(
-        xs,
+    # Left: per-band mean bar chart
+    ax = axes[0]
+    means, stds, ns = [], [], []
+    for band in BANDS:
+        brows = [r for r in rows if r["band"] == band]
+        resids = [float(r["residual"]) for r in brows]
+        means.append(float(np.mean(resids)) if resids else 0.0)
+        stds.append(float(np.std(resids, ddof=1)) if len(resids) > 1 else 0.0)
+        ns.append(len(resids))
+
+    bars = ax.bar(
+        [BAND_LABELS[b] for b in BANDS],
         means,
         yerr=stds,
+        capsize=5,
         color=[BAND_COLORS[b] for b in BANDS],
-        edgecolor="black",
-        capsize=6,
         alpha=0.85,
+        edgecolor="black",
     )
+    ax.axhline(0, color="black", lw=1)
+    ax.set_ylabel("Residual (pipeline − Landolt) [mag]")
+    ax.set_xlabel("Band")
+    ax.set_title("Per-Band Photometric Offset")
 
-    ax.axhline(0.0, color="black", linewidth=0.6, linestyle="--", alpha=0.5)
-
-    # Pad y-limits to leave room for annotations above/below the error bars
-    upper = max((m + s for m, s in zip(means, stds)), default=0)
-    lower = min((m - s for m, s in zip(means, stds)), default=0)
-    span = upper - lower if upper != lower else 1.0
-    ax.set_ylim(lower - 0.3 * span, upper + 0.25 * span)
-
-    for x, m, s, n in zip(xs, means, stds, counts):
-        if m >= 0:
-            label_y = m + s + 0.04 * span
-            va = "bottom"
-        else:
-            label_y = m - s - 0.04 * span
-            va = "top"
-        ax.annotate(
-            f"N={n}\n{m:+.3f}±{s:.3f}",
-            (x, label_y),
+    # Annotate bars with the mean residual just outside the error bar
+    for bar, m, s in zip(bars, means, stds):
+        y = m + (s + 0.04) * (1 if m >= 0 else -1)
+        va = "bottom" if m >= 0 else "top"
+        ax.text(
+            bar.get_x() + bar.get_width() / 2,
+            y,
+            f"{m:+.3f}",
             ha="center",
             va=va,
-            fontsize=9,
+            fontsize=11,
+            fontweight="bold",
         )
 
-    ax.set_xticks(xs)
+    # Right: individual measurements as a per-band scatter (jittered)
+    ax = axes[1]
+    rng = np.random.default_rng(seed=42)
+    for band in BANDS:
+        brows = [r for r in rows if r["band"] == band]
+        resids = [float(r["residual"]) for r in brows]
+        x = BANDS.index(band) + rng.uniform(-0.15, 0.15, size=len(resids))
+        ax.scatter(
+            x,
+            resids,
+            color=BAND_COLORS[band],
+            s=55,
+            alpha=0.8,
+            edgecolor="black",
+            lw=0.5,
+            label=f"{BAND_LABELS[band]} (N={len(resids)})",
+        )
+    ax.set_xticks(range(len(BANDS)))
     ax.set_xticklabels([BAND_LABELS[b] for b in BANDS])
+    ax.axhline(0, color="black", lw=1)
+    ax.set_ylabel("Residual (mag)")
     ax.set_xlabel("Band")
-    ax.set_ylabel("Pipeline − Landolt residual (mag)")
-    ax.set_title(
-        "Landolt photometric validation — per-band residuals\n"
-        "4 nights × 10 stars (B-V −0.19 to +1.74), 1 V-band outlier excluded"
+    ax.set_title("Individual Measurements")
+    ax.legend(fontsize=10, loc="best", framealpha=0.85)
+
+    fig.suptitle(
+        "Landolt Photometric Validation: Pipeline vs. Published Magnitudes",
+        fontsize=13,
+        fontweight="bold",
     )
-    ax.grid(True, alpha=0.3, axis="y")
     fig.tight_layout()
-    fig.savefig(out_path, dpi=150)
+    fig.savefig(out_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
     print(f"wrote {out_path}")
 
@@ -106,62 +131,76 @@ def linfit(xs: np.ndarray, ys: np.ndarray) -> tuple[float, float, float]:
 
 
 def plot_color_terms(rows, out_path: Path) -> None:
-    fig, axes = plt.subplots(2, 2, figsize=(11, 7), sharex=True)
-    axes = axes.flatten()
+    """4-panel residual vs B-V with per-band linear fit and star labels.
 
+    Matches the style of cell 17 in analysis/calibration_assessment.ipynb.
+    Adds a short star label next to each point (e.g. "1530+057") so the
+    reader can see which specific Landolt standard drives each fit's outliers.
+    """
+    fig, axes = plt.subplots(2, 2, figsize=(12, 8), sharex=True)
     bv_range = np.linspace(-0.3, 1.85, 100)
 
-    for ax, band in zip(axes, BANDS):
-        xs = np.array(
-            [float(r["color_BV"]) for r in rows if r["band"] == band], float
-        )
-        ys = np.array(
-            [float(r["residual"]) for r in rows if r["band"] == band], float
-        )
+    for idx, band in enumerate(BANDS):
+        ax = axes[idx // 2][idx % 2]
+        brows = [r for r in rows if r["band"] == band]
+        bv = np.array([float(r["color_BV"]) for r in brows], float)
+        resids = np.array([float(r["residual"]) for r in brows], float)
 
-        ax.axhline(0.0, color="black", linewidth=0.5, linestyle="--", alpha=0.5)
+        ax.axhline(0, color="black", linestyle="--", alpha=0.5, lw=0.5)
         ax.scatter(
-            xs,
-            ys,
+            bv,
+            resids,
             color=BAND_COLORS[band],
+            s=55,
             edgecolor="black",
-            s=45,
-            alpha=0.8,
+            lw=0.5,
+            alpha=0.85,
             zorder=3,
         )
 
-        slope, intercept, fit_rms = linfit(xs, ys)
-        ax.plot(
-            bv_range,
-            slope * bv_range + intercept,
-            color="black",
-            linewidth=1.5,
-            linestyle="-",
-            alpha=0.7,
-        )
+        if len(bv) >= 2:
+            slope, intercept, fit_rms = linfit(bv, resids)
+            ax.plot(
+                bv_range,
+                slope * bv_range + intercept,
+                color=BAND_COLORS[band],
+                lw=1.5,
+                linestyle="--",
+                alpha=0.7,
+                label=f"slope = {slope:+.3f} mag/mag",
+            )
+            ax.legend(fontsize=10, loc="best")
 
-        ax.set_title(
-            f"{BAND_LABELS[band]} band  "
-            f"(N={len(xs)},  slope={slope:+.3f},  intercept={intercept:+.3f},  "
-            f"fit RMS={fit_rms:.3f})",
-            fontsize=10,
-        )
+        # Annotate every point with a short star label
+        for r in brows:
+            star_short = r["star"].split()[-1]  # "PG 1530+057" -> "1530+057"
+            ax.annotate(
+                star_short,
+                (float(r["color_BV"]), float(r["residual"])),
+                fontsize=7,
+                alpha=0.7,
+                xytext=(5, 5),
+                textcoords="offset points",
+            )
+
         ax.set_ylabel("Residual (mag)")
+        ax.set_title(f"{BAND_LABELS[band]} band", fontsize=11, fontweight="bold")
         ax.grid(True, alpha=0.3)
 
         if band in ("b", "v"):
-            yspan = max(0.5, abs(ys).max() * 1.2)
+            yspan = max(0.5, float(np.abs(resids).max()) * 1.2)
             ax.set_ylim(-yspan, yspan)
 
-    axes[2].set_xlabel("Landolt B − V color (mag)")
-    axes[3].set_xlabel("Landolt B − V color (mag)")
+    axes[1][0].set_xlabel("B−V (Landolt)")
+    axes[1][1].set_xlabel("B−V (Landolt)")
+
     fig.suptitle(
-        "Nickel-to-Landolt color terms — pipeline residual vs B−V\n"
-        "Linear fit per band across full Landolt color range",
-        fontsize=12,
+        "Residual vs. B−V Color: Nickel-to-Landolt Color Terms",
+        fontsize=13,
+        fontweight="bold",
     )
-    fig.tight_layout(rect=(0, 0, 1, 0.96))
-    fig.savefig(out_path, dpi=150)
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
     print(f"wrote {out_path}")
 
