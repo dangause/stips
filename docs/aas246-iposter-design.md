@@ -72,7 +72,7 @@ Panel 6 spans columns 2-3 of the bottom row (merged into one wide panel). Total 
 ### Panel 3 — Landolt Validation
 - **Headline:** "R and I bands calibrated to <0.1 mag against Landolt standards"
 - **Body:** ~70 words. Method (cross-match `single_visit_star` against Landolt catalog, 76 measurements across 10 stars, B-V −0.19 to +1.74). Headline numbers: R: −0.005 ± 0.062 mag; I: −0.038 ± 0.062 mag; B/V color terms +0.080 and +0.099 mag/(B-V).
-- **Visual:** `analysis/landolt_residuals.png` as the primary; `landolt_color_terms.png` as a zoom-in popup if iPosterSessions supports interactive expansions.
+- **Visual:** `analysis/landolt_residuals.png` as the primary figure inside the cell. `landolt_color_terms.png` goes in a click-to-expand popup if the AAS 246 iPoster tier supports it; otherwise it is **dropped from the canvas** and the per-band color-term slopes are quoted numerically in the body text (already in the headline numbers above). Do not stack both plots inside one cell — too cramped at 28 pt.
 - **Existing assets:** Both PNGs in `analysis/`.
 
 ### Panel 4 — SN Cross-Validation
@@ -84,7 +84,7 @@ Panel 6 spans columns 2-3 of the bottom row (merged into one wide panel). Total 
 ### Panel 5 — Portability (multi-instrument + multi-platform)
 - **Headline:** "Portable across telescopes and compute environments"
 - **Body:** Two stacked sub-sections, ~40 words each.
-  - **Multi-instrument:** CTIO 0.9m added in 1 week via the InstrumentPlugin system (Phase 1 + 2 complete, see PR #9). Single ISR validation passed.
+  - **Multi-instrument:** Same architecture has been extended to CTIO 0.9m via the InstrumentPlugin system (Phase 1 + 2 implementation complete on `feature/obs-smalltel-phase1`; full DRP integration in progress). Single ISR validation passed. *Wording deliberately hedged so it stays accurate whether or not PR #9 lands before upload.*
   - **Multi-platform:** Same code runs locally, in Docker, or via BPS on a Slurm cluster. Validated end-to-end on a 22-night concurrent test (memory note: "Docker Slurm Test Cluster (VALIDATED 2026-02-27)").
 - **Visual:** Two small images stacked: CTIO 0.9m thumbnail (icon or NOIRLab CTIO photo if available under free use) + Docker/Slurm icon-stack.
 - **Existing assets:** None; will source CTIO icon and Docker/Slurm logos (free-use).
@@ -110,7 +110,7 @@ The package will be re-branded from `nickel_processing_suite` to **STIPS** for p
 
 - **GitHub-side rename only:** rename the `nickel_processing_suite` repo to `stips` via GitHub's Settings → repository name UI. Preserves all commits, branches, tags, PRs, issues, stars. GitHub auto-redirects old clone URLs for ~1 year.
 - **Local directory + internal references stay as `nickel_processing_suite`** for this sprint. A future cleanup (out of scope for poster work) can rename the local checkout, `obs-nickel-data-tools` package metadata, env var names, etc.
-- **CTA URL on the poster:** `github.com/<owner>/stips` (replace `<owner>` with `danpgause` or the org if moved).
+- **CTA URL on the poster (decided):** `github.com/danpgause/stips`. This is the URL encoded in the Panel 7 QR code; if the repo later moves to an org, GitHub's redirect handles old QR scans for ~1 year.
 
 ## 9. Assets — existing and to-be-created
 
