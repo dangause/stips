@@ -4,21 +4,36 @@ Final text for each panel. Word budgets per spec §7.
 
 ## Panel 1 (~60-80 words)
 
+- **Title:** Why STIPS
+- **Headline:** 1-meter telescopes hold decades of archives but lack actively maintained reduction pipelines.
+
 One-meter class telescopes have accumulated decades of archival imaging and remain the most accessible workhorses for amateurs and professionals alike. What they lack is an actively maintained, modern reduction pipeline that keeps pace with survey-grade software. STIPS — the Small Telescope Imaging Pipeline System — closes that gap by wrapping the LSST Science Pipelines for the 1-m class, bringing calibration, difference imaging, forced photometry, and lightcurve extraction to small-telescope data.
 
 ## Panel 2 (~40 words caption)
+
+- **Title:** Architecture
+- **Headline:** STIPS = LSST Science Pipelines + a thin small-telescope abstraction layer
 
 STIPS provides a thin small-telescope abstraction layer over the LSST Science Pipelines: instrument plugins handle telescope-specific concerns, while a YAML+CLI front-end drives end-to-end processing — calibration, difference imaging, forced photometry, and lightcurves — from raw frames to science-ready products.
 
 ## Panel 3 (~70 words)
 
+- **Title:** Landolt Validation
+- **Headline:** R and I bands calibrated to <0.1 mag against Landolt standards
+
 Validated against Landolt with 76 measurements across 10 standards spanning the full Landolt color range (B−V from −0.19 to +1.74). R-band residual: −0.005 ± 0.062 mag. I-band residual: −0.038 ± 0.062 mag. B-band color-term slope: +0.080 mag/(B−V). V-band color-term slope: +0.099 mag/(B−V). Method: cross-match `single_visit_star` against Landolt; apply `initial_photoCalib_detector`; convert AB→Vega per Blanton & Roweis 2007.
 
 ## Panel 4 (~60 words)
 
+- **Title:** SN Cross-Validation
+- **Headline:** Reproduces published lightcurves: SN 2023ixf and SN 2020wnt vs ZTF
+
 STIPS was cross-validated against public ZTF (ALeRCE) photometry on two well-observed transients. SN 2023ixf: 141 Nickel R/I points spanning days 1.4–75.5 post-explosion. SN 2020wnt: 65 Nickel R/I points covering peak through late decline. Both campaigns agree with ZTF at the sub-tenth-magnitude level near peak, and the Nickel coverage extends past ZTF's late-time baseline for SN 2023ixf.
 
 ## Panel 5 — two subsections (~40 words each)
+
+- **Title:** Portability
+- **Headline:** Portable across telescopes and compute environments
 
 ### Multi-instrument
 
@@ -29,6 +44,9 @@ The same architecture has been extended to CTIO 0.9m via the `InstrumentPlugin` 
 The same STIPS code runs locally, in Docker, or on Slurm clusters via BPS/Parsl. End-to-end validated on a 22-night concurrent test through the Docker+Slurm cluster — identical inputs, identical outputs, no per-platform code paths.
 
 ## Panel 6 — four subtiles (~25 words each)
+
+- **Title:** Science Workflows
+- **Headline:** End-to-end workflows for diverse science cases
 
 ### Transients
 
@@ -47,6 +65,9 @@ CY Aqr V-band period detected from a single night of 47 measurements; phase-fold
 Narrowband (Hα, [O III]) and Sloan (g', r') workflows supported for galaxies, H II regions, and planetary nebulae.
 
 ## Panel 7
+
+- **Title:** Try STIPS
+- **Headline:** Open-source. End-to-end. Available now.
 
 - GitHub: `github.com/danpgause/stips`
 - Install: `uv pip install -e packages/data_tools`
