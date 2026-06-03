@@ -82,15 +82,24 @@ packages/refcats/upstream/
 # Project docs (auto-generated)
 CLAUDE.md
 
+# Claude Code / superpowers session state
+.claude/
+.superpowers/
+
 # Superpowers skill workflow artifacts (plans/specs from /brainstorm + /write-plan)
 docs/superpowers/
 
 # Git worktrees
 .worktrees/
 
-# Poster/paper analysis outputs (override generic *.png/*.csv ignore)
-!analysis/**/*.png
-!analysis/**/*.csv
+# Local analysis outputs (CSVs, PNGs, scratch scripts; kept out of main)
+analysis/
 
-# Poster assets (logos, figures) — override generic *.png ignore
-!posters/**/assets/**/*.png
+# Poster work (kept locally only, not in main)
+posters/
+
+# Internal design / planning docs (not user-facing)
+docs/diagrams/
+docs/plans/
+docs/aas246-iposter-*.md
+docs/logging-improvements.md
