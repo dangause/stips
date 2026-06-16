@@ -205,21 +205,21 @@ class TestPhaseFolding:
 class TestOutputGeneration:
     def _make_result(
         self, tmp_path: Path, sample_lightcurve_csv
-    ) -> period_mod.PeriodResult:
+    ) -> tuple[period_mod.PeriodResult, "pd.DataFrame"]:
         csv_path, true_period = sample_lightcurve_csv
         df = period_mod._read_lightcurve(csv_path)
         result = period_mod._run_lomb_scargle(
             df, period_min=0.5, period_max=50.0, n_samples=5_000
         )
         result.phase_folded = period_mod._phase_fold(df, result.best_period)
-        return result
+        return result, df
 
     def test_save_results_creates_json(self, tmp_path: Path, sample_lightcurve_csv):
         import json as json_mod
 
-        result = self._make_result(tmp_path, sample_lightcurve_csv)
+        result, df = self._make_result(tmp_path, sample_lightcurve_csv)
         out_dir = tmp_path / "out"
-        period_mod._save_results(result, out_dir)
+        period_mod._save_results(result, out_dir, df)
         json_path = out_dir / "period_results.json"
         assert json_path.exists(), "period_results.json not created"
         data = json_mod.loads(json_path.read_text())
@@ -229,17 +229,17 @@ class TestOutputGeneration:
     def test_save_results_creates_periodogram_plot(
         self, tmp_path: Path, sample_lightcurve_csv
     ):
-        result = self._make_result(tmp_path, sample_lightcurve_csv)
+        result, df = self._make_result(tmp_path, sample_lightcurve_csv)
         out_dir = tmp_path / "out2"
-        period_mod._save_results(result, out_dir)
+        period_mod._save_results(result, out_dir, df)
         assert (out_dir / "periodogram.png").exists()
 
     def test_save_results_creates_phase_folded_plot(
         self, tmp_path: Path, sample_lightcurve_csv
     ):
-        result = self._make_result(tmp_path, sample_lightcurve_csv)
+        result, df = self._make_result(tmp_path, sample_lightcurve_csv)
         out_dir = tmp_path / "out3"
-        period_mod._save_results(result, out_dir)
+        period_mod._save_results(result, out_dir, df)
         assert (out_dir / "phase_folded.png").exists()
 
 

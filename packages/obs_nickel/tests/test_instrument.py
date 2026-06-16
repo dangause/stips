@@ -62,12 +62,16 @@ class TestNickelExtras(unittest.TestCase):
         self.assertIs(self.inst.getDefineVisitsTask(), DefineVisitsTask)
 
     def test_filters_registered(self):
-        # Basic sanity: four physical filters plus clear with expected bands
+        # Broadband BVRI + clear, plus Sloan-like (gp/rp) and narrowband
+        # (Halpha/OIII) filters used for extended-object workflows.
         pfs = {fd.physical_filter for fd in NICKEL_FILTER_DEFINITIONS}
-        self.assertEqual(pfs, {"B", "V", "R", "I", "clear"})
+        self.assertEqual(
+            pfs,
+            {"B", "V", "R", "I", "clear", "gp", "rp", "Halpha", "OIII"},
+        )
 
         bands = {fd.band for fd in NICKEL_FILTER_DEFINITIONS if fd.band is not None}
-        self.assertEqual(bands, {"b", "v", "r", "i"})
+        self.assertEqual(bands, {"b", "v", "r", "i", "gp", "rp", "halpha", "oiii"})
 
         # Ensure there are no duplicate physical_filter entries
         self.assertEqual(len(pfs), len(list(NICKEL_FILTER_DEFINITIONS)))
