@@ -98,7 +98,11 @@ def compute_htm7_from_cones(cones_path: str, depth: int = 7) -> list[int]:
     with open(cones_path) as f:
         reader = csv.DictReader(row for row in f if not row.startswith("#"))
         for r in reader:
-            ra, dec, rad = float(r["ra_deg"]), float(r["dec_deg"]), float(r["radius_deg"])
+            ra, dec, rad = (
+                float(r["ra_deg"]),
+                float(r["dec_deg"]),
+                float(r["radius_deg"]),
+            )
             center = SpherePoint(ra * degrees, dec * degrees)
             shards, _ = htm.getShardIds(center, rad * degrees)
             ids.update(int(t) for t in shards)
@@ -124,7 +128,9 @@ def main():
         skip = set(read_htm7_ids_from_file(args.skip_existing))
         before = len(all_ids)
         all_ids = [i for i in all_ids if i not in skip]
-        print(f"Skipping {before - len(all_ids)} existing shards, {len(all_ids)} to dump")
+        print(
+            f"Skipping {before - len(all_ids)} existing shards, {len(all_ids)} to dump"
+        )
 
     if not all_ids:
         print("Nothing to dump — all shards already exist.")
