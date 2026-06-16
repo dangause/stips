@@ -1,111 +1,130 @@
-# Nickel Telescope Spline-Based Color Terms
+# colorterms
 
-Professional color term calculator for Nickel telescope (Lick Observatory) photometry transformation to the Monster catalog.
+Color-term fitting utilities for Nickel BVRI photometry against the Monster reference catalog (or other griz-based catalogs). Two complementary approaches are provided:
 
-## 📋 Quick Links
+- **Synthetic fitting** (`nickel_colorterm_fitter.py`): integrates stellar SED templates through Nickel and Monster filter passbands, then fits a cubic spline to the resulting color-color relation. Useful when no on-sky photometry is yet available and when the goal is a smooth, physically-motivated transformation.
+- **Empirical fitting** (`empirical_colorterm_fitter.py`): fits a color term directly from matched Nickel-vs-Monster catalogs read via the LSST Butler. Useful when on-sky measurements exist and capture instrumental effects the synthetic approach cannot.
 
-- **New user?** Start with [START_HERE.md](START_HERE.md)
-- **Ready to run?** Follow [QUICK_START.md](QUICK_START.md)
-- **Need details?** See [NICKEL_COLORTERMS_README.md](NICKEL_COLORTERMS_README.md)
-- **Want context?** Read [WHY_SPLINES_ARE_BETTER.md](WHY_SPLINES_ARE_BETTER.md)
-- **Big picture?** Check [SUMMARY.md](SUMMARY.md)
+The output is then converted to the LSST stack's `Colorterm` configuration format with `convert_to_lsst_colorterms.py` and dropped into `packages/obs_nickel/configs/colorterms.py`.
 
-## 🎯 What This Does
+## Layout
 
-Computes accurate, spline-based color transformations:
-- **From**: Nickel BVRI (Johnson/Bessell + Cousins)
-- **To**: Monster catalog grizy bands
-- **Method**: Synthetic photometry + cubic spline fitting
-- **Accuracy**: 2-4× better than linear color terms
+```
+colorterms/
+├── nickel_colorterm_fitter.py        Synthetic spline fitter
+├── empirical_colorterm_fitter.py     Empirical fitter from matched catalogs
+├── convert_to_lsst_colorterms.py     YAML spline → LSST Colorterm config
+├── example_run_nickel_colorterms.sh  Driver for the synthetic workflow
+└── pyproject.toml
+```
 
-## ⚡ Quick Start
+## Synthetic workflow
+
+Filter curves are pulled from the [SVO Filter Profile Service](http://svo2.cab.inta-csic.es/theory/fps/); stellar templates come from the FGCM library (SDSS + Kurucz, ~100 SEDs). For each template the script integrates the SED through the Nickel filter and the chosen Monster band, then fits a cubic spline through the resulting flux-ratio-vs-color points. Default is 4 spline nodes.
 
 ```bash
-# 1. Install dependencies
-pip install numpy scipy matplotlib astropy fitsio astroquery pyyaml scikit-learn fgcm
+python nickel_colorterm_fitter.py \
+    --monster-throughput-dir /path/to/the_monster/data/throughputs \
+    --output-dir ./nickel_colorterms_output \
+    --bands B V R I \
+    --n-nodes 4 \
+    --plots
+```
 
-# 2. Edit the example script (set your Monster throughput path)
-nano example_run_nickel_colorterms.sh
+Or, for convenience:
 
-# 3. Run it
+```bash
+# Edit MONSTER_THROUGHPUT_DIR at the top of the script, then:
 ./example_run_nickel_colorterms.sh
+```
 
-# 4. Check results
-open nickel_colorterms_output/*.png
+### Arguments
 
-# 5. Convert to LSST format
+| Flag | Default | Notes |
+|---|---|---|
+| `--monster-throughput-dir` | — (required) | Directory containing `total_*.dat` or `total_comcam_*.ecsv` for the Monster bands |
+| `--output-dir` | `./nickel_colorterms` | Output directory |
+| `--bands` | `B V R I` | Which Nickel bands to fit |
+| `--n-nodes` | `4` | Number of spline nodes. 3 for under-constrained ranges; 6+ for more flexibility (overfits past ~8) |
+| `--plots` | off | Emit per-band QA PNGs |
+| `--overwrite` | off | Replace existing output files |
+
+### Per-band color choice
+
+The color used as the spline x-axis is fixed per band:
+
+| Nickel band | Color |
+|---|---|
+| B | `monster_g − monster_r` |
+| V | `monster_g − monster_r` |
+| R | `monster_r − monster_i` |
+| I | `monster_r − monster_i` |
+
+## Empirical workflow
+
+For Nickel data already processed through the LSST pipeline, the empirical fitter reads matched source catalogs from a Butler repo and regresses the Nickel/Monster magnitude residual against color. This captures real instrumental effects (CCD response, atmosphere, vignetting) that synthetic fitting cannot.
+
+```bash
+python empirical_colorterm_fitter.py \
+    --butler-repo /path/to/repo \
+    --nickel-visit 12345 \
+    --nickel-band R \
+    --output-dir ./empirical_colorterms
+```
+
+## Conversion to LSST format
+
+Both fitters write per-band YAML files containing the spline nodes and values. To use them in the pipeline, convert to the `lsst.pipe.tasks.colorterms.Colorterm` configuration class:
+
+```bash
 python convert_to_lsst_colorterms.py \
     --input-dir nickel_colorterms_output \
     --output colorterms_monster.py
 ```
 
-## 📦 What's Included
+The output is a drop-in replacement for the `*monster*` block in `packages/obs_nickel/configs/colorterms.py`. The conversion approximates each spline with a low-order polynomial (`c0 + c1·color + c2·color²`), since the LSST stack's `Colorterm` class does not support arbitrary splines.
 
-### Scripts
-- `nickel_colorterm_fitter.py` - Main computation engine
-- `convert_to_lsst_colorterms.py` - Format converter
-- `example_run_nickel_colorterms.sh` - Ready-to-use example
+## Output files
 
-### Documentation
-- `START_HERE.md` - Absolute beginner guide
-- `QUICK_START.md` - Step-by-step instructions
-- `SUMMARY.md` - Complete package overview
-- `NICKEL_COLORTERMS_README.md` - Full technical docs
-- `WHY_SPLINES_ARE_BETTER.md` - Comparison and motivation
+Per-band, the synthetic fitter produces:
 
-## 🔬 Technical Details
+```
+nickel_<band>_to_monster_<color>_colorterm.yaml    Spline parameters
+nickel_<band>_to_monster_<color>_colorterm.png     QA plot (with --plots)
+nickel_<band>_to_monster_<color>_config.txt        Polynomial approximation
+```
 
-- **Stellar templates**: FGCM library (SDSS + Kurucz, ~100 SEDs)
-- **Filter curves**: SVO Filter Profile Service
-- **Fitting method**: Cubic splines with 4+ nodes
-- **Optimization**: Least-squares with soft L1 loss
-- **Output formats**: YAML (splines) + Python (LSST stack)
+Plus a `nickel_colorterms_summary.txt` listing all generated files.
 
-## 📊 Expected Improvements
+YAML structure:
 
-| Metric | Current (linear) | New (spline) |
-|--------|------------------|--------------|
-| RMS (all stars) | 0.08 mag | 0.02 mag |
-| Max residual | 0.25 mag | 0.05 mag |
-| Works for M-dwarfs? | ✗ | ✓ |
-| Works for hot WDs? | ✗ | ✓ |
+```yaml
+source_catalog: Monster
+target_catalog: Nickel
+primary_field: monster_ComCam_g_flux
+secondary_field: monster_ComCam_r_flux
+band_field: nickel_B_flux
+nodes: [-0.5, 0.0, 0.5, 1.0, 1.5, 2.0, 2.5]
+spline_values: [0.98, 1.01, 1.03, 1.05, 1.08, 1.12, 1.15]
+flux_offset: 0.000234
+```
 
-## 🛠️ Requirements
+The spline values are multiplicative flux-ratio corrections at each node position in color space.
 
-- Python 3.8+
-- numpy, scipy, matplotlib
-- astropy, fitsio, astroquery
-- pyyaml, scikit-learn
-- fgcm (for stellar templates)
-- Monster throughput files
+## Dependencies
 
-## 📝 Citation
+```
+numpy, scipy, matplotlib, astropy, fitsio, astroquery, pyyaml, scikit-learn
+fgcm                       (synthetic workflow: stellar templates)
+lsst.daf.butler            (empirical workflow: catalog access)
+```
 
-If you use this code, please cite:
-- Monster catalog (when published)
-- Kelly et al. 2014 (MNRAS 439, 28) - stellar templates
-- Burke et al. 2018 (AJ 155, 41) - FGCM methodology
-- SVO Filter Profile Service
+The LSST stack (`lsst.daf.butler`) is only required by the empirical fitter; the synthetic fitter is standalone.
 
-## 📄 License
+## References
 
-GPL-3.0 (matching obs_nickel)
-
-## 🤝 Contributing
-
-This is part of obs_nickel. For issues or improvements, please contribute to the obs_nickel repository.
-
-## 📧 Support
-
-Questions? Check the troubleshooting sections in the documentation files, especially QUICK_START.md and NICKEL_COLORTERMS_README.md.
-
-## 🎓 Learn More
-
-- Monster catalog: https://github.com/lsst-dm/the_monster
-- FGCM: Burke et al. 2018
-- SVO FPS: http://svo2.cab.inta-csic.es/theory/fps/
-- LSST color terms: https://pipelines.lsst.io/modules/lsst.pipe.tasks/lsst.pipe.tasks.colorterms.html
-
----
-
-**Ready to fix your color terms?** → Open [START_HERE.md](START_HERE.md)
+- [The Monster reference catalog](https://github.com/lsst-dm/the_monster)
+- Burke et al. 2018, AJ 155, 41 — FGCM methodology
+- Kelly et al. 2014, MNRAS 439, 28 — stellar templates
+- [SVO Filter Profile Service](http://svo2.cab.inta-csic.es/theory/fps/)
+- [LSST `Colorterm` API](https://pipelines.lsst.io/modules/lsst.pipe.tasks/lsst.pipe.tasks.colorterms.html)

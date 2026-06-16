@@ -1,107 +1,55 @@
 #!/bin/bash
-# example_run_nickel_colorterms.sh
+# Driver script for the synthetic Nickel colorterm fitter.
 #
-# Example script to compute Nickel spline-based color terms
-# Adapt paths to your local setup
+# Edit the paths below for your local setup, then run:
+#     ./example_run_nickel_colorterms.sh
+#
+# Inputs:
+#   - Monster throughput files (total_<band>.dat or total_comcam_<band>.ecsv).
+# Outputs (in $OUTPUT_DIR):
+#   - Per-band YAML files containing spline parameters
+#   - Per-band PNG QA plots
+#   - Per-band TXT files with polynomial approximations
+#   - A summary file listing everything generated
 
-set -e  # Exit on error
+set -euo pipefail
 
-# ============================================================================
-# CONFIGURATION - EDIT THESE PATHS
-# ============================================================================
+# ----------------------------------------------------------------------
+# Configuration — edit for your environment
+# ----------------------------------------------------------------------
 
-# Path to Monster throughput directory
-# Should contain files like: total_g.dat, total_r.dat, total_i.dat, etc.
-# Or: total_comcam_g.ecsv, total_comcam_r.ecsv, etc.
 MONSTER_THROUGHPUT_DIR="/path/to/the_monster/data/throughputs"
-
-# Output directory for color term files
 OUTPUT_DIR="./nickel_colorterms_output"
-
-# Number of spline nodes (4 is good default, 6-8 for more flexibility)
 N_NODES=4
 
-# ============================================================================
-# SETUP
-# ============================================================================
+# ----------------------------------------------------------------------
+# Preflight
+# ----------------------------------------------------------------------
 
-echo "========================================================================"
-echo "Nickel Spline-Based Color Term Calculator"
-echo "========================================================================"
-echo ""
-
-# Check if Monster throughput directory exists
 if [ ! -d "$MONSTER_THROUGHPUT_DIR" ]; then
-    echo "ERROR: Monster throughput directory not found:"
-    echo "  $MONSTER_THROUGHPUT_DIR"
-    echo ""
-    echo "Please edit this script and set MONSTER_THROUGHPUT_DIR to the"
-    echo "location of your Monster throughput files."
-    echo ""
-    echo "These files should be in:"
-    echo "  the_monster/data/throughputs/"
-    echo ""
+    echo "Monster throughput directory not found: $MONSTER_THROUGHPUT_DIR" >&2
+    echo "Set MONSTER_THROUGHPUT_DIR at the top of this script." >&2
     exit 1
 fi
 
-# Check for required Python packages
-echo "Checking Python dependencies..."
-python -c "import numpy, scipy, matplotlib, astropy, fitsio, astroquery, yaml" 2>/dev/null
-if [ $? -ne 0 ]; then
-    echo ""
-    echo "ERROR: Missing required Python packages."
-    echo "Please install:"
-    echo "  pip install numpy scipy matplotlib astropy fitsio astroquery pyyaml"
-    echo ""
-    echo "For FGCM stellar templates:"
-    echo "  pip install fgcm"
-    echo ""
+if ! python -c "import numpy, scipy, matplotlib, astropy, fitsio, astroquery, yaml" 2>/dev/null; then
+    echo "Missing Python dependencies." >&2
+    echo "  pip install numpy scipy matplotlib astropy fitsio astroquery pyyaml" >&2
+    echo "  pip install fgcm   # for stellar templates" >&2
     exit 1
 fi
 
-echo "All dependencies found!"
-echo ""
-
-# ============================================================================
-# RUN COLOR TERM CALCULATION
-# ============================================================================
-
-echo "Running color term calculation..."
-echo "  Monster throughputs: $MONSTER_THROUGHPUT_DIR"
-echo "  Output directory:    $OUTPUT_DIR"
-echo "  Number of nodes:     $N_NODES"
-echo ""
+# ----------------------------------------------------------------------
+# Run
+# ----------------------------------------------------------------------
 
 python nickel_colorterm_fitter.py \
     --monster-throughput-dir "$MONSTER_THROUGHPUT_DIR" \
     --output-dir "$OUTPUT_DIR" \
-    --n-nodes $N_NODES \
+    --n-nodes "$N_NODES" \
     --bands B V R I \
     --plots \
     --overwrite
 
-# ============================================================================
-# SUMMARY
-# ============================================================================
-
-echo ""
-echo "========================================================================"
-echo "SUCCESS!"
-echo "========================================================================"
-echo ""
-echo "Color term files written to: $OUTPUT_DIR/"
-echo ""
-echo "Generated files:"
-echo "  - YAML files (spline parameters)"
-echo "  - Config files (polynomial approximations)"
-echo "  - QA plots (PNG images)"
-echo "  - Summary text file"
-echo ""
-echo "Next steps:"
-echo "  1. Review QA plots in $OUTPUT_DIR/"
-echo "  2. Check nickel_colorterms_summary.txt"
-echo "  3. Integrate into obs_nickel/configs/colorterms.py"
-echo ""
-echo "To view plots:"
-echo "  open $OUTPUT_DIR/*.png"
-echo ""
+echo "Color terms written to $OUTPUT_DIR/"
+echo "Next: convert to LSST format with convert_to_lsst_colorterms.py"
