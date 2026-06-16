@@ -1,8 +1,18 @@
-# Nickel Processing Suite
+# STIPS — The Small Telescope Image Processing Suite
 
-Gen3 LSST Science Pipelines integration for the **Nickel 1-meter telescope** at Lick Observatory.
+[![CI](https://github.com/dangause/nickel_processing_suite/actions/workflows/ci.yml/badge.svg)](https://github.com/dangause/nickel_processing_suite/actions/workflows/ci.yml)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](pyproject.toml)
 
-A complete, production-ready monorepo providing telescope configuration, data pipelines, and analysis tools for automated astronomical survey processing.
+**STIPS** brings the [LSST Science Pipelines](https://pipelines.lsst.io/) to 1-meter class telescopes. It wraps the Rubin/LSST reduction stack with the per-telescope plumbing — instrument package, prefab YAML pipelines, and a unified CLI — needed to run survey-grade calibration, difference imaging, forced photometry, and lightcurve extraction on small-telescope data, without requiring deep LSST middleware knowledge.
+
+**Supported instruments:**
+
+- ✅ **Nickel 1-m** at Lick Observatory — reference implementation, used in active SN, exoplanet, and variable-star follow-up
+- 🚧 **CTIO 0.9m** — multi-instrument support in active integration on [`feature/obs-smalltel-phase1`](https://github.com/dangause/nickel_processing_suite/tree/feature/obs-smalltel-phase1) (single-frame ISR validated; full DRP in progress)
+- ➕ **Other 1-m single-CCD telescopes** — bring-up is mostly an instrument-package skeleton; the science pipelines work unchanged
+
+> Note: the project was previously named *Nickel Processing Suite* and the CLI is still `nickel`; both will be renamed to `stips` in a future cleanup.
 
 > Tested with LSST Science Pipelines `v30.0.3` and `v11.0.0`
 
@@ -146,21 +156,16 @@ The unified command-line interface for all pipeline operations.
 | `nickel bps cancel` | Cancel BPS run |
 | `nickel bps list` | List recent BPS runs |
 
-### Profile-Based Configuration
+### Multi-Target Workflows
 
-Work with multiple Butler repositories using profiles:
+The recommended path for multi-target work is per-target YAML configs (in `scripts/config/<target>/`). Each YAML is self-contained — including the environment paths in an `env:` block — so switching targets is one command:
 
 ```bash
-# Create profile-specific env files
-cp .env.example .env.2023ixf  # For SN 2023ixf campaign
-cp .env.example .env.2020wnt  # For SN 2020wnt campaign
-
-# Use profiles with any command
-nickel -p 2023ixf calibs 20230519
-nickel -p 2020wnt dia 20201207 --auto
-
-# Profiles look for .env.{profile} or .env.{profile}.ps1
+nickel run scripts/config/2023ixf/pipeline_ps1_template.yaml
+nickel run scripts/config/2020wnt/pipeline_ps1_template.yaml
 ```
+
+Profile-based `.env` files (`nickel -p <profile> <command>`) are also supported as a legacy workflow.
 
 ### Transient Analysis Workflow
 

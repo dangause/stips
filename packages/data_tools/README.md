@@ -339,11 +339,7 @@ obsn-skymap-make --repo /path/to/repo --collection "Nickel/raw/*"
 
 ### Pipeline Configuration
 
-The `nickel` CLI uses a `.env` file for configuration. Create one from the example:
-
-```bash
-cp .env.example .env
-```
+The `nickel` CLI reads configuration from environment variables. The recommended path is to embed them in your per-target YAML config's `env:` block (see `scripts/config/2023ixf/pipeline_ps1_template.yaml` for an example); the OS environment and `.env` files are also supported.
 
 Required variables:
 - `REPO` - Butler repository path
