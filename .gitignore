@@ -93,7 +93,7 @@ docs/superpowers/
 .worktrees/
 
 # Local analysis outputs (CSVs, PNGs, scratch scripts; kept out of main)
-analysis/
+/analysis/
 
 # Poster work (kept locally only, not in main)
 posters/
