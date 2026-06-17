@@ -1,0 +1,161 @@
+# tests/test_translation_golden.py
+"""Golden baseline test pinning the CURRENT NickelTranslator outputs.
+
+This captures byte-for-byte literal values produced by the existing
+``lsst.obs.nickel.translator.NickelTranslator`` BEFORE the STIPS framework
+refactor. A later task re-asserts these same literals against the
+reimplemented translator to prove identical behavior.
+
+Do NOT change any literal here to make a refactored translator pass; the
+current translator is the source of truth for this baseline.
+"""
+import unittest
+
+import astropy.units as u
+from astropy.time import Time
+from lsst.obs.nickel.translator import NickelTranslator
+
+# Science header: copied VERBATIM from test_translator.py's setUp, plus
+# RA/DEC keywords so the stuck-DEC tracking path has telescope coordinates.
+SCIENCE_HEADER = {
+    # IDs / instrument
+    "INSTRUME": "Nickel Direct Camera",
+    "OBSNUM": 1032,
+    # Times
+    "EXPTIME": 120.0,
+    "DATE-BEG": "2024-06-25T05:15:49.25",
+    "DATE-END": "2024-06-25T05:17:49.25",
+    # WCS center (primary; degrees)
+    "CRVAL1": 179.1170349121,
+    "CRVAL2": 55.1252822876,
+    "CRPIX1": 512.0,
+    "CRPIX2": 512.0,
+    "CUNIT1": "deg",
+    "CUNIT2": "deg",
+    "CTYPE1": "RA---TAN",
+    "CTYPE2": "DEC--TAN",
+    "RADECSYS": "FK5",
+    "EQUINOX": 2000.0,
+    # Misc used by trivial map and sanity checks
+    "OBJECT": "NGC_3982",
+    "AIRMASS": 1.281367778778,
+    "TEMPDET": -109.7,
+    "FILTNAM": "B",
+    "TELESCOP": "Nickel 1m",
+    # Telescope control system coordinates (stuck-DEC tracking path)
+    "RA": "11:56:28.09",
+    "DEC": "+55:07:31.0",
+}
+
+# Calibration header: same as science but a dome-flat calibration frame.
+CALIB_HEADER = dict(
+    SCIENCE_HEADER,
+    OBSTYPE="flat",
+    OBJECT="dome flat",
+    FILTNAM="V",
+)
+
+
+class TestTranslationGoldenScience(unittest.TestCase):
+    """Pin current translator outputs for the science header."""
+
+    def setUp(self):
+        self.tr = NickelTranslator(dict(SCIENCE_HEADER))
+
+    def test_instrument(self):
+        self.assertEqual(self.tr.to_instrument(), "Nickel")
+
+    def test_physical_filter(self):
+        self.assertEqual(self.tr.to_physical_filter(), "B")
+
+    def test_observation_type(self):
+        self.assertEqual(self.tr.to_observation_type(), "science")
+
+    def test_observation_reason(self):
+        self.assertEqual(self.tr.to_observation_reason(), "science")
+
+    def test_exposure_id(self):
+        self.assertEqual(self.tr.to_exposure_id(), 89421032)
+
+    def test_visit_id(self):
+        self.assertEqual(self.tr.to_visit_id(), 89421032)
+
+    def test_telescope(self):
+        self.assertEqual(self.tr.to_telescope(), "Nickel 1m")
+
+    def test_boresight_airmass(self):
+        self.assertAlmostEqual(self.tr.to_boresight_airmass(), 1.281367778778, places=9)
+
+    def test_temperature(self):
+        # -109.7 C + 273.15 = 163.45 K
+        self.assertAlmostEqual(self.tr.to_temperature().to_value(u.K), 163.45, places=9)
+
+    def test_datetime_begin(self):
+        t0 = self.tr.to_datetime_begin()
+        self.assertIsInstance(t0, Time)
+        self.assertAlmostEqual(t0.mjd, 60486.21932002315, places=9)
+
+    def test_datetime_end(self):
+        t1 = self.tr.to_datetime_end()
+        self.assertIsInstance(t1, Time)
+        self.assertAlmostEqual(t1.mjd, 60486.220708912035, places=9)
+
+    def test_tracking_radec(self):
+        coord = self.tr.to_tracking_radec()
+        self.assertAlmostEqual(coord.ra.to_value(u.deg), 179.1170349121, places=6)
+        self.assertAlmostEqual(coord.dec.to_value(u.deg), 55.1252822876, places=6)
+
+    def test_location(self):
+        loc = self.tr.to_location()
+        self.assertAlmostEqual(loc.lat.deg, 37.34333333333334, places=4)
+        self.assertAlmostEqual(loc.lon.deg, -121.63666666666666, places=4)
+        self.assertAlmostEqual(loc.height.to_value(u.m), 1290.0, places=1)
+
+    def test_boresight_rotation_angle(self):
+        self.assertAlmostEqual(
+            self.tr.to_boresight_rotation_angle().to_value(u.deg), 0.0, places=9
+        )
+
+    def test_day_obs(self):
+        self.assertEqual(self.tr.to_day_obs(), 20240625)
+
+    def test_observation_id(self):
+        self.assertEqual(self.tr.to_observation_id(), "20240625_1032")
+
+
+class TestTranslationGoldenCalib(unittest.TestCase):
+    """Pin current translator outputs for the calibration (flat) header."""
+
+    def setUp(self):
+        self.tr = NickelTranslator(dict(CALIB_HEADER))
+
+    def test_instrument(self):
+        self.assertEqual(self.tr.to_instrument(), "Nickel")
+
+    def test_physical_filter(self):
+        self.assertEqual(self.tr.to_physical_filter(), "V")
+
+    def test_observation_type(self):
+        self.assertEqual(self.tr.to_observation_type(), "flat")
+
+    def test_observation_reason(self):
+        self.assertEqual(self.tr.to_observation_reason(), "calibration")
+
+    def test_exposure_id(self):
+        self.assertEqual(self.tr.to_exposure_id(), 89421032)
+
+    def test_visit_id(self):
+        self.assertEqual(self.tr.to_visit_id(), 89421032)
+
+    def test_telescope(self):
+        self.assertEqual(self.tr.to_telescope(), "Nickel 1m")
+
+    def test_day_obs(self):
+        self.assertEqual(self.tr.to_day_obs(), 20240625)
+
+    def test_observation_id(self):
+        self.assertEqual(self.tr.to_observation_id(), "20240625_1032")
+
+
+if __name__ == "__main__":
+    unittest.main()
