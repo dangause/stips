@@ -550,8 +550,12 @@ detector row.
 - [ ] **Step 3: Implement by porting `_instrument.py`.** Generic `StipsInstrument(Instrument)`:
 - `getName()` → `cls.profile.name`; `policyName` property → `profile.policy_name`;
   `obsDataPackage` property → `profile.obs_data_package`.
-- `filterDefinitions` → `FilterDefinitionCollection` built from `profile.filters`
-  (one `FilterDefinition(physical, band=band)` per mapped value; de-dup bands).
+- `filterDefinitions` → a `FilterDefinitionCollection` built from `profile.filters`
+  (one `FilterDefinition(physical, band=band)` per mapped value; de-dup bands). **Resolve it
+  as a class-level attribute in `__init_subclass__`** (parallel to how the translator builds
+  `_trivial_map`), NOT as an instance property — the Task 6 Step 4 `rawFormatter` binding does
+  `Nickel.filterDefinitions` at import time without instantiating, so it must be a class attr,
+  exactly as the current `_instrument.py:23` (`filterDefinitions = NICKEL_FILTER_DEFINITIONS`).
 - `getCamera()` → `yamlCamera.makeCamera(os.path.join(getPackageDir(profile.eups_package), profile.camera))`.
   (For Nickel, `eups_package="obs_nickel"`, `camera="camera/nickel.yaml"` → the existing
   `packages/obs_nickel/camera/nickel.yaml`.)
@@ -621,6 +625,8 @@ _mod_path = (
     / "python" / "lsst" / "obs" / "stips" / "tasks" / "differentialPhot.py"
 )
 ```
+The test also inserts `parents[2] / "data_tools/src"` into `sys.path`; after the move
+`parents[2]` still resolves to `packages/`, so that line stays valid — leave it unchanged.
 
 - [ ] **Step 4: Neutralize the instrument-tuned default.** In `differentialPhot.py`, change
 the `matchRadius` `ConfigClass` default from `10.0` to LSST-neutral `2.0`, with a comment
