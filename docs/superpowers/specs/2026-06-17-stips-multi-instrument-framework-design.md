@@ -78,6 +78,7 @@ obs_stips/                        # distribution: "obs-stips" — LSST glue, ins
     instrument.py                 # StipsInstrument(Instrument) — generic, reads a profile
     translator.py                 # StipsTranslator(FitsTranslator) — generic, reads a profile
     formatter.py                  # StipsRawFormatter
+    plotting.py                   # shared publication-style plotting helpers (see §3.5)
     tasks/                        # GENERIC framework PipelineTasks (see §3.5)
       __init__.py                 #   ForcedPhotRaDecTask, ForcedPhotDiffimRaDecTask,
       forcedPhotRaDec.py          #   DiaLightcurvePlotTask, DiaLightcurveCombinedPlotTask,
@@ -203,6 +204,15 @@ instrument-agnostic:
 - **Generic → move to `obs_stips` as `lsst.obs.stips.tasks.*`:** `ForcedPhotRaDecTask`,
   `ForcedPhotDiffimRaDecTask`, `DiaLightcurvePlotTask`, `DiaLightcurveCombinedPlotTask`,
   `DifferentialPhotTask`. Every fork wants these; nothing in them is Nickel-specific.
+  **`plotting.py` moves with them** → `lsst.obs.stips.plotting`: the three plot/diff tasks
+  import it (`differentialPhot.py`, `diaLightcurveCombinedPlot.py`, `diaLightcurvePlot.py`),
+  so leaving it in the fork would force `obs_stips` to import a fork — violating §3.1
+  layering. Repoint those imports to `lsst.obs.stips.plotting`.
+- **Instrument-tuned config defaults stay out of the moved tasks.** Where a generic task
+  carries a Nickel-flavored default (e.g. `DifferentialPhotTask`'s `matchRadius=10.0″`,
+  justified by Nickel's 5–7″ WCS residuals), the generic `ConfigClass` keeps an
+  instrument-neutral default and the Nickel value is set in the fork's config tree (§3.6),
+  so the moved task is truly instrument-agnostic.
 - **Quirk → stay in the fork (`lsst.obs.nickel`):** `NickelCalibCombineTask` /
   `NickelCalibCombineByFilterTask` (`calibCombine.py`) — exists only because the Nickel
   ISR pipeline does not preserve VisitInfo dates; and `NickelVisitInfo` (`visitInfo.py`),
@@ -270,7 +280,8 @@ Each phase is independently shippable.
 
 1. **Framework + Nickel-as-profile.** Build `obs_stips` generic
    `StipsInstrument`/`StipsTranslator`/`StipsRawFormatter` **and the generic
-   `lsst.obs.stips.tasks.*`** (§3.5). Reimplement `lsst.obs.nickel` as `profile.py` + thin
+   `lsst.obs.stips.tasks.*` plus `lsst.obs.stips.plotting`** (§3.5). Reimplement
+   `lsst.obs.nickel` as `profile.py` + thin
    bindings + `camera.yaml`, **keeping the fork-local `visitInfo.py` and `calibCombine.py`
    quirk modules**. Repoint generic-task `class:` paths in the fork's pipeline YAMLs to
    `lsst.obs.stips.tasks.*`. Pass translation-parity (golden values) and registration
