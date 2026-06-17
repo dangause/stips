@@ -286,7 +286,8 @@ Each phase is independently shippable.
    quirk modules**. Repoint generic-task `class:` paths in the fork's pipeline YAMLs to
    `lsst.obs.stips.tasks.*`. Pass translation-parity (golden values) and registration
    tests. Retire only the old hand-written instrument/translator/formatter/filters Python
-   once parity is green — **not** `tasks/` (moved), `calibCombine.py`, or `visitInfo.py`.
+   once parity is green — **not** `tasks/` or `plotting.py` (both moved to `obs_stips`),
+   and **not** `calibCombine.py` or `visitInfo.py` (kept as fork quirks).
    Tooling not yet renamed (it still imports `lsst.obs.nickel` as today).
 2. **Tooling rename + de-hardcode.** `obs_nickel_data_tools` → `stips`; CLI `nickel` →
    `stips`; console scripts `*-` → `stips-*`; profile-drive all Nickel literals across the
