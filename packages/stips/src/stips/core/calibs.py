@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from stips.core.pipeline import (
-    INSTRUMENT,
     CollectionNames,
     get_raw_dir,
     night_to_date_range,
@@ -62,15 +61,16 @@ def write_curated_calibrations(
         config: Pipeline configuration
         log_file: Optional log file path
     """
+    prof = config.require_profile()
     night = validate_night(night)
-    cols = CollectionNames(night)
+    cols = CollectionNames(night, prefix=prof.collection_prefix)
     repo = str(config.repo)
 
     # Ingest raws for this night first (needed for write-curated-calibrations)
     raw_dir = get_raw_dir(config, night)
     if raw_dir.exists():
         run_butler(
-            ["register-instrument", repo, INSTRUMENT],
+            ["register-instrument", repo, prof.instrument_class],
             config,
             check=False,
             log_file=log_file,
@@ -89,13 +89,13 @@ def write_curated_calibrations(
             check=False,
             log_file=log_file,
         )
-        run_butler(["define-visits", repo, "Nickel"], config, log_file=log_file)
+        run_butler(["define-visits", repo, prof.name], config, log_file=log_file)
 
     run_butler(
         [
             "write-curated-calibrations",
             repo,
-            "Nickel",
+            prof.name,
             cols.raw_run,
             "--collection",
             cols.curated_run,
@@ -150,8 +150,9 @@ def run(
     if executor is None:
         executor = LocalExecutor()
 
+    prof = config.require_profile()
     night = validate_night(night)
-    cols = CollectionNames(night)
+    cols = CollectionNames(night, prefix=prof.collection_prefix)
 
     raw_dir = get_raw_dir(config, night)
     if not raw_dir.exists():
@@ -182,7 +183,7 @@ def run(
     try:
         # Register instrument (idempotent)
         run_butler(
-            ["register-instrument", repo, INSTRUMENT],
+            ["register-instrument", repo, prof.instrument_class],
             config,
             check=False,
             log_file=log_file,
@@ -205,7 +206,7 @@ def run(
         )
 
         # Define visits
-        run_butler(["define-visits", repo, "Nickel"], config, log_file=log_file)
+        run_butler(["define-visits", repo, prof.name], config, log_file=log_file)
 
         # Write curated calibrations (skip if already done by orchestrator)
         if not skip_curated:
@@ -213,7 +214,7 @@ def run(
                 [
                     "write-curated-calibrations",
                     repo,
-                    "Nickel",
+                    prof.name,
                     cols.raw_run,
                     "--collection",
                     cols.curated_run,
@@ -256,7 +257,7 @@ def run(
                     "--save-qgraph",
                     str(qg_bias),
                     "-d",
-                    "instrument='Nickel' AND exposure.observation_type='bias'",
+                    f"instrument='{prof.name}' AND exposure.observation_type='bias'",
                 ]
                 + (
                     ["--qgraph-datastore-records"]
@@ -349,7 +350,7 @@ def run(
                     "--save-qgraph",
                     str(qg_flat),
                     "-d",
-                    "instrument='Nickel' AND exposure.observation_type='flat'",
+                    f"instrument='{prof.name}' AND exposure.observation_type='flat'",
                     "-c",
                     "cpFlatIsr:doDark=False",
                     "-c",

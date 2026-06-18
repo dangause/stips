@@ -9,9 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from stips.core.pipeline import (
-    INSTRUMENT,
     REFCATS_CHAIN,
-    SKYMAP_NAME,
     SKYMAPS_CHAIN,
     CollectionNames,
     build_exclusion_expr,
@@ -145,13 +143,17 @@ def resolve_object_filter(
     """
     from stips.core.stack import run_butler_python_json
 
+    prof = config.require_profile()
+
     # Query all unique target names from Butler directly.
-    where = "instrument='Nickel' AND exposure.observation_type='science'"
+    where = f"instrument='{prof.name}' AND exposure.observation_type='science'"
     if night:
         from stips.core.pipeline import night_to_day_obs
 
         # See run() — a Lick observing night spans two UT days.
-        day_obs_next = night_to_day_obs(night)
+        day_obs_next = night_to_day_obs(
+            night, offset_days=prof.night_to_dayobs_offset_days
+        )
         where += f" AND day_obs IN ({night}, {day_obs_next})"
 
     script = f"""
@@ -248,8 +250,9 @@ def run(
     if executor is None:
         executor = LocalExecutor()
 
+    prof = config.require_profile()
     night = validate_night(night)
-    cols = CollectionNames(night)
+    cols = CollectionNames(night, prefix=prof.collection_prefix)
     repo = str(config.repo)
 
     # Build config chain: explicit > legacy > default
@@ -329,6 +332,7 @@ def run(
             target_ra,
             target_dec,
             object_filter=coord_filter,
+            instrument_name=prof.name,
         )
         if coord_bad_ids:
             log.warning(
@@ -388,9 +392,9 @@ def run(
     # A single Lick observing night can span two UT days: exposures taken
     # before Pacific midnight have day_obs=night, and post-midnight exposures
     # have day_obs=night+1 (what night_to_day_obs returns). Query both.
-    day_obs_next = night_to_day_obs(night)
+    day_obs_next = night_to_day_obs(night, offset_days=prof.night_to_dayobs_offset_days)
     data_query = (
-        f"instrument='Nickel' AND exposure.observation_type='science'"
+        f"instrument='{prof.name}' AND exposure.observation_type='science'"
         f" AND day_obs IN ({night}, {day_obs_next})"
         f"{object_expr}{band_expr}{exclusion_expr}"
     )
@@ -415,7 +419,7 @@ def run(
     # Register instrument
     try:
         run_butler(
-            ["register-instrument", repo, INSTRUMENT],
+            ["register-instrument", repo, prof.instrument_class],
             config,
             check=False,
             log_file=log_file,
@@ -813,7 +817,7 @@ def run(
                     "--save-qgraph",
                     str(qg_coadd),
                     "-d",
-                    f"instrument='Nickel' AND skymap='{SKYMAP_NAME}'",
+                    f"instrument='{prof.name}' AND skymap='{prof.skymap_name}'",
                 ]
                 + (
                     ["--qgraph-datastore-records"]
