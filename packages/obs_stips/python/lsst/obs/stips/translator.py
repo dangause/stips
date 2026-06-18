@@ -28,6 +28,30 @@ class StipsTranslator(FitsTranslator):
         return self.profile.hooks.get(name)
 
     @cache_translation
+    def to_instrument(self):
+        return self.profile.name
+
+    @cache_translation
+    def to_datetime_begin(self):
+        h = self._hook("datetime_begin")
+        return h(self._header) if h else super().to_datetime_begin()
+
+    @cache_translation
+    def to_datetime_end(self):
+        h = self._hook("datetime_end")
+        return h(self._header) if h else super().to_datetime_end()
+
+    @cache_translation
+    def to_day_obs(self):
+        h = self._hook("day_obs")
+        return h(self._header) if h else super().to_day_obs()
+
+    @cache_translation
+    def to_observation_id(self):
+        h = self._hook("observation_id")
+        return h(self._header) if h else super().to_observation_id()
+
+    @cache_translation
     def to_location(self):
         s = self.profile.site
         if s.name:

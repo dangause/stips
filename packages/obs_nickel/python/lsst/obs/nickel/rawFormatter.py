@@ -1,19 +1,12 @@
-# python/lsst/obs/nickel/rawFormatter.py
-
 __all__ = ["NickelRawFormatter"]
 
-from lsst.obs.base import FitsRawFormatterBase
+from lsst.obs.stips.formatter import StipsRawFormatter
 
 from ._instrument import Nickel
-from .nickelFilters import NICKEL_FILTER_DEFINITIONS
 from .translator import NickelTranslator
 
 
-class NickelRawFormatter(FitsRawFormatterBase):
-    """Raw data formatter for the Nickel telescope."""
-
+class NickelRawFormatter(StipsRawFormatter):
+    instrumentClass = Nickel
     translatorClass = NickelTranslator
-    filterDefinitions = NICKEL_FILTER_DEFINITIONS
-
-    def getDetector(self, id):
-        return Nickel().getCamera()[id]
+    filterDefinitions = Nickel.filterDefinitions
