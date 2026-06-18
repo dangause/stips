@@ -123,7 +123,7 @@ def load(config_path: Path | str | None = None, *, env: dict[str, str] | None = 
 ```
 Keep the existing post-merge body (Path conversions, cp_pipe auto-discovery, `INSTRUMENT_PACKAGE`/profile loading, `lick_*` optional fields — Parts B/C remove those later). Add a small `_expand_within(value, env)` that expands `${VAR}` using ONLY the `env` dict (port the no-os.environ subset of `_expand_env_vars`). Do NOT yet delete `_parse_env_file`/`_resolve_env_file`/the old helpers (Task 5 removes dead code once cli.py is migrated) — but the NEW `load()` no longer uses them.
 
-- [ ] **Step 4: Update internal `load()` callers** so nothing imports the removed params. `grep -rn "cfg_module.load(\|config.load(\|\.load(env_file" packages/stips/src/stips` — update `run.py` (it has the YAML env via `get_env_from_yaml`; change to `config.load(env=yaml_env)` or `config.load(config_path)`). Leave `cli.py`'s `_load_config` for Task 2 (it'll temporarily be broken until Task 2 — so do Task 1 and Task 2 in immediate succession; if you must keep green between them, have `_load_config` call `cfg_module.load(config_path=ctx.obj.get("config_path"))` already in this task by adding the group option early — but cleanest is to land T1+T2 together).
+- [ ] **Step 4: Confirm the `load()` callers.** `grep -rn "cfg_module.load(\|config\.load(\|\.load(env_file" packages/stips/src/stips`. **The ONLY callers of `config.load()` are in `cli.py`** (`_load_config` ~`:142`, `_load_lightcurve_config` ~`:177`) — `run.py` does NOT call `config.load()` (it uses `get_env_from_yaml` to extract the dict, which `_load_config` then passes; the only other `.load(` hit is a docstring in `core/__init__.py`). So this task changes ONLY `config.py`. Those cli.py callers still pass the OLD kwargs after this task — that's fine: changing `load()`'s signature does NOT break `import stips.cli` (the calls are inside command bodies), and **no test exercises `load(env_file=…)`** (`test_config_profile.py` builds `Config(...)` directly; `test_run_config.py` uses `RunConfig.from_yaml`), so the suite stays GREEN at this commit. The cli.py callers are fixed in Tasks 2/4. (Do NOT touch cli.py here.)
 
 - [ ] **Step 5: Run the new test → PASS.** `.venv/bin/python -m pytest packages/stips/tests/test_config_yaml.py -v`
 
@@ -141,7 +141,7 @@ Keep the existing post-merge body (Path conversions, cp_pipe auto-discovery, `IN
               type=click.Path(exists=True, path_type=Path),
               help="YAML config file (its env: block supplies REPO/STACK_DIR/OBS_NICKEL/RAW_PARENT_DIR)")
 ```
-In `cli(...)`: drop the `env_file`/`profile` params + the "Cannot use both" check + `_resolve_env_file` call; store `ctx.obj["config_path"] = config_path`. Update the group docstring examples (`-p 2023ixf` → `-c scripts/config/2023ixf/pipeline_ps1_template.yaml`).
+In `cli(...)`: drop the `env_file`/`profile` params + the "Cannot use both" check + `_resolve_env_file` call; store `ctx.obj["config_path"] = config_path`. Update the group docstring examples (`-p 2023ixf` → `-c scripts/config/2023ixf/pipeline_ps1_template.yaml`). **Also clean the `env` command** (`cli.py:277-282`): it prints `ctx.obj.get("profile")`/`("env_file")` in now-dead `if profile:`/`if env_file:` branches — remove those branches (they'll never fire once `-p`/`--env-file` are gone).
 
 - [ ] **Step 2: Rewrite `_load_config(ctx)`** to YAML-only:
 ```python
@@ -175,7 +175,7 @@ Remove the `inline_env`/`prefer_inline` params from `_load_config` (the YAML is 
 
 - [ ] **Step 1:** For `bootstrap`, `clean`, `calib-metrics`, `landolt-validate`, `run`: **remove the positional `config_file` argument** and the per-command `get_env_from_yaml`/`inline_env`/`prefer_inline` block. They now get config via `config = _load_config(ctx)` (the group `-c`). The non-`env:` pipeline sections they need (e.g. `run`'s `object`/`science`/`template`, `clean`'s patterns) are still read from the **same** `-c` file: pass `ctx.obj["config_path"]` to the code that parses those sections (e.g. `run.py`/`RunConfig.from_yaml(config_path)`). So replace "positional config_file" with "the group config_path" everywhere those sections are consumed.
 
-- [ ] **Step 2:** `download` (`cli.py:537-619`) is the messiest — it has a nights-from-YAML path + a config path. Simplify: config via `_load_config(ctx)` (group `-c`); the nights come from the CLI `night` arg(s) and/or the `-c` YAML's `science:`/`template:` sections (read via the same config_path). Keep the actual fetch call as-is for now (Part B rewires it through `profile.fetch_data`; 4a only changes config delivery). Ensure `download` errors clearly if no `-c` and no night.
+- [ ] **Step 2:** `download` (`cli.py:537-619`) is the messiest. NOTE its current shape: a single **variadic positional `config_or_nights` (`nargs=-1`)**, disambiguated by a `.yaml`/`.yml` suffix (`cli.py:572`) — NOT a named `config_file` + nights. Simplify: config comes via the group `-c` (`_load_config(ctx)`); the positional becomes just **nights** (a list of `YYYYMMDD`), and/or the nights are read from the `-c` YAML's `science:`/`template:` sections (via `config_path`). Keep the actual fetch call as-is for now (it still references `config.lick_archive_dir` at `:661` — leave that Lick wiring alone; Part B rewires it through `profile.fetch_data`; 4a only changes config delivery). Ensure `download` errors clearly if no `-c`, and if no night can be resolved.
 
 - [ ] **Step 3:** Update these commands' docstring examples (`stips --env-file .env.X bootstrap` etc.) → `stips -c <config.yaml> bootstrap`.
 
@@ -193,7 +193,7 @@ Remove the `inline_env`/`prefer_inline` params from `_load_config` (the YAML is 
   - If `ctx.obj.get("config_path")`: `config = cfg_module.load(config_path)`; then apply explicit `--repo`/`--stack-dir` overrides if passed (`dataclasses.replace`).
   - Else: require `--repo` (error if absent: "lightcurve needs -c <config.yaml> or --repo"); resolve `--stack-dir` from the flag or error — **no** `os.environ`/cwd auto-detection. Build a minimal `Config` from `--repo`/`--stack-dir` (+ the profile from `INSTRUMENT_PACKAGE` default).
   - Delete the entire `os.environ`/cwd-walking auto-detect block.
-- [ ] **Step 2:** Ensure the `lightcurve` command takes the group `-c` (it does, via the group) and keeps its `--repo`/`--stack-dir` flags.
+- [ ] **Step 2:** Ensure the `lightcurve` command takes the group `-c` (it does, via the group) and keeps its `--repo`/`--stack-dir` flags. **Fix the `--stack-dir` help text** (`cli.py:1108`, currently "auto-detect or $STACK_DIR") to drop the auto-detect/env claim now that auto-detection is removed.
 - [ ] **Step 3:** Run: `.venv/bin/python -c "import stips.cli"`; `.venv/bin/stips lightcurve --help` resolves. Add a small test if feasible (lightcurve config from a YAML fixture).
 - [ ] **Step 4: Commit.** `git add -A && git commit -m "refactor(stips): lightcurve config via -c or explicit --repo/--stack-dir (no .env/os.environ auto-detect)"`
 
@@ -203,7 +203,7 @@ Remove the `inline_env`/`prefer_inline` params from `_load_config` (the YAML is 
 
 **Files:** `config.py`, `cli.py`; tracked `.env*` if any.
 
-- [ ] **Step 1:** Remove from `config.py`: `_parse_env_file`, `_resolve_env_file` (if it lived here — it's in cli.py), `_expand_env_vars` (replaced by the env-only `_expand_within`), the `extra_env`/`inline_env`/`prefer_inline`/`env_file` params and the `ENV_FILE`/`os.environ` base-population from `load()` (confirm `load()` no longer references `os.environ` for config keys). Remove `cli.py`'s `_resolve_env_file`.
+- [ ] **Step 1:** Remove from `config.py`: `_parse_env_file`, `_expand_env_vars` (replaced by the env-only `_expand_within`), and any leftover `extra_env`/`inline_env`/`prefer_inline`/`env_file` params / `ENV_FILE`/`os.environ` base-population in `load()` (confirm `load()` no longer references `os.environ` for config keys). Remove `cli.py`'s `_resolve_env_file`. **Also remove `run.py`'s `get_profile_from_yaml`** (`run.py:538`) — it is now dead code (its only callers were the `-p`-fallback blocks in `bootstrap`/`clean`/`run` that Tasks 2-3 delete; grep `get_profile_from_yaml` → no live callers). Keep `get_env_from_yaml` if still used by the `-c` non-env-section parsing; grep to confirm before deciding.
 - [ ] **Step 2:** `grep -rn "_parse_env_file\|_resolve_env_file\|_expand_env_vars\|prefer_inline\|inline_env\|env_file\|ENV_FILE\|\.env\b" packages/stips/src/stips` → only legitimate remnants (e.g. a docstring) remain; no dead code/params.
 - [ ] **Step 3:** Delete any TRACKED `.env*` files (`git ls-files | grep -E '(^|/)\.env'` — the real `.env*` are user-local/gitignored; only remove tracked ones, e.g. a committed `.env.example`). Leave `packages/lick_searchable_archive`'s own `.env*` alone if unrelated.
 - [ ] **Step 4:** Run the stack-free suite: `.venv/bin/python -m pytest packages/stips/tests -v 2>&1 | tail -20` (pre-existing scipy/astroquery skips OK). `uvx ruff check packages/stips`.
@@ -215,7 +215,7 @@ Remove the `inline_env`/`prefer_inline` params from `_load_config` (the YAML is 
 
 **Files:** `tests/*`, `scripts/config/2023ixf/*.yaml`, `scripts/config/2020wnt/*.yaml`, cli/docstrings.
 
-- [ ] **Step 1:** Update tests that loaded config via `.env`/the old `load()` signature (e.g. `test_run_config.py`, any test calling `cfg_module.load(env_file=…)`) to the YAML path (`load(config_path)` / `load(env=…)`). `grep -rn "load(env_file\|\.env\b\|inline_env\|prefer_inline\|--profile\|env_file" packages/stips/tests` and fix each.
+- [ ] **Step 1:** Check for tests needing migration: `grep -rn "load(env_file\|\.env\b\|inline_env\|prefer_inline\|--profile\|env_file" packages/stips/tests`. NOTE (verified): no test currently calls `load(env_file=…)` — `test_config_profile.py` builds `Config(...)` directly (stays valid, Part A keeps the field names) and `test_run_config.py` uses `RunConfig.from_yaml`. So this is likely a no-op beyond confirming; fix anything the grep surfaces, but don't expect churn.
 - [ ] **Step 2:** Confirm the canonical per-target YAMLs (`scripts/config/2023ixf/pipeline_ps1_template.yaml`, `2020wnt/...`) have complete `env:` blocks (REPO/STACK_DIR/OBS_NICKEL/RAW_PARENT_DIR) so `stips -c <them>` works. (They already do; just verify.)
 - [ ] **Step 3:** De-`.env` the CLI help/docstrings (group + commands): every `-p <profile>` / `--env-file` / `.env` mention → `-c <config.yaml>`. Update `README.md`'s config/usage sections (the `nickel -p` → `stips -c` examples) and the local gitignored `CLAUDE.md` config section.
 - [ ] **Step 4: Full suite under the stack:**
