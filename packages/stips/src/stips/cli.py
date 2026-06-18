@@ -71,14 +71,11 @@ def _resolve_env_file(env_file: Path | None, profile: str | None) -> Path | None
 
 @click.group()
 @click.option(
-    "--env-file",
-    type=click.Path(path_type=Path),
-    help="Environment file to load (default: .env)",
-)
-@click.option(
-    "-p",
-    "--profile",
-    help="Profile name (loads .env.{profile})",
+    "-c",
+    "--config",
+    "config_path",
+    type=click.Path(exists=True, path_type=Path),
+    help="YAML config file (its env: block supplies REPO/STACK_DIR/OBS_NICKEL/RAW_PARENT_DIR)",
 )
 @click.option(
     "-v",
@@ -87,13 +84,11 @@ def _resolve_env_file(env_file: Path | None, profile: str | None) -> Path | None
     help="Enable verbose logging (DEBUG level)",
 )
 @click.pass_context
-def cli(
-    ctx: click.Context, env_file: Path | None, profile: str | None, verbose: bool
-) -> None:
+def cli(ctx: click.Context, config_path: Path | None, verbose: bool) -> None:
     """STIPS - Small Telescope Image Processing Suite. LSST pipeline tools.
 
     Process small-telescope observations using LSST Science Pipelines.
-    Configure your environment with a .env file or environment variables.
+    Configure your environment with a YAML config file's env: block.
 
     \b
     Quick start:
@@ -103,9 +98,9 @@ def cli(
         stips dia 20240625 --auto    # Difference imaging
 
     \b
-    Using profiles (shorthand for --env-file):
-        stips -p 2023ixf env         # Uses .env.2023ixf
-        stips -p 2020wnt calibs ...  # Uses .env.2020wnt
+    Selecting a config:
+        stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml env
+        stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml calibs ...
     """
     # Configure logging for all core modules
     log_level = logging.DEBUG if verbose else logging.INFO
@@ -115,33 +110,20 @@ def cli(
     )
 
     ctx.ensure_object(dict)
-
-    if env_file and profile:
-        _print_error("Cannot use both --env-file and --profile")
-        sys.exit(1)
-
-    resolved = _resolve_env_file(env_file, profile)
-    ctx.obj["env_file"] = resolved
-    ctx.obj["profile"] = profile
+    ctx.obj["config_path"] = config_path
 
 
-def _load_config(
-    ctx: click.Context,
-    inline_env: dict[str, str] | None = None,
-    prefer_inline: bool = False,
-) -> cfg_module.Config:
-    """Load configuration from context.
-
-    Args:
-        ctx: Click context
-        inline_env: Inline environment variables (from YAML)
-        prefer_inline: If True, inline_env overrides os.environ (for YAML configs)
-    """
-    env_file = ctx.obj.get("env_file")
-    try:
-        return cfg_module.load(
-            env_file=env_file, inline_env=inline_env, prefer_inline=prefer_inline
+def _load_config(ctx: click.Context) -> cfg_module.Config:
+    """Load configuration from the group-level -c/--config YAML file."""
+    config_path = ctx.obj.get("config_path")
+    if not config_path:
+        _print_error(
+            "No config provided. Pass -c <config.yaml> before the command, e.g.\n"
+            "  stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml calibs 20230519"
         )
+        sys.exit(1)
+    try:
+        return cfg_module.load(config_path)
     except ValueError as e:
         _print_error(str(e))
         sys.exit(1)
@@ -265,21 +247,15 @@ def _load_lightcurve_config(
 @click.pass_context
 def env(ctx: click.Context) -> None:
     """Show current configuration and validate paths."""
-    try:
-        config = _load_config(ctx)
-    except SystemExit:
-        return
+    config = _load_config(ctx)
 
     click.echo("\nSTIPS Configuration")
     click.echo("=" * 40)
 
-    # Show profile/env file if set
-    profile = ctx.obj.get("profile")
-    env_file = ctx.obj.get("env_file")
-    if profile:
-        click.echo(f"\n{'Profile:':<20} {profile}")
-    if env_file:
-        click.echo(f"{'Env file:':<20} {env_file}")
+    # Show the config file that supplied the env
+    config_path = ctx.obj.get("config_path")
+    if config_path:
+        click.echo(f"\n{'Config:':<20} {config_path}")
 
     click.echo(f"\n{'REPO:':<20} {config.repo}")
     click.echo(f"{'STACK_DIR:':<20} {config.stack_dir}")
@@ -369,7 +345,7 @@ def calibs(ctx: click.Context, night: str, jobs: int) -> None:
 @click.option("--object", "object_filter", help="Filter by OBJECT header value")
 @click.option("--skip-coadds", is_flag=True, help="Skip coadd generation")
 @click.option(
-    "--config",
+    "--calibrate-config",
     "science_config",
     type=click.Path(exists=True, path_type=Path),
     help="Override calibrateImage config",
@@ -612,7 +588,7 @@ def download(
             _print_info(f"Including {len(extra)} additional nights from command line")
 
         # Load config with inline env
-        config = _load_config(ctx, inline_env=yaml_env, prefer_inline=True)
+        config = _load_config(ctx)
     else:
         # All arguments are night dates
         nights = list(config_or_nights)
@@ -749,13 +725,10 @@ def bootstrap(ctx: click.Context, config_file: Path | None) -> None:
     from stips.core import bootstrap as bootstrap_module
     from stips.core import run as run_module
 
-    inline_env = None
-
     # If a pipeline YAML is provided, extract env from it
     if config_file:
         yaml_env = run_module.get_env_from_yaml(config_file)
         if yaml_env:
-            inline_env = yaml_env
             _print_info(f"Using environment from: {config_file}")
         else:
             # Check for profile in YAML
@@ -771,9 +744,7 @@ def bootstrap(ctx: click.Context, config_file: Path | None) -> None:
                             f"Using profile '{yaml_profile}' from: {config_file}"
                         )
 
-    # When loading from YAML with inline env, prefer YAML values
-    prefer_inline = inline_env is not None
-    config = _load_config(ctx, inline_env=inline_env, prefer_inline=prefer_inline)
+    config = _load_config(ctx)
 
     _print_info("Bootstrapping Butler repository...")
     _print_info(f"  Repo: {config.repo}")
@@ -865,14 +836,10 @@ def clean(
     from stips.core import clean as clean_module
     from stips.core import run as run_module
 
-    inline_env = None
-
     # If a pipeline YAML is provided, extract env from it
     if config_file:
         yaml_env = run_module.get_env_from_yaml(config_file)
-        if yaml_env:
-            inline_env = yaml_env
-        else:
+        if not yaml_env:
             cli_profile = ctx.obj.get("profile")
             if not cli_profile:
                 yaml_profile = run_module.get_profile_from_yaml(config_file)
@@ -882,9 +849,7 @@ def clean(
                         ctx.obj["env_file"] = resolved
                         ctx.obj["profile"] = yaml_profile
 
-    # When loading from YAML with inline env, prefer YAML values
-    prefer_inline = inline_env is not None
-    config = _load_config(ctx, inline_env=inline_env, prefer_inline=prefer_inline)
+    config = _load_config(ctx)
 
     nights_list = list(nights) if nights else None
     steps_list = list(steps) if steps else None
@@ -959,9 +924,7 @@ def clean(
     type=click.Choice(["r", "i"]),
     help="Nickel band (r or i)",
 )
-@click.option(
-    "-c", "--collection", help="Output collection (default: templates/ps1/{band})"
-)
+@click.option("--collection", help="Output collection (default: templates/ps1/{band})")
 @click.option("--tract", type=int, help="Tract number (auto-determined if not set)")
 @click.option(
     "--size", type=float, default=0.2, help="Cutout size in degrees (default: 0.2)"
@@ -1329,7 +1292,7 @@ def calib_metrics(
         sys.exit(1)
 
     _print_info(f"Using environment from: {config_file}")
-    config = _load_config(ctx, inline_env=yaml_env, prefer_inline=True)
+    config = _load_config(ctx)
 
     if collection is None:
         prof = config.require_profile()
@@ -1426,7 +1389,7 @@ def landolt_validate(
         sys.exit(1)
 
     _print_info(f"Using environment from: {config_file}")
-    config = _load_config(ctx, inline_env=yaml_env, prefer_inline=True)
+    config = _load_config(ctx)
 
     _print_info(f"Repo: {config.repo}")
     mode = "listing stars" if list_stars else "validating photometry"
@@ -1512,12 +1475,9 @@ def run_pipeline(
     """
     from stips.core import run as run_module
 
-    inline_env = None
-
     # Check if the YAML specifies inline env vars (highest priority)
     yaml_env = run_module.get_env_from_yaml(config_file)
     if yaml_env:
-        inline_env = yaml_env
         _print_info("Using inline environment from pipeline YAML")
     else:
         # Check if the YAML specifies a profile and no -p flag was given
@@ -1532,9 +1492,7 @@ def run_pipeline(
                     ctx.obj["profile"] = yaml_profile
                     _print_info(f"Using profile '{yaml_profile}' from pipeline YAML")
 
-    # When loading from YAML with inline env, prefer YAML values over shell environment
-    prefer_inline = inline_env is not None
-    config = _load_config(ctx, inline_env=inline_env, prefer_inline=prefer_inline)
+    config = _load_config(ctx)
 
     _print_info(f"Running pipeline from {config_file}...")
 
