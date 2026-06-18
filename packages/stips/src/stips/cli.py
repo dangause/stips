@@ -159,7 +159,11 @@ def _load_lightcurve_config(
 
     config_path = ctx.obj.get("config_path")
     if config_path:
-        config = cfg_module.load(config_path)
+        try:
+            config = cfg_module.load(config_path)
+        except ValueError as e:
+            _print_error(str(e))
+            sys.exit(1)
         if repo is not None:
             config = dataclasses.replace(config, repo=repo)
         if stack_dir is not None:
