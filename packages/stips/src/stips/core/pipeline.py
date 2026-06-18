@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 
 # Re-exported for backwards compatibility; canonical home is stips.collections.
 from stips.collections import CollectionNames as CollectionNames
+from stips.collections import generate_run_timestamp as generate_run_timestamp
 
 if TYPE_CHECKING:
     from stips.core.config import Config
@@ -39,11 +40,6 @@ def validate_night(night: str) -> str:
         raise ValueError(f"Invalid date: {night}") from e
 
     return night
-
-
-def generate_run_timestamp() -> str:
-    """Generate a UTC timestamp for collection naming."""
-    return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
 
 def night_to_date_range(night: str) -> tuple[str, str]:

@@ -2,15 +2,21 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
+
+def generate_run_timestamp() -> str:
+    """Generate a UTC timestamp for collection naming."""
+    return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+
 
 class CollectionNames:
     """Generate standard collection names for a pipeline run."""
 
+    # NOTE: the prefix="Nickel" default is a transitional back-compat scaffold;
+    # it is removed in the final Phase-2b task (Task 10) once all call sites pass
+    # the prefix explicitly.
     def __init__(self, night: str, run_ts: str | None = None, prefix: str = "Nickel"):
-        # Lazy import of generate_run_timestamp to avoid a circular import
-        # between stips.collections and stips.core.pipeline.
-        from stips.core.pipeline import generate_run_timestamp
-
         self.night = night
         self.run_ts = run_ts or generate_run_timestamp()
         self.prefix = prefix
