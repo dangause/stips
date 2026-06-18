@@ -1,17 +1,17 @@
-"""Nickel Processing Suite CLI.
+"""STIPS - Small Telescope Image Processing Suite CLI.
 
-Unified command-line interface for processing Nickel telescope data
+Unified command-line interface for processing small-telescope data
 with the LSST Science Pipelines.
 
 Usage:
-    nickel calibs 20240625
-    nickel science 20240625
-    nickel dia 20240625 --auto-template
-    nickel env
+    stips calibs 20240625
+    stips science 20240625
+    stips dia 20240625 --auto-template
+    stips env
 
 Profiles:
-    nickel -p 2023ixf dia 20230519 --auto   # Uses .env.2023ixf
-    nickel -p 2020wnt calibs 20201207       # Uses .env.2020wnt
+    stips -p 2023ixf dia 20230519 --auto   # Uses .env.2023ixf
+    stips -p 2020wnt calibs 20201207       # Uses .env.2020wnt
 """
 
 from __future__ import annotations
@@ -90,22 +90,22 @@ def _resolve_env_file(env_file: Path | None, profile: str | None) -> Path | None
 def cli(
     ctx: click.Context, env_file: Path | None, profile: str | None, verbose: bool
 ) -> None:
-    """Nickel Processing Suite - LSST pipeline tools for Nickel telescope data.
+    """STIPS - Small Telescope Image Processing Suite. LSST pipeline tools.
 
-    Process Nickel 1-meter telescope observations using LSST Science Pipelines.
+    Process small-telescope observations using LSST Science Pipelines.
     Configure your environment with a .env file or environment variables.
 
     \b
     Quick start:
-        nickel env                    # Check configuration
-        nickel calibs 20240625        # Run calibrations
-        nickel science 20240625       # Process science frames
-        nickel dia 20240625 --auto    # Difference imaging
+        stips env                    # Check configuration
+        stips calibs 20240625        # Run calibrations
+        stips science 20240625       # Process science frames
+        stips dia 20240625 --auto    # Difference imaging
 
     \b
     Using profiles (shorthand for --env-file):
-        nickel -p 2023ixf env         # Uses .env.2023ixf
-        nickel -p 2020wnt calibs ...  # Uses .env.2020wnt
+        stips -p 2023ixf env         # Uses .env.2023ixf
+        stips -p 2020wnt calibs ...  # Uses .env.2020wnt
     """
     # Configure logging for all core modules
     log_level = logging.DEBUG if verbose else logging.INFO
@@ -270,7 +270,7 @@ def env(ctx: click.Context) -> None:
     except SystemExit:
         return
 
-    click.echo("\nNickel Processing Suite Configuration")
+    click.echo("\nSTIPS Configuration")
     click.echo("=" * 40)
 
     # Show profile/env file if set
@@ -330,8 +330,8 @@ def calibs(ctx: click.Context, night: str, jobs: int) -> None:
 
     \b
     Example:
-        nickel calibs 20240625
-        nickel calibs 20240625 --jobs 8
+        stips calibs 20240625
+        stips calibs 20240625 --jobs 8
     """
     config = _load_config(ctx)
 
@@ -403,10 +403,10 @@ def science(
 
     \b
     Example:
-        nickel science 20240625
-        nickel science 20240625 --object 2020wnt --skip-coadds
-        nickel science 20240625 --bad 12345,12346
-        nickel science 20240625 --object 2023ixf --ra 210.91 --dec 54.32
+        stips science 20240625
+        stips science 20240625 --object 2020wnt --skip-coadds
+        stips science 20240625 --bad 12345,12346
+        stips science 20240625 --object 2023ixf --ra 210.91 --dec 54.32
     """
     if (ra is None) != (dec is None):
         _print_error("--ra and --dec must be provided together")
@@ -479,9 +479,9 @@ def dia(
 
     \b
     Example:
-        nickel dia 20240625 --auto
-        nickel dia 20240625 --template templates/deep/r
-        nickel dia 20240625 --auto --band r --object 2020wnt
+        stips dia 20240625 --auto
+        stips dia 20240625 --template templates/deep/r
+        stips dia 20240625 --auto --band r --object 2020wnt
     """
     if not template and not auto_template:
         _print_error("Specify --template or --auto")
@@ -548,14 +548,14 @@ def download(
     \b
     Examples:
         # Download all nights from a pipeline config
-        nickel download scripts/config/2023ixf/pipeline_ps1_template.yaml
+        stips download scripts/config/2023ixf/pipeline_ps1_template.yaml
 
         # Download only missing nights from config
-        nickel download scripts/config/2023ixf/pipeline_ps1_template.yaml --missing-only
+        stips download scripts/config/2023ixf/pipeline_ps1_template.yaml --missing-only
 
         # Download specific nights (requires -p profile or --env-file)
-        nickel -p 2023ixf download 20240625
-        nickel -p 2023ixf download 20240416 20240429 20240516
+        stips -p 2023ixf download 20240625
+        stips -p 2023ixf download 20240416 20240429 20240516
     """
     from stips.core import run as run_module
     from stips.pipeline_tools import fetch_archive_night
@@ -730,21 +730,21 @@ def bootstrap(ctx: click.Context, config_file: Path | None) -> None:
 
     \b
     1. Pipeline YAML file with 'env' section (recommended):
-       nickel bootstrap scripts/config/2023ixf/pipeline_ps1_template.yaml
+       stips bootstrap scripts/config/2023ixf/pipeline_ps1_template.yaml
 
     \b
     2. Profile flag:
-       nickel -p 2023ixf bootstrap
+       stips -p 2023ixf bootstrap
 
     \b
     3. Environment file:
-       nickel --env-file .env.2023ixf bootstrap
+       stips --env-file .env.2023ixf bootstrap
 
     \b
     Examples:
-        nickel bootstrap scripts/config/2023ixf/pipeline_ps1_template.yaml
-        nickel bootstrap scripts/config/2020wnt/pipeline_nickel_template.yaml
-        nickel -p 2023ixf bootstrap
+        stips bootstrap scripts/config/2023ixf/pipeline_ps1_template.yaml
+        stips bootstrap scripts/config/2020wnt/pipeline_nickel_template.yaml
+        stips -p 2023ixf bootstrap
     """
     from stips.core import bootstrap as bootstrap_module
     from stips.core import run as run_module
@@ -840,27 +840,27 @@ def clean(
     \b
     Examples:
         # Preview what would be removed
-        nickel clean pipeline.yaml --dry-run
+        stips clean pipeline.yaml --dry-run
 
     \b
         # Remove all processing runs (not calibs)
-        nickel clean pipeline.yaml -y
+        stips clean pipeline.yaml -y
 
     \b
         # Remove calibs and all processing runs
-        nickel clean pipeline.yaml --step calibs --step science --step dia --step fphot --step coadd -y
+        stips clean pipeline.yaml --step calibs --step science --step dia --step fphot --step coadd -y
 
     \b
         # Remove only DIA and forced phot runs
-        nickel clean pipeline.yaml --step dia --step fphot
+        stips clean pipeline.yaml --step dia --step fphot
 
     \b
         # Remove runs for specific nights only
-        nickel clean pipeline.yaml --night 20201207 --night 20201219
+        stips clean pipeline.yaml --night 20201207 --night 20201219
 
     \b
         # Using profile instead of YAML
-        nickel -p 2020wnt clean --dry-run
+        stips -p 2020wnt clean --dry-run
     """
     from stips.core import clean as clean_module
     from stips.core import run as run_module
@@ -986,8 +986,8 @@ def ps1_template(
 
     \b
     Example:
-        nickel ps1-template --ra 210.91 --dec 54.32 --band r
-        nickel ps1-template --ra 210.91 --dec 54.32 --band i --degrade-seeing 2.0
+        stips ps1-template --ra 210.91 --dec 54.32 --band r
+        stips ps1-template --ra 210.91 --dec 54.32 --band i --degrade-seeing 2.0
     """
     config = _load_config(ctx)
 
@@ -1057,8 +1057,8 @@ def fphot(
 
     \b
     Example:
-        nickel fphot 20230519 --ra 210.91 --dec 54.32
-        nickel fphot 20230519 --ra 210.91 --dec 54.32 --band r --image-type both
+        stips fphot 20230519 --ra 210.91 --dec 54.32
+        stips fphot 20230519 --ra 210.91 --dec 54.32 --band r --image-type both
     """
     config = _load_config(ctx)
 
@@ -1180,7 +1180,7 @@ def lightcurve(
 
     \b
     Example (standalone - no .env needed):
-        nickel lightcurve \\
+        stips lightcurve \\
             --repo /path/to/butler_repo \\
             --ra 210.91 --dec 54.32 \\
             --collections "Nickel/runs/*/diff/*/run" \\
@@ -1188,12 +1188,12 @@ def lightcurve(
 
     \b
     Example (with profile):
-        nickel -p 2023ixf lightcurve --ra 210.91 --dec 54.32 \\
+        stips -p 2023ixf lightcurve --ra 210.91 --dec 54.32 \\
             --collections "Nickel/runs/20230519/diff/*/run" --name "SN 2023ixf"
 
     \b
     Example (forced photometry):
-        nickel lightcurve --repo /path/to/repo --ra 210.91 --dec 54.32 \\
+        stips lightcurve --repo /path/to/repo --ra 210.91 --dec 54.32 \\
             --collections "Nickel/runs/*/forcedPhotRaDec/*/run" \\
             --dataset-type forced_phot_diffim_radec --name "SN 2023ixf"
     """
@@ -1294,7 +1294,7 @@ def calib_metrics(
     """Extract per-visit astrometric/photometric calibration metrics to CSV.
 
     Reads REPO and STACK_DIR from the `env:` section of a pipeline YAML config
-    (same file you pass to `nickel run`), then queries the Butler for:
+    (same file you pass to `stips run`), then queries the Butler for:
 
     \b
       - preliminary_visit_summary          (always)
@@ -1303,13 +1303,13 @@ def calib_metrics(
 
     \b
     Example:
-        nickel calib-metrics \\
+        stips calib-metrics \\
             scripts/config/2023ixf/pipeline_ps1_template.yaml \\
             -o calib_metrics_2023ixf_all.csv
 
     \b
     Filter to one night:
-        nickel calib-metrics \\
+        stips calib-metrics \\
             scripts/config/2023ixf/pipeline_ps1_template.yaml \\
             --night 20230519 \\
             --collection "Nickel/runs/20230519/processCcd/*" \\
@@ -1394,14 +1394,14 @@ def landolt_validate(
 
     \b
     Example:
-        nickel landolt-validate \\
+        stips landolt-validate \\
             scripts/config/landolt_validation/pipeline_landolt.yaml \\
             --catalog scripts/config/landolt_validation/landolt_catalog.csv \\
             -o landolt_validation.csv
 
     \b
     Dry run (list expected matches):
-        nickel landolt-validate \\
+        stips landolt-validate \\
             scripts/config/landolt_validation/pipeline_landolt.yaml \\
             --catalog scripts/config/landolt_validation/landolt_catalog.csv \\
             --list-stars \\
@@ -1497,8 +1497,8 @@ def run_pipeline(
 
     \b
     Example:
-        nickel run scripts/config/2023ixf/pipeline.yaml
-        nickel run pipeline.yaml --dry-run
+        stips run scripts/config/2023ixf/pipeline.yaml
+        stips run pipeline.yaml --dry-run
     """
     from stips.core import run as run_module
 
@@ -1583,10 +1583,10 @@ def bps(ctx: click.Context) -> None:
 
     \b
     Example:
-        nickel bps submit calibs 20230519 --site slurm
-        nickel bps submit dia 20230519 --site slurm --band r
-        nickel bps status RUN_ID
-        nickel bps cancel RUN_ID
+        stips bps submit calibs 20230519 --site slurm
+        stips bps submit dia 20230519 --site slurm --band r
+        stips bps status RUN_ID
+        stips bps cancel RUN_ID
     """
     pass
 
@@ -1626,9 +1626,9 @@ def bps_submit(
 
     \b
     Example:
-        nickel bps submit calibs 20230519 --site slurm
-        nickel bps submit science 20230519 --site local --dry-run
-        nickel bps submit dia 20230519 --site slurm --band r
+        stips bps submit calibs 20230519 --site slurm
+        stips bps submit science 20230519 --site local --dry-run
+        stips bps submit dia 20230519 --site slurm --band r
     """
     # Validate DIA requires band
     if pipeline == "dia" and not band:
@@ -1667,7 +1667,7 @@ def bps_submit(
             click.echo(f"  Submit dir: {result.submit_dir}")
         if result.run_id:
             click.echo(f"  Run ID: {result.run_id}")
-            click.echo(f"\n  Check status: nickel bps status {result.run_id}")
+            click.echo(f"\n  Check status: stips bps status {result.run_id}")
     else:
         _print_error(f"BPS submission failed: {result.error}")
         if result.stderr:
@@ -1685,7 +1685,7 @@ def bps_status(ctx: click.Context, run_id: str) -> None:
 
     \b
     Example:
-        nickel bps status 12345
+        stips bps status 12345
     """
     config = _load_config(ctx)
 
@@ -1713,7 +1713,7 @@ def bps_cancel(ctx: click.Context, run_id: str, force: bool) -> None:
 
     \b
     Example:
-        nickel bps cancel 12345
+        stips bps cancel 12345
     """
     config = _load_config(ctx)
 
@@ -1740,7 +1740,7 @@ def bps_list(ctx: click.Context) -> None:
 
     \b
     Example:
-        nickel bps list
+        stips bps list
     """
     config = _load_config(ctx)
 
@@ -1786,10 +1786,10 @@ def dashboard(
 
     \b
     Example:
-        nickel dashboard
-        nickel dashboard --port 9000
-        nickel dashboard --logs-dir ./logs --no-browser
-        nickel -p 2023ixf dashboard
+        stips dashboard
+        stips dashboard --port 9000
+        stips dashboard --logs-dir ./logs --no-browser
+        stips -p 2023ixf dashboard
     """
     # Determine logs directory
     if logs_dir is None:
