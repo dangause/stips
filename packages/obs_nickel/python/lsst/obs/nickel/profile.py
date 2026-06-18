@@ -4,6 +4,9 @@ Copy this file, rename, and edit for your telescope."""
 
 import logging
 
+# Safe to import at module load: fetch.py is stdlib-only at import time
+# (the lick_archive client is lazy-imported inside the fetch implementation).
+from lsst.obs.nickel.fetch import fetch_data as _fetch_data
 from stips import Field, InstrumentProfile, Site, hook
 
 log = logging.getLogger("lsst.obs.nickel.translator")
@@ -72,6 +75,7 @@ profile = InstrumentProfile(
     skymap_collection="skymaps/nickelRings",
     obs_data_package="obs_nickel_data",
     package_dir="lsst.obs.nickel",
+    fetch_data=_fetch_data,
 )
 
 

@@ -30,7 +30,6 @@ dashboard = [
 stips = "stips.cli:main"
 
 # Archive tools
-stips-archive-fetch-night = "stips.pipeline_tools.fetch_archive_night:main"
 stips-archive-nights = "stips.pipeline_tools.generate_nights_list:main"
 stips-archive-ingest-ps1 = "stips.pipeline_tools.ingest_ps1_template:main"
 stips-archive-template-meta = "stips.pipeline_tools.template_metadata:main"
