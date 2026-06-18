@@ -569,7 +569,7 @@ def download(
 
     if not_in_archive and not succeeded:
         click.secho(
-            "\nNone of the requested nights are in the Lick archive. "
+            "\nNone of the requested nights were found in the archive. "
             "The data may not have been uploaded yet, or the dates may be incorrect.",
             fg="yellow",
         )
