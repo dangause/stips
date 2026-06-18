@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -170,54 +169,6 @@ class Config:
         if self.cp_pipe_dir and not self.cp_pipe_dir.exists():
             errors.append(f"CP_PIPE_DIR does not exist: {self.cp_pipe_dir}")
         return errors
-
-
-def _expand_env_vars(value: str, local_env: dict[str, str] | None = None) -> str:
-    """Expand ${VAR} references in a string.
-
-    Args:
-        value: String potentially containing ${VAR} references
-        local_env: Local environment dict to check first
-
-    Returns:
-        String with all ${VAR} references expanded
-    """
-    local_env = local_env or {}
-    while "${" in value:
-        start = value.index("${")
-        end = value.index("}", start)
-        var_name = value[start + 2 : end]
-        var_value = local_env.get(var_name, os.environ.get(var_name, ""))
-        value = value[:start] + var_value + value[end + 1 :]
-    return value
-
-
-def _parse_env_file(path: Path) -> dict[str, str]:
-    """Parse a .env file into a dict."""
-    env = {}
-    if not path.exists():
-        return env
-
-    with open(path) as f:
-        for line in f:
-            line = line.strip()
-            # Skip comments and empty lines
-            if not line or line.startswith("#"):
-                continue
-            # Handle KEY=VALUE (with optional quotes)
-            if "=" in line:
-                key, _, value = line.partition("=")
-                key = key.strip()
-                value = value.strip()
-                # Remove surrounding quotes
-                if (value.startswith('"') and value.endswith('"')) or (
-                    value.startswith("'") and value.endswith("'")
-                ):
-                    value = value[1:-1]
-                # Expand ${VAR} references
-                value = _expand_env_vars(value, env)
-                env[key] = value
-    return env
 
 
 def _expand_within(value: str, env: dict[str, str]) -> str:

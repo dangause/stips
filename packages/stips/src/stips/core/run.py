@@ -535,44 +535,6 @@ class RunConfig:
         )
 
 
-def get_profile_from_yaml(path: Path) -> str | None:
-    """Extract just the profile field from a pipeline YAML file.
-
-    This is a lightweight function to get the profile before loading
-    the full environment configuration.
-
-    Args:
-        path: Path to pipeline YAML file
-
-    Returns:
-        Profile name if specified, None otherwise
-    """
-    with open(path) as f:
-        data = yaml.safe_load(f)
-    return data.get("profile")
-
-
-def get_env_from_yaml(path: Path) -> dict[str, str] | None:
-    """Extract inline environment variables from a pipeline YAML file.
-
-    This allows pipeline configs to be self-contained by embedding
-    environment variables directly in the YAML.
-
-    Args:
-        path: Path to pipeline YAML file
-
-    Returns:
-        Dict of environment variables if 'env' section exists, None otherwise
-    """
-    with open(path) as f:
-        data = yaml.safe_load(f)
-    env_section = data.get("env")
-    if env_section and isinstance(env_section, dict):
-        # Convert all values to strings
-        return {str(k): str(v) for k, v in env_section.items()}
-    return None
-
-
 @dataclass
 class RunResult:
     """Result of pipeline run."""

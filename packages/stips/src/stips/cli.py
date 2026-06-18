@@ -40,35 +40,6 @@ def _print_info(msg: str) -> None:
     click.echo(msg)
 
 
-def _resolve_env_file(env_file: Path | None, profile: str | None) -> Path | None:
-    """Resolve environment file from --env-file or --profile."""
-    if env_file:
-        return env_file
-
-    if profile:
-        # Try common patterns for profile env files
-        candidates = [
-            Path(f".env.{profile}"),
-            Path(f".env.{profile}.ps1"),
-            Path(f"envs/{profile}.env"),
-            Path(f".env-{profile}"),
-        ]
-        for candidate in candidates:
-            if candidate.exists():
-                return candidate
-
-        # If no match found, default to .env.{profile}
-        default = Path(f".env.{profile}")
-        if not default.exists():
-            _print_error(
-                f"Profile '{profile}' not found. Tried: {', '.join(str(c) for c in candidates)}"
-            )
-            sys.exit(1)
-        return default
-
-    return None
-
-
 @click.group()
 @click.option(
     "-c",
