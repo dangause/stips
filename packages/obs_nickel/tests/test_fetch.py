@@ -37,6 +37,29 @@ class TestFetchData(unittest.TestCase):
         status, _ = self._run(1)
         self.assertEqual(status, "failed")
 
+    def test_forwards_env_and_overwrite(self):
+        # fetch_data must unpack the env block + overwrite into _fetch_night.
+        status, m = self._run(0)
+        m.assert_called_once()
+        args, kwargs = m.call_args
+        self.assertEqual(args[0], "20230519")
+        self.assertEqual(args[1], Path("/tmp/raw"))
+        self.assertEqual(kwargs["client_path"], "/x")
+        self.assertEqual(kwargs["archive_url"], "u")
+        self.assertEqual(kwargs["instrument"], "NICKEL_DIR")
+        self.assertTrue(kwargs["overwrite"])
+
+    def test_env_defaults_when_keys_absent(self):
+        # Missing URL/INSTR fall back to the Nickel defaults; absent client_path is None.
+        cfg = _Cfg({})
+        with mock.patch.object(fetch, "_fetch_night", return_value=0) as m:
+            fetch.fetch_data("20230519", cfg)
+        _args, kwargs = m.call_args
+        self.assertIsNone(kwargs["client_path"])
+        self.assertEqual(kwargs["archive_url"], fetch._DEFAULT_ARCHIVE_URL)
+        self.assertEqual(kwargs["instrument"], fetch._DEFAULT_INSTR)
+        self.assertFalse(kwargs["overwrite"])
+
 
 if __name__ == "__main__":
     unittest.main()

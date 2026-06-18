@@ -48,10 +48,10 @@ def _import_client():
     except ImportError as err:
         msg = (
             f"Could not import lick_archive client (ImportError: {err}). "
-            "Set LICK_ARCHIVE_DIR or use --client-path to point at the "
+            "Set LICK_ARCHIVE_DIR in the config env: block to point at the "
             "lick_searchable_archive clone, or pip install -e that repo."
         )
-        raise SystemExit(msg) from err
+        raise ImportError(msg) from err
     return LickArchiveClient, QueryTerm
 
 
@@ -60,8 +60,8 @@ def _daterange_for_night(night: str, timezone: str) -> tuple[dt.datetime, dt.dat
     tz = ZoneInfo(timezone)
     try:
         date = dt.datetime.strptime(night, "%Y%m%d").date()
-    except ValueError as err:  # pragma: no cover - CLI validation
-        raise SystemExit(f"Invalid --night '{night}' (use YYYYMMDD)") from err
+    except ValueError as err:
+        raise ValueError(f"Invalid night '{night}' (use YYYYMMDD)") from err
     start = dt.datetime.combine(date, dt.time(12, 0), tzinfo=tz)
     return start, start + dt.timedelta(days=1)
 
