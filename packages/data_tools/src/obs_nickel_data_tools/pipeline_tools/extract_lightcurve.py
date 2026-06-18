@@ -174,7 +174,7 @@ def plot_light_curves(
 ):
     """Generate a single multi-band light curve plot with publication styling."""
     try:
-        from lsst.obs.nickel.plotting import (
+        from lsst.obs.stips.plotting import (
             FIGURE_SIZE,
             apply_publication_style,
             format_lightcurve_axes,

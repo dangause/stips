@@ -22,6 +22,8 @@ class StipsTranslator(FitsTranslator):
 
     @classmethod
     def can_translate(cls, header, filename=None):
+        if cls.profile is None:
+            return False
         return cls.profile.name.lower() in str(header.get("INSTRUME", "")).lower()
 
     def _hook(self, name):

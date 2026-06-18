@@ -11,6 +11,10 @@ log = logging.getLogger("lsst.obs.nickel.translator")
 profile = InstrumentProfile(
     name="Nickel",
     policy_name="Nickel",
+    # `name` takes precedence in to_location(): EarthLocation.of_site("Lick
+    # Observatory") is used, so the lat/lon/elevation below are never consulted
+    # for Nickel. They are informational and serve as the documented fallback
+    # for forks whose astropy lacks an of_site entry for this observatory.
     site=Site(
         latitude=37.3414,
         longitude=-121.6429,
