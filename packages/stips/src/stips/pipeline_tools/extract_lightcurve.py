@@ -310,11 +310,11 @@ def plot_light_curves(
 
 
 def get_photocalib_for_visit(
-    butler: Butler, visit: int, band: str, photocalib_cache: dict
+    butler: Butler, visit: int, band: str, photocalib_cache: dict, instrument: str
 ) -> tuple:
     """Fetch photoCalib for a visit, with caching.
 
-    The photoCalib is stored in initial_photoCalib_detector (from the Nickel
+    The photoCalib is stored in initial_photoCalib_detector (from the
     DRP calibrateImage task), not in calexp. This function queries processCcd
     collections to find the calibration for the given visit.
 
@@ -323,6 +323,8 @@ def get_photocalib_for_visit(
         visit: Visit ID to fetch calibration for
         band: Band name (for cache key)
         photocalib_cache: Dictionary cache for photoCalib objects
+        instrument: Instrument name (used for the dataId and the
+            processCcd collection-glob prefix)
 
     Returns:
         (photoCalib, instFluxToNanojansky_factor) or (None, None) if not available.
@@ -334,9 +336,18 @@ def get_photocalib_for_visit(
 
     # Check if we've already cached the processCcd collections
     if "_processccd_collections" not in photocalib_cache:
+        # The collection prefix is the instrument's collection_prefix. For these
+        # single-CCD instruments collection_prefix == instrument name (Nickel),
+        # but resolve it from the profile to stay correct for non-Nickel forks.
+        try:
+            prefix = load_profile(
+                os.environ.get("INSTRUMENT_PACKAGE", "lsst.obs.nickel")
+            ).collection_prefix
+        except Exception:
+            prefix = instrument
         try:
             photocalib_cache["_processccd_collections"] = list(
-                butler.registry.queryCollections("Nickel/runs/*/processCcd/*")
+                butler.registry.queryCollections(f"{prefix}/runs/*/processCcd/*")
             )
         except Exception:
             photocalib_cache["_processccd_collections"] = []
@@ -347,11 +358,11 @@ def get_photocalib_for_visit(
         return None, None
 
     try:
-        # The Nickel DRP produces initial_photoCalib_detector from calibrateImage,
+        # The DRP produces initial_photoCalib_detector from calibrateImage,
         # not calexp.photoCalib. This is the photometric calibration we need.
         photocalib = butler.get(
             "initial_photoCalib_detector",
-            dataId={"instrument": "Nickel", "visit": visit, "detector": 0},
+            dataId={"instrument": instrument, "visit": visit, "detector": 0},
             collections=processccd_collections,
         )
         # Get the calibration factor (converts 1 ADU to nJy)
@@ -631,7 +642,7 @@ def main():
             else:
                 # Flux is in instrumental ADU — apply photoCalib
                 photocalib, calib_factor = get_photocalib_for_visit(
-                    butler, visit, band, photocalib_cache
+                    butler, visit, band, photocalib_cache, instrument
                 )
                 if photocalib is not None and calib_factor is not None:
                     flux_nJy = flux * calib_factor

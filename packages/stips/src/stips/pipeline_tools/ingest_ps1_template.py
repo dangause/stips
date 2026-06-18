@@ -1135,9 +1135,11 @@ def ingest_exposure_to_butler(
         prof = load_profile(os.environ.get("INSTRUMENT_PACKAGE", "lsst.obs.nickel"))
         prof_skymap_name = prof.skymap_name
         prof_skymap_collection = prof.skymap_collection
+        prof_instrument = prof.name
     except Exception:
         prof_skymap_name = None
         prof_skymap_collection = None
+        prof_instrument = "Nickel"
 
     skymap_name = os.environ.get("SKYMAP_NAME") or prof_skymap_name or "nickelRings-v1"
     skymap_collections = (
@@ -1210,7 +1212,7 @@ def ingest_exposure_to_butler(
 
     # Only add instrument/physical_filter if they're in the dataset type dimensions
     if dims and "instrument" in dims:
-        data_id["instrument"] = "Nickel"
+        data_id["instrument"] = prof_instrument
         log.info("Including 'instrument' dimension in data ID")
     if dims and "physical_filter" in dims:
         data_id["physical_filter"] = band.upper()
