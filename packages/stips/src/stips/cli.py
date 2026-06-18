@@ -1824,10 +1824,16 @@ def dashboard(
 
         threading.Thread(target=_open_browser, daemon=True).start()
 
-    # Import and run
-    import uvicorn
+    # Import and run (dashboard deps are an optional extra)
+    try:
+        import uvicorn
 
-    from stips.dashboard import create_app
+        from stips.dashboard import create_app
+    except ModuleNotFoundError as exc:
+        raise click.ClickException(
+            f"Dashboard support is not installed ({exc.name}). "
+            "Install it with: pip install 'stips[dashboard]'"
+        ) from exc
 
     app = create_app(logs_dir)
     uvicorn.run(app, host=host, port=port, log_level="warning")

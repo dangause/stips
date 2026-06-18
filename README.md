@@ -105,7 +105,8 @@ nickel_processing_suite/
 ├── packages/
 │   ├── obs_nickel/           # LSST instrument package
 │   ├── obs_nickel_data/      # Curated calibrations (defects)
-│   ├── data_tools/           # Python CLI and pipeline tools
+│   ├── obs_stips/            # Instrument-agnostic LSST glue
+│   ├── stips/                # Python CLI, pipeline tools + framework core
 │   ├── defects/              # Defect mask generation
 │   ├── refcats/              # Reference catalog scripts
 │   ├── colorterms/           # Color term fitting
