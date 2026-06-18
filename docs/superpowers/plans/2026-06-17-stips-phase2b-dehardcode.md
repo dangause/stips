@@ -266,13 +266,14 @@ Add a `profile` field to the `Config` dataclass. Where `Config` is built (config
 
 - [ ] **Step 3: Grep gate (two-part — broadened to catch escaped predicates; tolerant of docstring examples).** The naive `'Nickel'` gate both MISSES escaped query forms (`instrument=\'Nickel\'` in generated render scripts) and FALSE-POSITIVES on legitimate docstring/usage-example lines (e.g. `core/__init__.py`, `core/calib_metrics.py`, `eda/butler_inspect.py`, `skymap/make_skymap_from_datasets.py`, `skymap/build_discrete_skymap_config.py`). So run two greps:
 
-  **(a) LOGIC gate — must return NOTHING.** Catch instrument/collection/skymap literals in real code (queries incl. the escaped form, collection f-strings, the instrument class, skymap names):
+  **(a) LOGIC gate — must return NOTHING.** Use SIMPLE, permissive patterns that catch every escape form (the on-disk predicate is `instrument=\\'Nickel\\'` with doubled backslashes inside a generated subprocess script — a narrow `'Nickel'` regex misses it; `instrument=.*Nickel` does not). Run BOTH greps; each must be empty after excluding docstring/comment lines:
   ```bash
-  grep -rnE "instrument=[\\\\]*'Nickel'|[\"f]\"?Nickel/|prefix_filter=\"Nickel|nickelRings|lsst\.obs\.nickel\.Nickel" \
-    packages/stips/src/stips --include=*.py \
-    | grep -vE '^\s*#|"""|Usage:|Example'
+  # (a1) query predicates — ANY quoting/escaping form:
+  grep -rnE "instrument=.*Nickel" packages/stips/src/stips --include=*.py | grep -vE '#|"""|Usage:|Example'
+  # (a2) collection prefixes / skymap / instrument class in logic:
+  grep -rnE "Nickel/|nickelRings|lsst\\.obs\\.nickel\\.Nickel" packages/stips/src/stips --include=*.py | grep -vE '#|"""|Usage:|Example'
   ```
-  Any hit here is an un-migrated logic site → fix it. (Tune the exclude so genuine docstring/`Usage:` lines are dropped but code lines are not.)
+  SANITY: before migrating image_renderer.py, confirm the (a1) grep DOES fire on `dashboard/image_renderer.py:142,151` (proves the gate catches the escaped form); after migration both greps must be empty. Any hit is an un-migrated logic site → fix it (a code line that legitimately must keep "Nickel" is a miss, not an exclude).
 
   **(b) RESIDUAL audit — review, don't fail.** List every remaining `Nickel`/`nickelRings` mention and confirm each is one of the ALLOWED categories: (i) the Nickel-specific profile/test fixtures, (ii) a docstring/usage example, (iii) a comment. Enumerate the allowed remainders explicitly in the commit message (the known docstring-example files above are Phase-3 doc cleanup, intentionally left):
   ```bash
