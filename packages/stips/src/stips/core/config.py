@@ -221,7 +221,7 @@ def _parse_env_file(path: Path) -> dict[str, str]:
 
 
 def _expand_within(value: str, env: dict[str, str]) -> str:
-    """Expand ${VAR}/$VAR references using ONLY the given env dict (no os.environ).
+    """Expand ${VAR} references using ONLY the given env dict (no os.environ).
 
     Args:
         value: String potentially containing ${VAR} references
@@ -302,8 +302,8 @@ def load(
     # Load the active instrument profile. Robustness: if the obs package is not
     # installed in this environment, do NOT crash config loading — leave
     # profile=None. Commands that need it call Config.require_profile() for a
-    # clear, actionable error. (INSTRUMENT_PACKAGE is already in env_keys, so
-    # it is merged from os.environ above.)
+    # clear, actionable error. (INSTRUMENT_PACKAGE comes from the config YAML's
+    # env: block, defaulting to lsst.obs.nickel when unset.)
     instrument_package = merged.get("INSTRUMENT_PACKAGE", "lsst.obs.nickel")
     try:
         profile = load_profile(instrument_package)
