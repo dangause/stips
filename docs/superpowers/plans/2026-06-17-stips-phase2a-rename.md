@@ -87,6 +87,21 @@ done
 ```
 (If any of those test files don't exist or don't actually import the tooling, leave them in obs_nickel/tests — verify with `grep -l obs_nickel_data_tools packages/obs_nickel/tests/*.py` BEFORE moving, and only move the ones that match.)
 
+- [ ] **Step 2b: Repath the `sys.path` bootstrap in the moved test files (CRITICAL — the sed misses this)**
+
+Each of the 7 moved test files contains a self-bootstrap line like:
+```python
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "data_tools/src"))
+```
+This is how they import the tooling today (it is NOT installed in the test venv via this path — the literal is `"data_tools/src"`, which the `obs_nickel_data_tools`→`stips` sed does NOT touch). After the `git mv` to `packages/stips/tests/`, `parents[2]` is still `packages/`, and `packages/data_tools/src` is deleted in Task 2. Fix every occurrence so it points at the new source tree (from `packages/stips/tests/`, `parents[1]` is `packages/stips`):
+```bash
+cd /Users/dangause/Developer/lick/lsst/lsst_stack/stack/nickel_processing_suite/.claude/worktrees/stips-framework-phase1
+grep -rln 'data_tools/src' packages/stips/tests
+grep -rln 'data_tools/src' packages/stips/tests | xargs sed -i '' 's#parents\[2\] / "data_tools/src"#parents[1] / "src"#g'
+grep -rn 'data_tools/src' packages/stips/tests || echo "bootstrap repathed ✓"
+```
+Also fix the now-false docstring in `test_fphot_collection_selection.py` ("Import fphot module from data_tools source tree." → "...from the stips source tree.") and any similar stale comment surfaced by `grep -rn "data_tools" packages/stips/tests`.
+
 - [ ] **Step 3: Rewrite the namespace `obs_nickel_data_tools` → `stips` everywhere it's an import/module ref**
 
 Scope: all `.py` under `packages/stips/` and the moved tests, plus `docker/entrypoint.sh` and `scripts/utilities/with-stack.sh`. EXCLUDE `docs/superpowers/**` (prose), `.git`, build artifacts.
@@ -196,7 +211,8 @@ ls packages/   # data_tools gone; stips, obs_stips, obs_nickel, obs_nickel_data,
 - [ ] **Step 4: Root `pyproject.toml`**
 
 - Remove `"packages/data_tools"` from `[tool.ruff].src`.
-- Confirm `"packages/stips/tests"` is in `[tool.pytest.ini_options].testpaths` (added in Phase 1) and `"packages/obs_nickel/tests"` remains.
+- Remove `"packages/data_tools"` from `[tool.pyright].include` (it's a second stale reference, ~line 111), and add `"packages/stips"` + `"packages/obs_stips"` there for consistency with ruff `src`.
+- Confirm `"packages/stips/tests"` is in `[tool.pytest.ini_options].testpaths` (added in Phase 1) and `"packages/obs_nickel/tests"` remains. Fix the now-false comment near `testpaths` (~line 77: "All tests (including data_tools unit tests) live in obs_nickel/tests/") and drop the commented-out `# "packages/data_tools/tests"` line.
 - The `[tool.uv.workspace].members = ["packages/*"]` glob auto-drops the deleted dir — no change needed.
 
 - [ ] **Step 5: Reinstall + verify the `stips` console script exists and runs**
@@ -275,11 +291,12 @@ git commit -m "refactor: update docker/docs/test references from obs_nickel_data
 In `cli.py`:
 - Root group docstring: `"Nickel Processing Suite - LSST pipeline tools for Nickel telescope data."` → `"STIPS - Small Telescope Image Processing Suite. LSST pipeline tools."` (or similar).
 - All example lines in command docstrings that show `nickel <subcommand>` → `stips <subcommand>` (env, calibs, science, dia, download, ps1-template, fphot, lightcurve, bps examples).
-Grep first to find them, then edit:
+Grep first to find them, then edit ONLY the docstring/example lines. **Tighten the grep to exclude `obs_nickel`** so you don't accidentally touch the `obs_nickel` env/path-discovery logic (e.g. `obs_nickel = Path(os.environ["OBS_NICKEL"])`, the `# If cwd is obs_nickel itself` comment) — those must stay:
 ```bash
-grep -n "nickel " packages/stips/src/stips/cli.py
+grep -n "nickel " packages/stips/src/stips/cli.py | grep -v "obs_nickel"
 ```
-**Leave alone:** the BPS `--project default="nickel"` option value (it's a runtime account/submission label, not the CLI name — Phase 2b decides whether/what to rebrand it). Do NOT change any `lsst.obs.nickel` strings, any `"Nickel/..."` collection literals, or `instrument='Nickel'` (all Phase 2b). This task is ONLY the CLI command name in human-facing help.
+Edit only the lines that are user-facing CLI examples/help (`nickel <subcommand>` → `stips <subcommand>`) and the group docstring branding. Do NOT change any `obs_nickel` path/env logic.
+**Also leave alone:** the BPS `--project default="nickel"` option value (it's a runtime account/submission label, not the CLI name — Phase 2b decides whether/what to rebrand it). Do NOT change any `lsst.obs.nickel` strings, any `"Nickel/..."` collection literals, or `instrument='Nickel'` (all Phase 2b). This task is ONLY the CLI command name in human-facing help.
 
 - [ ] **Step 2: Verify help renders the new name**
 
