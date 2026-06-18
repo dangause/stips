@@ -1,4 +1,4 @@
-"""Tasks for the Nickel telescope obs package."""
+"""Generic PipelineTasks for the STIPS framework."""
 
 from .diaLightcurveCombinedPlot import (
     DiaLightcurveCombinedPlotConfig,

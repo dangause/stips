@@ -430,8 +430,9 @@ if _HAS_LSST:
             # Nickel's 10" value is set in the fork config tree (Phase 2);
             # 2.0 is the LSST-neutral default.
             default=2.0,
-            doc="Cross-match radius in arcseconds. Nickel WCS residuals "
-            "can be 5-7 arcsec, so the default is set generously.",
+            doc="Match radius (arcsec) for associating the target with a "
+            "catalog source. Instruments with large WCS residuals may need "
+            "to increase this in their config.",
         )
         minRelMag = pexConfig.Field(
             dtype=float,
