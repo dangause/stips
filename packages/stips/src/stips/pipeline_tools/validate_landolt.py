@@ -458,8 +458,9 @@ def parse_args():
     parser.add_argument("--catalog", required=True, help="Path to landolt_catalog.csv")
     parser.add_argument(
         "--collection",
-        default="Nickel/runs/*/processCcd/*",
-        help="Collection glob pattern (default: 'Nickel/runs/*/processCcd/*')",
+        default=None,
+        help="Collection glob pattern "
+        "(default: the instrument's processCcd collections from the active profile)",
     )
     parser.add_argument("--output", "-o", required=False, help="Output CSV path")
     parser.add_argument(
@@ -477,6 +478,18 @@ def parse_args():
 
 def main() -> int:
     args = parse_args()
+
+    # Resolve the collection glob from the active profile when not given,
+    # so non-Nickel forks default to their own processCcd collections.
+    collection = args.collection
+    if collection is None:
+        try:
+            prefix = load_profile(
+                os.environ.get("INSTRUMENT_PACKAGE", "lsst.obs.nickel")
+            ).collection_prefix
+        except Exception:
+            prefix = "Nickel"
+        collection = f"{prefix}/runs/*/processCcd/*"
 
     if not args.list_stars and not args.output:
         print(
@@ -496,12 +509,10 @@ def main() -> int:
     instrument = _resolve_instrument(args.instrument)
 
     # Resolve collections
-    print(f"[info] querying collection: {args.collection}", file=sys.stderr)
-    collections = _resolve_collections(butler, args.collection)
+    print(f"[info] querying collection: {collection}", file=sys.stderr)
+    collections = _resolve_collections(butler, collection)
     if not collections:
-        print(
-            f"[error] no collections match pattern {args.collection!r}", file=sys.stderr
-        )
+        print(f"[error] no collections match pattern {collection!r}", file=sys.stderr)
         return 1
     print(f"[info] resolved {len(collections)} collection(s)", file=sys.stderr)
 
@@ -529,7 +540,7 @@ def main() -> int:
 
     if not refs:
         print(
-            f"[warn] no single_visit_star_unstandardized datasets found in {args.collection}",
+            f"[warn] no single_visit_star_unstandardized datasets found in {collection}",
             file=sys.stderr,
         )
         return 1
