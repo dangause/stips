@@ -15,7 +15,7 @@
 #     nps:hpc bash
 #
 # Test BPS parallel execution (simulates HPC):
-#   nickel bps submit science 20230519 --site local
+#   stips bps submit science 20230519 --site local
 #
 # How it works:
 # - BPS uses Parsl for workflow execution

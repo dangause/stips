@@ -9,7 +9,7 @@
 #   docker run -v /path/to/repo:/data/repo \
 #              -v /path/to/raw:/data/raw \
 #              -v /path/to/refcats:/data/refcats \
-#              nps:latest nickel env
+#              nps:latest stips env
 
 # =============================================================================
 # Base Image: LSST Science Pipelines
@@ -106,4 +106,4 @@ HEALTHCHECK --interval=60s --timeout=10s --start-period=5s --retries=3 \
 
 # Entry point
 ENTRYPOINT ["/opt/nps/docker/entrypoint.sh"]
-CMD ["nickel", "--help"]
+CMD ["stips", "--help"]

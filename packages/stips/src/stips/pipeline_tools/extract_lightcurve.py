@@ -6,7 +6,7 @@ This script extracts a light curve for a specific object from difference imaging
 source catalogs, producing a CSV file with photometry over time.
 
 Usage:
-    obsn-dia-lightcurve \\
+    stips-dia-lightcurve \\
         --repo /path/to/repo \\
         --collection "Nickel/runs/*/diff/*/run" \\
         --ra 123.456 --dec +12.345 \\
@@ -14,7 +14,7 @@ Usage:
         --output lightcurve.csv
 
 Example with object name (looks up coordinates):
-    obsn-dia-lightcurve \\
+    stips-dia-lightcurve \\
         --repo $REPO \\
         --collection "Nickel/runs/202406*/diff/*/run" \\
         --object "2020wnt" \\

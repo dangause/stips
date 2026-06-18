@@ -9,15 +9,9 @@ in the full stack environment.
 from __future__ import annotations
 
 import importlib
-import sys
 from pathlib import Path
 
 import numpy as np
-
-sys.path.insert(
-    0,
-    str(Path(__file__).resolve().parents[2] / "data_tools/src"),
-)
 
 # Import the module directly from its file path to avoid triggering
 # the lsst.obs.stips package __init__.py (which needs the LSST stack).

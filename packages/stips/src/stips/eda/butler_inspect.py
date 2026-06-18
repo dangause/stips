@@ -8,10 +8,10 @@ This tool provides exploratory data analysis for Butler repositories:
 - Template availability and characteristics
 
 Usage:
-  obsn-eda-butler collections --repo /path/to/repo [--pattern "Nickel/*"]
-  obsn-eda-butler datasets --repo /path/to/repo --collection "Nickel/runs/*/processCcd/*/run"
-  obsn-eda-butler calibs --repo /path/to/repo [--nights 20200101,20200102,...]
-  obsn-eda-butler templates --repo /path/to/repo [--band r]
+  stips-eda-butler collections --repo /path/to/repo [--pattern "Nickel/*"]
+  stips-eda-butler datasets --repo /path/to/repo --collection "Nickel/runs/*/processCcd/*/run"
+  stips-eda-butler calibs --repo /path/to/repo [--nights 20200101,20200102,...]
+  stips-eda-butler templates --repo /path/to/repo [--band r]
 
 Environment:
   REPO    Butler repository path (can be used instead of --repo)

@@ -5,7 +5,7 @@ This pulls files into the layout expected by obs_nickel ingestion:
   ${RAW_PARENT_DIR}/${NIGHT}/raw/<archive-relative-path>.fits
 
 Usage:
-  obsn-archive-fetch-night --night YYYYMMDD [--raw-root PATH] [--archive-url URL]
+  stips-archive-fetch-night --night YYYYMMDD [--raw-root PATH] [--archive-url URL]
   # or via module invocation
   python -m stips.pipeline_tools.fetch_archive_night --night YYYYMMDD [--raw-root PATH] [--archive-url URL]
 

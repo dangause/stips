@@ -652,7 +652,7 @@ def download(
         # Use existing fetch_archive_night module
         old_argv = sys.argv
         sys.argv = [
-            "obsn-archive-fetch-night",
+            "stips-archive-fetch-night",
             "--night",
             night,
             "--raw-root",

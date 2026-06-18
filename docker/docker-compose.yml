@@ -11,10 +11,10 @@
 #   # Dashboard is now live at http://localhost:8080
 #
 #   # Run a pipeline (dashboard shows live progress)
-#   docker exec nps-processing nps-exec nickel run /opt/nps/scripts/config/2023ixf/pipeline_docker_test.yaml
+#   docker exec nps-processing nps-exec stips run /opt/nps/scripts/config/2023ixf/pipeline_docker_test.yaml
 #
 #   # Or run individual commands
-#   docker exec nps-processing nps-exec nickel calibs 20230519
+#   docker exec nps-processing nps-exec stips calibs 20230519
 #
 #   # Interactive shell (with LSST stack activated)
 #   docker exec -it nps-processing nps-exec bash
@@ -89,7 +89,7 @@ services:
 
     # Health check
     healthcheck:
-      test: ["CMD", "bash", "-c", "source /opt/lsst/software/stack/loadLSST.bash && setup lsst_distrib && nickel --help > /dev/null"]
+      test: ["CMD", "bash", "-c", "source /opt/lsst/software/stack/loadLSST.bash && setup lsst_distrib && stips --help > /dev/null"]
       interval: 60s
       timeout: 30s
       retries: 3

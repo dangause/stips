@@ -16,7 +16,7 @@
 #   singularity run -B /path/to/repo:/data/repo \
 #                   -B /path/to/raw:/data/raw \
 #                   -B /path/to/refcats:/data/refcats \
-#                   nps.sif nickel calibs 20230519
+#                   nps.sif stips calibs 20230519
 
 Bootstrap: docker
 From: nps:latest
@@ -36,13 +36,13 @@ From: nps:latest
 
     USAGE:
         # Run calibrations
-        singularity run nps.sif nickel calibs 20230519
+        singularity run nps.sif stips calibs 20230519
 
         # Run science processing
-        singularity run nps.sif nickel science 20230519
+        singularity run nps.sif stips science 20230519
 
         # Run difference imaging
-        singularity run nps.sif nickel dia 20230519 --auto --band r
+        singularity run nps.sif stips dia 20230519 --auto --band r
 
         # Interactive shell
         singularity shell nps.sif
@@ -70,7 +70,7 @@ From: nps:latest
         singularity run -B /scratch/repo:/data/repo \
                         -B /archive/raw:/data/raw \
                         -B /common/refcats:/data/refcats \
-                        nps.sif nickel calibs 20230519
+                        nps.sif stips calibs 20230519
 
         # With profile configuration
         singularity run -B /scratch/repo:/data/repo \
@@ -78,11 +78,11 @@ From: nps:latest
                         -B /common/refcats:/data/refcats \
                         -B ./config:/config \
                         --env NPS_PROFILE=2023ixf \
-                        nps.sif nickel dia 20230519 --auto
+                        nps.sif stips dia 20230519 --auto
 
         # BPS submission (local testing)
         singularity run -B ... \
-                        nps.sif nickel bps submit science 20230519 --site local
+                        nps.sif stips bps submit science 20230519 --site local
 
 %environment
     # Standard environment variables
@@ -124,9 +124,9 @@ From: nps:latest
         exit 1
     fi
 
-    # Check that nickel CLI is available
-    if ! command -v nickel &> /dev/null; then
-        echo "WARNING: nickel command not in PATH (will be available after stack activation)"
+    # Check that stips CLI is available
+    if ! command -v stips &> /dev/null; then
+        echo "WARNING: stips command not in PATH (will be available after stack activation)"
     fi
 
     echo "Container tests passed!"

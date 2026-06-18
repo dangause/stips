@@ -4,7 +4,7 @@
 # Runs inside the 'login' container. Verifies:
 #   1. LSST stack is available
 #   2. obs_nickel is setup
-#   3. nickel CLI works
+#   3. stips CLI works
 #   4. BPS submit to Slurm works (basic connectivity)
 #
 # Usage:

@@ -8,10 +8,10 @@ This tool provides exploratory data analysis capabilities for the Lick archive:
 - Optional visualization
 
 Usage:
-  obsn-eda-archive summary --start 20200101 --end 20201231
-  obsn-eda-archive nights --start 20200101 --end 20201231 [--format csv]
-  obsn-eda-archive targets --start 20200101 --end 20201231
-  obsn-eda-archive plot-filters --start 20200101 --end 20201231 --output filters.png
+  stips-eda-archive summary --start 20200101 --end 20201231
+  stips-eda-archive nights --start 20200101 --end 20201231 [--format csv]
+  stips-eda-archive targets --start 20200101 --end 20201231
+  stips-eda-archive plot-filters --start 20200101 --end 20201231 --output filters.png
 
 Environment:
   LICK_ARCHIVE_URL    archive API base (default https://archive.ucolick.org/archive)
@@ -286,7 +286,7 @@ def cmd_targets(args) -> int:
     formatters.print_error(
         "Target catalog analysis requires FITS header metadata.\n"
         "The archive index only provides filenames.\n"
-        "Download files with 'obsn-archive-fetch-night' and analyze FITS headers locally."
+        "Download files with 'stips-archive-fetch-night' and analyze FITS headers locally."
     )
     return 1
 
@@ -296,7 +296,7 @@ def cmd_plot_filters(args) -> int:
     formatters.print_error(
         "Filter usage analysis requires FITS header metadata.\n"
         "The archive index only provides filenames.\n"
-        "Download files with 'obsn-archive-fetch-night' and analyze FITS headers locally."
+        "Download files with 'stips-archive-fetch-night' and analyze FITS headers locally."
     )
     return 1
 
