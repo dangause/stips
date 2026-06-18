@@ -92,9 +92,8 @@ class Config:
         raw_parent_dir: Parent directory for raw data
         refcat_repo: Path to reference catalog repository
         cp_pipe_dir: Path to cp_pipe pipelines
-        lick_archive_dir: Path to lick_searchable_archive (optional)
-        lick_archive_url: Lick archive API URL
-        lick_archive_instr: Instrument filter for archive queries
+        env: The raw, ${VAR}-expanded YAML env: block (instrument-specific keys
+            read by profile hooks, e.g. fetch_data).
         profile: Active instrument's InstrumentProfile (None if obs package
             not importable; use require_profile() for an actionable error)
         instrument_package: Importable package the profile is loaded from
@@ -113,9 +112,7 @@ class Config:
     instrument_dir: Path | None = None
     refcat_repo: Path | None = None
     cp_pipe_dir: Path | None = None
-    lick_archive_dir: Path | None = None
-    lick_archive_url: str = "https://archive.ucolick.org/archive"
-    lick_archive_instr: str = "NICKEL_DIR"
+    env: dict[str, str] = field(default_factory=dict)
 
     # Active instrument's InstrumentProfile (loaded from INSTRUMENT_PACKAGE).
     # May be None if the obs package is not importable; commands that need it
@@ -294,15 +291,7 @@ def load(
             else None
         ),
         cp_pipe_dir=cp_pipe_dir,
-        lick_archive_dir=(
-            Path(merged["LICK_ARCHIVE_DIR"]).expanduser()
-            if merged.get("LICK_ARCHIVE_DIR")
-            else None
-        ),
-        lick_archive_url=merged.get(
-            "LICK_ARCHIVE_URL", "https://archive.ucolick.org/archive"
-        ),
-        lick_archive_instr=merged.get("LICK_ARCHIVE_INSTR", "NICKEL_DIR"),
+        env=dict(merged),
         profile=profile,
         instrument_package=instrument_package,
     )

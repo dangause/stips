@@ -63,6 +63,24 @@ class TestYamlConfig(unittest.TestCase):
         with self.assertRaises(ValueError):
             cfg.load()
 
+    def test_env_block_exposed_and_expanded(self):
+        p = _write_yaml(
+            "env:\n"
+            "  REPO: /tmp/repo\n"
+            "  STACK_DIR: /tmp/stack\n"
+            "  OBS_NICKEL: /tmp/obs\n"
+            "  RAW_PARENT_DIR: /tmp/raw\n"
+            "  LICK_ARCHIVE_DIR: ${STACK_DIR}/lick\n"
+        )
+        c = cfg.load(p)
+        # raw, expanded env block is exposed generically
+        self.assertEqual(c.env["LICK_ARCHIVE_DIR"], "/tmp/stack/lick")
+        self.assertEqual(c.env["REPO"], "/tmp/repo")
+        # framework Config no longer carries Lick-specific typed fields
+        self.assertFalse(hasattr(c, "lick_archive_dir"))
+        self.assertFalse(hasattr(c, "lick_archive_url"))
+        self.assertFalse(hasattr(c, "lick_archive_instr"))
+
 
 if __name__ == "__main__":
     unittest.main()

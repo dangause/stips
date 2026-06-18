@@ -55,6 +55,10 @@ class InstrumentProfile:
     obs_data_package: Optional[str] = None
     package_dir: Optional[str] = None
     refcat_path: Optional[str] = None
+    # Optional data-fetch hook. Signature:
+    #   fetch_data(night: str, config: Config, *, overwrite: bool = False) -> str
+    # Returns one of "ok" | "not_found" | "failed". When None, `stips download`
+    # reports that download is not configured for this instrument (no crash).
     fetch_data: Optional[Callable] = None
     hooks: dict[str, Callable] = field(default_factory=dict)
 
