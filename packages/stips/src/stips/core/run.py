@@ -1610,7 +1610,7 @@ def _run_differential_phot_step(
 
     prof = config.require_profile()
     repo = str(config.repo)
-    obs_nickel = str(config.obs_nickel)
+    instrument_dir = str(config.instrument_dir)
 
     # Discover science collection via Butler (consistent with fphot.py pattern)
     science_coll = None
@@ -1646,7 +1646,7 @@ def _run_differential_phot_step(
 
     log.info(f"Running LSST differential photometry on {science_coll}")
 
-    pipeline_yaml = str(Path(obs_nickel) / "pipelines" / "DifferentialPhot.yaml")
+    pipeline_yaml = str(Path(instrument_dir) / "pipelines" / "DifferentialPhot.yaml")
     input_colls = (
         f"{science_coll},{prof.collection_prefix}/calib/current,"
         f"refcats,{prof.skymap_collection}"
