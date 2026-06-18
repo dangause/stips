@@ -5,12 +5,14 @@ diverged from current Nickel behavior."""
 
 import unittest
 
-from stips.core.pipeline import CollectionNames, night_to_day_obs
+from stips.collections import CollectionNames
+from stips.core.config import load_profile
+from stips.core.pipeline import night_to_day_obs
 
 
 class TestNickelCollectionGolden(unittest.TestCase):
     def setUp(self):
-        self.c = CollectionNames("20230519", "ts1")
+        self.c = CollectionNames("20230519", "ts1", prefix="Nickel")
 
     def test_input_attrs(self):
         # Inputs echoed back unchanged.
@@ -57,6 +59,24 @@ class TestNickelCollectionGolden(unittest.TestCase):
         # explicit offset is honored (genericity)
         self.assertEqual(night_to_day_obs("20230519", offset_days=0), "20230519")
         self.assertEqual(night_to_day_obs("20230519", offset_days=2), "20230521")
+
+
+class TestProfileDrivenParity(unittest.TestCase):
+    def test_nickel_profile_reproduces_golden(self):
+        prof = load_profile("lsst.obs.nickel")
+        c = CollectionNames("20230519", "ts1", prefix=prof.collection_prefix)
+        # SAME literals as the golden (proves the threaded profile yields identical Nickel output):
+        self.assertEqual(c.raw_run, "Nickel/raw/20230519/ts1")
+        self.assertEqual(c.calib_chain, "Nickel/calib/current")
+        self.assertEqual(c.science_parent, "Nickel/runs/20230519/processCcd/ts1")
+        self.assertEqual(c.diff_parent, "Nickel/runs/20230519/diff/ts1")
+        self.assertEqual(c.coadd_parent, "Nickel/runs/20230519/coadd/ts1")
+
+    def test_synthetic_profile_is_generic(self):
+        c = CollectionNames("20240101", "tsX", prefix="ctio0m9")
+        self.assertEqual(c.raw_run, "ctio0m9/raw/20240101/tsX")
+        self.assertEqual(c.calib_chain, "ctio0m9/calib/current")
+        self.assertEqual(c.science_parent, "ctio0m9/runs/20240101/processCcd/tsX")
 
 
 if __name__ == "__main__":

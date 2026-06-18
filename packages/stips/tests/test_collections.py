@@ -17,11 +17,11 @@ class TestCollectionNames(unittest.TestCase):
         self.assertEqual(c.calib_chain, "ctio0m9/calib/current")
         self.assertEqual(c.science_parent, "ctio0m9/runs/20240101/processCcd/tsX")
 
-    def test_prefix_defaults_to_nickel(self):
-        # temporary back-compat scaffold so existing 2-arg call sites still work
-        self.assertEqual(
-            CollectionNames("20230519", "ts1").calib_chain, "Nickel/calib/current"
-        )
+    def test_prefix_is_required(self):
+        # The transitional prefix="Nickel" default has been removed; prefix is now
+        # a required keyword-only arg. Omitting it must raise TypeError.
+        with self.assertRaises(TypeError):
+            CollectionNames("20230519", "ts1")
 
 
 if __name__ == "__main__":

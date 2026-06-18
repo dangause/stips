@@ -13,10 +13,7 @@ def generate_run_timestamp() -> str:
 class CollectionNames:
     """Generate standard collection names for a pipeline run."""
 
-    # NOTE: the prefix="Nickel" default is a transitional back-compat scaffold;
-    # it is removed in the final Phase-2b task (Task 10) once all call sites pass
-    # the prefix explicitly.
-    def __init__(self, night: str, run_ts: str | None = None, prefix: str = "Nickel"):
+    def __init__(self, night: str, run_ts: str | None = None, *, prefix: str):
         self.night = night
         self.run_ts = run_ts or generate_run_timestamp()
         self.prefix = prefix

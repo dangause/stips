@@ -260,8 +260,6 @@ print(json.dumps(results))
 # Standard chains
 REFCATS_CHAIN = "refcats"
 SKYMAPS_CHAIN = "skymaps/nickelRings"
-SKYMAP_NAME = "nickelRings-v1"
-INSTRUMENT = "lsst.obs.nickel.Nickel"
 
 
 def parse_butler_query_output(

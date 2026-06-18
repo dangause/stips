@@ -264,12 +264,12 @@ def run(
     # Find the raw collection for this night (targeted query)
     try:
         result = run_butler_query(
-            ["query-collections", repo, f"Nickel/raw/{night}/*"],
+            ["query-collections", repo, f"{cols.prefix}/raw/{night}/*"],
             config,
             check=False,
         )
         raw_collections = parse_butler_query_output(
-            result.stdout, prefix_filter="Nickel/"
+            result.stdout, prefix_filter=f"{cols.prefix}/"
         )
         raw_run = raw_collections[0] if raw_collections else None
         if not raw_run:
