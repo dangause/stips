@@ -84,6 +84,10 @@ export RAW_PARENT_DIR="{config.raw_parent_dir}"
     # Path to data_tools package (this package)
     data_tools_src = config.obs_nickel.parent / "data_tools" / "src"
 
+    # STIPS framework packages (siblings of obs_nickel)
+    obs_stips_dir = config.obs_nickel.parent / "obs_stips"
+    stips_src = config.obs_nickel.parent / "stips" / "src"
+
     script = f"""
 set -e
 {env_exports}
@@ -96,6 +100,16 @@ setup -r "{config.obs_nickel}" obs_nickel 2>/dev/null || true
 OBS_NICKEL_DATA="{config.obs_nickel.parent / 'obs_nickel_data'}"
 if [ -d "$OBS_NICKEL_DATA" ]; then
     setup -r "$OBS_NICKEL_DATA" obs_nickel_data 2>/dev/null || true
+fi
+
+# STIPS framework: obs_stips (LSST glue) + stips (core, src-layout)
+OBS_STIPS="{obs_stips_dir}"
+if [ -d "$OBS_STIPS" ]; then
+    setup -r "$OBS_STIPS" obs_stips 2>/dev/null || true
+fi
+STIPS_SRC="{stips_src}"
+if [ -d "$STIPS_SRC" ]; then
+    export PYTHONPATH="${{STIPS_SRC}}:${{PYTHONPATH:-}}"
 fi
 
 # Add data_tools to PYTHONPATH so obs_nickel_data_tools is importable
