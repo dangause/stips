@@ -44,6 +44,7 @@ src = [
     "packages/tuning",
     "packages/colorterms",
     "packages/stips",
+    "packages/obs_stips",
     "scripts",
 ]
 extend-exclude = [
@@ -78,6 +79,7 @@ convention = "numpy"
 testpaths = [
     "packages/obs_nickel/tests",
     "packages/stips/tests",
+    "packages/obs_stips/tests",
     # "packages/data_tools/tests",
     # "packages/defects/tests",
     # "packages/refcats/tests",
