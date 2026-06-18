@@ -8,6 +8,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+# Re-exported for backwards compatibility; canonical home is stips.collections.
+from stips.collections import CollectionNames as CollectionNames
+
 if TYPE_CHECKING:
     from stips.core.config import Config
 
@@ -243,78 +246,6 @@ print(json.dumps(results))
         )
 
     return sorted(bad_ids)
-
-
-class CollectionNames:
-    """Generate standard collection names for a pipeline run."""
-
-    def __init__(self, night: str, run_ts: str | None = None):
-        self.night = night
-        self.run_ts = run_ts or generate_run_timestamp()
-
-    # Raw data
-    @property
-    def raw_run(self) -> str:
-        return f"Nickel/raw/{self.night}/{self.run_ts}"
-
-    # Calibration products
-    @property
-    def cp_bias(self) -> str:
-        return f"Nickel/cp/{self.night}/bias/{self.run_ts}"
-
-    @property
-    def cp_bias_run(self) -> str:
-        return f"{self.cp_bias}/run"
-
-    @property
-    def cp_flat(self) -> str:
-        return f"Nickel/cp/{self.night}/flat/{self.run_ts}"
-
-    @property
-    def cp_flat_run(self) -> str:
-        return f"{self.cp_flat}/run"
-
-    @property
-    def curated_run(self) -> str:
-        return f"Nickel/calib/curated/{self.run_ts}"
-
-    @property
-    def curated_chain(self) -> str:
-        return "Nickel/calib/curated"
-
-    @property
-    def calib_out(self) -> str:
-        return f"Nickel/calib/{self.night}"
-
-    @property
-    def calib_chain(self) -> str:
-        return "Nickel/calib/current"
-
-    # Science processing
-    @property
-    def science_parent(self) -> str:
-        return f"Nickel/runs/{self.night}/processCcd/{self.run_ts}"
-
-    @property
-    def science_run(self) -> str:
-        return f"{self.science_parent}/run"
-
-    @property
-    def coadd_parent(self) -> str:
-        return f"Nickel/runs/{self.night}/coadd/{self.run_ts}"
-
-    @property
-    def coadd_run(self) -> str:
-        return f"{self.coadd_parent}/run"
-
-    # Difference imaging
-    @property
-    def diff_parent(self) -> str:
-        return f"Nickel/runs/{self.night}/diff/{self.run_ts}"
-
-    @property
-    def diff_run(self) -> str:
-        return f"{self.diff_parent}/run"
 
 
 # Standard chains
