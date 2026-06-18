@@ -73,8 +73,6 @@ export RAW_PARENT_DIR="{config.raw_parent_dir}"
         env_exports += f'export CP_PIPE_DIR="{config.cp_pipe_dir}"\n'
     if config.refcat_repo:
         env_exports += f'export REFCAT_REPO="{config.refcat_repo}"\n'
-    if config.lick_archive_dir:
-        env_exports += f'export LICK_ARCHIVE_DIR="{config.lick_archive_dir}"\n'
 
     # Pass through RUN_ID so shell scripts log to the same directory
     run_id = os.environ.get("RUN_ID")

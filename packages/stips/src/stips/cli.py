@@ -196,8 +196,6 @@ def env(ctx: click.Context) -> None:
         click.echo(f"{'CP_PIPE_DIR:':<20} {config.cp_pipe_dir}")
     if config.refcat_repo:
         click.echo(f"{'REFCAT_REPO:':<20} {config.refcat_repo}")
-    if config.lick_archive_dir:
-        click.echo(f"{'LICK_ARCHIVE_DIR:':<20} {config.lick_archive_dir}")
 
     # Validate paths
     errors = config.validate()
@@ -446,7 +444,7 @@ def download(
     overwrite: bool,
     missing_only: bool,
 ) -> None:
-    """Download nights from the Lick archive.
+    """Download raw data for one or more nights using the active instrument's data-fetch hook.
 
     Nights are taken from the command line (one or more YYYYMMDD dates). If no
     nights are given, they are read from the group -c config YAML's science: and
@@ -464,9 +462,14 @@ def download(
         stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml download 20240625
         stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml download 20240416 20240429
     """
-    from stips.pipeline_tools import fetch_archive_night
-
     config = _load_config(ctx)
+
+    prof = config.require_profile()
+    if prof.fetch_data is None:
+        raise click.ClickException(
+            f"Data download is not configured for instrument '{prof.name}'. "
+            f"Place raw FITS under {config.raw_parent_dir}/<night>/raw/."
+        )
 
     nights_list: list[str] = list(nights)
 
@@ -534,46 +537,22 @@ def download(
     succeeded = []
 
     for night in nights:
-        _print_info(f"Downloading {night} from Lick archive...")
-
-        # Use existing fetch_archive_night module
-        old_argv = sys.argv
-        sys.argv = [
-            "stips-archive-fetch-night",
-            "--night",
-            night,
-            "--raw-root",
-            str(config.raw_parent_dir),
-        ]
-        if config.lick_archive_dir:
-            sys.argv.extend(["--client-path", str(config.lick_archive_dir)])
-        if overwrite:
-            sys.argv.append("--overwrite")
-
+        _print_info(f"Downloading {night}...")
         try:
-            result = fetch_archive_night.main()
-            sys.argv = old_argv
-            if result == 0:
-                _print_success(f"✓ Downloaded {night}")
-                succeeded.append(night)
-            elif result == 2:
-                # No data in archive for this night
-                click.secho(f"⚠ {night}: not found in archive", fg="yellow")
-                not_in_archive.append(night)
-            else:
-                _print_error(f"Failed to download {night}")
-                failed.append(night)
-        except SystemExit as e:
-            sys.argv = old_argv
-            if e.code == 0:
-                _print_success(f"✓ Downloaded {night}")
-                succeeded.append(night)
-            elif e.code == 2:
-                click.secho(f"⚠ {night}: not found in archive", fg="yellow")
-                not_in_archive.append(night)
-            else:
-                _print_error(f"Failed to download {night}")
-                failed.append(night)
+            status = prof.fetch_data(night, config, overwrite=overwrite)
+        except Exception as e:
+            _print_error(f"Failed to download {night}: {e}")
+            failed.append(night)
+            continue
+        if status == "ok":
+            _print_success(f"✓ Downloaded {night}")
+            succeeded.append(night)
+        elif status == "not_found":
+            click.secho(f"⚠ {night}: not found in archive", fg="yellow")
+            not_in_archive.append(night)
+        else:
+            _print_error(f"Failed to download {night}")
+            failed.append(night)
 
     # Summary
     click.echo("")
