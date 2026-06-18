@@ -48,10 +48,15 @@ already generic after Phases 1–3). Three coupled parts:
 - `get_env_from_yaml(path)` (`run.py`) already extracts the `env:` dict from a YAML.
 - Lick archive: **already mostly optional** — `lick_archive_dir`/`LICK_ARCHIVE_*` are optional
   Config fields (not required), `lick_searchable_archive` is lazily imported (not a dependency),
-  and no core step needs it. But the Lick defaults (`lick_archive_url`,
-  `lick_archive_instr="NICKEL_DIR"`) live in the framework `Config`, `stips download` is
-  hardwired to the Lick client (`pipeline_tools/fetch_archive_night.py`), and
-  `InstrumentProfile.fetch_data` (the intended seam) is declared but **never called**.
+  and no core step needs it. But the Lick defaults live in the framework `Config`, `stips
+  download` is hardwired to the Lick client (`pipeline_tools/fetch_archive_night.py`), and
+  `InstrumentProfile.fetch_data` (the intended seam) is declared but **never called**. Note:
+  `config.lick_archive_instr="NICKEL_DIR"` is in fact a **dead/unused Config field** — the
+  download path (`cli.py` argv build) never reads it; the tool's own filter default is `NICKEL`
+  in `fetch_archive_night.py`. So dropping `lick_archive_instr`/`lick_archive_url` from the
+  framework Config has **zero call-site rewiring**. `lick_searchable_archive` is itself an
+  **in-repo package** (`packages/lick_searchable_archive/`), which informs where the Nickel-side
+  Lick wrapper lives (§5.2).
 - Naming: `OBS_NICKEL` is a **required** env var (`config.py`), `config.obs_nickel: Path` is used
   for repo-root traversal + sibling-package finding; **`stack.py` hardcodes
   `setup -r "{config.obs_nickel}" obs_nickel`** (the EUPS *product name* is literal — a fork's
@@ -68,7 +73,7 @@ already generic after Phases 1–3). Three coupled parts:
   its `env:` block via `get_env_from_yaml`, and builds the `Config` from **that block only**.
 - **The YAML `env:` block is the sole source of config values.** No `.env` parsing, no
   `os.environ` fallback for config keys. (Runtime-only vars the orchestrator sets at execution —
-  `RUN_ID`, `RUN_LOG_DIR` — are unaffected; they are not config.) The `env:` block's values are
+  e.g. `RUN_ID` — are unaffected; they are not config.) The `env:` block's values are
   still **exported into the LSST stack subprocess** by `run_with_stack` (that is runtime env, not
   config-from-env).
 - **No `-c` given → error**, with an actionable message: `"No config provided. Pass -c
@@ -79,6 +84,20 @@ already generic after Phases 1–3). Three coupled parts:
   the stack env). The full self-contained YAMLs (`scripts/config/*`) already have it and keep
   working via `-c`.
 
+### 4.1a One `-c` file, two roles (resolves the double-YAML question)
+The same `-c <config.yaml>` is the SINGLE YAML input. Two distinct consumers read DIFFERENT parts
+of it, and must not be conflated:
+- **Config** (this spec): only the `env:` block → builds `Config` (every command).
+- **Pipeline spec** (unchanged, `run.py`/`RunConfig`): the non-`env:` sections (`object`, `ra`,
+  `dec`, `bands`, `template`, `science`, `configs`, `options`, `lightcurve`) → consumed by
+  `run.py` exactly as today, independently of the config path.
+Therefore: the 6 commands that today take a **positional `config_file`** pipeline YAML
+(`run`, `bootstrap`, `clean`, `calib-metrics`, `landolt-validate`, `download`) DROP that positional
+arg in favor of the group-level `-c`; they read both the `env:` block (config) and their needed
+non-`env:` sections from that one `-c` file. The per-step commands (`calibs`, `science`, `dia`,
+`fphot`, etc.) read only the `env:` block from `-c` (they take their night/coords as command
+args). Net: exactly one YAML path (`-c`), no positional YAML, no double extraction.
+
 ### 4.2 Removed
 `_parse_env_file`, `_resolve_env_file`, `_expand_env_vars` (if only used by .env parsing),
 `-p/--profile`, `--env-file`, the default `.env` lookup, the `ENV_FILE` var, `extra_env`, and the
@@ -88,10 +107,22 @@ Delete the committed `.env*` files if any are tracked (the real `.env*` are user
 ### 4.3 `Config.load()` rewrite
 `load()` simplifies to: take a YAML path (or an already-extracted `env` dict), read the `env:`
 block, validate required keys (`REPO`, `STACK_DIR`, `INSTRUMENT_DIR`, `RAW_PARENT_DIR`), construct
-`Config`. The `_load_lightcurve_config` CLI-flag-override path (`--repo`/`--stack-dir`) is
-revisited: it may keep CLI overrides but no longer falls back to `.env`/auto-detect of env vars
-for config (it can still build a minimal Config from `--repo`/`--stack-dir` + the active
-profile). Keep it small and explicit.
+`Config`.
+
+**`lightcurve` (the `_load_lightcurve_config` path) — concrete decision (was a BLOCKING gap).**
+`_load_lightcurve_config` (`cli.py:150-256`) is the largest `.env`/`os.environ` consumer today: it
+loads from `.env`, and on failure auto-detects `STACK_DIR`/`OBS_NICKEL`/`RAW_PARENT_DIR` from
+`os.environ` + cwd-walking, then builds `Config(...)` directly. Under YAML-only this whole
+auto-detect block is **removed**. The `lightcurve` command becomes:
+- It gains the group-level `-c` like every other command (its `env:` block is the config source), AND
+- it keeps its existing **explicit** `--repo` / `--stack-dir` flags as a **sanctioned non-YAML
+  override** (lightcurve is an analysis command often run ad-hoc against an arbitrary Butler repo;
+  explicit flags are allowed, unlike implicit `.env`/`os.environ` discovery which is removed).
+- Resolution: if `-c` is given, build `Config` from its `env:` block (with `--repo`/`--stack-dir`
+  overriding those two keys if also passed); else require `--repo` (and resolve `--stack-dir` or
+  error — no `os.environ`/cwd auto-detection). The active profile still comes from
+  `INSTRUMENT_PACKAGE` (its default), not from cwd-walking for an obs package.
+Keep `_load_lightcurve_config` small and explicit; delete the `os.environ`/auto-detect branches.
 
 ### 4.4 Tests
 - `Config` built from a YAML fixture (a temp `config.yaml` with an `env:` block) — no `.env`.
@@ -102,16 +133,20 @@ profile). Keep it small and explicit.
 ## 5. Part B — Optional, instrument-provided data fetch
 
 ### 5.1 The seam
-- `InstrumentProfile.fetch_data` is a callable with a defined signature, e.g.
-  `fetch_data(night: str, config: Config) -> None` (downloads/places raw data under
-  `config.raw_parent_dir/<night>/raw/`). Document the contract on the dataclass.
+- `InstrumentProfile.fetch_data` is a callable that downloads/places raw data under
+  `config.raw_parent_dir/<night>/raw/`. To preserve the current 3-way "downloaded / not in
+  archive / failed" UX (`cli.py:669-710`), it RETURNS a status rather than `None`:
+  `fetch_data(night: str, config: Config) -> str` returning one of `"ok"`, `"not_found"`,
+  `"failed"` (a tiny enum/`Literal`; `download` maps these to the existing messages/exit codes).
+  Document the contract + the return values on the dataclass field.
 - `stips download <night>` (and its YAML-config form) becomes:
   ```
   prof = config.require_profile()
   if prof.fetch_data is None:
       raise ClickException(f"Data download is not configured for instrument '{prof.name}'. "
                            f"Place raw FITS under {config.raw_parent_dir}/<night>/raw/.")
-  prof.fetch_data(night, config)
+  status = prof.fetch_data(night, config)   # "ok" | "not_found" | "failed"
+  # map status to the existing per-night success / not-in-archive / failed reporting + exit code
   ```
 - `pipeline_tools/fetch_archive_night.py` (and the EDA `archive_query.py`) — the Lick-specific
   client wrapper — **moves to the Nickel instrument's concern** (see 5.2). The framework no
@@ -146,9 +181,16 @@ fetch needs comes from the YAML `env:` block (Nickel-specific keys) or the Nicke
   package dir). Accept `OBS_NICKEL` as a **deprecated alias** in the YAML `env:` block for one
   release (warn), so the existing `scripts/config/*` YAMLs keep working; update those YAMLs to
   `INSTRUMENT_DIR`.
-- `config.obs_nickel: Path` → **`config.instrument_dir: Path`** (the field already half-exists
-  from Phase 2b). Migrate the repo-root traversal + sibling-package finding
-  (`bootstrap.py`, `bps.py`, `run.py`, `cli.py` dashboard, `stack.py`) onto `config.instrument_dir`.
+- **Config field rename (was a BLOCKING gap).** Today `Config.obs_nickel: Path` is the PRIMARY
+  required field and `instrument_dir` is *derived from it* in `__post_init__`. Invert that: make
+  **`instrument_dir`** the real field (populated from the `INSTRUMENT_DIR` YAML key, falling back
+  to the deprecated `OBS_NICKEL` key with a warning), and keep **`obs_nickel` as a deprecated
+  read-only `@property` returning `self.instrument_dir`** for one release (so any external/holdout
+  caller doesn't break). Update the INTERNAL direct constructors (`cli.py:254`, `config.py:361`)
+  and ALL tests that build `Config(obs_nickel=…)` (`test_config_profile.py:29`, `test_executor.py`,
+  `test_bps_config.py`) to use `instrument_dir=…`. Migrate the repo-root traversal + sibling-package
+  finding (`bootstrap.py`, `bps.py`, `run.py`, `cli.py` dashboard, `stack.py`) onto
+  `config.instrument_dir`.
 - `stips env` output and any display strings use `INSTRUMENT_DIR`/`instrument_dir`.
 
 ### 6.2 The real bug: profile-driven EUPS setup
@@ -171,7 +213,10 @@ instrument name (→ `config.profile.name`). Surgical; framework only.
 ### 6.5 Repo-name references → `stips`
 Update in-repo references to the repo identity: README badge URLs (→ `dangause/stips`), monorepo
 structure trees showing `nickel_processing_suite/`, and any doc prose/path strings using the repo
-dir name. Do NOT attempt the physical directory `mv` (manual ops step; would disrupt the active
+dir name. **Also update `CLAUDE.md`** (which still says `cd nickel_processing_suite`, documents
+`-p`/`.env` profiles, and `uv pip install -e packages/stips`) to YAML-only config + the new
+naming — note `CLAUDE.md` is **gitignored** (repo policy), so it's a LOCAL working-tree edit, not
+a commit. Do NOT attempt the physical directory `mv` (manual ops step; would disrupt the active
 worktree). Code uses relative traversal (`config.instrument_dir.parent…`), not the literal repo
 name, so reference updates are safe ahead of the physical rename.
 
@@ -202,6 +247,19 @@ name, so reference updates are safe ahead of the physical rename.
 - **A breaks every per-step command's config path at once.** Mitigation: the YAML `env:`
   extraction already exists for 6 commands; A generalizes it to all via the group-level `-c`.
   Stage A so the suite stays green; update the per-target YAMLs + tests together.
+- **Field rename breaks direct `Config(...)` constructors + tests.** `Config(obs_nickel=…)` is
+  built directly at `cli.py:254`, `config.py:361`, and in `test_config_profile.py:29`,
+  `test_executor.py`, `test_bps_config.py`. §6.1 handles this (rename field → `instrument_dir`,
+  keep `obs_nickel` as a deprecated property, update all internal constructors + tests in the same
+  change) — but it MUST be done atomically or the suite goes red.
+- **~28 per-target YAMLs carry `OBS_NICKEL`, none carry `INSTRUMENT_DIR`** (`scripts/config/**`,
+  plus Docker/HPC variants). The deprecated-`OBS_NICKEL`-alias path (§6.1) is what lets A/C land
+  without rewriting all 28 at once; migrate them to `INSTRUMENT_DIR` opportunistically. Update at
+  least the canonical 2023ixf/2020wnt ones used by tests.
+- **The Lick client is an in-repo package** (`packages/lick_searchable_archive/`). Part B's
+  "move Lick out of the framework" → the Nickel-side `fetch_data` wrapper (a Nickel module that
+  lazily imports the in-repo `lick_archive`) is the path of least resistance; it must NOT live in
+  `stips`/`obs_stips`.
 - **B's "where does the Lick wrapper live" choice** affects whether `lick_searchable_archive`
   leaks into the framework. Constraint: it must end up Nickel-owned; the plan picks the concrete
   home (obs_nickel package vs a Nickel-side module) without putting it in `stips`/`obs_stips`.
