@@ -6,7 +6,10 @@ import os
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from stips.profile import InstrumentProfile
 
 
 def load_profile(instrument_package: str):
@@ -20,8 +23,11 @@ def load_profile(instrument_package: str):
         The instrument's ``InstrumentProfile`` object.
 
     Raises:
-        ImportError: If the instrument package (or its ``profile`` module) is
-            not importable.
+        ModuleNotFoundError: If the instrument package (or its ``profile``
+            module) is not installed/importable.
+        AttributeError: If the ``profile`` module is importable but does not
+            expose a ``profile`` attribute.
+        ImportError: If a transitive import inside the profile module fails.
     """
     import importlib
 
@@ -87,6 +93,9 @@ class Config:
         lick_archive_dir: Path to lick_searchable_archive (optional)
         lick_archive_url: Lick archive API URL
         lick_archive_instr: Instrument filter for archive queries
+        profile: Active instrument's InstrumentProfile (None if obs package
+            not importable; use require_profile() for an actionable error)
+        instrument_package: Importable package the profile is loaded from
     """
 
     repo: Path
@@ -102,7 +111,7 @@ class Config:
     # Active instrument's InstrumentProfile (loaded from INSTRUMENT_PACKAGE).
     # May be None if the obs package is not importable; commands that need it
     # should call require_profile() to surface an actionable error.
-    profile: Any = None
+    profile: "InstrumentProfile | None" = None
     # Importable package the profile was (or would be) loaded from.
     instrument_package: str = "lsst.obs.nickel"
 
@@ -114,7 +123,7 @@ class Config:
         self.pipelines_dir = self.obs_nickel / "pipelines"
         self.configs_dir = self.obs_nickel / "configs"
 
-    def require_profile(self) -> Any:
+    def require_profile(self) -> "InstrumentProfile":
         """Return the active instrument profile, or raise an actionable error.
 
         Use this from commands that genuinely need the profile. If the obs
@@ -299,17 +308,26 @@ def load(
         cp_pipe_dir = _discover_cp_pipe_dir(stack_dir)
 
     # Load the active instrument profile. Robustness: if the obs package is not
-    # importable (not installed in this environment), do NOT crash config
-    # loading — leave profile=None. Commands that need it call
-    # Config.require_profile() for a clear, actionable error.
-    instrument_package = merged.get(
-        "INSTRUMENT_PACKAGE",
-        os.environ.get("INSTRUMENT_PACKAGE", "lsst.obs.nickel"),
-    )
+    # installed in this environment, do NOT crash config loading — leave
+    # profile=None. Commands that need it call Config.require_profile() for a
+    # clear, actionable error. (INSTRUMENT_PACKAGE is already in env_keys, so
+    # it is merged from os.environ above.)
+    instrument_package = merged.get("INSTRUMENT_PACKAGE", "lsst.obs.nickel")
     try:
         profile = load_profile(instrument_package)
-    except ImportError:
-        profile = None
+    except ModuleNotFoundError as e:
+        top = instrument_package.split(".")[0]
+        # Only treat as "not installed" if the configured package itself is
+        # missing — not a broken/missing import *inside* an otherwise-present
+        # profile.py (which must surface, not be silenced as "not installed").
+        if e.name and (
+            e.name == top
+            or e.name.startswith(top + ".")
+            or e.name == f"{instrument_package}.profile"
+        ):
+            profile = None
+        else:
+            raise
 
     return Config(
         repo=Path(merged["REPO"]).expanduser(),
