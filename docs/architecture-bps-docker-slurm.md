@@ -495,8 +495,8 @@ docker exec -it nps-hpc bash -c '
   source /opt/lsst/software/stack/loadLSST.bash
   setup lsst_distrib
   setup -r /opt/nps/packages/obs_nickel obs_nickel 2>/dev/null || true
-  export PYTHONPATH=/opt/nps/packages/data_tools/src:${PYTHONPATH:-}
-  python -m obs_nickel_data_tools.cli run \
+  export PYTHONPATH=/opt/nps/packages/stips/src:${PYTHONPATH:-}
+  python -m stips.cli run \
     /opt/nps/scripts/config/2023ixf/pipeline_docker_bps_test.yaml
 '
 
@@ -605,7 +605,7 @@ docker/
 └── scripts/
     └── run-bps-test.sh          # Cluster readiness smoke test
 
-packages/data_tools/src/obs_nickel_data_tools/core/
+packages/stips/src/stips/core/
 ├── executor.py                  # LocalExecutor + BPSExecutor
 ├── bps.py                       # BPSConfig, render, submit, status, cancel
 ├── stack.py                     # LSST stack activation, pipetask/butler wrappers

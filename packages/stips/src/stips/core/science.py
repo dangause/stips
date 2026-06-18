@@ -108,8 +108,8 @@ def _read_landolt_target_names() -> list[str]:
     """
     import csv
 
-    # core/science.py → core/ → data_tools/src/stips/ → src/ → data_tools/
-    #   → packages/ → repo root
+    # science.py → core/ → stips/ → src/ → stips/ → packages/ → repo root
+    #   (parents[0]=core, [1]=stips, [2]=src, [3]=stips, [4]=packages, [5]=root)
     repo_root = Path(__file__).resolve().parents[5]
     catalog = (
         repo_root / "scripts" / "config" / "landolt_validation" / "landolt_catalog.csv"

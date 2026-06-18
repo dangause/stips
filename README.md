@@ -683,13 +683,13 @@ Ensure `STACK_DIR` points to a valid LSST installation:
 ls $STACK_DIR/loadLSST.bash  # Should exist
 ```
 
-### "Command not found: nickel"
+### "Command not found: stips"
 
-Install the data_tools package:
+Install the stips package:
 ```bash
 uv sync --group dev
 # or
-pip install -e packages/data_tools
+pip install -e packages/stips
 ```
 
 ### Pipeline fails with import errors

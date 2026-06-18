@@ -56,7 +56,7 @@ services:
 
       # Optional: Mount source for development
       # Uncomment to enable live code reloading
-      # - ../packages/data_tools/src:/opt/nps/packages/data_tools/src:ro
+      # - ../packages/stips/src:/opt/nps/packages/stips/src:ro
       # - ../packages/obs_nickel:/opt/nps/packages/obs_nickel:ro
 
     ports:

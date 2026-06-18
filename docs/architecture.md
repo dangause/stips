@@ -92,13 +92,13 @@ obs_nickel_data/
     └── __init__.py
 ```
 
-### 3. data_tools (CLI & Core Modules)
+### 3. stips (CLI & Core Modules)
 
 The main Python package providing CLI and processing logic:
 
 ```
-data_tools/src/obs_nickel_data_tools/
-├── cli.py                 # nickel CLI entry point
+packages/stips/src/stips/
+├── cli.py                 # stips CLI entry point
 ├── core/
 │   ├── config.py          # Environment/config loading
 │   ├── stack.py           # LSST stack activation

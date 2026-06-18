@@ -84,14 +84,14 @@ check "partition 'normal' exists" sinfo -p normal
 echo
 
 # -------------------------------------------------------------------
-# 5. nickel CLI (if data_tools installed)
+# 5. stips CLI (if stips installed)
 # -------------------------------------------------------------------
-echo "[5/5] nickel CLI"
-DATA_TOOLS_DIR="${NPS_ROOT:-/opt/nps}/packages/data_tools"
-if [[ -d "$DATA_TOOLS_DIR" ]] && ! command -v nickel &>/dev/null; then
-    pip install -e "$DATA_TOOLS_DIR" 2>/dev/null || true
+echo "[5/5] stips CLI"
+STIPS_DIR="${NPS_ROOT:-/opt/nps}/packages/stips"
+if [[ -d "$STIPS_DIR" ]] && ! command -v stips &>/dev/null; then
+    pip install -e "$STIPS_DIR" 2>/dev/null || true
 fi
-check "nickel --help" nickel --help
+check "stips --help" stips --help
 
 echo
 echo "============================================"

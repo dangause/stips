@@ -33,13 +33,13 @@ if [[ -d "${OBS_NICKEL_DATA}" ]]; then
     setup -r "${OBS_NICKEL_DATA}" obs_nickel_data 2>/dev/null || true
 fi
 
-# Add data_tools to PYTHONPATH
-DATA_TOOLS_SRC="${NPS_ROOT}/packages/data_tools/src"
-if [[ -d "${DATA_TOOLS_SRC}" ]]; then
-    export PYTHONPATH="${DATA_TOOLS_SRC}:${PYTHONPATH:-}"
+# Add stips to PYTHONPATH
+STIPS_SRC="${NPS_ROOT}/packages/stips/src"
+if [[ -d "${STIPS_SRC}" ]]; then
+    export PYTHONPATH="${STIPS_SRC}:${PYTHONPATH:-}"
 fi
 
-# Ensure conda bin is in PATH (for pip-installed scripts like 'nickel')
+# Ensure conda bin is in PATH (for pip-installed scripts like 'stips')
 if [[ -n "${CONDA_PREFIX}" ]]; then
     export PATH="${CONDA_PREFIX}/bin:${PATH}"
 fi

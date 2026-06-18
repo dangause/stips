@@ -24,8 +24,8 @@ nickel landolt-validate \
 ```
 
 **Source code:**
-- Calibration metrics: `packages/data_tools/src/obs_nickel_data_tools/pipeline_tools/extract_calib_metrics.py`
-- Landolt validation: `packages/data_tools/src/obs_nickel_data_tools/pipeline_tools/validate_landolt.py`
+- Calibration metrics: `packages/stips/src/stips/pipeline_tools/extract_calib_metrics.py`
+- Landolt validation: `packages/stips/src/stips/pipeline_tools/validate_landolt.py`
 - Batch runner: `scripts/analysis/run_calib_metrics_batch.py`
 
 **Reference catalog:** The Monster (local, 2025-02-19 build)

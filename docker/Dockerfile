@@ -39,7 +39,7 @@ USER root
 WORKDIR /opt/nps
 
 # Copy package source code
-COPY packages/data_tools/ packages/data_tools/
+COPY packages/stips/ packages/stips/
 COPY packages/obs_nickel/ packages/obs_nickel/
 COPY packages/obs_nickel_data/ packages/obs_nickel_data/
 
@@ -62,7 +62,7 @@ COPY docker/slurm/slurm.conf /etc/slurm/slurm.conf
 RUN source /opt/lsst/software/stack/loadLSST.bash && \
     setup lsst_distrib && \
     cd /opt/nps && \
-    pip install --no-deps -e packages/data_tools && \
+    pip install --no-deps -e packages/stips && \
     pip install --no-deps -e packages/obs_nickel && \
     pip install fastapi "uvicorn[standard]" jinja2 sse-starlette && \
     chmod +x /opt/nps/scripts/pipeline/*.sh 2>/dev/null || true
