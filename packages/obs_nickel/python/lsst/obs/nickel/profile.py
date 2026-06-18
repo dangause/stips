@@ -30,7 +30,11 @@ profile = InstrumentProfile(
         "RP": "rp",
         "R'": "rp",
         "HALPHA": "Halpha",
+        "H-ALPHA": "Halpha",
+        "6563/100": "Halpha",
         "OIII": "OIII",
+        "[OIII]": "OIII",
+        "5000/100": "OIII",
     },
     filter_key="FILTNAM",
     header_map={
