@@ -217,17 +217,20 @@ def run_with_stack(cmd: list[str], config: Config, **kwargs) -> subprocess.Compl
 
 ### 3. Collection Naming & Coordinate Validation
 
-`pipeline.py` provides consistent collection names and pre-flight data quality checks:
+`stips.collections` builds consistent collection names, parameterized by the active
+instrument's `collection_prefix` (a fork's collections become `<prefix>/...`); `core/pipeline.py`
+re-exports `CollectionNames` and provides the pre-flight coordinate/data-quality checks:
 
 ```python
 class CollectionNames:
-    def __init__(self, night: str, timestamp: str):
-        self.raw_run = f"Nickel/raw/{night}/{timestamp}"
-        self.calib_chain = "Nickel/calib/current"
-        self.science_parent = f"Nickel/runs/{night}/processCcd/{timestamp}"  # CHAINED
+    # prefix = config.profile.collection_prefix ("Nickel" for the reference instrument)
+    def __init__(self, night: str, run_ts: str | None = None, *, prefix: str):
+        self.raw_run = f"{prefix}/raw/{night}/{run_ts}"
+        self.calib_chain = f"{prefix}/calib/current"
+        self.science_parent = f"{prefix}/runs/{night}/processCcd/{run_ts}"  # CHAINED
         self.science_run = f"{self.science_parent}/run"                     # Primary RUN
         # Fallback RUNs: {science_parent}/run_fb1, run_fb2, etc.
-        self.diff_run = f"Nickel/runs/{night}/diff/{timestamp}/run"
+        self.diff_run = f"{prefix}/runs/{night}/diff/{run_ts}/run"
         # ...
 
 def find_bad_coord_exposures(config, night, target_ra, target_dec, ...):
