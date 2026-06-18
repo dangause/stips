@@ -1,13 +1,14 @@
 # tests/test_translation_golden.py
-"""Golden baseline test pinning the CURRENT NickelTranslator outputs.
+"""Golden translation-parity gate for the NickelTranslator.
 
-This captures byte-for-byte literal values produced by the existing
-``lsst.obs.nickel.translator.NickelTranslator`` BEFORE the STIPS framework
-refactor. A later task re-asserts these same literals against the
-reimplemented translator to prove identical behavior.
+These literals were captured from the legacy ``NickelTranslator`` before the
+STIPS refactor (commit 7abfe7b). After the reimplementation, this same test now
+runs against the ``StipsTranslator``-based ``NickelTranslator`` and must continue
+to pass -- so it serves as the translation-parity gate (legacy literals
+reproduced by the reimplementation).
 
-Do NOT change any literal here to make a refactored translator pass; the
-current translator is the source of truth for this baseline.
+Do NOT edit the literals; if a value changes, the reimplementation diverged from
+the legacy and must be fixed, not the test.
 """
 import unittest
 
