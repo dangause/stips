@@ -26,14 +26,14 @@ Profile fields available (`stips.InstrumentProfile`): `name`, `collection_prefix
 - `core/calibs.py`: `CollectionNames(...)` ×2; `INSTRUMENT` register-instrument (lines 73,185); `define-visits ... "Nickel"` (92,208); `write-curated-calibrations "Nickel"` (216); `instrument='Nickel'` (259,352).
 - `core/science.py`: `CollectionNames(...)`; `INSTRUMENT` (418); `instrument='Nickel'` (149,393,816); `instrument='Nickel' AND skymap='{SKYMAP_NAME}'` (816); config/pipeline paths via `config.obs_nickel` (79-84).
 - `core/dia.py`: `CollectionNames(...)`; `INSTRUMENT` (239); `instrument='Nickel'` (223,413,431); `"Nickel/..."`/`prefix_filter="Nickel/"` (172,177,253,258); `SKYMAPS_CHAIN` (263); pipeline path `config.obs_nickel/"pipelines/DIA.yaml"` (228).
-- `core/coadd.py`: `INSTRUMENT` (430); `instrument='Nickel' AND skymap='{SKYMAP_NAME}'` (459); `"Nickel/..."`/`prefix_filter` (154,163); `skymaps/nickelRings` in generated butler-python (77); `SKYMAPS_CHAIN`/`SKYMAP_NAME` (23,59).
+- `core/coadd.py`: `INSTRUMENT` (430); `instrument='Nickel' AND skymap='{SKYMAP_NAME}'` (~455/459); `"Nickel/..."`/`prefix_filter` (154,163); `skymaps/nickelRings` in generated butler-python (77); `SKYMAPS_CHAIN`/`SKYMAP_NAME` imported ~23-24 (verify usage lines).
 - `core/fphot.py`: `instrument='Nickel'` (45,172); `"Nickel/..."`/`prefix_filter` (79,88,145,150,185,255); calib chains w/ `Nickel/calib/current`+`REFCATS_CHAIN`+`SKYMAPS_CHAIN` (189,252).
 - `core/run.py`: many `"Nickel/..."` + `prefix_filter="Nickel/"` (1618,1623,1643,1644,1733,1742,1751,1784,1793,1799); hardcoded `skymaps/nickelRings` + `Nickel/calib/current` chain (1644).
 - `core/clean.py`: `RUN_PATTERNS`/`CALIB_PATTERNS`/`PRESERVED_PATTERNS` lists + `step_to_patterns` dict, all `"Nickel/..."` (27-46,127-131); `"Nickel/calib/current"` (46).
 - `core/landolt.py`: default `collection="Nickel/runs/*/processCcd/*"` (32).
 - `cli.py`: docstring examples + defaults `"Nickel/runs/*/processCcd/*"` (1186-1197,1264,1315,1364).
-- `pipeline_tools/`: `assess_dia_quality.py` `instrument='Nickel'` (97,118); `extract_lightcurve.py` (396,446); `validate_landolt.py` (217,285,490); `extract_calib_metrics.py` (156,230,271); `ingest_ps1_template.py` `os.environ.get("SKYMAP_NAME","nickelRings-v1")` (1130) + `SKYMAPS_CHAIN` (1131).
-- `dashboard/catalog_query.py`: `instrument='Nickel'` (233).
+- `pipeline_tools/`: `assess_dia_quality.py` `instrument='Nickel'` (97,118); `extract_lightcurve.py` (396,446); `validate_landolt.py` (217,285,490); `extract_calib_metrics.py` (156,230,271); `ingest_ps1_template.py` `os.environ.get("SKYMAP_NAME","nickelRings-v1")` (1130) + `os.environ.get("SKYMAPS_CHAIN","skymaps")` (1131; note the SKYMAPS_CHAIN default is `"skymaps"`, not the nickelRings form).
+- `dashboard/catalog_query.py`: `instrument='Nickel'` (233). **`dashboard/image_renderer.py`: ESCAPED `where="instrument=\'Nickel\' AND day_obs=..."` (142,151)** — easy to miss; neither file has a `config`/`profile` in scope (Task 9 Step 2 threads the name).
 - `core/config.py`: `obs_nickel: Path` + derives `pipelines_dir`/`configs_dir` (74,87-88). `cli.py` discovers `OBS_NICKEL` env (227-244).
 
 ---
@@ -47,7 +47,7 @@ packages/stips/src/stips/
   core/pipeline.py      # constants/night_to_day_obs/queries become profile-driven helpers; re-exports CollectionNames
   core/*.py             # all collection/query/instrument literals → config.profile-driven
   pipeline_tools/*.py   # query predicates + ps1 skymap default → profile-driven
-  dashboard/catalog_query.py
+  dashboard/{catalog_query,image_renderer}.py  # threaded instrument_name (no config in scope)
 packages/stips/tests/
   test_collections.py       # NEW: prefix parity (Nickel) + genericity (synthetic)
   test_config_profile.py    # NEW: Config loads the configured profile
@@ -195,8 +195,7 @@ Add a `profile` field to the `Config` dataclass. Where `Config` is built (config
 
 **Files:** `packages/stips/src/stips/core/pipeline.py`
 
-- [ ] **Step 1: Replace module constants with profile-driven access.** Remove/repurpose `SKYMAP_NAME`, `SKYMAPS_CHAIN`, `INSTRUMENT` module constants. Since many call sites import these constants directly, the lowest-churn approach is to keep `REFCATS_CHAIN="refcats"` (generic) and convert the instrument-specific ones to read from a profile passed by the caller. Provide small helpers that take `profile`:
-  - callers will use `config.profile.skymap_name`, `config.profile.skymap_collection`, `config.profile.instrument_class` directly (Tasks 5-9 do this per call site). In this task, DELETE the three instrument-specific constants and let the per-module tasks replace their usages — OR (to stage safely) temporarily set them from the default Nickel profile at import and mark deprecated. **Prefer:** delete them and fix usages in Tasks 5-9; if that makes this task's file not import, keep a module-level `_NICKEL = load_profile("lsst.obs.nickel")` shim ONLY as a transitional crutch removed in the final task. Choose the staging that keeps tests green at each commit.
+- [ ] **Step 1: Keep the constants as a transitional shim (do NOT delete them yet).** `INSTRUMENT`, `SKYMAP_NAME`, `SKYMAPS_CHAIN` are imported by FIVE modules (calibs, science, dia, coadd, fphot) and the test suite imports those modules transitively — deleting the constants now would break imports and redden the suite at this commit. **Definitive staging:** LEAVE the three constants in place (and `REFCATS_CHAIN="refcats"`, which is generic and stays permanently). Tasks 5-9 migrate each USAGE to `config.profile.{instrument_class,skymap_name,skymap_collection}`. The now-unused constants are deleted in Task 10 Step 2, once a grep confirms no module imports them. Do NOT introduce a `_NICKEL = load_profile(...)` shim — the existing constants already serve as the transitional values; just don't remove them until the end. (Optionally add a `# DEPRECATED: migrating to config.profile in Phase 2b; removed in Task 10` comment above them.)
 - [ ] **Step 2: `night_to_day_obs(night, offset_days=1)`** — add an `offset_days` param (default 1 preserves behavior), replace the hardcoded `timedelta(days=1)` with `timedelta(days=offset_days)`. Update internal callers in pipeline.py to pass `config.profile.night_to_dayobs_offset_days`. Test: `night_to_day_obs("20230519")` still `"20230520"`; `night_to_day_obs("20230519", offset_days=0)` == `"20230519"`.
 - [ ] **Step 3: `find_bad_coord_exposures` query** — replace `instrument='Nickel'` with `f"instrument='{profile.name}'"` (the function already receives target/coords; add `profile` or `instrument_name` param). Update its caller (`science.py`).
 - [ ] **Step 4: Run the parity + collections + config tests → green.** Commit: `git commit -am "refactor(stips): profile-drive pipeline.py constants/night_offset/query"`
@@ -205,7 +204,7 @@ Add a `profile` field to the `Config` dataclass. Where `Config` is built (config
 
 ## Task 5: De-hardcode `core/calibs.py` + `core/science.py`
 
-**Files:** `core/calibs.py`, `core/science.py`. Pattern (apply throughout): thread `config.profile`; `CollectionNames(night, ts)` → `CollectionNames(night, ts, prefix=config.profile.collection_prefix)`; `INSTRUMENT` → `config.profile.instrument_class`; `"Nickel"` in `define-visits`/`write-curated-calibrations` → `config.profile.name`; `instrument='Nickel'` → `f"instrument='{config.profile.name}'"`; `skymap='{SKYMAP_NAME}'` → `f"skymap='{config.profile.skymap_name}'"`.
+**Files:** `core/calibs.py`, `core/science.py`. Pattern (apply throughout): thread `config.profile`; the real call sites are 1-arg `CollectionNames(night)` (run_ts defaults internally) → `CollectionNames(night, prefix=config.profile.collection_prefix)` (pass `prefix` as a keyword so any run_ts default is preserved); `INSTRUMENT` → `config.profile.instrument_class`; `"Nickel"` in `define-visits`/`write-curated-calibrations` → `config.profile.name`; `instrument='Nickel'` → `f"instrument='{config.profile.name}'"`; `skymap='{SKYMAP_NAME}'` → `f"skymap='{config.profile.skymap_name}'"`.
 
 - [ ] **Step 1:** Edit `calibs.py` — both `CollectionNames` calls, register-instrument (73,185), define-visits (92,208), write-curated-calibrations (216), the two `instrument='...'` queries (259,352).
 - [ ] **Step 2:** Edit `science.py` — `CollectionNames`, register-instrument (418), the three `instrument='Nickel'` (149,393,816) incl. `skymap='{SKYMAP_NAME}'` (816), and the `find_bad_coord_exposures` call (pass profile).
@@ -230,7 +229,7 @@ Add a `profile` field to the `Config` dataclass. Where `Config` is built (config
 **Files:** `core/run.py`, `core/clean.py`, `core/landolt.py`, `cli.py`.
 
 - [ ] **Step 1:** `run.py` — the ~10 `"Nickel/..."`/`prefix_filter` sites (1618,1623,1643,1644,1733,1742,1751,1784,1793,1799) → `config.profile.collection_prefix`; the inline `f"{science_coll},Nickel/calib/current,refcats,skymaps/nickelRings"` (1644) → profile prefix + `config.profile.skymap_collection`.
-- [ ] **Step 2:** `clean.py` — the `RUN_PATTERNS`/`CALIB_PATTERNS`/`PRESERVED_PATTERNS` lists and `step_to_patterns` dict (27-46,127-131): these are module-level constants. Convert them to functions that take a `prefix` (e.g. `def run_patterns(prefix): return [f"{prefix}/runs/*/processCcd/*", ...]`) and thread `config.profile.collection_prefix` from the `clean` command. Keep behavior identical for `prefix="Nickel"`.
+- [ ] **Step 2:** `clean.py` — the `RUN_PATTERNS`/`CALIB_PATTERNS`/`PRESERVED_PATTERNS` lists and `step_to_patterns` dict (27-46,127-131): these are module-level constants (referenced ONLY within clean.py — `cli.py:865` imports the module and calls its functions, so converting them is safe, no external breakage). Convert them to functions that take a `prefix` (e.g. `def run_patterns(prefix): return [f"{prefix}/runs/*/processCcd/*", ...]`) and thread `config.profile.collection_prefix` from the `clean` command. **Also thread `prefix` into `_is_preserved()` (lines ~59-69)** — it uses `PRESERVED_PATTERNS` and currently has no prefix/config param; give it a `prefix` argument so its preserved-pattern check is profile-driven too. Keep behavior identical for `prefix="Nickel"`.
 - [ ] **Step 3:** `landolt.py` — default `collection="Nickel/runs/*/processCcd/*"` (32): make the default `None` and resolve from `config.profile.collection_prefix` at the call site, OR require the caller to pass it. Don't bake "Nickel" into the default.
 - [ ] **Step 4:** `cli.py` — the docstring examples (1186-1197,1315) keep generic prose but replace `Nickel/...` example collection strings with neutral placeholders or `<prefix>/...`; the option `default=...` values (1264,1364) that hardcode `"Nickel/runs/*/processCcd/*"` → default `None` resolved from `config.profile.collection_prefix` when the command runs.
 - [ ] **Step 5:** Run full suite; grep these files. Commit.
@@ -249,11 +248,11 @@ Add a `profile` field to the `Config` dataclass. Where `Config` is built (config
 
 ## Task 9: De-hardcode `pipeline_tools/` + `dashboard/`
 
-**Files:** `pipeline_tools/{assess_dia_quality,extract_lightcurve,validate_landolt,extract_calib_metrics,ingest_ps1_template}.py`, `dashboard/catalog_query.py`.
+**Files:** `pipeline_tools/{assess_dia_quality,extract_lightcurve,validate_landolt,extract_calib_metrics,ingest_ps1_template}.py`, `dashboard/catalog_query.py`, **`dashboard/image_renderer.py`** (it has the easily-missed ESCAPED predicate `where="instrument=\'Nickel\' AND day_obs=..."` at lines 142,151).
 
-- [ ] **Step 1:** These are standalone scripts/modules. For each `instrument='Nickel'`, make the instrument name a parameter/CLI-arg (default resolved from the profile via `INSTRUMENT_PACKAGE` env, or an explicit `--instrument` flag). For `ingest_ps1_template.py:1130-1131`, unify the `os.environ.get("SKYMAP_NAME", "nickelRings-v1")` default with the profile (load the profile and use `profile.skymap_name`/`skymap_collection`, falling back to env only if no profile).
-- [ ] **Step 2:** `dashboard/catalog_query.py:233` `instrument='Nickel'` → profile-driven (the dashboard already loads config; thread `config.profile.name`).
-- [ ] **Step 3:** Run the pipeline_tools tests (test_ps1_templates, test_landolt_validation if present) under the stack; commit.
+- [ ] **Step 1 (pipeline_tools standalones):** these are argparse `main()` scripts with NO `config` object. Add an explicit `--instrument NAME` CLI option (default resolved by loading the profile via the `INSTRUMENT_PACKAGE` env, e.g. `default=load_profile(os.environ.get("INSTRUMENT_PACKAGE","lsst.obs.nickel")).name`), and replace each `instrument='Nickel'` with `f"instrument='{args.instrument}'"`. For `ingest_ps1_template.py:1130-1131`, unify the `os.environ.get("SKYMAP_NAME", "nickelRings-v1")` / `os.environ.get("SKYMAPS_CHAIN","skymaps")` defaults with the profile (load the profile and use `profile.skymap_name`/`profile.skymap_collection`, falling back to env only if no profile).
+- [ ] **Step 2 (dashboard):** `dashboard/catalog_query.py` and `dashboard/image_renderer.py` have NO `config`/`profile` in scope — their query-builder functions take primitive args (repo_path, night, band). Thread the instrument name as an explicit parameter: add an `instrument_name: str` argument to the relevant `_build_*`/render functions and pass it down from where the dashboard is created. The dashboard is launched by `stips dashboard` (cli.py), which HAS `config.profile` — pass `config.profile.name` into `create_app(...)`, store it on the app/collector, and forward it to the query builders. Replace `instrument='Nickel'` (catalog_query.py:233) and the two escaped `instrument=\'Nickel\'` predicates (image_renderer.py:142,151) with the threaded `instrument_name`. **Both the plain and escaped forms must be handled** — grep `grep -rn "instrument=.*Nickel" packages/stips/src/stips/dashboard` and fix every hit.
+- [ ] **Step 3:** Run the pipeline_tools + dashboard-importable tests under the stack (and stack-free where possible); `grep -rn "Nickel" packages/stips/src/stips/dashboard packages/stips/src/stips/pipeline_tools` → only docstrings/help-defaults remain. Commit.
 
 ---
 
@@ -265,11 +264,21 @@ Add a `profile` field to the `Config` dataclass. Where `Config` is built (config
 
 - [ ] **Step 2: Remove the transitional scaffolds** — the `prefix="Nickel"` default on `CollectionNames` and any `_NICKEL = load_profile(...)` crutch in pipeline.py — now that all call sites pass the profile. Re-run tests to confirm nothing relied on them. (If a call site still needs the default, that's a missed de-hardcode — fix it.)
 
-- [ ] **Step 3: Grep gate.** No hardcoded instrument literals remain in the tooling (the ONLY allowed `Nickel`/`nickelRings` mentions are in test fixtures, comments, or the Nickel-specific profile — NOT in `stips/src` logic):
-```bash
-grep -rn "'Nickel'\|\"Nickel/\|Nickel/\|nickelRings\|lsst.obs.nickel.Nickel" packages/stips/src/stips --include=*.py | grep -v "# "
-```
-Expect: nothing in logic (collection prefixes, queries, instrument args, skymap all profile-driven). Document any deliberate remaining mention.
+- [ ] **Step 3: Grep gate (two-part — broadened to catch escaped predicates; tolerant of docstring examples).** The naive `'Nickel'` gate both MISSES escaped query forms (`instrument=\'Nickel\'` in generated render scripts) and FALSE-POSITIVES on legitimate docstring/usage-example lines (e.g. `core/__init__.py`, `core/calib_metrics.py`, `eda/butler_inspect.py`, `skymap/make_skymap_from_datasets.py`, `skymap/build_discrete_skymap_config.py`). So run two greps:
+
+  **(a) LOGIC gate — must return NOTHING.** Catch instrument/collection/skymap literals in real code (queries incl. the escaped form, collection f-strings, the instrument class, skymap names):
+  ```bash
+  grep -rnE "instrument=[\\\\]*'Nickel'|[\"f]\"?Nickel/|prefix_filter=\"Nickel|nickelRings|lsst\.obs\.nickel\.Nickel" \
+    packages/stips/src/stips --include=*.py \
+    | grep -vE '^\s*#|"""|Usage:|Example'
+  ```
+  Any hit here is an un-migrated logic site → fix it. (Tune the exclude so genuine docstring/`Usage:` lines are dropped but code lines are not.)
+
+  **(b) RESIDUAL audit — review, don't fail.** List every remaining `Nickel`/`nickelRings` mention and confirm each is one of the ALLOWED categories: (i) the Nickel-specific profile/test fixtures, (ii) a docstring/usage example, (iii) a comment. Enumerate the allowed remainders explicitly in the commit message (the known docstring-example files above are Phase-3 doc cleanup, intentionally left):
+  ```bash
+  grep -rn "Nickel\|nickelRings" packages/stips/src/stips --include=*.py
+  ```
+  Document the allowed list; anything not in (i)-(iii) is a miss to fix.
 
 - [ ] **Step 4: Full suite + lint + an end-to-end smoke.** Run the whole suite under the stack (expect ~185+ passed). Then a profile-threading smoke: a `--dry-run` of `stips run` (or `stips science <night> --dry-run`) on the Nickel config and confirm the printed collection names/queries are byte-identical to a pre-2b dry-run (capture before/after). Lint clean.
 
