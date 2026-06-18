@@ -80,7 +80,7 @@ eups list -d cp_pipe 2>/dev/null | head -1 | awk '{{print $1}}'
 
 @dataclass
 class Config:
-    """Pipeline configuration loaded from environment/.env files.
+    """Pipeline configuration loaded from a YAML config file's ``env:`` block.
 
     Attributes:
         repo: Path to Butler repository
