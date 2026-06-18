@@ -66,6 +66,7 @@ profile = InstrumentProfile(
     const_map={"boresight_rotation_angle": 0.0, "boresight_rotation_coord": "sky"},
     camera="camera/nickel.yaml",
     eups_package="obs_nickel",
+    instrument_class="lsst.obs.nickel.Nickel",
     night_to_dayobs_offset_days=1,
     skymap_name="nickelRings-v1",
     skymap_collection="skymaps/nickelRings",

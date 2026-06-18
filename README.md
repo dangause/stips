@@ -200,7 +200,9 @@ nickel lightcurve --ra 210.91 --dec 54.32 \
 ```bash
 uv sync --group dev
 ```
-Installs all workspace packages plus code quality tools (ruff, pyright, pre-commit).
+Installs all workspace packages (including `stips`, `obs_stips`, and `obs_nickel`) plus code quality tools (ruff, pyright, pre-commit).
+
+A fork installs its own `obs_<instrument>` package here and sets `INSTRUMENT_PACKAGE` to point the CLI at it.
 
 #### Full Development Setup
 ```bash
@@ -690,7 +692,7 @@ Install the stips package:
 ```bash
 uv sync --group dev
 # or
-pip install -e packages/stips
+pip install -e packages/stips -e packages/obs_stips -e packages/obs_nickel
 ```
 
 ### Pipeline fails with import errors

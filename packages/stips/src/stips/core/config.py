@@ -6,6 +6,26 @@ import os
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
+
+
+def load_profile(instrument_package: str):
+    """Import the active instrument's profile (stack-free import path).
+
+    Args:
+        instrument_package: Importable package providing a ``.profile`` module
+            exposing a ``profile`` object (e.g. ``"lsst.obs.nickel"``).
+
+    Returns:
+        The instrument's ``InstrumentProfile`` object.
+
+    Raises:
+        ImportError: If the instrument package (or its ``profile`` module) is
+            not importable.
+    """
+    import importlib
+
+    return importlib.import_module(f"{instrument_package}.profile").profile
 
 
 def _discover_cp_pipe_dir(stack_dir: Path) -> Path | None:
@@ -79,6 +99,13 @@ class Config:
     lick_archive_url: str = "https://archive.ucolick.org/archive"
     lick_archive_instr: str = "NICKEL_DIR"
 
+    # Active instrument's InstrumentProfile (loaded from INSTRUMENT_PACKAGE).
+    # May be None if the obs package is not importable; commands that need it
+    # should call require_profile() to surface an actionable error.
+    profile: Any = None
+    # Importable package the profile was (or would be) loaded from.
+    instrument_package: str = "lsst.obs.nickel"
+
     # Derived paths (set in __post_init__)
     pipelines_dir: Path = field(init=False)
     configs_dir: Path = field(init=False)
@@ -86,6 +113,20 @@ class Config:
     def __post_init__(self):
         self.pipelines_dir = self.obs_nickel / "pipelines"
         self.configs_dir = self.obs_nickel / "configs"
+
+    def require_profile(self) -> Any:
+        """Return the active instrument profile, or raise an actionable error.
+
+        Use this from commands that genuinely need the profile. If the obs
+        package was not importable at config-load time, ``profile`` is None and
+        this surfaces a clear, fixable error instead of an opaque AttributeError.
+        """
+        if self.profile is None:
+            raise RuntimeError(
+                f"instrument package {self.instrument_package!r} not importable; "
+                f"pip install it and set INSTRUMENT_PACKAGE."
+            )
+        return self.profile
 
     def validate(self) -> list[str]:
         """Check that required paths exist.
@@ -201,6 +242,7 @@ def load(
         "LICK_ARCHIVE_DIR",
         "LICK_ARCHIVE_URL",
         "LICK_ARCHIVE_INSTR",
+        "INSTRUMENT_PACKAGE",
     ]
     for key in env_keys:
         if key in os.environ:
@@ -256,6 +298,19 @@ def load(
     if cp_pipe_dir is None:
         cp_pipe_dir = _discover_cp_pipe_dir(stack_dir)
 
+    # Load the active instrument profile. Robustness: if the obs package is not
+    # importable (not installed in this environment), do NOT crash config
+    # loading — leave profile=None. Commands that need it call
+    # Config.require_profile() for a clear, actionable error.
+    instrument_package = merged.get(
+        "INSTRUMENT_PACKAGE",
+        os.environ.get("INSTRUMENT_PACKAGE", "lsst.obs.nickel"),
+    )
+    try:
+        profile = load_profile(instrument_package)
+    except ImportError:
+        profile = None
+
     return Config(
         repo=Path(merged["REPO"]).expanduser(),
         stack_dir=stack_dir,
@@ -276,4 +331,6 @@ def load(
             "LICK_ARCHIVE_URL", "https://archive.ucolick.org/archive"
         ),
         lick_archive_instr=merged.get("LICK_ARCHIVE_INSTR", "NICKEL_DIR"),
+        profile=profile,
+        instrument_package=instrument_package,
     )

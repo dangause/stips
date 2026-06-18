@@ -46,6 +46,8 @@ class InstrumentProfile:
     eups_package: Optional[str] = None
     const_map: dict[str, Any] = field(default_factory=dict)
     night_to_dayobs_offset_days: int = 1
+    # FQ instrument class path for butler register-instrument, e.g. "lsst.obs.nickel.Nickel"
+    instrument_class: Optional[str] = None
     policy_name: Optional[str] = None
     collection_prefix: Optional[str] = None
     skymap_name: Optional[str] = None
