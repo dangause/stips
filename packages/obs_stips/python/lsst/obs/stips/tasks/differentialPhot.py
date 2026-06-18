@@ -427,7 +427,9 @@ if _HAS_LSST:
         )
         matchRadius = pexConfig.Field(
             dtype=float,
-            default=10.0,
+            # Nickel's 10" value is set in the fork config tree (Phase 2);
+            # 2.0 is the LSST-neutral default.
+            default=2.0,
             doc="Cross-match radius in arcseconds. Nickel WCS residuals "
             "can be 5-7 arcsec, so the default is set generously.",
         )
@@ -562,7 +564,7 @@ if _HAS_LSST:
         def _make_plot(self, table):
             """Generate differential photometry lightcurve plot."""
             import matplotlib.pyplot as plt
-            from lsst.obs.nickel.plotting import (
+            from lsst.obs.stips.plotting import (
                 FIGURE_SIZE,
                 format_lightcurve_axes,
                 plot_lightcurve_band,

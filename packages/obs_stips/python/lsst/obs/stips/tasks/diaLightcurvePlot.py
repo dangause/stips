@@ -275,7 +275,7 @@ class DiaLightcurvePlotTask(pipeBase.PipelineTask):
         return np.nan, np.nan
 
     def _make_plot(self, table, band):
-        from lsst.obs.nickel.plotting import (
+        from lsst.obs.stips.plotting import (
             FIGURE_SIZE,
             format_lightcurve_axes,
             plot_lightcurve_band,

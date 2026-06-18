@@ -20,13 +20,13 @@ sys.path.insert(
 )
 
 # Import the module directly from its file path to avoid triggering
-# the lsst.obs.nickel package __init__.py (which needs the LSST stack).
+# the lsst.obs.stips package __init__.py (which needs the LSST stack).
 _mod_path = (
     Path(__file__).resolve().parents[1]
     / "python"
     / "lsst"
     / "obs"
-    / "nickel"
+    / "stips"
     / "tasks"
     / "differentialPhot.py"
 )

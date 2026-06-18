@@ -10,7 +10,7 @@ were detected there.
 Example usage in a pipeline:
     tasks:
       forcedPhotRaDec:
-        class: lsst.obs.nickel.tasks.ForcedPhotRaDecTask
+        class: lsst.obs.stips.tasks.ForcedPhotRaDecTask
         config:
           connections.exposure: preliminary_visit_image
           connections.inputCoordCatalog: my_target_catalog

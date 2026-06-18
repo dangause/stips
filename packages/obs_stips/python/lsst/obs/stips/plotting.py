@@ -6,7 +6,7 @@ consistent, journal-ready figures.
 
 Usage in PipelineTasks (restores rcParams after)::
 
-    from lsst.obs.nickel.plotting import (
+    from lsst.obs.stips.plotting import (
         publication_style, format_lightcurve_axes,
         plot_lightcurve_band, set_title,
     )
@@ -20,7 +20,7 @@ Usage in PipelineTasks (restores rcParams after)::
 
 Usage in CLI scripts::
 
-    from lsst.obs.nickel.plotting import apply_publication_style, ...
+    from lsst.obs.stips.plotting import apply_publication_style, ...
     apply_publication_style()
 """
 

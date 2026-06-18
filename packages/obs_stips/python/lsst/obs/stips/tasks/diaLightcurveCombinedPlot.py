@@ -121,7 +121,7 @@ class DiaLightcurveCombinedPlotTask(pipeBase.PipelineTask):
         )
 
     def _make_plot(self, table: Table):
-        from lsst.obs.nickel.plotting import (
+        from lsst.obs.stips.plotting import (
             FIGURE_SIZE,
             format_lightcurve_axes,
             plot_lightcurve_band,
