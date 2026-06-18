@@ -21,30 +21,51 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
+
 # Collection glob patterns for processing runs (safe to delete).
-# These are all under Nickel/runs/ and contain derived products.
-RUN_PATTERNS = [
-    "Nickel/runs/*/processCcd/*",
-    "Nickel/runs/*/diff/*",
-    "Nickel/runs/*/forcedPhotRaDec/*",
-    "Nickel/runs/*/coadd/*",
-    "Nickel/runs/*/science/*",
-]
+# These are all under <prefix>/runs/ and contain derived products.
+def run_patterns(prefix: str) -> list[str]:
+    """Processing-run glob patterns (safe to delete) for an instrument prefix."""
+    return [
+        f"{prefix}/runs/*/processCcd/*",
+        f"{prefix}/runs/*/diff/*",
+        f"{prefix}/runs/*/forcedPhotRaDec/*",
+        f"{prefix}/runs/*/coadd/*",
+        f"{prefix}/runs/*/science/*",
+    ]
 
-# Calibration collection patterns (cp_pipe outputs + certified calibs).
-CALIB_PATTERNS = [
-    "Nickel/cp/*",
-    "Nickel/calib/*",
-]
 
-# Patterns that are always preserved (never touched by clean)
-PRESERVED_PATTERNS = [
-    "Nickel/raw/*",
-    "refcats/*",
-    "skymaps/*",
-    "skymaps",
-    "Nickel/calib/current",
-]
+def calib_patterns(prefix: str) -> list[str]:
+    """Calibration collection patterns (cp_pipe outputs + certified calibs)."""
+    return [
+        f"{prefix}/cp/*",
+        f"{prefix}/calib/*",
+    ]
+
+
+def preserved_patterns(prefix: str) -> list[str]:
+    """Patterns that are always preserved (never touched by clean)."""
+    return [
+        f"{prefix}/raw/*",
+        "refcats/*",
+        "skymaps/*",
+        "skymaps",
+        f"{prefix}/calib/current",
+    ]
+
+
+def step_patterns(prefix: str) -> dict[str, list[str]]:
+    """Map step names to per-night collection glob patterns (with {night})."""
+    return {
+        "calibs": [f"{prefix}/cp/{{night}}/*", f"{prefix}/calib/{{night}}"],
+        "science": [f"{prefix}/runs/{{night}}/processCcd/*"],
+        "dia": [f"{prefix}/runs/{{night}}/diff/*"],
+        "fphot": [f"{prefix}/runs/{{night}}/forcedPhotRaDec/*"],
+        "coadd": [
+            f"{prefix}/runs/{{night}}/coadd/*",
+            f"{prefix}/runs/{{night}}/science/*",
+        ],
+    }
 
 
 @dataclass
@@ -56,11 +77,11 @@ class CleanResult:
     errors: list[str] = field(default_factory=list)
 
 
-def _is_preserved(name: str) -> bool:
+def _is_preserved(name: str, prefix: str) -> bool:
     """Check if a collection name should never be deleted."""
     import fnmatch
 
-    for pattern in PRESERVED_PATTERNS:
+    for pattern in preserved_patterns(prefix):
         if fnmatch.fnmatch(name, pattern):
             return True
     # Also protect the top-level infrastructure names
@@ -82,6 +103,7 @@ def _query_collections(
     of LSST log messages that would corrupt the table parsing.
     """
     repo = str(config.repo)
+    prefix = config.require_profile().collection_prefix
     collections: dict[str, str] = {}
 
     for pattern in patterns:
@@ -107,7 +129,7 @@ def _query_collections(
                     col = parts[0]
                     col_type = parts[-1]  # Type is the last column
                     # Never touch preserved collections
-                    if _is_preserved(col):
+                    if _is_preserved(col, prefix):
                         continue
                     collections[col] = col_type
         except Exception as e:
@@ -117,19 +139,14 @@ def _query_collections(
 
 
 def _build_patterns(
+    prefix: str,
     nights: list[str] | None = None,
     steps: list[str] | None = None,
 ) -> list[str]:
     """Build collection glob patterns from filter options."""
     # Map step names to collection path components
     # Patterns with {night} are per-night; patterns without are global.
-    step_to_patterns = {
-        "calibs": ["Nickel/cp/{night}/*", "Nickel/calib/{night}"],
-        "science": ["Nickel/runs/{night}/processCcd/*"],
-        "dia": ["Nickel/runs/{night}/diff/*"],
-        "fphot": ["Nickel/runs/{night}/forcedPhotRaDec/*"],
-        "coadd": ["Nickel/runs/{night}/coadd/*", "Nickel/runs/{night}/science/*"],
-    }
+    step_to_patterns = step_patterns(prefix)
 
     # Determine which patterns to use
     if steps:
@@ -138,7 +155,7 @@ def _build_patterns(
             patterns.extend(step_to_patterns[step])
     else:
         # Default: processing runs only (not calibs — calibs must be explicit)
-        patterns = RUN_PATTERNS
+        patterns = run_patterns(prefix)
 
     # Substitute night or use wildcard
     if nights:
@@ -189,9 +206,10 @@ def run(
             )
 
     repo = str(config.repo)
+    prefix = config.require_profile().collection_prefix
     result = CleanResult(success=True)
 
-    patterns = _build_patterns(nights, steps)
+    patterns = _build_patterns(prefix, nights, steps)
     col_map = _query_collections(config, patterns)
 
     if not col_map:

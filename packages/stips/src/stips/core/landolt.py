@@ -29,7 +29,7 @@ def run(
     config: "Config",
     catalog: Path,
     output: Path,
-    collection: str = "Nickel/runs/*/processCcd/*",
+    collection: str | None = None,
     list_stars: bool = False,
     log_file: Path | None = None,
 ) -> LandoltResult:
@@ -39,13 +39,18 @@ def run(
         config: Loaded Config (provides repo + stack_dir).
         catalog: Path to landolt_catalog.csv.
         output: Output CSV path.
-        collection: Butler collection glob.
+        collection: Butler collection glob (defaults to the active profile's
+            ``{collection_prefix}/runs/*/processCcd/*``).
         list_stars: If True, only list matched stars without photometry.
         log_file: Optional log path.
 
     Returns:
         LandoltResult with status and measurement count.
     """
+    if collection is None:
+        prof = config.require_profile()
+        collection = f"{prof.collection_prefix}/runs/*/processCcd/*"
+
     output = Path(output).resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
 

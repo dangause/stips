@@ -1608,6 +1608,7 @@ def _run_differential_phot_step(
     from stips.core.pipeline import parse_butler_query_output
     from stips.core.stack import run_butler_query, run_pipetask
 
+    prof = config.require_profile()
     repo = str(config.repo)
     obs_nickel = str(config.obs_nickel)
 
@@ -1615,12 +1616,18 @@ def _run_differential_phot_step(
     science_coll = None
     for night in all_nights:
         qresult = run_butler_query(
-            ["query-collections", repo, f"Nickel/runs/{night}/processCcd/*"],
+            [
+                "query-collections",
+                repo,
+                f"{prof.collection_prefix}/runs/{night}/processCcd/*",
+            ],
             config,
             check=False,
         )
         if qresult.returncode == 0:
-            colls = parse_butler_query_output(qresult.stdout, prefix_filter="Nickel/")
+            colls = parse_butler_query_output(
+                qresult.stdout, prefix_filter=f"{prof.collection_prefix}/"
+            )
             if colls:
                 # Prefer CHAINED parents over individual RUNs
                 chained = [
@@ -1640,8 +1647,11 @@ def _run_differential_phot_step(
     log.info(f"Running LSST differential photometry on {science_coll}")
 
     pipeline_yaml = str(Path(obs_nickel) / "pipelines" / "DifferentialPhot.yaml")
-    input_colls = f"{science_coll},Nickel/calib/current,refcats,skymaps/nickelRings"
-    output_coll = f"Nickel/runs/{all_nights[0]}/differentialPhot"
+    input_colls = (
+        f"{science_coll},{prof.collection_prefix}/calib/current,"
+        f"refcats,{prof.skymap_collection}"
+    )
+    output_coll = f"{prof.collection_prefix}/runs/{all_nights[0]}/differentialPhot"
 
     bands = run_cfg.bands
     band_filter = bands[0] if len(bands) == 1 else ""
@@ -1709,6 +1719,7 @@ def _discover_fphot_collections(
     from stips.core.pipeline import parse_butler_query_output
     from stips.core.stack import run_butler_query
 
+    prof = config.require_profile()
     fphot_colls: list[str] = []
     for night in all_nights:
         colls = result.forced_phot_collections.get(night, [])
@@ -1730,7 +1741,8 @@ def _discover_fphot_collections(
                         [
                             "query-collections",
                             str(config.repo),
-                            f"Nickel/runs/{night}/forcedPhotRaDec/*/{fphot_suffix}*",
+                            f"{prof.collection_prefix}/runs/{night}"
+                            f"/forcedPhotRaDec/*/{fphot_suffix}*",
                         ],
                         config,
                         check=False,
@@ -1739,7 +1751,7 @@ def _discover_fphot_collections(
                         fphot_colls.extend(
                             parse_butler_query_output(
                                 check_result.stdout,
-                                prefix_filter="Nickel/runs/",
+                                prefix_filter=f"{prof.collection_prefix}/runs/",
                             )
                         )
                 except Exception as e:
@@ -1748,7 +1760,9 @@ def _discover_fphot_collections(
                     )
     elif not fphot_colls and dry_run:
         for night in all_nights:
-            fphot_colls.append(f"Nickel/runs/{night}/forcedPhotRaDec/*/run")
+            fphot_colls.append(
+                f"{prof.collection_prefix}/runs/{night}/forcedPhotRaDec/*/run"
+            )
 
     return sorted(set(fphot_colls))
 
@@ -1764,6 +1778,7 @@ def _discover_dia_collections(
     from stips.core.pipeline import parse_butler_query_output
     from stips.core.stack import run_butler_query
 
+    prof = config.require_profile()
     verified: list[str] = []
     failed_night_bands = set(result.failed_dia)
 
@@ -1781,7 +1796,7 @@ def _discover_dia_collections(
                     [
                         "query-collections",
                         str(config.repo),
-                        f"Nickel/runs/{night}/diff/*/run",
+                        f"{prof.collection_prefix}/runs/{night}/diff/*/run",
                     ],
                     config,
                     check=False,
@@ -1790,13 +1805,13 @@ def _discover_dia_collections(
                     verified.extend(
                         parse_butler_query_output(
                             check_result.stdout,
-                            prefix_filter="Nickel/runs/",
+                            prefix_filter=f"{prof.collection_prefix}/runs/",
                         )
                     )
             except Exception:
                 log.debug(f"Could not verify diff collection for {night}")
         else:
-            verified.append(f"Nickel/runs/{night}/diff/*/run")
+            verified.append(f"{prof.collection_prefix}/runs/{night}/diff/*/run")
 
     return verified
 

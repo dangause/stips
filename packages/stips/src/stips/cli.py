@@ -1261,9 +1261,10 @@ def lightcurve(
 @click.argument("config_file", type=click.Path(exists=True, path_type=Path))
 @click.option(
     "--collection",
-    default="Nickel/runs/*/processCcd/*",
+    default=None,
     show_default=True,
-    help="Butler collection glob to query",
+    help="Butler collection glob to query "
+    "(defaults to <profile prefix>/runs/*/processCcd/*)",
 )
 @click.option(
     "-o",
@@ -1286,7 +1287,7 @@ def lightcurve(
 def calib_metrics(
     ctx: click.Context,
     config_file: Path,
-    collection: str,
+    collection: str | None,
     output: Path,
     night: str | None,
     include_refcat_metrics: bool,
@@ -1326,6 +1327,10 @@ def calib_metrics(
     _print_info(f"Using environment from: {config_file}")
     config = _load_config(ctx, inline_env=yaml_env, prefer_inline=True)
 
+    if collection is None:
+        prof = config.require_profile()
+        collection = f"{prof.collection_prefix}/runs/*/processCcd/*"
+
     _print_info(f"Repo: {config.repo}")
     _print_info(f"Extracting calibration metrics from {collection}")
     if night:
@@ -1361,9 +1366,10 @@ def calib_metrics(
 )
 @click.option(
     "--collection",
-    default="Nickel/runs/*/processCcd/*",
+    default=None,
     show_default=True,
-    help="Butler collection glob to query",
+    help="Butler collection glob to query "
+    "(defaults to <profile prefix>/runs/*/processCcd/*)",
 )
 @click.option(
     "-o",
@@ -1383,7 +1389,7 @@ def landolt_validate(
     ctx: click.Context,
     config_file: Path,
     catalog: Path,
-    collection: str,
+    collection: str | None,
     output: Path,
     list_stars: bool,
 ) -> None:
