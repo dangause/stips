@@ -10,7 +10,6 @@ from typing import TYPE_CHECKING
 
 from stips.core.pipeline import (
     REFCATS_CHAIN,
-    SKYMAPS_CHAIN,
     CollectionNames,
     build_exclusion_expr,
     find_bad_coord_exposures,
@@ -479,7 +478,7 @@ def run(
                 "-p",
                 f"{pipeline}#stage1-single-visit",
                 "-i",
-                f"{raw_run},{cols.calib_chain},{REFCATS_CHAIN},{SKYMAPS_CHAIN}",
+                f"{raw_run},{cols.calib_chain},{REFCATS_CHAIN},{prof.skymap_collection}",
                 "-o",
                 cols.science_parent,
                 "--output-run",
@@ -809,7 +808,7 @@ def run(
                     "-p",
                     f"{pipeline}#coadds-only",
                     "-i",
-                    f"{cols.science_parent},{cols.calib_chain},{REFCATS_CHAIN},{SKYMAPS_CHAIN}",
+                    f"{cols.science_parent},{cols.calib_chain},{REFCATS_CHAIN},{prof.skymap_collection}",
                     "-o",
                     cols.coadd_parent,
                     "--output-run",

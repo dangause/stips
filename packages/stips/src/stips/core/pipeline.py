@@ -259,7 +259,6 @@ print(json.dumps(results))
 
 # Standard chains
 REFCATS_CHAIN = "refcats"
-SKYMAPS_CHAIN = "skymaps/nickelRings"
 
 
 def parse_butler_query_output(
