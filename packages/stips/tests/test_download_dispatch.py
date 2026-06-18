@@ -11,7 +11,7 @@ def _make_config(profile):
     c = Config(
         repo=Path("/tmp/repo"),
         stack_dir=Path("/tmp/stack"),
-        obs_nickel=Path("/tmp/obs"),
+        instrument_dir=Path("/tmp/obs"),
         raw_parent_dir=Path("/tmp/raw"),
     )
     c.profile = profile  # plain (non-frozen) dataclass — direct assignment

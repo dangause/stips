@@ -81,6 +81,33 @@ class TestYamlConfig(unittest.TestCase):
         self.assertFalse(hasattr(c, "lick_archive_url"))
         self.assertFalse(hasattr(c, "lick_archive_instr"))
 
+    def test_instrument_dir_is_primary_key(self):
+        p = _write_yaml(
+            "env:\n  REPO: /tmp/repo\n  STACK_DIR: /tmp/stack\n"
+            "  INSTRUMENT_DIR: /tmp/instr\n  RAW_PARENT_DIR: /tmp/raw\n"
+        )
+        c = cfg.load(p)
+        self.assertEqual(str(c.instrument_dir), "/tmp/instr")
+        self.assertEqual(str(c.obs_nickel), "/tmp/instr")  # deprecated read-only alias
+        self.assertEqual(str(c.pipelines_dir), "/tmp/instr/pipelines")
+
+    def test_obs_nickel_key_is_deprecated_alias(self):
+        p = _write_yaml(
+            "env:\n  REPO: /tmp/repo\n  STACK_DIR: /tmp/stack\n"
+            "  OBS_NICKEL: /tmp/obs\n  RAW_PARENT_DIR: /tmp/raw\n"
+        )
+        with self.assertWarns(DeprecationWarning):
+            c = cfg.load(p)
+        self.assertEqual(str(c.instrument_dir), "/tmp/obs")
+
+    def test_missing_instrument_dir_errors(self):
+        p = _write_yaml(
+            "env:\n  REPO: /tmp/repo\n  STACK_DIR: /tmp/stack\n  RAW_PARENT_DIR: /tmp/raw\n"
+        )
+        with self.assertRaises(ValueError) as ctx:
+            cfg.load(p)
+        self.assertIn("INSTRUMENT_DIR", str(ctx.exception))
+
 
 if __name__ == "__main__":
     unittest.main()

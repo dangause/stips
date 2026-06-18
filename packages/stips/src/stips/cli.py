@@ -157,13 +157,13 @@ def _load_lightcurve_config(
         _print_error("lightcurve without -c requires both --repo and --stack-dir.")
         sys.exit(1)
 
-    # The Config dataclass requires obs_nickel and raw_parent_dir, but the
+    # The Config dataclass requires instrument_dir and raw_parent_dir, but the
     # lightcurve command uses neither (it only needs repo + stack_dir). Pass
     # inert placeholders for those two fields — no auto-detection, no env.
     return cfg_module.Config(
         repo=repo,
         stack_dir=stack_dir,
-        obs_nickel=Path("/nonexistent"),
+        instrument_dir=Path("/nonexistent"),
         raw_parent_dir=Path("/nonexistent"),
     )
 

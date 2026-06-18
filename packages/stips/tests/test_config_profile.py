@@ -29,7 +29,7 @@ class TestRequireProfile(unittest.TestCase):
         cfg = Config(
             repo=Path("/tmp/repo"),
             stack_dir=Path("/tmp/stack"),
-            obs_nickel=Path("/tmp/obs_nickel"),
+            instrument_dir=Path("/tmp/obs_nickel"),
             raw_parent_dir=Path("/tmp/raw"),
             profile=None,
             instrument_package="lsst.obs.does_not_exist",

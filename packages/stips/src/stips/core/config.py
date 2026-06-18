@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import subprocess
+import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -85,10 +86,11 @@ class Config:
     Attributes:
         repo: Path to Butler repository
         stack_dir: Path to LSST stack installation
-        obs_nickel: Path to obs_nickel package (back-compat alias for
-            instrument_dir; kept populated during migration)
         instrument_dir: Active instrument package directory containing
-            pipelines/ and configs/ (generic; defaults to obs_nickel path)
+            pipelines/ and configs/ (the primary required instrument field;
+            base of all pipeline/config path joins)
+        obs_nickel: Deprecated read-only alias for instrument_dir (kept one
+            release; see the ``obs_nickel`` property)
         raw_parent_dir: Parent directory for raw data
         refcat_repo: Path to reference catalog repository
         cp_pipe_dir: Path to cp_pipe pipelines
@@ -101,15 +103,8 @@ class Config:
 
     repo: Path
     stack_dir: Path
-    obs_nickel: Path
+    instrument_dir: Path
     raw_parent_dir: Path
-    # Active instrument package directory (contains pipelines/ and configs/).
-    # Generic replacement for obs_nickel as the base of pipeline/config path
-    # joins. Populated from INSTRUMENT_DIR env if set, else falls back to the
-    # obs_nickel path (so Nickel resolves identical paths). field(default=None)
-    # keeps it optional for callers that construct Config directly; load()
-    # always sets it, and __post_init__ derives it from obs_nickel otherwise.
-    instrument_dir: Path | None = None
     refcat_repo: Path | None = None
     cp_pipe_dir: Path | None = None
     env: dict[str, str] = field(default_factory=dict)
@@ -127,12 +122,13 @@ class Config:
 
     def __post_init__(self):
         # instrument_dir is the generic base for pipeline/config path joins.
-        # Default to the obs_nickel path when not explicitly provided so Nickel
-        # (and any caller that only sets obs_nickel) resolves identical paths.
-        if self.instrument_dir is None:
-            self.instrument_dir = self.obs_nickel
         self.pipelines_dir = self.instrument_dir / "pipelines"
         self.configs_dir = self.instrument_dir / "configs"
+
+    @property
+    def obs_nickel(self) -> Path:
+        """Deprecated alias for instrument_dir (kept one release; read-only)."""
+        return self.instrument_dir
 
     def require_profile(self) -> "InstrumentProfile":
         """Return the active instrument profile, or raise an actionable error.
@@ -159,8 +155,8 @@ class Config:
             errors.append(f"REPO does not exist: {self.repo}")
         if not self.stack_dir.exists():
             errors.append(f"STACK_DIR does not exist: {self.stack_dir}")
-        if not self.obs_nickel.exists():
-            errors.append(f"OBS_NICKEL does not exist: {self.obs_nickel}")
+        if not self.instrument_dir.exists():
+            errors.append(f"INSTRUMENT_DIR does not exist: {self.instrument_dir}")
         if not self.raw_parent_dir.exists():
             errors.append(f"RAW_PARENT_DIR does not exist: {self.raw_parent_dir}")
         if self.cp_pipe_dir and not self.cp_pipe_dir.exists():
@@ -209,7 +205,7 @@ def load(
         if config_path is None:
             raise ValueError(
                 "No config provided. Pass -c <config.yaml> (its env: block supplies "
-                "REPO, STACK_DIR, OBS_NICKEL, RAW_PARENT_DIR)."
+                "REPO, STACK_DIR, INSTRUMENT_DIR, RAW_PARENT_DIR)."
             )
         import yaml
 
@@ -226,8 +222,23 @@ def load(
     merged = {k: _expand_within(v, env) for k, v in env.items()}
 
     # Validate required fields
-    required = ["REPO", "STACK_DIR", "OBS_NICKEL", "RAW_PARENT_DIR"]
+    required = ["REPO", "STACK_DIR", "RAW_PARENT_DIR"]
     missing = [k for k in required if not merged.get(k)]
+
+    # Resolve the instrument directory: INSTRUMENT_DIR is the documented key;
+    # OBS_NICKEL is a deprecated alias (warn). A missing one is reported as
+    # INSTRUMENT_DIR via the standard missing-key error below.
+    instrument_dir_val = merged.get("INSTRUMENT_DIR")
+    if not instrument_dir_val and merged.get("OBS_NICKEL"):
+        warnings.warn(
+            "OBS_NICKEL is deprecated; rename it to INSTRUMENT_DIR in the config env: block.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        instrument_dir_val = merged["OBS_NICKEL"]
+    if not instrument_dir_val:
+        missing.append("INSTRUMENT_DIR")
+
     if missing:
         raise ValueError(
             f"Missing required config key(s): {', '.join(missing)} "
@@ -269,20 +280,13 @@ def load(
         else:
             raise
 
-    obs_nickel_path = Path(merged["OBS_NICKEL"]).expanduser()
-    # Generic instrument package directory: prefer INSTRUMENT_DIR, else fall
-    # back to the obs_nickel path (back-compat — Nickel resolves identical
-    # pipeline/config paths when only OBS_NICKEL is set).
-    instrument_dir = (
-        Path(merged["INSTRUMENT_DIR"]).expanduser()
-        if merged.get("INSTRUMENT_DIR")
-        else obs_nickel_path
-    )
+    # instrument_dir_val resolved above (INSTRUMENT_DIR, or deprecated
+    # OBS_NICKEL alias). The missing-check has already guaranteed it is set.
+    instrument_dir = Path(instrument_dir_val).expanduser()
 
     return Config(
         repo=Path(merged["REPO"]).expanduser(),
         stack_dir=stack_dir,
-        obs_nickel=obs_nickel_path,
         instrument_dir=instrument_dir,
         raw_parent_dir=Path(merged["RAW_PARENT_DIR"]).expanduser(),
         refcat_repo=(
