@@ -286,7 +286,7 @@ def cmd_targets(args) -> int:
     formatters.print_error(
         "Target catalog analysis requires FITS header metadata.\n"
         "The archive index only provides filenames.\n"
-        "Download files with 'stips-archive-fetch-night' and analyze FITS headers locally."
+        "Download files with 'stips download' and analyze FITS headers locally."
     )
     return 1
 
@@ -296,7 +296,7 @@ def cmd_plot_filters(args) -> int:
     formatters.print_error(
         "Filter usage analysis requires FITS header metadata.\n"
         "The archive index only provides filenames.\n"
-        "Download files with 'stips-archive-fetch-night' and analyze FITS headers locally."
+        "Download files with 'stips download' and analyze FITS headers locally."
     )
     return 1
 
