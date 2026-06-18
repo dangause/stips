@@ -1126,9 +1126,23 @@ def ingest_exposure_to_butler(
         log.debug(f"Collection registration note: {e}")
         pass
 
-    # Get skymap to determine tract/patch (allow env overrides)
-    skymap_name = os.environ.get("SKYMAP_NAME", "nickelRings-v1")
-    skymap_collections = os.environ.get("SKYMAPS_CHAIN", "skymaps")
+    # Get skymap to determine tract/patch.
+    # Prefer the active instrument's profile values, allowing env overrides.
+    # Wrapped in try/except so this script stays runnable without the obs package.
+    try:
+        from stips.core.config import load_profile
+
+        prof = load_profile(os.environ.get("INSTRUMENT_PACKAGE", "lsst.obs.nickel"))
+        prof_skymap_name = prof.skymap_name
+        prof_skymap_collection = prof.skymap_collection
+    except Exception:
+        prof_skymap_name = None
+        prof_skymap_collection = None
+
+    skymap_name = os.environ.get("SKYMAP_NAME") or prof_skymap_name or "nickelRings-v1"
+    skymap_collections = (
+        os.environ.get("SKYMAPS_CHAIN") or prof_skymap_collection or "skymaps"
+    )
     skymap_collections = [
         c.strip() for c in skymap_collections.split(",") if c.strip()
     ] or ["skymaps"]

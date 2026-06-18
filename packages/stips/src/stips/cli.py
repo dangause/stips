@@ -1797,14 +1797,29 @@ def dashboard(
         stips dashboard --logs-dir ./logs --no-browser
         stips -p 2023ixf dashboard
     """
-    # Determine logs directory
-    if logs_dir is None:
-        # Try loading config to find repo root
+    # Determine logs directory and resolve the instrument name from the
+    # active profile (used to drive Butler dataset queries in the dashboard).
+    instrument_name = "Nickel"
+    config = None
+    try:
+        config = _load_config(ctx)
+    except (SystemExit, Exception):
+        config = None
+
+    if config is not None:
         try:
-            config = _load_config(ctx)
-            repo_root = config.obs_nickel.parent.parent
-            logs_dir = repo_root / "logs"
-        except (SystemExit, Exception):
+            instrument_name = config.require_profile().name
+        except Exception:
+            instrument_name = "Nickel"
+
+    if logs_dir is None:
+        if config is not None:
+            try:
+                repo_root = config.obs_nickel.parent.parent
+                logs_dir = repo_root / "logs"
+            except Exception:
+                logs_dir = Path.cwd() / "logs"
+        else:
             # Fallback: look for logs/ in current directory
             logs_dir = Path.cwd() / "logs"
 
@@ -1841,7 +1856,7 @@ def dashboard(
             "Install it with: pip install 'stips[dashboard]'"
         ) from exc
 
-    app = create_app(logs_dir)
+    app = create_app(logs_dir, instrument_name=instrument_name)
     uvicorn.run(app, host=host, port=port, log_level="warning")
 
 

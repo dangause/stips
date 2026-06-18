@@ -107,6 +107,7 @@ def query_catalog(
     band: str | None = None,
     limit: int = 200,
     offset: int = 0,
+    instrument_name: str = "Nickel",
 ) -> dict:
     """Query a Butler catalog and return rows as JSON.
 
@@ -128,7 +129,9 @@ def query_catalog(
             "total": 0,
         }
 
-    script = _build_catalog_script(repo_path, catalog_type, night, band, limit, offset)
+    script = _build_catalog_script(
+        repo_path, catalog_type, night, band, limit, offset, instrument_name
+    )
 
     try:
         result = subprocess.run(
@@ -227,10 +230,11 @@ def _build_catalog_script(
     band: str | None,
     limit: int,
     offset: int,
+    instrument_name: str = "Nickel",
 ) -> str:
     """Build Python script to query a source catalog."""
     cols = json.dumps(CATALOG_TYPES[catalog_type]["columns"])
-    where_parts = ["instrument='Nickel'"]
+    where_parts = [f"instrument='{instrument_name}'"]
     if night:
         where_parts.append(f"day_obs={int(night)}")
     if band:

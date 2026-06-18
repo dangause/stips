@@ -39,12 +39,31 @@ from __future__ import annotations
 
 import argparse
 import csv
+import os
 import sys
 from collections import defaultdict
 from pathlib import Path
 
 from lsst.daf.butler import Butler
 from lsst.daf.butler.registry import MissingDatasetTypeError
+
+from stips.core.config import load_profile
+
+
+def _resolve_instrument(instrument: str | None) -> str:
+    """Resolve the instrument name from a CLI arg or the active profile.
+
+    Stays robust if the obs package is not importable (falls back to "Nickel").
+    """
+    if instrument:
+        return instrument
+    try:
+        return load_profile(
+            os.environ.get("INSTRUMENT_PACKAGE", "lsst.obs.nickel")
+        ).name
+    except Exception:
+        return "Nickel"
+
 
 # ---------------------------------------------------------------------------
 # Columns
@@ -151,9 +170,11 @@ def _resolve_collections(butler: Butler, pattern: str) -> list[str]:
     return list(resolved)
 
 
-def query_visit_summary(butler: Butler, collection: str, night: str | None):
+def query_visit_summary(
+    butler: Butler, collection: str, night: str | None, instrument: str
+):
     """Yield per-detector rows from preliminary_visit_summary datasets."""
-    where = "instrument='Nickel'"
+    where = f"instrument='{instrument}'"
     if night:
         where += f" AND exposure.day_obs = {int(night)}"
 
@@ -223,11 +244,13 @@ def query_visit_summary(butler: Butler, collection: str, night: str | None):
             yield out
 
 
-def query_metadata_metrics(butler: Butler, collection: str, night: str | None):
+def query_metadata_metrics(
+    butler: Butler, collection: str, night: str | None, instrument: str
+):
     """Return {(visit, detector): {metric: value}} from calibrateImage_metadata_metrics."""
     out: dict[tuple[int, int], dict[str, float]] = defaultdict(dict)
 
-    where = "instrument='Nickel'"
+    where = f"instrument='{instrument}'"
     if night:
         where += f" AND exposure.day_obs = {int(night)}"
 
@@ -264,11 +287,13 @@ def query_metadata_metrics(butler: Butler, collection: str, night: str | None):
     return out
 
 
-def query_refcat_residual_metrics(butler: Butler, collection: str, night: str | None):
+def query_refcat_residual_metrics(
+    butler: Butler, collection: str, night: str | None, instrument: str
+):
     """Return {(visit, detector): {metric: value}} from refcat-residual metric bundles."""
     out: dict[tuple[int, int], dict[str, float]] = defaultdict(dict)
 
-    where = "instrument='Nickel'"
+    where = f"instrument='{instrument}'"
     if night:
         where += f" AND exposure.day_obs = {int(night)}"
 
@@ -371,6 +396,11 @@ def parse_args():
         "(requires visit-quality analysis pipeline to have been run)",
     )
     parser.add_argument("--output", "-o", required=True, help="Output CSV path")
+    parser.add_argument(
+        "--instrument",
+        default=None,
+        help="Instrument name (default: from INSTRUMENT_PACKAGE profile)",
+    )
     return parser.parse_args()
 
 
@@ -381,16 +411,18 @@ def main():
 
     butler = Butler(args.repo)
 
+    instrument = _resolve_instrument(args.instrument)
+
     print(f"[info] querying collection: {args.collection}", file=sys.stderr)
     if args.night:
         print(f"[info] filtering to day_obs={args.night}", file=sys.stderr)
 
     # Primary: visit summary
-    rows = list(query_visit_summary(butler, args.collection, args.night))
+    rows = list(query_visit_summary(butler, args.collection, args.night, instrument))
     print(f"[info] loaded {len(rows)} visit_summary rows", file=sys.stderr)
 
     # Secondary: task metadata metrics
-    metadata = query_metadata_metrics(butler, args.collection, args.night)
+    metadata = query_metadata_metrics(butler, args.collection, args.night, instrument)
     if metadata:
         print(
             f"[info] loaded calibrateImage_metadata_metrics for "
@@ -407,7 +439,9 @@ def main():
     # Tertiary: refcat residual metrics
     refcat = {}
     if args.include_refcat_metrics:
-        refcat = query_refcat_residual_metrics(butler, args.collection, args.night)
+        refcat = query_refcat_residual_metrics(
+            butler, args.collection, args.night, instrument
+        )
         if refcat:
             print(
                 f"[info] loaded refcat residual metrics for " f"{len(refcat)} entries",

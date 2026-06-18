@@ -26,11 +26,13 @@ from stips.dashboard.collector import (
 _HERE = Path(__file__).parent
 
 
-def create_app(logs_dir: Path) -> FastAPI:
+def create_app(logs_dir: Path, instrument_name: str = "Nickel") -> FastAPI:
     """Create the FastAPI dashboard application.
 
     Args:
         logs_dir: Path to the logs directory to monitor.
+        instrument_name: Butler instrument name used in dataset queries
+            (threaded from the active profile by the launcher).
 
     Returns:
         Configured FastAPI application.
@@ -255,7 +257,9 @@ def create_app(logs_dir: Path) -> FastAPI:
         if not repo_path:
             return PlainTextResponse("Repository not found", status_code=404)
 
-        png_path = render_fits_image(repo_path, run_id, type, night, band)
+        png_path = render_fits_image(
+            repo_path, run_id, type, night, band, instrument_name
+        )
         if png_path is None:
             return PlainTextResponse("Failed to render image", status_code=500)
 
@@ -307,7 +311,9 @@ def create_app(logs_dir: Path) -> FastAPI:
         if not repo_path:
             return JSONResponse({"available": False, "error": "Repository not found"})
 
-        data = query_catalog(repo_path, catalog_type, night, band, limit, offset)
+        data = query_catalog(
+            repo_path, catalog_type, night, band, limit, offset, instrument_name
+        )
         return JSONResponse(data)
 
     @app.get("/api/metrics/{run_id}", response_class=JSONResponse)

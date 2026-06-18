@@ -26,12 +26,30 @@ Example:
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from collections import defaultdict
 from pathlib import Path
 
 import numpy as np
 from lsst.daf.butler import Butler
+
+from stips.core.config import load_profile
+
+
+def _resolve_instrument(instrument):
+    """Resolve the instrument name from a CLI arg or the active profile.
+
+    Stays robust if the obs package is not importable (falls back to "Nickel").
+    """
+    if instrument:
+        return instrument
+    try:
+        return load_profile(
+            os.environ.get("INSTRUMENT_PACKAGE", "lsst.obs.nickel")
+        ).name
+    except Exception:
+        return "Nickel"
 
 
 def parse_args():
@@ -63,11 +81,16 @@ def parse_args():
         action="store_true",
         help="Verbose output",
     )
+    parser.add_argument(
+        "--instrument",
+        default=None,
+        help="Instrument name (default: from INSTRUMENT_PACKAGE profile)",
+    )
 
     return parser.parse_args()
 
 
-def assess_dia_quality(butler, collections, night, verbose=False):
+def assess_dia_quality(butler, collections, night, instrument, verbose=False):
     """Assess DIA quality for a given night."""
 
     results = {
@@ -94,7 +117,7 @@ def assess_dia_quality(butler, collections, night, verbose=False):
             butler.registry.queryDatasets(
                 "difference_image",
                 collections=collections,
-                where=f"instrument='Nickel' AND day_obs={night}",
+                where=f"instrument='{instrument}' AND day_obs={night}",
             )
         )
         results["n_diff_images"] = len(diff_img_refs)
@@ -115,7 +138,7 @@ def assess_dia_quality(butler, collections, night, verbose=False):
             butler.registry.queryDatasets(
                 "dia_source_unfiltered",
                 collections=collections,
-                where=f"instrument='Nickel' AND day_obs={night}",
+                where=f"instrument='{instrument}' AND day_obs={night}",
             )
         )
         results["n_dia_catalogs"] = len(dia_src_refs)
@@ -339,11 +362,14 @@ def main():
         print(f"ERROR: Failed to resolve collections: {e}", file=sys.stderr)
         sys.exit(1)
 
+    instrument = _resolve_instrument(args.instrument)
+
     # Assess quality
     results = assess_dia_quality(
         butler,
         resolved_collections,
         args.night,
+        instrument,
         verbose=args.verbose,
     )
 

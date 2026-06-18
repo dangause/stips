@@ -24,6 +24,7 @@ Example with object name (looks up coordinates):
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -33,6 +34,23 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from lsst.daf.butler import Butler
+
+from stips.core.config import load_profile
+
+
+def _resolve_instrument(instrument):
+    """Resolve the instrument name from a CLI arg or the active profile.
+
+    Stays robust if the obs package is not importable (falls back to "Nickel").
+    """
+    if instrument:
+        return instrument
+    try:
+        return load_profile(
+            os.environ.get("INSTRUMENT_PACKAGE", "lsst.obs.nickel")
+        ).name
+    except Exception:
+        return "Nickel"
 
 
 def parse_args():
@@ -119,6 +137,11 @@ def parse_args():
         type=float,
         default=None,
         help="Maximum magnitude error for plot filtering (points with larger errors are excluded from plot)",
+    )
+    parser.add_argument(
+        "--instrument",
+        default=None,
+        help="Instrument name (default: from INSTRUMENT_PACKAGE profile)",
     )
 
     args = parser.parse_args()
@@ -362,6 +385,8 @@ def main():
     # Note: wildcards must be resolved before passing to Butler constructor
     butler = Butler(args.repo)
 
+    instrument = _resolve_instrument(args.instrument)
+
     # Cache for photoCalib objects (keyed by visit, band)
     photocalib_cache = {}
 
@@ -393,7 +418,7 @@ def main():
         sys.exit(1)
 
     # Build data ID query
-    where_parts = ["instrument='Nickel'"]
+    where_parts = [f"instrument='{instrument}'"]
     if args.band:
         where_parts.append(f"band='{args.band}'")
     where_clause = " AND ".join(where_parts)
@@ -443,7 +468,7 @@ def main():
             visit_id = ref.dataId["visit"]
             visit_records = list(
                 butler.registry.queryDimensionRecords(
-                    "visit", where=f"instrument='Nickel' AND visit={visit_id}"
+                    "visit", where=f"instrument='{instrument}' AND visit={visit_id}"
                 )
             )
             if visit_records:

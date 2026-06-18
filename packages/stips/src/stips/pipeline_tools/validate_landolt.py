@@ -30,6 +30,7 @@ from __future__ import annotations
 import argparse
 import csv
 import math
+import os
 import sys
 from collections import defaultdict
 from pathlib import Path
@@ -37,6 +38,24 @@ from pathlib import Path
 import numpy as np
 from lsst.daf.butler import Butler
 from lsst.daf.butler.registry import MissingDatasetTypeError
+
+from stips.core.config import load_profile
+
+
+def _resolve_instrument(instrument: str | None) -> str:
+    """Resolve the instrument name from a CLI arg or the active profile.
+
+    Stays robust if the obs package is not importable (falls back to "Nickel").
+    """
+    if instrument:
+        return instrument
+    try:
+        return load_profile(
+            os.environ.get("INSTRUMENT_PACKAGE", "lsst.obs.nickel")
+        ).name
+    except Exception:
+        return "Nickel"
+
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -202,7 +221,9 @@ def _get_column_array(table, col: str):
 # ---------------------------------------------------------------------------
 
 
-def load_visit_metadata(butler: Butler, collections: list[str]) -> dict[int, dict]:
+def load_visit_metadata(
+    butler: Butler, collections: list[str], instrument: str
+) -> dict[int, dict]:
     """Load preliminary_visit_summary metadata keyed by visit ID.
 
     Returns {visit: {"airmass": float, "exptime": float, "day_obs": int}}.
@@ -214,7 +235,7 @@ def load_visit_metadata(butler: Butler, collections: list[str]) -> dict[int, dic
             butler.registry.queryDatasets(
                 "preliminary_visit_summary",
                 collections=collections,
-                where="instrument='Nickel'",
+                where=f"instrument='{instrument}'",
                 findFirst=True,
             )
         )
@@ -282,7 +303,7 @@ def load_visit_metadata(butler: Butler, collections: list[str]) -> dict[int, dic
                 butler.registry.queryDatasets(
                     "initial_photoCalib_detector",
                     collections=collections,
-                    where=f"instrument='Nickel' AND visit={visit}",
+                    where=f"instrument='{instrument}' AND visit={visit}",
                     findFirst=True,
                 )
             )
@@ -446,6 +467,11 @@ def parse_args():
         action="store_true",
         help="Dry-run: list matched stars per visit/band, then exit (no --output required)",
     )
+    parser.add_argument(
+        "--instrument",
+        default=None,
+        help="Instrument name (default: from INSTRUMENT_PACKAGE profile)",
+    )
     return parser.parse_args()
 
 
@@ -467,6 +493,8 @@ def main() -> int:
     # Open Butler
     butler = Butler(args.repo)
 
+    instrument = _resolve_instrument(args.instrument)
+
     # Resolve collections
     print(f"[info] querying collection: {args.collection}", file=sys.stderr)
     collections = _resolve_collections(butler, args.collection)
@@ -478,7 +506,7 @@ def main() -> int:
     print(f"[info] resolved {len(collections)} collection(s)", file=sys.stderr)
 
     # Load visit metadata once
-    visit_meta = load_visit_metadata(butler, collections)
+    visit_meta = load_visit_metadata(butler, collections, instrument)
     print(f"[info] loaded visit metadata for {len(visit_meta)} visits", file=sys.stderr)
 
     # Query single_visit_star_unstandardized datasets
@@ -487,7 +515,7 @@ def main() -> int:
             butler.registry.queryDatasets(
                 "single_visit_star_unstandardized",
                 collections=collections,
-                where="instrument='Nickel'",
+                where=f"instrument='{instrument}'",
                 findFirst=True,
             )
         )

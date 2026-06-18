@@ -38,6 +38,7 @@ def render_fits_image(
     dataset_type: str,
     night: str,
     band: str,
+    instrument_name: str = "Nickel",
 ) -> Path | None:
     """Render a FITS image from Butler to a cached PNG file.
 
@@ -49,7 +50,9 @@ def render_fits_image(
 
     png_path.parent.mkdir(parents=True, exist_ok=True)
 
-    script = _build_render_script(repo_path, dataset_type, night, band, str(png_path))
+    script = _build_render_script(
+        repo_path, dataset_type, night, band, str(png_path), instrument_name
+    )
 
     try:
         result = subprocess.run(
@@ -112,7 +115,12 @@ def _png_path(run_id: str, dataset_type: str, night: str, band: str) -> Path:
 
 
 def _build_render_script(
-    repo_path: str, dataset_type: str, night: str, band: str, output_path: str
+    repo_path: str,
+    dataset_type: str,
+    night: str,
+    band: str,
+    output_path: str,
+    instrument_name: str = "Nickel",
 ) -> str:
     """Build Python script that loads FITS via Butler and renders to PNG."""
     return f"""
@@ -139,7 +147,7 @@ try:
     # Find matching datasets
     refs = list(butler.registry.queryDatasets(
         dataset_type,
-        where="instrument=\\'Nickel\\' AND day_obs={{night_int}} AND band=\\'{{band_val}}\\'".format(
+        where="instrument=\\'{instrument_name}\\' AND day_obs={{night_int}} AND band=\\'{{band_val}}\\'".format(
             night_int=int(night), band_val=band
         ),
     ))
@@ -148,7 +156,7 @@ try:
         # Try without band constraint for template types
         refs = list(butler.registry.queryDatasets(
             dataset_type,
-            where="instrument=\\'Nickel\\' AND day_obs={{night_int}}".format(night_int=int(night)),
+            where="instrument=\\'{instrument_name}\\' AND day_obs={{night_int}}".format(night_int=int(night)),
         ))
 
     if not refs:
