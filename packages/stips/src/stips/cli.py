@@ -4,14 +4,17 @@ Unified command-line interface for processing small-telescope data
 with the LSST Science Pipelines.
 
 Usage:
-    stips calibs 20240625
-    stips science 20240625
-    stips dia 20240625 --auto-template
-    stips env
+    stips -c <config.yaml> calibs 20240625
+    stips -c <config.yaml> science 20240625
+    stips -c <config.yaml> dia 20240625 --auto-template
+    stips -c <config.yaml> env
 
-Profiles:
-    stips -p 2023ixf dia 20230519 --auto   # Uses .env.2023ixf
-    stips -p 2020wnt calibs 20201207       # Uses .env.2020wnt
+Configuration:
+    The group-level ``-c/--config`` YAML file is the sole config source; its
+    ``env:`` block supplies REPO/STACK_DIR/OBS_NICKEL/RAW_PARENT_DIR.
+
+    stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml dia 20230519 --auto
+    stips -c scripts/config/2020wnt/pipeline_ps1_template.yaml calibs 20201207
 """
 
 from __future__ import annotations
@@ -995,16 +998,17 @@ def lightcurve(
     (``<prefix>``); the examples are shown for the Nickel reference profile.
 
     \b
-    Example (standalone - no .env needed):
+    Example (standalone - no config file):
         stips lightcurve \\
-            --repo /path/to/butler_repo \\
+            --repo /path/to/butler_repo --stack-dir /path/to/lsst_stack \\
             --ra 210.91 --dec 54.32 \\
             --collections "<prefix>/runs/*/diff/*/run" \\
             --name "SN 2023ixf"
 
     \b
-    Example (with profile):
-        stips -p 2023ixf lightcurve --ra 210.91 --dec 54.32 \\
+    Example (with config file):
+        stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml lightcurve \\
+            --ra 210.91 --dec 54.32 \\
             --collections "<prefix>/runs/20230519/diff/*/run" --name "SN 2023ixf"
 
     \b
@@ -1021,7 +1025,7 @@ def lightcurve(
     if y_axis == "absolute_mag" and distance_modulus is None:
         raise click.UsageError("--distance-modulus required with --y-axis=absolute_mag")
 
-    # Build config from CLI options, falling back to env/profile
+    # Build config from the group -c YAML, or from explicit --repo/--stack-dir
     config = _load_lightcurve_config(ctx, repo=repo, stack_dir=stack_dir)
 
     _print_info(f"Extracting lightcurve at RA={ra:.4f}, Dec={dec:.4f}...")
@@ -1557,7 +1561,7 @@ def dashboard(
         stips dashboard
         stips dashboard --port 9000
         stips dashboard --logs-dir ./logs --no-browser
-        stips -p 2023ixf dashboard
+        stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml dashboard
     """
     # Determine logs directory and resolve the instrument name from the
     # active profile (used to drive Butler dataset queries in the dashboard).

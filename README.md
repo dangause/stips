@@ -42,13 +42,13 @@
 # 1. Install all packages (stips + obs_stips + obs_nickel)
 uv sync --group dev
 
-# 2. Run a full pipeline from YAML config (self-contained)
-stips run scripts/config/2023ixf/pipeline_ps1_template.yaml
+# 2. Run a full pipeline from a YAML config (self-contained)
+stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml run
 
-# 3. Or use individual commands with profiles
-stips -p 2023ixf calibs 20230519        # Run calibrations
-stips -p 2023ixf science 20230519       # Process science frames
-stips -p 2023ixf dia 20230519 --auto    # Difference imaging
+# 3. Or use individual commands — the same -c YAML supplies the config
+stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml calibs 20230519   # Calibrations
+stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml science 20230519  # Science frames
+stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml dia 20230519 --auto  # Difference imaging
 ```
 
 > The reference instrument defaults to Nickel (`INSTRUMENT_PACKAGE=lsst.obs.nickel`); `uv sync` installs the `obs_*` packages the CLI imports at runtime.
@@ -139,10 +139,13 @@ The unified command-line interface for all pipeline operations. Supporting conso
 
 ### Commands Reference
 
+All commands take the group-level config via `stips -c <config.yaml> <command> ...`
+(the `-c` YAML's `env:` block supplies the configuration).
+
 | Command | Description |
 |---------|-------------|
 | `stips env` | Show configuration and validate paths |
-| `stips bootstrap [CONFIG.yaml]` | Initialize Butler repository |
+| `stips bootstrap` | Initialize Butler repository |
 | `stips download NIGHT` | Fetch data from Lick archive |
 | `stips calibs NIGHT` | Run nightly calibrations (bias, flat, defects) |
 | `stips science NIGHT` | Process science frames (ISR, WCS, photometry) |
@@ -150,8 +153,8 @@ The unified command-line interface for all pipeline operations. Supporting conso
 | `stips ps1-template` | Download and ingest PS1 template |
 | `stips fphot NIGHT` | Run forced photometry at RA/Dec |
 | `stips lightcurve` | Extract light curve from sources |
-| `stips clean CONFIG.yaml` | Remove processing outputs for re-runs |
-| `stips run CONFIG.yaml` | Run full pipeline from YAML config |
+| `stips clean` | Remove processing outputs for re-runs |
+| `stips run` | Run full pipeline from the `-c` YAML config |
 | `stips dashboard` | Launch browser-based pipeline monitoring (needs the `stips[dashboard]` extra) |
 | `stips bps submit` | Submit pipeline to BPS cluster |
 | `stips bps status` | Check BPS run status |
@@ -163,11 +166,11 @@ The unified command-line interface for all pipeline operations. Supporting conso
 The recommended path for multi-target work is per-target YAML configs (in `scripts/config/<target>/`). Each YAML is self-contained — including the environment paths in an `env:` block — so switching targets is one command:
 
 ```bash
-stips run scripts/config/2023ixf/pipeline_ps1_template.yaml
-stips run scripts/config/2020wnt/pipeline_ps1_template.yaml
+stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml run
+stips -c scripts/config/2020wnt/pipeline_ps1_template.yaml run
 ```
 
-Profile-based `.env` files (`stips -p <profile> <command>`) are also supported as a legacy workflow.
+The group-level `-c/--config` YAML is the sole config source. Its `env:` block supplies `REPO`/`STACK_DIR`/`OBS_NICKEL`/`RAW_PARENT_DIR`; the same file's pipeline sections drive `stips run`. (`.env` files and `-p <profile>` are no longer supported.)
 
 ### Transient Analysis Workflow
 
@@ -282,17 +285,20 @@ lightcurve:
   explosion_mjd: 60082.75
 ```
 
-### Environment File Configuration
+### Config File `env:` Block
 
-For single-repository setups or profiles:
+Configuration lives in the `env:` block of the YAML you pass with `-c/--config`
+(the same file that drives `stips run`). It is the sole config source:
 
-```bash
-# .env or .env.{profile}
-REPO=/path/to/butler/repo
-STACK_DIR=/path/to/lsst_stack
-OBS_NICKEL=/path/to/obs_nickel
-RAW_PARENT_DIR=/path/to/raw/data
-REFCAT_REPO=/path/to/refcats
+```yaml
+# scripts/config/<target>/pipeline_ps1_template.yaml
+env:
+  REPO: /path/to/butler/repo
+  STACK_DIR: /path/to/lsst_stack
+  OBS_NICKEL: /path/to/obs_nickel
+  RAW_PARENT_DIR: /path/to/raw/data
+  REFCAT_REPO: /path/to/refcats
+  CP_PIPE_DIR: "${STACK_DIR}/cp_pipe"   # ${VAR} expands within the env: block
 ```
 
 ### Required Variables
@@ -321,11 +327,8 @@ REFCAT_REPO=/path/to/refcats
 The `stips run` command automatically bootstraps the repository if needed. For manual bootstrap:
 
 ```bash
-# From YAML config (recommended - self-contained)
-stips bootstrap scripts/config/2023ixf/pipeline_ps1_template.yaml
-
-# With profile
-stips -p 2023ixf bootstrap
+# Config comes from the group -c YAML (self-contained)
+stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml bootstrap
 
 # The bootstrap step:
 # - Creates Butler repository
@@ -401,9 +404,9 @@ stips lightcurve --ra 210.91 --dec 54.32 \
 Run complete workflows from a single configuration file:
 
 ```bash
-stips run scripts/config/2023ixf/pipeline_ps1_template.yaml
-stips run scripts/config/2023ixf/pipeline_nickel_template.yaml
-stips run pipeline.yaml --dry-run  # Preview without executing
+stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml run
+stips -c scripts/config/2023ixf/pipeline_nickel_template.yaml run
+stips -c pipeline.yaml run --dry-run  # Preview without executing
 ```
 
 ### Template Types
@@ -709,7 +712,7 @@ setup lsst_distrib
 Run from the repository root directory:
 ```bash
 cd /path/to/stips
-stips bootstrap scripts/config/2023ixf/pipeline_ps1_template.yaml
+stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml bootstrap
 ```
 
 ### Forced photometry finds no processCcd collection

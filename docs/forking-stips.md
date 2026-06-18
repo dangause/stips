@@ -354,15 +354,17 @@ uv sync
 
 Then tell STIPS which instrument is active:
 
-```bash
-export INSTRUMENT_PACKAGE=lsst.obs.<x>
+```yaml
+# in your config YAML's env: block
+env:
+  INSTRUMENT_PACKAGE: lsst.obs.<x>
 ```
 
-`INSTRUMENT_PACKAGE` defaults to `lsst.obs.nickel`. You can also set it in your
-`.env` file (it is one of the recognized env keys) or inline in a YAML pipeline
-config. Once set, `stips` imports `lsst.obs.<x>.profile`, and every collection
-name, Butler query, and skymap reference is driven by your profile — collections
-become `<your collection_prefix>/...`.
+`INSTRUMENT_PACKAGE` defaults to `lsst.obs.nickel`. Set it in the `env:` block of
+the config YAML you pass with `-c` (it is one of the recognized env keys). Once
+set, `stips` imports `lsst.obs.<x>.profile`, and every collection name, Butler
+query, and skymap reference is driven by your profile — collections become
+`<your collection_prefix>/...`.
 
 > If the package isn't installed, config loading does **not** crash: the profile
 > is left as `None` and commands that need it raise a clear "pip install it and
@@ -373,17 +375,19 @@ become `<your collection_prefix>/...`.
 
 ## 8. Step 7 — Run
 
-Same CLI, your instrument:
+Same CLI, your instrument. Pass your config once with the group-level `-c`
+(its `env:` block supplies REPO/STACK_DIR/INSTRUMENT paths/RAW_PARENT_DIR):
 
 ```bash
-stips bootstrap                 # create repo, register your instrument, ingest refcats, skymap
-stips calibs <night>            # build bias/flat, certify
-stips science <night> --ra <RA> --dec <DEC>
-stips dia <night> --auto
-stips fphot <night> --ra <RA> --dec <DEC>
-stips lightcurve --ra <RA> --dec <DEC> --collections <...>
-# or drive the whole thing from a YAML config:
-stips run scripts/config/<target>/pipeline.yaml
+CFG=scripts/config/<target>/pipeline.yaml
+stips -c $CFG bootstrap                 # create repo, register your instrument, ingest refcats, skymap
+stips -c $CFG calibs <night>            # build bias/flat, certify
+stips -c $CFG science <night> --ra <RA> --dec <DEC>
+stips -c $CFG dia <night> --auto
+stips -c $CFG fphot <night> --ra <RA> --dec <DEC>
+stips -c $CFG lightcurve --ra <RA> --dec <DEC> --collections <...>
+# or drive the whole thing from the same YAML config:
+stips -c $CFG run
 ```
 
 ---
@@ -409,7 +413,7 @@ values. Most fork bugs are header-mapping bugs, and they surface here cheaply.
 - [ ] `pyproject.toml` name + `astro_metadata_translator` entry point renamed.
 - [ ] `instrument_class` points to `lsst.obs.<x>.<X>`.
 - [ ] Package installed editable in the venv (`uv pip install -e` or `uv sync`).
-- [ ] `INSTRUMENT_PACKAGE=lsst.obs.<x>` exported / in `.env`.
+- [ ] `INSTRUMENT_PACKAGE: lsst.obs.<x>` set in the config YAML's `env:` block.
 - [ ] Translator parity verified against a real header.
 
 **Other gotchas:**

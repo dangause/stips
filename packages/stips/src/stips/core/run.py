@@ -4,12 +4,8 @@ This module reads a YAML configuration file and orchestrates the full pipeline:
 calibs → science → DIA → forced photometry → lightcurve → period/transit analysis.
 
 Example YAML format:
-    # Environment configuration (choose one approach):
-    #
-    # Option 1: Reference a profile (loads .env.{profile})
-    profile: "2023ixf"
-    #
-    # Option 2: Inline environment variables (self-contained config)
+    # Environment configuration: the self-contained env: block is the sole
+    # config source (supplied to `stips -c <this file>`).
     env:
       REPO: "/path/to/butler/repo"
       STACK_DIR: "/path/to/lsst_stack"
@@ -404,9 +400,6 @@ class RunConfig:
     # HPC container options
     container_image: str | None = None  # Path to Singularity/Apptainer SIF image
 
-    # Environment profile (optional - embedded in YAML instead of -p flag)
-    profile: str | None = None
-
     @classmethod
     def from_yaml(cls, path: Path) -> RunConfig:
         """Load configuration from YAML file."""
@@ -531,7 +524,6 @@ class RunConfig:
             bps_poll_interval=float(options.get("bps_poll_interval", 5.0)),
             bps_timeout=float(options.get("bps_timeout", 7200.0)),
             container_image=options.get("container_image"),
-            profile=data.get("profile"),
         )
 
 
