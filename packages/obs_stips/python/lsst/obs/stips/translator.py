@@ -124,22 +124,8 @@ def _build_trivial_map(header_map):
     return result
 
 
-class _DegAngle(Angle):
-    """``astropy.coordinates.Angle`` with an ``lsst.geom``-style ``asDegrees``.
-
-    Storing the boresight rotation as an ``Angle`` keeps the value consistent
-    with the ``astro_metadata_translator`` property type, while ``asDegrees``
-    lets stack-free callers read the magnitude without importing ``lsst.geom``.
-    """
-
-    def asDegrees(self):
-        return self.to_value(u.deg)
-
-
 def _build_const_map(raw):
     result = {}
     for k, v in raw.items():
-        result[k] = (
-            _DegAngle(float(v) * u.deg) if k == "boresight_rotation_angle" else v
-        )
+        result[k] = Angle(float(v) * u.deg) if k == "boresight_rotation_angle" else v
     return result

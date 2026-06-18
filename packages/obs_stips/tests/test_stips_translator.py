@@ -1,5 +1,6 @@
 import unittest
 
+import astropy.units as u
 from lsst.obs.stips.translator import StipsTranslator
 from stips import Field, InstrumentProfile, Site, hook
 
@@ -57,7 +58,7 @@ class TestStipsTranslator(unittest.TestCase):
         self.assertAlmostEqual(
             DemoTranslator({"INSTRUME": "Demo"})
             .to_boresight_rotation_angle()
-            .asDegrees(),
+            .to_value(u.deg),
             0.0,
             places=6,
         )
