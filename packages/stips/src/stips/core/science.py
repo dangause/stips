@@ -62,7 +62,7 @@ print(sum(1 for _ in rows))
 class ScienceConfig:
     """Configuration for science processing."""
 
-    # Config file paths (relative to obs_nickel or absolute)
+    # Config file paths (relative to the instrument package dir or absolute)
     calibrate_image: Path | None = None
     colorterms: Path | None = None
 
@@ -70,9 +70,9 @@ class ScienceConfig:
     calibrate_image_fallbacks: list[Path] = field(default_factory=list)
 
     @classmethod
-    def default(cls, obs_nickel: Path) -> "ScienceConfig":
+    def default(cls, instrument_dir: Path) -> "ScienceConfig":
         """Create default config with standard paths."""
-        configs = obs_nickel / "configs"
+        configs = instrument_dir / "configs"
         return cls(
             calibrate_image=configs / "calibrateImage/tuned_configs/2023ixf_relaxed.py",
             colorterms=configs / "apply_colorterms.py",
@@ -257,7 +257,7 @@ def run(
 
     # Build config chain: explicit > legacy > default
     if science_cfg is None:
-        science_cfg = ScienceConfig.default(config.obs_nickel)
+        science_cfg = ScienceConfig.default(config.instrument_dir)
     if science_config is not None:
         science_cfg.calibrate_image = science_config
 
@@ -366,9 +366,9 @@ def run(
     exclusion_expr = build_exclusion_expr(bad_ids)
 
     # Pipeline and config paths
-    pipeline = config.obs_nickel / "pipelines" / "DRP.yaml"
+    pipeline = config.instrument_dir / "pipelines" / "DRP.yaml"
     colorterms_config = (
-        science_cfg.colorterms or config.obs_nickel / "configs/apply_colorterms.py"
+        science_cfg.colorterms or config.instrument_dir / "configs/apply_colorterms.py"
     )
 
     # Build list of configs to try (primary + fallbacks)

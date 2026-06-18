@@ -425,7 +425,7 @@ def run(
     run_ts = generate_run_timestamp()
     template_parent = f"templates/deep/tract{tract}/{band}"
     template_run = f"{template_parent}/{run_ts}"
-    pipeline = config.obs_nickel / "pipelines" / "DRP.yaml"
+    pipeline = config.instrument_dir / "pipelines" / "DRP.yaml"
 
     qg_dir = config.repo / "qgraphs"
     qg_dir.mkdir(parents=True, exist_ok=True)

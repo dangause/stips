@@ -86,7 +86,10 @@ class Config:
     Attributes:
         repo: Path to Butler repository
         stack_dir: Path to LSST stack installation
-        obs_nickel: Path to obs_nickel package
+        obs_nickel: Path to obs_nickel package (back-compat alias for
+            instrument_dir; kept populated during migration)
+        instrument_dir: Active instrument package directory containing
+            pipelines/ and configs/ (generic; defaults to obs_nickel path)
         raw_parent_dir: Parent directory for raw data
         refcat_repo: Path to reference catalog repository
         cp_pipe_dir: Path to cp_pipe pipelines
@@ -102,6 +105,13 @@ class Config:
     stack_dir: Path
     obs_nickel: Path
     raw_parent_dir: Path
+    # Active instrument package directory (contains pipelines/ and configs/).
+    # Generic replacement for obs_nickel as the base of pipeline/config path
+    # joins. Populated from INSTRUMENT_DIR env if set, else falls back to the
+    # obs_nickel path (so Nickel resolves identical paths). field(default=None)
+    # keeps it optional for callers that construct Config directly; load()
+    # always sets it, and __post_init__ derives it from obs_nickel otherwise.
+    instrument_dir: Path | None = None
     refcat_repo: Path | None = None
     cp_pipe_dir: Path | None = None
     lick_archive_dir: Path | None = None
@@ -120,8 +130,13 @@ class Config:
     configs_dir: Path = field(init=False)
 
     def __post_init__(self):
-        self.pipelines_dir = self.obs_nickel / "pipelines"
-        self.configs_dir = self.obs_nickel / "configs"
+        # instrument_dir is the generic base for pipeline/config path joins.
+        # Default to the obs_nickel path when not explicitly provided so Nickel
+        # (and any caller that only sets obs_nickel) resolves identical paths.
+        if self.instrument_dir is None:
+            self.instrument_dir = self.obs_nickel
+        self.pipelines_dir = self.instrument_dir / "pipelines"
+        self.configs_dir = self.instrument_dir / "configs"
 
     def require_profile(self) -> "InstrumentProfile":
         """Return the active instrument profile, or raise an actionable error.
@@ -245,6 +260,7 @@ def load(
         "REPO",
         "STACK_DIR",
         "OBS_NICKEL",
+        "INSTRUMENT_DIR",
         "RAW_PARENT_DIR",
         "REFCAT_REPO",
         "CP_PIPE_DIR",
@@ -329,10 +345,21 @@ def load(
         else:
             raise
 
+    obs_nickel_path = Path(merged["OBS_NICKEL"]).expanduser()
+    # Generic instrument package directory: prefer INSTRUMENT_DIR, else fall
+    # back to the obs_nickel path (back-compat — Nickel resolves identical
+    # pipeline/config paths when only OBS_NICKEL is set).
+    instrument_dir = (
+        Path(merged["INSTRUMENT_DIR"]).expanduser()
+        if merged.get("INSTRUMENT_DIR")
+        else obs_nickel_path
+    )
+
     return Config(
         repo=Path(merged["REPO"]).expanduser(),
         stack_dir=stack_dir,
-        obs_nickel=Path(merged["OBS_NICKEL"]).expanduser(),
+        obs_nickel=obs_nickel_path,
+        instrument_dir=instrument_dir,
         raw_parent_dir=Path(merged["RAW_PARENT_DIR"]).expanduser(),
         refcat_repo=(
             Path(merged["REFCAT_REPO"]).expanduser()

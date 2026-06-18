@@ -826,7 +826,7 @@ def _run_coadd_templates(
             coadd_config_files = []
             if run_cfg.coadd_configs.make_direct_warp:
                 cfg_path = (
-                    config.obs_nickel
+                    config.instrument_dir
                     / "configs"
                     / run_cfg.coadd_configs.make_direct_warp
                 )
@@ -1169,7 +1169,7 @@ def _run_dia_step(
         return None
 
     # Resolve DIA config file paths from YAML (shared across all nights)
-    configs_dir = config.obs_nickel / "configs"
+    configs_dir = config.instrument_dir / "configs"
     subtract_cfg = None
     if run_cfg.dia_configs.subtract_images:
         subtract_cfg = configs_dir / run_cfg.dia_configs.subtract_images
@@ -1884,8 +1884,8 @@ def run(
     log.info(f"Execution: {run_cfg.execution} (site={run_cfg.site})")
 
     # Build ScienceConfig from YAML paths
-    configs_dir = config.obs_nickel / "configs"
-    science_cfg = ScienceConfig.default(config.obs_nickel)
+    configs_dir = config.instrument_dir / "configs"
+    science_cfg = ScienceConfig.default(config.instrument_dir)
 
     if run_cfg.science_configs.calibrate_image:
         science_cfg.calibrate_image = (
