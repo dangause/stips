@@ -37,7 +37,6 @@ line-length = 110
 target-version = "py312"
 src = [
     "packages/obs_nickel",
-    "packages/data_tools",
     "packages/defects",
     "packages/refcats",
     "packages/testdata",
@@ -74,13 +73,13 @@ max-doc-length = 79
 convention = "numpy"
 
 [tool.pytest.ini_options]
-# All tests (including data_tools unit tests) live in obs_nickel/tests/
-# Add additional packages here as they add tests/ directories
+# stips tests live in packages/stips/tests; obs_nickel tests in
+# packages/obs_nickel/tests. Add additional packages here as they add
+# tests/ directories.
 testpaths = [
     "packages/obs_nickel/tests",
     "packages/stips/tests",
     "packages/obs_stips/tests",
-    # "packages/data_tools/tests",
     # "packages/defects/tests",
     # "packages/refcats/tests",
     # "packages/colorterms/tests",
@@ -108,7 +107,8 @@ venvPath = "."
 venv = ".venv"
 include = [
     "packages/obs_nickel",
-    "packages/data_tools",
+    "packages/stips",
+    "packages/obs_stips",
     "packages/defects",
     "packages/refcats",
     "packages/testdata",
