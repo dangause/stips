@@ -17,7 +17,7 @@ tasks:
       connections.outputCatalog: preliminary_visit_table
 
   differentialPhot:
-    class: lsst.obs.nickel.tasks.DifferentialPhotTask
+    class: lsst.obs.stips.tasks.DifferentialPhotTask
     config:
       connections.starCatalogName: single_visit_star_unstandardized
       connections.visitTableName: preliminary_visit_table

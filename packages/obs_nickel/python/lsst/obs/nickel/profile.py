@@ -18,6 +18,17 @@ profile = InstrumentProfile(
         name="Lick Observatory",
     ),
     filters={
+        "B": "b",
+        "V": "v",
+        "R": "r",
+        "I": "i",
+        "clear": None,
+        "gp": "gp",
+        "rp": "rp",
+        "Halpha": "halpha",
+        "OIII": "oiii",
+    },
+    filter_aliases={
         "B": "B",
         "V": "V",
         "R": "R",

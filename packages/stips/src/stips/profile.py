@@ -32,10 +32,11 @@ class InstrumentProfile:
 
     name: str
     site: Site
-    filters: dict[str, str]
+    filters: dict[str, str | None]
     header_map: dict[str, Field]
     camera: str
     filter_key: str = "FILTNAM"
+    filter_aliases: dict[str, str] = field(default_factory=dict)
     eups_package: Optional[str] = None
     const_map: dict[str, Any] = field(default_factory=dict)
     night_to_dayobs_offset_days: int = 1

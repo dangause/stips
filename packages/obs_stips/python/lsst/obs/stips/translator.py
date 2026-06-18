@@ -62,11 +62,11 @@ class StipsTranslator(FitsTranslator):
 
     def to_physical_filter(self):
         raw = str(self._header.get(self.profile.filter_key, "UNKNOWN")).strip()
-        fmap = self.profile.filters
-        if raw in fmap:
-            return fmap[raw]
-        if raw.upper() in fmap:
-            return fmap[raw.upper()]
+        aliases = self.profile.filter_aliases
+        if raw in aliases:
+            return aliases[raw]
+        if raw.upper() in aliases:
+            return aliases[raw.upper()]
         h = self._hook("unknown_filter")
         return h(self._header, raw) if h else raw
 

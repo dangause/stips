@@ -7,7 +7,8 @@ from stips import Field, InstrumentProfile, Site, hook
 PROFILE = InstrumentProfile(
     name="Demo",
     site=Site(10.0, 20.0, 100.0),
-    filters={"B": "B", "OPEN": "clear"},
+    filters={"B": "b", "clear": None},
+    filter_aliases={"B": "B", "OPEN": "clear"},
     header_map={
         "exposure_time": Field("EXPTIME", unit="s", default=0.0),
         "telescope": Field("TELESCOP", default="Demo 1m"),

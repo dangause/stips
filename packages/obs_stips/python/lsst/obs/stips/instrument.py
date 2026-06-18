@@ -52,15 +52,12 @@ class StipsInstrument(Instrument):
 
     @staticmethod
     def _build_filter_definitions(profile) -> FilterDefinitionCollection:
-        """Build a de-duplicated FilterDefinitionCollection from
-        ``profile.filters`` (one ``FilterDefinition`` per physical_filter)."""
-        defs = []
-        seen = set()
-        for physical_filter, band in profile.filters.items():
-            if physical_filter in seen:
-                continue
-            seen.add(physical_filter)
-            defs.append(FilterDefinition(physical_filter, band=band))
+        """Build a FilterDefinitionCollection from ``profile.filters``
+        (physical_filter -> band), one ``FilterDefinition`` per physical_filter."""
+        defs = [
+            FilterDefinition(physical_filter, band=band)
+            for physical_filter, band in profile.filters.items()
+        ]
         return FilterDefinitionCollection(*defs)
 
     def __init__(self, collection_prefix: str | None = None):

@@ -48,7 +48,7 @@ tasks:
   # Forced photometry on calibrated visit images
   # ============================================
   forcedPhotRaDec:
-    class: lsst.obs.nickel.tasks.ForcedPhotRaDecTask
+    class: lsst.obs.stips.tasks.ForcedPhotRaDecTask
     config:
       # Input: calibrated science exposure
       connections.exposure: preliminary_visit_image
@@ -79,7 +79,7 @@ tasks:
   # Forced photometry on difference images
   # ============================================
   forcedPhotDiffimRaDec:
-    class: lsst.obs.nickel.tasks.ForcedPhotDiffimRaDecTask
+    class: lsst.obs.stips.tasks.ForcedPhotDiffimRaDecTask
     config:
       # Input: difference image
       connections.differenceExposure: difference_image

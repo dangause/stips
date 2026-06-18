@@ -18,7 +18,6 @@ from lsst.obs.base import DefineVisitsTask
 
 # tests/test_instrument_extras.py
 from lsst.obs.nickel import Nickel
-from lsst.obs.nickel.nickelFilters import NICKEL_FILTER_DEFINITIONS
 
 
 class TestNickelExtras(unittest.TestCase):
@@ -64,17 +63,18 @@ class TestNickelExtras(unittest.TestCase):
     def test_filters_registered(self):
         # Broadband BVRI + clear, plus Sloan-like (gp/rp) and narrowband
         # (Halpha/OIII) filters used for extended-object workflows.
-        pfs = {fd.physical_filter for fd in NICKEL_FILTER_DEFINITIONS}
+        filter_definitions = Nickel.filterDefinitions
+        pfs = {fd.physical_filter for fd in filter_definitions}
         self.assertEqual(
             pfs,
             {"B", "V", "R", "I", "clear", "gp", "rp", "Halpha", "OIII"},
         )
 
-        bands = {fd.band for fd in NICKEL_FILTER_DEFINITIONS if fd.band is not None}
+        bands = {fd.band for fd in filter_definitions if fd.band is not None}
         self.assertEqual(bands, {"b", "v", "r", "i", "gp", "rp", "halpha", "oiii"})
 
         # Ensure there are no duplicate physical_filter entries
-        self.assertEqual(len(pfs), len(list(NICKEL_FILTER_DEFINITIONS)))
+        self.assertEqual(len(pfs), len(list(filter_definitions)))
 
 
 class MemoryTester(lsst.utils.tests.MemoryTestCase):

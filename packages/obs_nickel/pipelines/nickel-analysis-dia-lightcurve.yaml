@@ -16,14 +16,14 @@ tasks:
       connections.outputCatalog: preliminary_visit_table
 
   plotDiaLightcurve:
-    class: lsst.obs.nickel.tasks.DiaLightcurvePlotTask
+    class: lsst.obs.stips.tasks.DiaLightcurvePlotTask
     config:
       connections.diaSources: dia_source_unfiltered
       connections.visitTable: preliminary_visit_table
       connections.outputName: dia_lightcurve
 
   plotDiaLightcurveCombined:
-    class: lsst.obs.nickel.tasks.DiaLightcurveCombinedPlotTask
+    class: lsst.obs.stips.tasks.DiaLightcurveCombinedPlotTask
     config:
       connections.inputName: dia_lightcurve
       connections.outputName: dia_lightcurve_combined
