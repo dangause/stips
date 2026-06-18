@@ -134,107 +134,59 @@ def _load_lightcurve_config(
     repo: Path | None = None,
     stack_dir: Path | None = None,
 ) -> cfg_module.Config:
-    """Load configuration for lightcurve command with CLI overrides.
+    """Load configuration for the lightcurve command.
 
-    This allows running lightcurve without any .env file by providing
-    --repo and optionally --stack-dir on the command line.
+    Two mutually exclusive sources, in priority order:
+
+    1. The group-level ``-c/--config`` YAML (its ``env:`` block). Any
+       ``--repo``/``--stack-dir`` flags then override the loaded values.
+    2. Explicit ``--repo`` and ``--stack-dir`` flags, with no ``-c``. This
+       builds a minimal Config directly from those two flags — lightcurve only
+       needs the repo and the stack at runtime.
+
+    There is no ``.env`` file, no ``os.environ`` fallback, and no cwd/stack/
+    obs-package auto-detection.
 
     Args:
         ctx: Click context
-        repo: Butler repository path (required if no .env)
-        stack_dir: LSST stack directory (auto-detected if not provided)
+        repo: Butler repository path (overrides ``-c``; required without ``-c``)
+        stack_dir: LSST stack directory (overrides ``-c``; required without ``-c``)
 
     Returns:
-        Config object with CLI overrides applied
+        Config object with explicit overrides applied
     """
-    import os
-    from dataclasses import replace
+    import dataclasses
 
-    # Try to load config from env/profile first
-    env_file = ctx.obj.get("env_file")
-    config = None
-
-    # Try loading from env file or environment
-    try:
-        config = cfg_module.load(env_file=env_file)
-    except ValueError:
-        # Config loading failed - we'll build from CLI options
-        pass
-
-    if config is not None:
-        # Have a base config, apply CLI overrides
+    config_path = ctx.obj.get("config_path")
+    if config_path:
+        config = cfg_module.load(config_path)
         if repo is not None:
-            config = replace(config, repo=repo)
+            config = dataclasses.replace(config, repo=repo)
         if stack_dir is not None:
-            config = replace(config, stack_dir=stack_dir)
+            config = dataclasses.replace(config, stack_dir=stack_dir)
         return config
 
-    # No config from env - must have --repo at minimum
+    # No -c: build a minimal Config from explicit flags.
     if repo is None:
         _print_error(
-            "No configuration found. Either:\n"
-            "  1. Provide --repo (and optionally --stack-dir)\n"
-            "  2. Use -p PROFILE to load from .env.PROFILE\n"
-            "  3. Set REPO, STACK_DIR, OBS_NICKEL in environment"
+            "lightcurve needs configuration. Either:\n"
+            "  1. Pass -c <config.yaml> before the command, or\n"
+            "  2. Provide --repo and --stack-dir on the command line."
         )
         sys.exit(1)
 
-    # Auto-detect stack_dir if not provided
     if stack_dir is None:
-        # Check environment
-        if "STACK_DIR" in os.environ:
-            stack_dir = Path(os.environ["STACK_DIR"])
-        else:
-            # Try common locations
-            candidates = [
-                Path.home() / "lsst_stack",
-                Path("/opt/lsst/software/stack"),
-                Path.cwd().parent.parent,  # If running from within stack
-            ]
-            for candidate in candidates:
-                if (candidate / "loadLSST.zsh").exists() or (
-                    candidate / "loadLSST.bash"
-                ).exists():
-                    stack_dir = candidate
-                    break
-
-        if stack_dir is None:
-            _print_error(
-                "Could not auto-detect LSST stack. Provide --stack-dir or set STACK_DIR"
-            )
-            sys.exit(1)
-
-    # Auto-detect obs_nickel
-    obs_nickel = None
-    if "OBS_NICKEL" in os.environ:
-        obs_nickel = Path(os.environ["OBS_NICKEL"])
-    else:
-        # Check if we're in the nickel_processing_suite directory
-        cwd = Path.cwd()
-        candidates = [
-            cwd / "packages" / "obs_nickel",
-            cwd.parent / "packages" / "obs_nickel",
-            cwd,  # If cwd is obs_nickel itself
-        ]
-        for candidate in candidates:
-            if (candidate / "pipelines").exists():
-                obs_nickel = candidate
-                break
-
-    if obs_nickel is None:
-        _print_error(
-            "Could not auto-detect obs_nickel package. Set OBS_NICKEL in environment"
-        )
+        _print_error("lightcurve without -c requires both --repo and --stack-dir.")
         sys.exit(1)
 
-    # Use a dummy RAW_PARENT_DIR since lightcurve doesn't need it
-    raw_parent_dir = Path(os.environ.get("RAW_PARENT_DIR", "/tmp"))
-
+    # The Config dataclass requires obs_nickel and raw_parent_dir, but the
+    # lightcurve command uses neither (it only needs repo + stack_dir). Pass
+    # inert placeholders for those two fields — no auto-detection, no env.
     return cfg_module.Config(
         repo=repo,
         stack_dir=stack_dir,
-        obs_nickel=obs_nickel,
-        raw_parent_dir=raw_parent_dir,
+        obs_nickel=Path("/nonexistent"),
+        raw_parent_dir=Path("/nonexistent"),
     )
 
 
@@ -990,7 +942,7 @@ def fphot(
 @click.option(
     "--stack-dir",
     type=click.Path(exists=True, path_type=Path),
-    help="LSST stack directory (default: auto-detect or $STACK_DIR)",
+    help="LSST stack directory (required if not using -c)",
 )
 @click.option(
     "--radius", type=float, default=1.0, help="Match radius in arcsec (default: 1.0)"
