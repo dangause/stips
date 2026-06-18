@@ -1,0 +1,68 @@
+import tempfile
+import textwrap
+import unittest
+from pathlib import Path
+
+from stips.core import config as cfg
+
+
+def _write_yaml(body: str) -> Path:
+    d = Path(tempfile.mkdtemp())
+    p = d / "config.yaml"
+    p.write_text(textwrap.dedent(body))
+    return p
+
+
+ENVBLOCK = """
+    env:
+      REPO: /tmp/repo
+      STACK_DIR: /tmp/stack
+      OBS_NICKEL: /tmp/obs_nickel
+      RAW_PARENT_DIR: /tmp/raw
+    object: demo
+    """
+
+
+class TestYamlConfig(unittest.TestCase):
+    def test_load_from_yaml_path(self):
+        c = cfg.load(_write_yaml(ENVBLOCK))
+        self.assertEqual(str(c.repo), "/tmp/repo")
+        self.assertEqual(str(c.stack_dir), "/tmp/stack")
+        self.assertEqual(str(c.raw_parent_dir), "/tmp/raw")
+
+    def test_load_from_env_dict(self):
+        c = cfg.load(
+            env={
+                "REPO": "/r",
+                "STACK_DIR": "/s",
+                "OBS_NICKEL": "/o",
+                "RAW_PARENT_DIR": "/raw",
+            }
+        )
+        self.assertEqual(str(c.repo), "/r")
+
+    def test_expands_within_env_block(self):
+        # ${VAR} expands using ONLY the env block (no os.environ)
+        c = cfg.load(
+            env={
+                "STACK_DIR": "/s",
+                "REPO": "/r",
+                "OBS_NICKEL": "/o",
+                "RAW_PARENT_DIR": "/raw",
+                "CP_PIPE_DIR": "${STACK_DIR}/cp_pipe",
+            }
+        )
+        self.assertEqual(str(c.cp_pipe_dir), "/s/cp_pipe")
+
+    def test_missing_required_key_errors(self):
+        with self.assertRaises(ValueError) as ctx:
+            cfg.load(_write_yaml("env:\n  REPO: /tmp/repo\n"))
+        self.assertIn("STACK_DIR", str(ctx.exception))
+
+    def test_no_config_errors(self):
+        with self.assertRaises(ValueError):
+            cfg.load()
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -220,106 +220,82 @@ def _parse_env_file(path: Path) -> dict[str, str]:
     return env
 
 
-def load(
-    env_file: str | Path | None = None,
-    extra_env: list[str | Path] | None = None,
-    inline_env: dict[str, str] | None = None,
-    prefer_inline: bool = False,
-) -> Config:
-    """Load configuration from environment and .env files.
+def _expand_within(value: str, env: dict[str, str]) -> str:
+    """Expand ${VAR}/$VAR references using ONLY the given env dict (no os.environ).
 
     Args:
-        env_file: Primary .env file (default: .env or $ENV_FILE)
-        extra_env: Additional .env files to layer on top
-        inline_env: Dict of environment variables (from YAML 'env' section)
-        prefer_inline: If True, inline_env overrides os.environ (for nickel run YAML configs)
+        value: String potentially containing ${VAR} references
+        env: The config env block — the sole substitution source
+
+    Returns:
+        String with all ${VAR} references expanded; unknown vars expand to "".
+    """
+    while "${" in value:
+        start = value.index("${")
+        end = value.index("}", start)
+        var_name = value[start + 2 : end]
+        var_value = env.get(var_name, "")
+        value = value[:start] + var_value + value[end + 1 :]
+    return value
+
+
+def load(
+    config_path: Path | str | None = None, *, env: dict[str, str] | None = None
+) -> Config:
+    """Build Config from a YAML config file's ``env:`` block — the SOLE config source.
+
+    Pass either ``config_path`` (a YAML file with an ``env:`` mapping) or an already-extracted
+    ``env`` dict. There is no ``.env`` file and no ``os.environ`` fallback for config values.
+
+    Args:
+        config_path: Path to a YAML config file containing an ``env:`` mapping
+        env: An already-extracted env dict (alternative to ``config_path``)
 
     Returns:
         Validated Config object
 
     Raises:
-        ValueError: If required configuration is missing
-
-    Priority (when prefer_inline=False, default):
-        1. os.environ (highest)
-        2. inline_env
-        3. env_file
-        4. extra_env (lowest)
-
-    Priority (when prefer_inline=True, for YAML configs):
-        1. inline_env (highest - YAML 'env' section)
-        2. env_file (if keys not in inline_env)
-        3. extra_env
-        4. os.environ (lowest - only for keys not in inline_env)
+        ValueError: If no config is provided or required configuration is missing
     """
-    # Load env files in order (later files override earlier)
-    merged: dict[str, str] = {}
+    if env is None:
+        if config_path is None:
+            raise ValueError(
+                "No config provided. Pass -c <config.yaml> (its env: block supplies "
+                "REPO, STACK_DIR, OBS_NICKEL, RAW_PARENT_DIR)."
+            )
+        import yaml
 
-    # Start with OS environment as base (will be overridden if prefer_inline=True)
-    env_keys = [
-        "REPO",
-        "STACK_DIR",
-        "OBS_NICKEL",
-        "INSTRUMENT_DIR",
-        "RAW_PARENT_DIR",
-        "REFCAT_REPO",
-        "CP_PIPE_DIR",
-        "LICK_ARCHIVE_DIR",
-        "LICK_ARCHIVE_URL",
-        "LICK_ARCHIVE_INSTR",
-        "INSTRUMENT_PACKAGE",
-    ]
-    for key in env_keys:
-        if key in os.environ:
-            merged[key] = os.environ[key]
+        with open(config_path) as f:
+            data = yaml.safe_load(f) or {}
+        raw_env = data.get("env") or {}
+        if not isinstance(raw_env, dict):
+            raise ValueError(f"{config_path}: 'env:' must be a mapping")
+        env = {str(k): str(v) for k, v in raw_env.items()}
+    else:
+        env = {str(k): str(v) for k, v in env.items()}
 
-    # Determine primary env file
-    if env_file is None and not inline_env:
-        env_file = os.environ.get("ENV_FILE", ".env")
-
-    if env_file:
-        env_file = Path(env_file)
-        if env_file.exists():
-            file_env = _parse_env_file(env_file)
-            merged.update(file_env)
-
-    if extra_env:
-        for extra in extra_env:
-            extra_path = Path(extra)
-            if extra_path.exists():
-                merged.update(_parse_env_file(extra_path))
-
-    # Handle inline_env based on priority mode
-    if inline_env:
-        if prefer_inline:
-            # For YAML configs: inline_env has highest priority
-            for k, v in inline_env.items():
-                merged[k] = _expand_env_vars(v, inline_env)
-        else:
-            # For CLI: only use inline_env for keys not in os.environ
-            for k, v in inline_env.items():
-                if k not in os.environ:
-                    merged[k] = _expand_env_vars(v, inline_env)
+    # ${VAR} expansion using ONLY the env block (no os.environ)
+    merged = {k: _expand_within(v, env) for k, v in env.items()}
 
     # Validate required fields
     required = ["REPO", "STACK_DIR", "OBS_NICKEL", "RAW_PARENT_DIR"]
     missing = [k for k in required if not merged.get(k)]
     if missing:
         raise ValueError(
-            f"Missing required configuration: {', '.join(missing)}. "
-            f"Set these in your .env file or environment."
+            f"Missing required config key(s): {', '.join(missing)} "
+            f"(set them in the config YAML's env: block)."
         )
 
     stack_dir = Path(merged["STACK_DIR"]).expanduser()
 
-    # Resolve CP_PIPE_DIR - use provided value if valid, otherwise auto-discover
+    # Resolve CP_PIPE_DIR - use the value from the env block if set, otherwise
+    # auto-discover from the stack. The env block is authoritative, so an
+    # explicitly-set CP_PIPE_DIR is trusted (no on-disk existence gate).
     cp_pipe_dir: Path | None = None
     if merged.get("CP_PIPE_DIR"):
-        candidate = Path(merged["CP_PIPE_DIR"]).expanduser()
-        if candidate.exists():
-            cp_pipe_dir = candidate
+        cp_pipe_dir = Path(merged["CP_PIPE_DIR"]).expanduser()
 
-    # Auto-discover from stack if not set or invalid
+    # Auto-discover from stack if not set
     if cp_pipe_dir is None:
         cp_pipe_dir = _discover_cp_pipe_dir(stack_dir)
 
