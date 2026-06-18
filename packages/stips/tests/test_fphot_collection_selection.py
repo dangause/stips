@@ -23,6 +23,19 @@ def fphot_module():
     return fphot
 
 
+def _nickel_config() -> SimpleNamespace:
+    """Minimal config stub exposing a Nickel instrument profile."""
+    profile = SimpleNamespace(
+        name="Nickel",
+        collection_prefix="Nickel",
+        skymap_name="nickelRings-v1",
+        skymap_collection="skymaps/nickelRings",
+        instrument_class="lsst.obs.nickel.Nickel",
+        night_to_dayobs_offset_days=1,
+    )
+    return SimpleNamespace(require_profile=lambda: profile)
+
+
 def _collections_stdout(*collections: str) -> str:
     lines = ["Name Type", "---- ----"]
     lines.extend(f"{c} RUN" for c in collections)
@@ -77,7 +90,7 @@ def test_select_diff_collection_prefers_matching_band(fphot_module, monkeypatch)
     monkeypatch.setattr(fphot_module, "run_butler_query", fake_run_butler_query)
 
     selected, candidates = fphot_module._select_diff_collection(
-        repo, night, config=object(), band="r"
+        repo, night, config=_nickel_config(), band="r"
     )
     assert candidates == [i_run, r_run]
     assert selected == r_run
@@ -111,7 +124,7 @@ def test_select_diff_collection_uses_latest_when_band_unspecified(
     monkeypatch.setattr(fphot_module, "run_butler_query", fake_run_butler_query)
 
     selected, candidates = fphot_module._select_diff_collection(
-        repo, night, config=object(), band=None
+        repo, night, config=_nickel_config(), band=None
     )
     assert candidates == [i_run, r_run]
     assert selected == i_run

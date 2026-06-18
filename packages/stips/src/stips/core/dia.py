@@ -8,9 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from stips.core.pipeline import (
-    INSTRUMENT,
     REFCATS_CHAIN,
-    SKYMAPS_CHAIN,
     CollectionNames,
     build_exclusion_expr,
     is_empty_qgraph,
@@ -145,10 +143,11 @@ def run(
     if executor is None:
         executor = LocalExecutor()
 
+    prof = config.require_profile()
     night = validate_night(night)
-    cols = CollectionNames(night)
+    cols = CollectionNames(night, prefix=prof.collection_prefix)
     repo = str(config.repo)
-    day_obs = night_to_day_obs(night)
+    day_obs = night_to_day_obs(night, offset_days=prof.night_to_dayobs_offset_days)
 
     # Resolve template
     template_collection = template
@@ -169,12 +168,16 @@ def run(
     # CHAINED parent includes results from both primary and fallback configs.
     try:
         result = run_butler_query(
-            ["query-collections", repo, f"Nickel/runs/{night}/processCcd/*"],
+            [
+                "query-collections",
+                repo,
+                f"{prof.collection_prefix}/runs/{night}/processCcd/*",
+            ],
             config,
             check=False,
         )
         sci_collections = parse_butler_query_output(
-            result.stdout, prefix_filter="Nickel/"
+            result.stdout, prefix_filter=f"{prof.collection_prefix}/"
         )
         # Prefer CHAINED parents (no /run or /run_fb suffix) over individual RUNs.
         # Join ALL CHAINED parents so DIA sees science outputs from every
@@ -220,7 +223,7 @@ def run(
         band_expr = f" AND band='{band}'"
 
     data_query = (
-        f"instrument='Nickel' AND exposure.observation_type='science' "
+        f"instrument='{prof.name}' AND exposure.observation_type='science' "
         f"AND day_obs={day_obs}{object_expr}{exclusion_expr}{band_expr}"
     )
 
@@ -236,7 +239,7 @@ def run(
     try:
         # Register instrument
         run_butler(
-            ["register-instrument", repo, INSTRUMENT],
+            ["register-instrument", repo, prof.instrument_class],
             config,
             check=False,
             log_file=log_file,
@@ -250,19 +253,19 @@ def run(
         # Find raw collection (optional for DIA, targeted query)
         raw_run = ""
         raw_result = run_butler_query(
-            ["query-collections", repo, f"Nickel/raw/{night}/*"],
+            ["query-collections", repo, f"{prof.collection_prefix}/raw/{night}/*"],
             config,
             check=False,
         )
         raw_collections = parse_butler_query_output(
-            raw_result.stdout, prefix_filter="Nickel/"
+            raw_result.stdout, prefix_filter=f"{prof.collection_prefix}/"
         )
         if raw_collections:
             raw_run = raw_collections[0]
 
-        input_collections = f"{sci_parents},{cols.calib_chain},{REFCATS_CHAIN},{SKYMAPS_CHAIN},{template_collection}"
+        input_collections = f"{sci_parents},{cols.calib_chain},{REFCATS_CHAIN},{prof.skymap_collection},{template_collection}"
         if raw_run:
-            input_collections = f"{sci_parents},{raw_run},{cols.calib_chain},{REFCATS_CHAIN},{SKYMAPS_CHAIN},{template_collection}"
+            input_collections = f"{sci_parents},{raw_run},{cols.calib_chain},{REFCATS_CHAIN},{prof.skymap_collection},{template_collection}"
 
         qgraph_args = [
             "qgraph",
@@ -410,7 +413,7 @@ def run(
                     "--collections",
                     cols.diff_run,
                     "--where",
-                    f"instrument='Nickel' AND day_obs={day_obs}",
+                    f"instrument='{prof.name}' AND day_obs={day_obs}",
                 ],
                 config,
                 check=False,
@@ -428,7 +431,7 @@ def run(
                     "--collections",
                     cols.diff_run,
                     "--where",
-                    f"instrument='Nickel' AND day_obs={day_obs}",
+                    f"instrument='{prof.name}' AND day_obs={day_obs}",
                 ],
                 config,
                 check=False,

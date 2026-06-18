@@ -18,10 +18,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from stips.core.pipeline import (
-    INSTRUMENT,
     REFCATS_CHAIN,
-    SKYMAP_NAME,
-    SKYMAPS_CHAIN,
     butler_query_has_results,
     generate_run_timestamp,
     parse_butler_query_output,
@@ -56,7 +53,7 @@ def find_tract_for_coords(
     ra: float,
     dec: float,
     config: Config,
-    skymap: str = "nickelRings-v1",
+    skymap: str | None = None,
 ) -> int | None:
     """Find the tract ID that contains the given coordinates.
 
@@ -64,17 +61,20 @@ def find_tract_for_coords(
         ra: Right ascension in degrees
         dec: Declination in degrees
         config: Pipeline configuration
-        skymap: Skymap name
+        skymap: Skymap name (defaults to the active profile's skymap_name)
 
     Returns:
         Tract ID or None if not found
     """
+    prof = config.require_profile()
+    if skymap is None:
+        skymap = prof.skymap_name
     script = f"""
 import lsst.daf.butler as dafButler
 from lsst.geom import SpherePoint, degrees
 
 butler = dafButler.Butler('{config.repo}')
-skymap = butler.get('skyMap', skymap='{skymap}', collections='skymaps/nickelRings')
+skymap = butler.get('skyMap', skymap='{skymap}', collections='{prof.skymap_collection}')
 coord = SpherePoint({ra}, {dec}, degrees)
 tract_info = skymap.findTract(coord)
 print(tract_info.getId())
@@ -145,13 +145,18 @@ def find_science_collections_for_nights(
     Returns:
         List of collection names with science outputs for this band
     """
+    prof = config.require_profile()
     collections = []
     repo = str(config.repo)
 
     for night in nights:
         try:
             result = run_butler_query(
-                ["query-collections", repo, f"Nickel/runs/{night}/processCcd/*"],
+                [
+                    "query-collections",
+                    repo,
+                    f"{prof.collection_prefix}/runs/{night}/processCcd/*",
+                ],
                 config,
                 check=False,
             )
@@ -160,7 +165,7 @@ def find_science_collections_for_nights(
                 continue
 
             night_colls = parse_butler_query_output(
-                result.stdout, prefix_filter="Nickel/"
+                result.stdout, prefix_filter=f"{prof.collection_prefix}/"
             )
             if not night_colls:
                 log.info(
@@ -330,6 +335,8 @@ def run(
             error="No template nights provided",
         )
 
+    prof = config.require_profile()
+
     # Determine tract
     if tract is None:
         if ra is not None and dec is not None:
@@ -427,7 +434,7 @@ def run(
     try:
         # Register instrument (idempotent)
         run_butler(
-            ["register-instrument", repo, INSTRUMENT],
+            ["register-instrument", repo, prof.instrument_class],
             config,
             check=False,
             log_file=log_file,
@@ -452,11 +459,12 @@ def run(
         # Build input chain
         input_chain = ",".join(input_collections)
         full_input = (
-            f"{input_chain},Nickel/calib/current," f"{REFCATS_CHAIN},{SKYMAPS_CHAIN}"
+            f"{input_chain},{prof.collection_prefix}/calib/current,"
+            f"{REFCATS_CHAIN},{prof.skymap_collection}"
         )
 
         data_query = (
-            f"instrument='Nickel' AND skymap='{SKYMAP_NAME}' "
+            f"instrument='{prof.name}' AND skymap='{prof.skymap_name}' "
             f"AND tract={tract} AND band='{band}'"
         )
 

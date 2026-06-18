@@ -9,7 +9,6 @@ from typing import TYPE_CHECKING
 
 from stips.core.pipeline import (
     REFCATS_CHAIN,
-    SKYMAPS_CHAIN,
     butler_query_has_results,
     generate_run_timestamp,
     night_to_day_obs,
@@ -42,7 +41,8 @@ def _collection_has_difference_images(
     band: str | None,
 ) -> bool:
     """Check whether a diff run has at least one difference_image for the band."""
-    query = "instrument='Nickel'"
+    prof = config.require_profile()
+    query = f"instrument='{prof.name}'"
     if band:
         query += f" AND band='{band}'"
 
@@ -75,8 +75,13 @@ def _select_diff_collection(
     band: str | None,
 ) -> tuple[str | None, list[str]]:
     """Select the newest diff collection that contains datasets for this band."""
+    prof = config.require_profile()
     diff_result = run_butler_query(
-        ["query-collections", repo, f"Nickel/runs/{night}/diff/*/run"],
+        [
+            "query-collections",
+            repo,
+            f"{prof.collection_prefix}/runs/{night}/diff/*/run",
+        ],
         config,
         check=False,
     )
@@ -85,7 +90,9 @@ def _select_diff_collection(
         return None, []
 
     candidates = sorted(
-        parse_butler_query_output(diff_result.stdout, prefix_filter="Nickel/"),
+        parse_butler_query_output(
+            diff_result.stdout, prefix_filter=f"{prof.collection_prefix}/"
+        ),
         reverse=True,
     )
     for coll in candidates:
@@ -129,6 +136,7 @@ def run(
     if executor is None:
         executor = LocalExecutor()
 
+    prof = config.require_profile()
     night = validate_night(night)
     run_ts = generate_run_timestamp()
     repo = str(config.repo)
@@ -142,12 +150,18 @@ def run(
     # over individual RUN collections.
     processccd_coll = None
     result = run_butler_query(
-        ["query-collections", repo, f"Nickel/runs/{night}/processCcd/*"],
+        [
+            "query-collections",
+            repo,
+            f"{prof.collection_prefix}/runs/{night}/processCcd/*",
+        ],
         config,
         check=False,
     )
     if result.returncode == 0:
-        colls = parse_butler_query_output(result.stdout, prefix_filter="Nickel/")
+        colls = parse_butler_query_output(
+            result.stdout, prefix_filter=f"{prof.collection_prefix}/"
+        )
         if colls:
             # Prefer CHAINED parents over individual RUNs
             chained = [
@@ -168,8 +182,8 @@ def run(
     log.info(f"Using processCcd collection: {processccd_coll}")
 
     # Build data query
-    day_obs = night_to_day_obs(night)
-    data_query = f"instrument='Nickel' AND day_obs={day_obs}"
+    day_obs = night_to_day_obs(night, offset_days=prof.night_to_dayobs_offset_days)
+    data_query = f"instrument='{prof.name}' AND day_obs={day_obs}"
     if band:
         data_query += f" AND band='{band}'"
 
@@ -182,11 +196,15 @@ def run(
         if image_type in ("visit", "both"):
             band_suffix = f"_{band}" if band else ""
             output_coll = (
-                f"Nickel/runs/{night}/forcedPhotRaDec/{run_ts}/visit{band_suffix}"
+                f"{prof.collection_prefix}/runs/{night}/forcedPhotRaDec/"
+                f"{run_ts}/visit{band_suffix}"
             )
             output_run = f"{output_coll}/run"
 
-            visit_input = f"{processccd_coll},Nickel/calib/current,{REFCATS_CHAIN},{SKYMAPS_CHAIN}"
+            visit_input = (
+                f"{processccd_coll},{prof.collection_prefix}/calib/current,"
+                f"{REFCATS_CHAIN},{prof.skymap_collection}"
+            )
 
             log.info("Running forced photometry on visit images...")
             log.info(f"  Input: {visit_input}")
@@ -249,10 +267,15 @@ def run(
                 errors.append(err_msg)
 
             if diff_coll:
-                input_colls = f"{processccd_coll},{diff_coll},Nickel/calib/current,{REFCATS_CHAIN},{SKYMAPS_CHAIN}"
+                input_colls = (
+                    f"{processccd_coll},{diff_coll},"
+                    f"{prof.collection_prefix}/calib/current,"
+                    f"{REFCATS_CHAIN},{prof.skymap_collection}"
+                )
                 band_suffix = f"_{band}" if band else ""
                 output_coll = (
-                    f"Nickel/runs/{night}/forcedPhotRaDec/{run_ts}/diffim{band_suffix}"
+                    f"{prof.collection_prefix}/runs/{night}/forcedPhotRaDec/"
+                    f"{run_ts}/diffim{band_suffix}"
                 )
                 output_run = f"{output_coll}/run"
 
