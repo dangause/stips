@@ -114,7 +114,7 @@ if [[ "${NPS_DASHBOARD}" == "true" ]]; then
     echo "[NPS] Starting dashboard on port ${NPS_DASHBOARD_PORT} (logs: ${NPS_LOGS_DIR})"
     python3 -c "
 import uvicorn
-from obs_nickel_data_tools.dashboard import create_app
+from stips.dashboard import create_app
 from pathlib import Path
 app = create_app(Path('${NPS_LOGS_DIR}'))
 uvicorn.run(app, host='0.0.0.0', port=${NPS_DASHBOARD_PORT}, log_level='warning')

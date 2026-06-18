@@ -122,7 +122,7 @@ if [[ -d "$OBS_NICKEL_DATA_DIR" ]]; then
 fi
 
 # Ensure workspace packages are available in PYTHONPATH
-# This allows tests to import obs_nickel_data_tools, etc.
+# This allows tests to import stips, etc.
 WORKSPACE_ROOT="$REPO_ROOT"
 for pkg_dir in "${WORKSPACE_ROOT}"/packages/*/src; do
   if [[ -d "$pkg_dir" ]]; then
