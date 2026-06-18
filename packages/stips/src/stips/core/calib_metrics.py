@@ -37,7 +37,7 @@ def run(
 
     Args:
         config: Loaded Config (provides repo + stack_dir).
-        collection: Butler collection glob (e.g. 'Nickel/runs/*/processCcd/*').
+        collection: Butler collection glob (e.g. '<prefix>/runs/*/processCcd/*').
         output: Output CSV path (absolute or relative to CWD).
         night: Optional YYYYMMDD to filter by exposure.day_obs.
         include_refcat_metrics: Also pull ref-match metric bundles if present.

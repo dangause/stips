@@ -274,7 +274,7 @@ def parse_butler_query_output(
     Args:
         output: Raw stdout from butler query-collections/query-datasets
         prefix_filter: Only return names starting with this prefix
-            (e.g., "Nickel/", "templates/")
+            (e.g. (Nickel) "Nickel/", or "templates/")
 
     Returns:
         List of collection/dataset names

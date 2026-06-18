@@ -5,10 +5,10 @@ extract_lightcurve.py - Extract light curve from DIA source catalogs
 This script extracts a light curve for a specific object from difference imaging
 source catalogs, producing a CSV file with photometry over time.
 
-Usage:
+Usage (collection globs use the instrument's prefix, e.g. ``Nickel``):
     stips-dia-lightcurve \\
         --repo /path/to/repo \\
-        --collection "Nickel/runs/*/diff/*/run" \\
+        --collection "<prefix>/runs/*/diff/*/run" \\
         --ra 123.456 --dec +12.345 \\
         --radius 1.0 \\
         --output lightcurve.csv
@@ -16,7 +16,7 @@ Usage:
 Example with object name (looks up coordinates):
     stips-dia-lightcurve \\
         --repo $REPO \\
-        --collection "Nickel/runs/202406*/diff/*/run" \\
+        --collection "<prefix>/runs/202406*/diff/*/run" \\
         --object "2020wnt" \\
         --output lightcurve_2020wnt.csv
 """
@@ -64,7 +64,7 @@ def parse_args():
     parser.add_argument(
         "--collection",
         required=True,
-        help="Collection(s) to search (supports wildcards, e.g., 'Nickel/runs/*/diff/*/run')",
+        help="Collection(s) to search (supports wildcards, e.g. '<prefix>/runs/*/diff/*/run')",
     )
 
     # Position specification (one of these is required)

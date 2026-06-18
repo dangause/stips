@@ -6,11 +6,11 @@ Cross-matches Landolt star positions against single_visit_star_unstandardized so
 catalogs and compares calibrated magnitudes (nJy → AB → Vega) to published Landolt
 values (B, V, R, I).
 
-Usage:
+Usage (collection globs use the instrument's prefix, e.g. ``Nickel``):
     validate-landolt \\
         --repo $REPO \\
         --catalog landolt_catalog.csv \\
-        --collection "Nickel/runs/*/processCcd/*" \\
+        --collection "<prefix>/runs/*/processCcd/*" \\
         --output landolt_validation.csv
 
     # Dry-run: list matched stars per visit without computing residuals

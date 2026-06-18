@@ -1179,22 +1179,26 @@ def lightcurve(
     and generates a lightcurve CSV and optional plot.
 
     \b
+    Collection globs below use the active instrument's collection prefix
+    (``<prefix>``); the examples are shown for the Nickel reference profile.
+
+    \b
     Example (standalone - no .env needed):
         stips lightcurve \\
             --repo /path/to/butler_repo \\
             --ra 210.91 --dec 54.32 \\
-            --collections "Nickel/runs/*/diff/*/run" \\
+            --collections "<prefix>/runs/*/diff/*/run" \\
             --name "SN 2023ixf"
 
     \b
     Example (with profile):
         stips -p 2023ixf lightcurve --ra 210.91 --dec 54.32 \\
-            --collections "Nickel/runs/20230519/diff/*/run" --name "SN 2023ixf"
+            --collections "<prefix>/runs/20230519/diff/*/run" --name "SN 2023ixf"
 
     \b
     Example (forced photometry):
         stips lightcurve --repo /path/to/repo --ra 210.91 --dec 54.32 \\
-            --collections "Nickel/runs/*/forcedPhotRaDec/*/run" \\
+            --collections "<prefix>/runs/*/forcedPhotRaDec/*/run" \\
             --dataset-type forced_phot_diffim_radec --name "SN 2023ixf"
     """
     # Validate dependent options
@@ -1313,7 +1317,7 @@ def calib_metrics(
         stips calib-metrics \\
             scripts/config/2023ixf/pipeline_ps1_template.yaml \\
             --night 20230519 \\
-            --collection "Nickel/runs/20230519/processCcd/*" \\
+            --collection "<prefix>/runs/20230519/processCcd/*" \\
             -o calib_metrics_20230519.csv
     """
     from stips.core import calib_metrics as cm_module

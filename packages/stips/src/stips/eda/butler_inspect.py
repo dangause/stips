@@ -7,9 +7,9 @@ This tool provides exploratory data analysis for Butler repositories:
 - Calibration status and coverage
 - Template availability and characteristics
 
-Usage:
-  stips-eda-butler collections --repo /path/to/repo [--pattern "Nickel/*"]
-  stips-eda-butler datasets --repo /path/to/repo --collection "Nickel/runs/*/processCcd/*/run"
+Usage (collection globs use the instrument's prefix, e.g. ``Nickel`` for Nickel):
+  stips-eda-butler collections --repo /path/to/repo [--pattern "<prefix>/*"]
+  stips-eda-butler datasets --repo /path/to/repo --collection "<prefix>/runs/*/processCcd/*/run"
   stips-eda-butler calibs --repo /path/to/repo [--nights 20200101,20200102,...]
   stips-eda-butler templates --repo /path/to/repo [--band r]
 

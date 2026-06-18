@@ -4,13 +4,13 @@
 Build a DiscreteSkyMap from the WCS+BBox of a set of exposures (e.g. initial_pvi)
 and persist it as dataset type 'skyMap', plus insert the skymap/tract dimension rows.
 
-Example:
+Example (collection/skymap names use the instrument's prefix, e.g. ``Nickel``):
   python scripts/make_skymap_from_datasets.py \
     --repo /path/to/repo \
-    --collections "Nickel/run/processCcd" \
+    --collections "<prefix>/run/processCcd" \
     --dataset-type initial_pvi \
-    --skymap-id nickel_discrete \
-    --run "Nickel/skymaps/$(date -u +%Y%m%dT%H%M%SZ)" \
+    --skymap-id <prefix>_discrete \
+    --run "<prefix>/skymaps/$(date -u +%Y%m%dT%H%M%SZ)" \
     --border-deg 0.05
 """
 

@@ -14,23 +14,23 @@ quality plots. Pulls from three butler dataset groups:
   3. single_visit_star_ref_match_{astrom,photom}_metrics -> aggregated
                                         refcat-residual RMS/bias (optional)
 
-Usage:
+Usage (collection globs use the instrument's prefix, e.g. ``Nickel``):
     extract-calib-metrics \\
         --repo $REPO \\
-        --collection "Nickel/runs/20230519/processCcd/*" \\
+        --collection "<prefix>/runs/20230519/processCcd/*" \\
         --night 20230519 \\
         --output calib_metrics_20230519.csv
 
     # Combine across many nights using a glob:
     extract-calib-metrics \\
         --repo $REPO \\
-        --collection "Nickel/runs/*/processCcd/*" \\
+        --collection "<prefix>/runs/*/processCcd/*" \\
         --output calib_metrics_all.csv
 
     # Include analysis_tools refcat-residual metrics (must be produced upstream):
     extract-calib-metrics \\
         --repo $REPO \\
-        --collection "Nickel/runs/20230519/processCcd/*" \\
+        --collection "<prefix>/runs/20230519/processCcd/*" \\
         --include-refcat-metrics \\
         --output calib_metrics_20230519.csv
 """
@@ -382,7 +382,7 @@ def parse_args():
     parser.add_argument(
         "--collection",
         required=True,
-        help="Collection(s) to query (wildcards ok, e.g. 'Nickel/runs/*/processCcd/*')",
+        help="Collection(s) to query (wildcards ok, e.g. '<prefix>/runs/*/processCcd/*')",
     )
     parser.add_argument(
         "--night",

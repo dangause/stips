@@ -21,7 +21,7 @@ Example:
 
     # Lightcurve extraction
     from stips.core import lightcurve
-    lightcurve.run(ra=210.91, dec=54.32, collections="Nickel/runs/*/diff/*/run", config=cfg)
+    lightcurve.run(ra=210.91, dec=54.32, collections="<prefix>/runs/*/diff/*/run", config=cfg)
 
     # Full pipeline from YAML config
     from stips.core import run

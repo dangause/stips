@@ -2,12 +2,13 @@
 # Build a Discrete SkyMap config (pex_config) from the convex hull of
 # all initial_pvi images in one or more collections.
 #
-# Usage (example):
+# Usage (example; collection/skymap names use the instrument's prefix,
+# e.g. ``Nickel``):
 #   python scripts/build_discrete_skymap_config.py \
 #     --repo /path/to/repo \
-#     --collections Nickel/run/processCcd \
+#     --collections <prefix>/run/processCcd \
 #     --dataset-type initial_pvi \
-#     --skymap-id nickel_discrete \
+#     --skymap-id <prefix>_discrete \
 #     --border-deg 0.05 \
 #     --out configs/makeSkyMap_discrete_auto.py
 #

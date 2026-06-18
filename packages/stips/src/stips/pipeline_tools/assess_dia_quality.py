@@ -9,16 +9,16 @@ This script analyzes DIA outputs to provide quality metrics including:
 - Detection efficiency
 - Spatial distribution of sources
 
-Usage:
+Usage (collection globs use the instrument's prefix, e.g. ``Nickel``):
     python assess_dia_quality.py \\
         --repo /path/to/repo \\
-        --collection "Nickel/runs/*/diff/*/run" \\
+        --collection "<prefix>/runs/*/diff/*/run" \\
         --night 20240625
 
 Example:
     python assess_dia_quality.py \\
         --repo $REPO \\
-        --collection "Nickel/runs/20240625/diff/*/run" \\
+        --collection "<prefix>/runs/20240625/diff/*/run" \\
         --night 20240625 \\
         --output dia_quality_report.txt
 """

@@ -900,7 +900,7 @@ def _run_calibs_step(
 
         # Write curated calibrations once before concurrent dispatch.
         # This avoids SQLite write conflicts when multiple nights try to
-        # write defects/crosstalk to the shared Nickel/calib/curated chain.
+        # write defects/crosstalk to the shared <prefix>/calib/curated chain.
         first_night = all_nights[0]
         log.info("Writing curated calibrations (one-time)...")
         curated_log = _get_step_log_file("calibs", night="curated")
