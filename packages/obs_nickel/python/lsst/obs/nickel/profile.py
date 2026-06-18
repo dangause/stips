@@ -17,6 +17,7 @@ profile = InstrumentProfile(
         elevation=1283.0,
         name="Lick Observatory",
     ),
+    # physical_filter -> band
     filters={
         "B": "b",
         "V": "v",
@@ -28,6 +29,7 @@ profile = InstrumentProfile(
         "Halpha": "halpha",
         "OIII": "oiii",
     },
+    # raw FITS FILTNAM value (upper-cased on lookup) -> physical_filter
     filter_aliases={
         "B": "B",
         "V": "V",

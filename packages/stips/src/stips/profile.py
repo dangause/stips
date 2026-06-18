@@ -28,14 +28,20 @@ class Field:
 
 @dataclass
 class InstrumentProfile:
-    """Everything instrument-specific, in one object."""
+    """Everything instrument-specific, in one object.
+
+    The two filter fields point in opposite directions: ``filters`` maps
+    physical_filter->band; ``filter_aliases`` maps raw header values->physical_filter.
+    """
 
     name: str
     site: Site
+    # physical_filter -> band (canonical registry; drives FilterDefinitionCollection)
     filters: dict[str, str | None]
     header_map: dict[str, Field]
     camera: str
     filter_key: str = "FILTNAM"
+    # raw FITS filter value -> physical_filter (case-insensitive lookup; drives to_physical_filter)
     filter_aliases: dict[str, str] = field(default_factory=dict)
     eups_package: Optional[str] = None
     const_map: dict[str, Any] = field(default_factory=dict)
