@@ -111,7 +111,7 @@ def _datetime_end(header):
 
 
 def _day_obs(header):
-    """Observing day as YYYYMMDD (UTC), using only DATE."""
+    """Derive day_obs (YYYYMMDD int) from the end-of-exposure datetime."""
     return int(_datetime_end(header).datetime.strftime("%Y%m%d"))
 
 

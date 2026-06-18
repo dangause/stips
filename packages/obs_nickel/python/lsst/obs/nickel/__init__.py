@@ -18,19 +18,3 @@ try:
     __all__ += ["calibCombine", "visitInfo"]
 except ImportError:
     pass
-
-# Import tasks submodule to make it available as lsst.obs.nickel.tasks
-# (required for LSST's doImport to find task classes).
-try:
-    from . import tasks  # noqa: F401
-
-    __all__.append("tasks")
-except ImportError:
-    pass
-
-try:
-    from . import plotting  # noqa: F401
-
-    __all__.append("plotting")
-except ImportError:
-    pass
