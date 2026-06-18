@@ -70,14 +70,20 @@ def night_to_date_range(night: str) -> tuple[str, str]:
     )
 
 
-def night_to_day_obs(night: str) -> str:
+def night_to_day_obs(night: str, offset_days: int = 1) -> str:
     """Convert observing night (local) to UT day_obs.
 
-    Lick observations starting on local night YYYYMMDD have
-    UT dates of YYYYMMDD+1 in FITS headers.
+    For an instrument whose local night YYYYMMDD maps to a UT date that is
+    ``offset_days`` ahead, this shifts the date accordingly. The default of 1
+    preserves Nickel/Lick behavior, where observations starting on local night
+    YYYYMMDD have UT dates of YYYYMMDD+1 in FITS headers. The offset is
+    instrument-configurable via the profile's
+    ``night_to_dayobs_offset_days``.
 
     Args:
         night: Local observing night (YYYYMMDD)
+        offset_days: Days to add to convert local night to UT day_obs
+            (default: 1, Nickel-correct)
 
     Returns:
         UT day_obs (YYYYMMDD)
@@ -85,7 +91,7 @@ def night_to_day_obs(night: str) -> str:
     from datetime import timedelta
 
     dt = datetime.strptime(night, "%Y%m%d")
-    return (dt + timedelta(days=1)).strftime("%Y%m%d")
+    return (dt + timedelta(days=offset_days)).strftime("%Y%m%d")
 
 
 def get_raw_dir(config: Config, night: str) -> Path:
@@ -147,6 +153,7 @@ def find_bad_coord_exposures(
     *,
     object_filter: str | None = None,
     tolerance_deg: float = 5.0,
+    instrument_name: str = "Nickel",
 ) -> list[int]:
     """Find exposures with coordinates far from the expected target.
 
@@ -165,6 +172,8 @@ def find_bad_coord_exposures(
         target_dec: Expected target Dec in degrees
         object_filter: Optional object name to restrict query
         tolerance_deg: Max offset in degrees before flagging (default: 5.0)
+        instrument_name: Butler instrument name for the query
+            (default: "Nickel", back-compat)
 
     Returns:
         Sorted list of exposure IDs with bad coordinates
@@ -172,12 +181,16 @@ def find_bad_coord_exposures(
     from stips.core.stack import run_butler_python_json
 
     # A Lick observing night can span two UT days (Pacific evening = night,
-    # post-midnight = night+1). Query both.
-    day_obs_next = night_to_day_obs(night)
+    # post-midnight = night+1). Query both. The local->UT offset is
+    # instrument-configurable via the active profile.
+    offset_days = (
+        config.profile.night_to_dayobs_offset_days if config.profile is not None else 1
+    )
+    day_obs_next = night_to_day_obs(night, offset_days=offset_days)
 
     # Build WHERE clause
     where = (
-        f"instrument='Nickel' AND exposure.observation_type='science'"
+        f"instrument='{instrument_name}' AND exposure.observation_type='science'"
         f" AND exposure.day_obs IN ({night}, {day_obs_next})"
     )
     if object_filter:

@@ -51,6 +51,13 @@ class TestNickelCollectionGolden(unittest.TestCase):
         # Local observing night -> UT day_obs (+1 day), returned as a str.
         self.assertEqual(night_to_day_obs("20230519"), "20230520")
 
+    def test_day_obs_offset_param(self):
+        # default offset preserves current Nickel behavior
+        self.assertEqual(night_to_day_obs("20230519"), "20230520")
+        # explicit offset is honored (genericity)
+        self.assertEqual(night_to_day_obs("20230519", offset_days=0), "20230519")
+        self.assertEqual(night_to_day_obs("20230519", offset_days=2), "20230521")
+
 
 if __name__ == "__main__":
     unittest.main()
