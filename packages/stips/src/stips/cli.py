@@ -500,7 +500,7 @@ def dia(
 
 @cli.command()
 @click.argument(
-    "config_or_nights",
+    "nights",
     nargs=-1,
 )
 @click.option("--overwrite", is_flag=True, help="Re-download existing files")
@@ -512,60 +512,52 @@ def dia(
 @click.pass_context
 def download(
     ctx: click.Context,
-    config_or_nights: tuple[str, ...],
+    nights: tuple[str, ...],
     overwrite: bool,
     missing_only: bool,
 ) -> None:
     """Download nights from the Lick archive.
 
-    Can be invoked with a pipeline YAML config (downloads all nights from config)
-    or with explicit night dates.
+    Nights are taken from the command line (one or more YYYYMMDD dates). If no
+    nights are given, they are read from the group -c config YAML's science: and
+    coadd template: nights: lists.
 
     \b
     Examples:
-        # Download all nights from a pipeline config
-        stips download scripts/config/2023ixf/pipeline_ps1_template.yaml
+        # Download all nights from the -c pipeline config
+        stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml download
 
         # Download only missing nights from config
-        stips download scripts/config/2023ixf/pipeline_ps1_template.yaml --missing-only
+        stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml download --missing-only
 
-        # Download specific nights (requires -p profile or --env-file)
-        stips -p 2023ixf download 20240625
-        stips -p 2023ixf download 20240416 20240429 20240516
+        # Download specific nights
+        stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml download 20240625
+        stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml download 20240416 20240429
     """
-    from stips.core import run as run_module
     from stips.pipeline_tools import fetch_archive_night
 
-    if not config_or_nights:
-        _print_error("Must provide either a config file or night dates")
-        sys.exit(1)
+    config = _load_config(ctx)
 
-    # Check if first argument is a YAML config file
-    first_arg = config_or_nights[0]
-    config_file = None
-    nights: list[str] = []
+    nights_list: list[str] = list(nights)
 
-    if first_arg.endswith(".yaml") or first_arg.endswith(".yml"):
-        config_path = Path(first_arg)
-        if not config_path.exists():
-            _print_error(f"Config file not found: {first_arg}")
+    if not nights_list:
+        # No nights on the CLI: read them from the group -c config YAML.
+        config_path = ctx.obj.get("config_path")
+        if not config_path:
+            _print_error(
+                "No nights given and no -c config to read them from. Pass "
+                "YYYYMMDD night(s) or -c <config.yaml> with science:/template: nights:."
+            )
             sys.exit(1)
-        config_file = config_path
 
-        # Extract env from YAML
-        yaml_env = run_module.get_env_from_yaml(config_file)
-        if yaml_env:
-            _print_info(f"Using environment from: {config_file}")
-
-        # Load the full YAML to get nights
         import yaml
 
-        with open(config_file) as f:
-            yaml_config = yaml.safe_load(f)
+        with open(config_path) as f:
+            yaml_config = yaml.safe_load(f) or {}
 
-        # Collect all nights from science and template sections
+        # Collect all nights from science and (coadd) template sections
         science_nights = yaml_config.get("science", {}).get("nights", [])
-        template_config = yaml_config.get("template", {})
+        template_config = yaml_config.get("template", {}) or {}
         template_nights = (
             template_config.get("nights", [])
             if template_config.get("type") == "coadd"
@@ -573,26 +565,15 @@ def download(
         )
 
         all_nights = set(str(n) for n in science_nights + template_nights)
-        nights = sorted(all_nights)
+        nights_list = sorted(all_nights)
 
-        if not nights:
-            _print_error("No nights found in config file")
+        if not nights_list:
+            _print_error(f"No nights found in config file: {config_path}")
             sys.exit(1)
 
-        _print_info(f"Found {len(nights)} nights in config")
+        _print_info(f"Found {len(nights_list)} nights in config")
 
-        # Any additional arguments after config are extra nights to include
-        if len(config_or_nights) > 1:
-            extra = list(config_or_nights[1:])
-            nights = sorted(set(nights) | set(extra))
-            _print_info(f"Including {len(extra)} additional nights from command line")
-
-        # Load config with inline env
-        config = _load_config(ctx)
-    else:
-        # All arguments are night dates
-        nights = list(config_or_nights)
-        config = _load_config(ctx)
+    nights = tuple(nights_list)
 
     # Filter to missing-only if requested
     if missing_only:
@@ -692,57 +673,21 @@ def download(
 
 
 @cli.command()
-@click.argument(
-    "config_file", type=click.Path(exists=True, path_type=Path), required=False
-)
 @click.pass_context
-def bootstrap(ctx: click.Context, config_file: Path | None) -> None:
+def bootstrap(ctx: click.Context) -> None:
     """Initialize a new Butler repository.
 
     Creates the Butler repo, registers the instrument, ingests reference
     catalogs, and sets up the skymap. Run this once before processing data.
 
-    Configuration can be provided in three ways (in order of precedence):
-
-    \b
-    1. Pipeline YAML file with 'env' section (recommended):
-       stips bootstrap scripts/config/2023ixf/pipeline_ps1_template.yaml
-
-    \b
-    2. Profile flag:
-       stips -p 2023ixf bootstrap
-
-    \b
-    3. Environment file:
-       stips --env-file .env.2023ixf bootstrap
+    Configuration comes from the group -c config YAML's env: block.
 
     \b
     Examples:
-        stips bootstrap scripts/config/2023ixf/pipeline_ps1_template.yaml
-        stips bootstrap scripts/config/2020wnt/pipeline_nickel_template.yaml
-        stips -p 2023ixf bootstrap
+        stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml bootstrap
+        stips -c scripts/config/2020wnt/pipeline_nickel_template.yaml bootstrap
     """
     from stips.core import bootstrap as bootstrap_module
-    from stips.core import run as run_module
-
-    # If a pipeline YAML is provided, extract env from it
-    if config_file:
-        yaml_env = run_module.get_env_from_yaml(config_file)
-        if yaml_env:
-            _print_info(f"Using environment from: {config_file}")
-        else:
-            # Check for profile in YAML
-            cli_profile = ctx.obj.get("profile")
-            if not cli_profile:
-                yaml_profile = run_module.get_profile_from_yaml(config_file)
-                if yaml_profile:
-                    resolved = _resolve_env_file(None, yaml_profile)
-                    if resolved:
-                        ctx.obj["env_file"] = resolved
-                        ctx.obj["profile"] = yaml_profile
-                        _print_info(
-                            f"Using profile '{yaml_profile}' from: {config_file}"
-                        )
 
     config = _load_config(ctx)
 
@@ -765,9 +710,6 @@ def bootstrap(ctx: click.Context, config_file: Path | None) -> None:
 
 
 @cli.command()
-@click.argument(
-    "config_file", type=click.Path(exists=True, path_type=Path), required=False
-)
 @click.option(
     "--night",
     "nights",
@@ -793,7 +735,6 @@ def bootstrap(ctx: click.Context, config_file: Path | None) -> None:
 @click.pass_context
 def clean(
     ctx: click.Context,
-    config_file: Path | None,
     nights: tuple[str, ...],
     steps: tuple[str, ...],
     dry_run: bool,
@@ -805,49 +746,30 @@ def clean(
     coadd runs. Calibrations (cp, calib) are only removed when explicitly
     requested via --step calibs. Preserves raws, reference catalogs, and skymaps.
 
-    Configuration can come from a pipeline YAML, profile, or env file
-    (same as other commands).
+    Configuration comes from the group -c config YAML's env: block.
 
     \b
     Examples:
         # Preview what would be removed
-        stips clean pipeline.yaml --dry-run
+        stips -c pipeline.yaml clean --dry-run
 
     \b
         # Remove all processing runs (not calibs)
-        stips clean pipeline.yaml -y
+        stips -c pipeline.yaml clean -y
 
     \b
         # Remove calibs and all processing runs
-        stips clean pipeline.yaml --step calibs --step science --step dia --step fphot --step coadd -y
+        stips -c pipeline.yaml clean --step calibs --step science --step dia --step fphot --step coadd -y
 
     \b
         # Remove only DIA and forced phot runs
-        stips clean pipeline.yaml --step dia --step fphot
+        stips -c pipeline.yaml clean --step dia --step fphot
 
     \b
         # Remove runs for specific nights only
-        stips clean pipeline.yaml --night 20201207 --night 20201219
-
-    \b
-        # Using profile instead of YAML
-        stips -p 2020wnt clean --dry-run
+        stips -c pipeline.yaml clean --night 20201207 --night 20201219
     """
     from stips.core import clean as clean_module
-    from stips.core import run as run_module
-
-    # If a pipeline YAML is provided, extract env from it
-    if config_file:
-        yaml_env = run_module.get_env_from_yaml(config_file)
-        if not yaml_env:
-            cli_profile = ctx.obj.get("profile")
-            if not cli_profile:
-                yaml_profile = run_module.get_profile_from_yaml(config_file)
-                if yaml_profile:
-                    resolved = _resolve_env_file(None, yaml_profile)
-                    if resolved:
-                        ctx.obj["env_file"] = resolved
-                        ctx.obj["profile"] = yaml_profile
 
     config = _load_config(ctx)
 
@@ -1225,7 +1147,6 @@ def lightcurve(
 
 
 @cli.command("calib-metrics")
-@click.argument("config_file", type=click.Path(exists=True, path_type=Path))
 @click.option(
     "--collection",
     default=None,
@@ -1253,7 +1174,6 @@ def lightcurve(
 @click.pass_context
 def calib_metrics(
     ctx: click.Context,
-    config_file: Path,
     collection: str | None,
     output: Path,
     night: str | None,
@@ -1261,7 +1181,7 @@ def calib_metrics(
 ) -> None:
     """Extract per-visit astrometric/photometric calibration metrics to CSV.
 
-    Reads REPO and STACK_DIR from the `env:` section of a pipeline YAML config
+    Reads REPO and STACK_DIR from the `env:` section of the group -c config YAML
     (same file you pass to `stips run`), then queries the Butler for:
 
     \b
@@ -1271,27 +1191,18 @@ def calib_metrics(
 
     \b
     Example:
-        stips calib-metrics \\
-            scripts/config/2023ixf/pipeline_ps1_template.yaml \\
+        stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml calib-metrics \\
             -o calib_metrics_2023ixf_all.csv
 
     \b
     Filter to one night:
-        stips calib-metrics \\
-            scripts/config/2023ixf/pipeline_ps1_template.yaml \\
+        stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml calib-metrics \\
             --night 20230519 \\
             --collection "<prefix>/runs/20230519/processCcd/*" \\
             -o calib_metrics_20230519.csv
     """
     from stips.core import calib_metrics as cm_module
-    from stips.core import run as run_module
 
-    yaml_env = run_module.get_env_from_yaml(config_file)
-    if not yaml_env:
-        _print_error(f"No env: section found in {config_file}")
-        sys.exit(1)
-
-    _print_info(f"Using environment from: {config_file}")
     config = _load_config(ctx)
 
     if collection is None:
@@ -1324,7 +1235,6 @@ def calib_metrics(
 
 
 @cli.command("landolt-validate")
-@click.argument("config_file", type=click.Path(exists=True, path_type=Path))
 @click.option(
     "--catalog",
     type=click.Path(exists=True, path_type=Path),
@@ -1354,7 +1264,6 @@ def calib_metrics(
 @click.pass_context
 def landolt_validate(
     ctx: click.Context,
-    config_file: Path,
     catalog: Path,
     collection: str | None,
     output: Path,
@@ -1367,28 +1276,19 @@ def landolt_validate(
 
     \b
     Example:
-        stips landolt-validate \\
-            scripts/config/landolt_validation/pipeline_landolt.yaml \\
+        stips -c scripts/config/landolt_validation/pipeline_landolt.yaml landolt-validate \\
             --catalog scripts/config/landolt_validation/landolt_catalog.csv \\
             -o landolt_validation.csv
 
     \b
     Dry run (list expected matches):
-        stips landolt-validate \\
-            scripts/config/landolt_validation/pipeline_landolt.yaml \\
+        stips -c scripts/config/landolt_validation/pipeline_landolt.yaml landolt-validate \\
             --catalog scripts/config/landolt_validation/landolt_catalog.csv \\
             --list-stars \\
             -o /dev/null
     """
     from stips.core import landolt as landolt_module
-    from stips.core import run as run_module
 
-    yaml_env = run_module.get_env_from_yaml(config_file)
-    if not yaml_env:
-        _print_error(f"No env: section found in {config_file}")
-        sys.exit(1)
-
-    _print_info(f"Using environment from: {config_file}")
     config = _load_config(ctx)
 
     _print_info(f"Repo: {config.repo}")
@@ -1421,7 +1321,6 @@ def landolt_validate(
 
 
 @cli.command("run")
-@click.argument("config_file", type=click.Path(exists=True, path_type=Path))
 @click.option("--dry-run", is_flag=True, help="Print commands without executing")
 @click.option(
     "--site",
@@ -1438,28 +1337,17 @@ def landolt_validate(
 @click.pass_context
 def run_pipeline(
     ctx: click.Context,
-    config_file: Path,
     dry_run: bool,
     site: str | None,
     concurrent: int | None,
 ) -> None:
-    """Run full pipeline from YAML configuration file.
+    """Run full pipeline from the group -c YAML configuration file.
 
-    CONFIG_FILE is a YAML file specifying target, nights, bands, and options.
-    The YAML can include environment configuration in two ways:
-
-    \b
-    1. 'profile' field - loads .env.{profile}
-    2. 'env' section - inline environment variables (self-contained)
+    The -c config YAML specifies target, nights, bands, and options, and supplies
+    environment configuration via its env: section.
 
     \b
-    Example with profile:
-        profile: "2023ixf"    # Loads .env.2023ixf
-        object: "2023ixf"
-        ...
-
-    \b
-    Example with inline env (self-contained):
+    Example env: section (self-contained):
         env:
           REPO: "/path/to/repo"
           STACK_DIR: "/path/to/stack"
@@ -1470,29 +1358,14 @@ def run_pipeline(
 
     \b
     Example:
-        stips run scripts/config/2023ixf/pipeline.yaml
-        stips run pipeline.yaml --dry-run
+        stips -c scripts/config/2023ixf/pipeline.yaml run
+        stips -c pipeline.yaml run --dry-run
     """
     from stips.core import run as run_module
 
-    # Check if the YAML specifies inline env vars (highest priority)
-    yaml_env = run_module.get_env_from_yaml(config_file)
-    if yaml_env:
-        _print_info("Using inline environment from pipeline YAML")
-    else:
-        # Check if the YAML specifies a profile and no -p flag was given
-        cli_profile = ctx.obj.get("profile")
-        if not cli_profile:
-            yaml_profile = run_module.get_profile_from_yaml(config_file)
-            if yaml_profile:
-                # Resolve and use the YAML-specified profile
-                resolved = _resolve_env_file(None, yaml_profile)
-                if resolved:
-                    ctx.obj["env_file"] = resolved
-                    ctx.obj["profile"] = yaml_profile
-                    _print_info(f"Using profile '{yaml_profile}' from pipeline YAML")
-
     config = _load_config(ctx)
+
+    config_file = ctx.obj["config_path"]
 
     _print_info(f"Running pipeline from {config_file}...")
 
