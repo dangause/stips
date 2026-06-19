@@ -1,5 +1,6 @@
 import importlib
 import os
+import sys
 import unittest
 from pathlib import Path
 
@@ -22,6 +23,10 @@ class TestActive(unittest.TestCase):
             )
         finally:
             os.environ.pop("INSTRUMENT_DIR", None)
+            # Don't leave a profile-bound, INSTRUMENT_DIR-cached `active` in
+            # sys.modules — a later plain `import active` (expecting fail-loud)
+            # would otherwise get the cached module and pass for the wrong reason.
+            sys.modules.pop("lsst.obs.stips.active", None)
 
     def test_package_import_without_instrument_dir_is_safe(self):
         os.environ.pop("INSTRUMENT_DIR", None)
