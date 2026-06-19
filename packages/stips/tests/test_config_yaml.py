@@ -108,6 +108,56 @@ class TestYamlConfig(unittest.TestCase):
             cfg.load(p)
         self.assertIn("INSTRUMENT_DIR", str(ctx.exception))
 
+    def test_profile_loaded_by_path_from_instrument_dir(self):
+        import sys
+        from pathlib import Path
+
+        FIX = str(
+            Path(__file__).resolve().parents[2]
+            / "obs_stips"
+            / "tests"
+            / "data"
+            / "demo_instrument"
+        )
+        # verify the hop reaches the fixture (adjust parents[N] if needed)
+        assert (Path(FIX) / "profile.py").is_file(), FIX
+        c = cfg.load(
+            env={
+                "REPO": "/r",
+                "STACK_DIR": "/s",
+                "INSTRUMENT_DIR": FIX,
+                "RAW_PARENT_DIR": "/raw",
+            }
+        )
+        self.assertIsNotNone(c.profile)
+        self.assertEqual(c.profile.name, "DemoFix")
+        self.assertIn(FIX, sys.path)  # by-path load also inserts on sys.path
+
+    def test_config_and_obs_stips_loaders_agree(self):
+        import sys
+        from pathlib import Path
+
+        from lsst.obs.stips.profile_loader import load_profile_from_dir
+
+        FIX = str(
+            Path(__file__).resolve().parents[2]
+            / "obs_stips"
+            / "tests"
+            / "data"
+            / "demo_instrument"
+        )
+        p1 = load_profile_from_dir(FIX)
+        c = cfg.load(
+            env={
+                "REPO": "/r",
+                "STACK_DIR": "/s",
+                "INSTRUMENT_DIR": FIX,
+                "RAW_PARENT_DIR": "/raw",
+            }
+        )
+        self.assertEqual(p1.name, c.profile.name)
+        self.assertIn(FIX, sys.path)  # both loaders insert
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -258,27 +258,54 @@ def load(
     if cp_pipe_dir is None:
         cp_pipe_dir = _discover_cp_pipe_dir(stack_dir)
 
-    # Load the active instrument profile. Robustness: if the obs package is not
+    # Load the active instrument profile.
+    #
+    # Primary path (post-collapse): load instruments/<name>/profile.py BY PATH
+    # from INSTRUMENT_DIR. NOTE: the `instrument_dir` Path object isn't built
+    # until later in load() — only the string `instrument_dir_val` exists here,
+    # so use Path(instrument_dir_val). This mirrors
+    # lsst.obs.stips.profile_loader.load_profile_from_dir (load by path + insert
+    # the dir on sys.path so co-located hook modules — e.g. `from fetch import
+    # fetch_data` — resolve); keep the two in sync.
+    #
+    # Fallback (back-compat, removed in the collapse cleanup): import the
+    # configured INSTRUMENT_PACKAGE. Robustness: if the obs package is not
     # installed in this environment, do NOT crash config loading — leave
     # profile=None. Commands that need it call Config.require_profile() for a
-    # clear, actionable error. (INSTRUMENT_PACKAGE comes from the config YAML's
-    # env: block, defaulting to lsst.obs.nickel when unset.)
+    # clear, actionable error.
+    profile = None
     instrument_package = merged.get("INSTRUMENT_PACKAGE", "lsst.obs.nickel")
-    try:
-        profile = load_profile(instrument_package)
-    except ModuleNotFoundError as e:
-        top = instrument_package.split(".")[0]
-        # Only treat as "not installed" if the configured package itself is
-        # missing — not a broken/missing import *inside* an otherwise-present
-        # profile.py (which must surface, not be silenced as "not installed").
-        if e.name and (
-            e.name == top
-            or e.name.startswith(top + ".")
-            or e.name == f"{instrument_package}.profile"
-        ):
-            profile = None
-        else:
-            raise
+    candidate = Path(instrument_dir_val).expanduser() / "profile.py"
+    if candidate.is_file():
+        import importlib.util
+        import sys
+
+        # Insert the instrument dir on sys.path BEFORE exec so the profile's
+        # co-located hook modules resolve — mirrors profile_loader.
+        if str(candidate.parent) not in sys.path:
+            sys.path.insert(0, str(candidate.parent))
+        spec = importlib.util.spec_from_file_location("_stips_profile", candidate)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        profile = mod.profile
+    else:
+        # Back-compat: importable obs package. (INSTRUMENT_PACKAGE comes from the
+        # config YAML's env: block, defaulting to lsst.obs.nickel when unset.)
+        try:
+            profile = load_profile(instrument_package)
+        except ModuleNotFoundError as e:
+            top = instrument_package.split(".")[0]
+            # Only treat as "not installed" if the configured package itself is
+            # missing — not a broken/missing import *inside* an otherwise-present
+            # profile.py (which must surface, not be silenced as "not installed").
+            if e.name and (
+                e.name == top
+                or e.name.startswith(top + ".")
+                or e.name == f"{instrument_package}.profile"
+            ):
+                profile = None
+            else:
+                raise
 
     # instrument_dir_val resolved above (INSTRUMENT_DIR, or deprecated
     # OBS_NICKEL alias). The missing-check has already guaranteed it is set.
