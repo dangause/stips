@@ -17,7 +17,7 @@ ENVBLOCK = """
     env:
       REPO: /tmp/repo
       STACK_DIR: /tmp/stack
-      OBS_NICKEL: /tmp/obs_nickel
+      INSTRUMENT_DIR: /tmp/obs_nickel
       RAW_PARENT_DIR: /tmp/raw
     object: demo
     """
@@ -35,7 +35,7 @@ class TestYamlConfig(unittest.TestCase):
             env={
                 "REPO": "/r",
                 "STACK_DIR": "/s",
-                "OBS_NICKEL": "/o",
+                "INSTRUMENT_DIR": "/o",
                 "RAW_PARENT_DIR": "/raw",
             }
         )
@@ -47,7 +47,7 @@ class TestYamlConfig(unittest.TestCase):
             env={
                 "STACK_DIR": "/s",
                 "REPO": "/r",
-                "OBS_NICKEL": "/o",
+                "INSTRUMENT_DIR": "/o",
                 "RAW_PARENT_DIR": "/raw",
                 "CP_PIPE_DIR": "${STACK_DIR}/cp_pipe",
             }
@@ -68,7 +68,7 @@ class TestYamlConfig(unittest.TestCase):
             "env:\n"
             "  REPO: /tmp/repo\n"
             "  STACK_DIR: /tmp/stack\n"
-            "  OBS_NICKEL: /tmp/obs\n"
+            "  INSTRUMENT_DIR: /tmp/obs\n"
             "  RAW_PARENT_DIR: /tmp/raw\n"
             "  LICK_ARCHIVE_DIR: ${STACK_DIR}/lick\n"
         )
