@@ -44,6 +44,11 @@ def _build_setup_script(config: Config) -> str:
 
     prof = config.require_profile()
     eups_name = prof.eups_package
+    if not eups_name:
+        raise RuntimeError(
+            f"profile {prof.name!r} must set eups_package to run LSST stack commands "
+            "(it names the instrument's EUPS product and the OBS_* env var)."
+        )
     env_var = eups_name.upper()
     data_pkg = prof.obs_data_package
 

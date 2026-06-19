@@ -48,7 +48,9 @@ class TestStackEups(unittest.TestCase):
             stack_module, "_find_stack_loader", return_value=Path("/x/loadLSST.sh")
         ):
             script = stack_module._build_setup_script(_config(data=None))
-        self.assertNotIn("_data", script)  # no data-package setup block when unset
+        self.assertNotIn(
+            "# Check for", script
+        )  # no data-package setup block when unset
 
     def test_nickel_output_is_byte_identical_shape(self):
         # Nickel parity: eups_package=obs_nickel → export OBS_NICKEL + setup -r ... obs_nickel + data block
@@ -66,3 +68,12 @@ class TestStackEups(unittest.TestCase):
         self.assertIn('setup -r "/p/packages/obs_nickel" obs_nickel', script)
         self.assertIn("obs_nickel_data", script)
         self.assertIn("obs_stips", script)  # framework sibling still set up
+
+    def test_missing_eups_package_errors_clearly(self):
+        cfg = _config(eups=None)
+        with mock.patch.object(
+            stack_module, "_find_stack_loader", return_value=Path("/x/loadLSST.sh")
+        ):
+            with self.assertRaises(RuntimeError) as ctx:
+                stack_module._build_setup_script(cfg)
+        self.assertIn("eups_package", str(ctx.exception))
