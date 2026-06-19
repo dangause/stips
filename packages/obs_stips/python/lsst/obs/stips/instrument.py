@@ -68,9 +68,16 @@ class StipsInstrument(Instrument):
         return cls.profile.name
 
     def getCamera(self):
-        path = os.path.join(
-            getPackageDir(self.profile.eups_package), self.profile.camera
-        )
+        # Prefer the declarative instrument dir (INSTRUMENT_DIR) — no per-instrument
+        # EUPS package required. Fall back to the EUPS package for back-compat until
+        # the collapse migration removes profile.eups_package (Task 10).
+        instrument_dir = os.environ.get("INSTRUMENT_DIR")
+        if instrument_dir:
+            path = os.path.join(instrument_dir, self.profile.camera)
+        else:
+            path = os.path.join(
+                getPackageDir(self.profile.eups_package), self.profile.camera
+            )
         return yamlCamera.makeCamera(path)
 
     def register(self, registry, update: bool = False):

@@ -82,6 +82,45 @@ class TestStipsInstrument(unittest.TestCase):
             self.assertEqual(det.raft, "R00")
             self.assertEqual(det.name_in_raft, "S00")
 
+    def test_getcamera_uses_instrument_dir_env(self):
+        import os
+        import shutil
+        import tempfile
+        from dataclasses import replace
+        from pathlib import Path
+
+        # Path to the real camera yaml (packages/obs_nickel/camera/nickel.yaml).
+        # tests/ -> obs_stips -> packages, so parents[2] reaches packages/.
+        REAL_CAMERA = (
+            Path(__file__).resolve().parents[2]
+            / "obs_nickel"
+            / "camera"
+            / "nickel.yaml"
+        )
+        assert REAL_CAMERA.is_file(), REAL_CAMERA
+        d = Path(tempfile.mkdtemp())
+        cam_dst = (
+            d / DemoInst.profile.camera
+        )  # match profile.camera so getCamera finds it
+        cam_dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy(REAL_CAMERA, cam_dst)
+
+        # Bind a profile whose eups_package is bogus so the back-compat fallback
+        # CANNOT resolve. This proves getCamera uses INSTRUMENT_DIR, not the
+        # EUPS package, when the env var is set.
+        class NoEupsInst(StipsInstrument):
+            profile = replace(DemoInst.profile, eups_package="not_a_real_eups_pkg")
+
+        old = os.environ.get("INSTRUMENT_DIR")
+        os.environ["INSTRUMENT_DIR"] = str(d)
+        try:
+            cam = NoEupsInst().getCamera()
+            self.assertGreaterEqual(len(cam), 1)
+        finally:
+            os.environ.pop("INSTRUMENT_DIR", None)
+            if old:
+                os.environ["INSTRUMENT_DIR"] = old
+
 
 if __name__ == "__main__":
     unittest.main()
