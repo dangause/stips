@@ -88,6 +88,21 @@ class StipsTranslator(FitsTranslator):
         return h(self._header) if h else None
 
     @cache_translation
+    def to_pressure(self):
+        # Small-telescope headers usually carry no barometric pressure. Default
+        # to None (a fork with a barometer can supply a "pressure" hook) so
+        # ObservationInfo succeeds instead of raising NotImplementedError.
+        h = self._hook("pressure")
+        return h(self._header) if h else None
+
+    @cache_translation
+    def to_altaz_begin(self):
+        # Not in the headers; mirrors the base to_altaz_end (also None). A fork
+        # can override via an "altaz_begin" hook.
+        h = self._hook("altaz_begin")
+        return h(self._header) if h else None
+
+    @cache_translation
     def to_exposure_id(self):
         h = self._hook("exposure_id")
         return h(self._header) if h else None

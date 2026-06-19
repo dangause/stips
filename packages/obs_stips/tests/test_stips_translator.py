@@ -64,6 +64,16 @@ class TestStipsTranslator(unittest.TestCase):
             places=6,
         )
 
+    def test_pressure_defaults_to_none(self):
+        # Small-telescope headers carry no barometric pressure; the generic
+        # translator must still satisfy ObservationInfo by returning None
+        # (rather than the base FitsTranslator's NotImplementedError).
+        self.assertIsNone(DemoTranslator({"INSTRUME": "Demo"}).to_pressure())
+
+    def test_altaz_begin_defaults_to_none(self):
+        # Not in the headers; mirrors the base to_altaz_end (also None).
+        self.assertIsNone(DemoTranslator({"INSTRUME": "Demo"}).to_altaz_begin())
+
 
 if __name__ == "__main__":
     unittest.main()
