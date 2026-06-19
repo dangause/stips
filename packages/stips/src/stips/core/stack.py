@@ -25,6 +25,96 @@ def _find_stack_loader(stack_dir: Path) -> Path:
     )
 
 
+def _build_setup_script(config: Config) -> str:
+    """Build the bash script prefix that activates the LSST stack.
+
+    Returns everything EXCEPT the trailing command: the loader source, the
+    config env exports, the instrument-package setup, and the STIPS framework
+    sibling setup. The instrument EUPS product name, its OBS_* export variable,
+    and the data package are all derived from the active profile so a fork's
+    instrument package (not just obs_nickel) is set up correctly.
+
+    Args:
+        config: Pipeline configuration (must have an importable profile).
+
+    Returns:
+        The bash script prefix, ending with a trailing newline.
+    """
+    loader = _find_stack_loader(config.stack_dir)
+
+    prof = config.require_profile()
+    eups_name = prof.eups_package
+    env_var = eups_name.upper()
+    data_pkg = prof.obs_data_package
+
+    instrument_dir = config.instrument_dir
+
+    # Build environment exports from config.
+    # These override any .env file sourcing in scripts. The instrument's
+    # OBS_* export name derives from the profile's EUPS package so a fork
+    # gets e.g. OBS_DEMO instead of a hardcoded OBS_NICKEL. The pipeline
+    # YAMLs reference this var ($OBS_NICKEL/... for Nickel), so it must stay.
+    env_exports = f"""
+export REPO="{config.repo}"
+export STACK_DIR="{config.stack_dir}"
+export {env_var}="{instrument_dir}"
+export RAW_PARENT_DIR="{config.raw_parent_dir}"
+"""
+    if config.cp_pipe_dir:
+        env_exports += f'export CP_PIPE_DIR="{config.cp_pipe_dir}"\n'
+    if config.refcat_repo:
+        env_exports += f'export REFCAT_REPO="{config.refcat_repo}"\n'
+
+    # Pass through RUN_ID so shell scripts log to the same directory
+    run_id = os.environ.get("RUN_ID")
+    if run_id:
+        env_exports += f'export RUN_ID="{run_id}"\n'
+
+    # Instrument data package (e.g. obs_nickel_data) — only when the profile
+    # declares one. Path literal is inlined twice to avoid bash-var/f-string
+    # brace-escaping bugs.
+    data_block = ""
+    if data_pkg:
+        data_dir = instrument_dir.parent / data_pkg
+        data_block = f"""
+# Check for {data_pkg}
+if [ -d "{data_dir}" ]; then
+    setup -r "{data_dir}" {data_pkg} 2>/dev/null || true
+fi
+"""
+
+    # STIPS framework packages (siblings of the instrument package)
+    obs_stips_dir = instrument_dir.parent / "obs_stips"
+    stips_src = instrument_dir.parent / "stips" / "src"
+
+    script = f"""
+set -e
+{env_exports}
+cd "{config.stack_dir}"
+source "{loader}"
+setup lsst_distrib
+setup -r "{instrument_dir}" {eups_name} 2>/dev/null || true
+{data_block}
+# STIPS framework: obs_stips (LSST glue) + stips (core, src-layout)
+OBS_STIPS="{obs_stips_dir}"
+if [ -d "$OBS_STIPS" ]; then
+    setup -r "$OBS_STIPS" obs_stips 2>/dev/null || true
+fi
+STIPS_SRC="{stips_src}"
+if [ -d "$STIPS_SRC" ]; then
+    export PYTHONPATH="${{STIPS_SRC}}:${{PYTHONPATH:-}}"
+fi
+
+# Ensure we use the conda python by putting CONDA_PREFIX/bin first in PATH
+# This overrides any local .venv or shell aliases
+if [ -n "$CONDA_PREFIX" ]; then
+    export PATH="${{CONDA_PREFIX}}/bin:${{PATH}}"
+fi
+
+"""
+    return script
+
+
 def run_with_stack(
     cmd: list[str],
     config: Config,
@@ -52,69 +142,10 @@ def run_with_stack(
     Raises:
         subprocess.CalledProcessError: If check=True and command fails
     """
-    loader = _find_stack_loader(config.stack_dir)
-
-    # Build the wrapper script
-    # We need to source the stack, setup packages, then run the command
-    # Quote arguments that contain spaces or special shell characters
     import shlex
 
     cmd_str = " ".join(shlex.quote(c) for c in cmd)
-
-    # Build environment exports from config
-    # These override any .env file sourcing in scripts
-    env_exports = f"""
-export REPO="{config.repo}"
-export STACK_DIR="{config.stack_dir}"
-export OBS_NICKEL="{config.obs_nickel}"
-export RAW_PARENT_DIR="{config.raw_parent_dir}"
-"""
-    if config.cp_pipe_dir:
-        env_exports += f'export CP_PIPE_DIR="{config.cp_pipe_dir}"\n'
-    if config.refcat_repo:
-        env_exports += f'export REFCAT_REPO="{config.refcat_repo}"\n'
-
-    # Pass through RUN_ID so shell scripts log to the same directory
-    run_id = os.environ.get("RUN_ID")
-    if run_id:
-        env_exports += f'export RUN_ID="{run_id}"\n'
-
-    # STIPS framework packages (siblings of obs_nickel)
-    obs_stips_dir = config.obs_nickel.parent / "obs_stips"
-    stips_src = config.obs_nickel.parent / "stips" / "src"
-
-    script = f"""
-set -e
-{env_exports}
-cd "{config.stack_dir}"
-source "{loader}"
-setup lsst_distrib
-setup -r "{config.obs_nickel}" obs_nickel 2>/dev/null || true
-
-# Check for obs_nickel_data
-OBS_NICKEL_DATA="{config.obs_nickel.parent / 'obs_nickel_data'}"
-if [ -d "$OBS_NICKEL_DATA" ]; then
-    setup -r "$OBS_NICKEL_DATA" obs_nickel_data 2>/dev/null || true
-fi
-
-# STIPS framework: obs_stips (LSST glue) + stips (core, src-layout)
-OBS_STIPS="{obs_stips_dir}"
-if [ -d "$OBS_STIPS" ]; then
-    setup -r "$OBS_STIPS" obs_stips 2>/dev/null || true
-fi
-STIPS_SRC="{stips_src}"
-if [ -d "$STIPS_SRC" ]; then
-    export PYTHONPATH="${{STIPS_SRC}}:${{PYTHONPATH:-}}"
-fi
-
-# Ensure we use the conda python by putting CONDA_PREFIX/bin first in PATH
-# This overrides any local .venv or shell aliases
-if [ -n "$CONDA_PREFIX" ]; then
-    export PATH="${{CONDA_PREFIX}}/bin:${{PATH}}"
-fi
-
-{cmd_str}
-"""
+    script = _build_setup_script(config) + cmd_str + "\n"
 
     return subprocess.run(
         ["bash", "-c", script],
