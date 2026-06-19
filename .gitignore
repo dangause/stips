@@ -61,6 +61,10 @@ logs
 !packages/testdata/data/
 !packages/testdata/data/**
 
+# Allow tracked test fixtures (the bare `data` rule above would hide these)
+!packages/obs_stips/tests/data/
+!packages/obs_stips/tests/data/**
+
 # Defect visualization outputs
 packages/defects/defects_tools/defects/defects_*/
 **/defects/defects/
