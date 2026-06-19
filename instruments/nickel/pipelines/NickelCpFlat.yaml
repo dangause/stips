@@ -1,6 +1,6 @@
 description: >
   Nickel telescope flat calibration construction.
-  Uses NickelCalibCombineByFilterTask to handle missing VisitInfo dates
+  Uses StipsCalibCombineByFilterTask to handle missing VisitInfo dates
   in ISR outputs (the standard CalibCombineByFilterTask crashes on invalid dates).
 imports:
   - location: $CP_PIPE_DIR/pipelines/_ingredients/cpFlat.yaml
