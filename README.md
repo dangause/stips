@@ -1,6 +1,6 @@
 # STIPS — The Small Telescope Image Processing Suite
 
-[![CI](https://github.com/dangause/nickel_processing_suite/actions/workflows/ci.yml/badge.svg)](https://github.com/dangause/nickel_processing_suite/actions/workflows/ci.yml)
+[![CI](https://github.com/dangause/stips/actions/workflows/ci.yml/badge.svg)](https://github.com/dangause/stips/actions/workflows/ci.yml)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](pyproject.toml)
 
@@ -170,7 +170,7 @@ stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml run
 stips -c scripts/config/2020wnt/pipeline_ps1_template.yaml run
 ```
 
-The group-level `-c/--config` YAML is the sole config source. Its `env:` block supplies `REPO`/`STACK_DIR`/`OBS_NICKEL`/`RAW_PARENT_DIR`; the same file's pipeline sections drive `stips run`. (`.env` files and `-p <profile>` are no longer supported.)
+The group-level `-c/--config` YAML is the sole config source. Its `env:` block supplies `REPO`/`STACK_DIR`/`INSTRUMENT_DIR`/`RAW_PARENT_DIR`; the same file's pipeline sections drive `stips run`. (`.env` files and `-p <profile>` are no longer supported.)
 
 ### Transient Analysis Workflow
 
@@ -238,7 +238,7 @@ Self-contained YAML files with inline environment:
 env:
   REPO: "/path/to/butler/repo"
   STACK_DIR: "/path/to/lsst_stack"
-  OBS_NICKEL: "/path/to/nickel_processing_suite/packages/obs_nickel"
+  INSTRUMENT_DIR: "/path/to/stips/packages/obs_nickel"
   RAW_PARENT_DIR: "/path/to/raw/data"
   REFCAT_REPO: "/path/to/refcats"
 
@@ -295,7 +295,7 @@ Configuration lives in the `env:` block of the YAML you pass with `-c/--config`
 env:
   REPO: /path/to/butler/repo
   STACK_DIR: /path/to/lsst_stack
-  OBS_NICKEL: /path/to/obs_nickel
+  INSTRUMENT_DIR: /path/to/obs_nickel
   RAW_PARENT_DIR: /path/to/raw/data
   REFCAT_REPO: /path/to/refcats
   CP_PIPE_DIR: "${STACK_DIR}/cp_pipe"   # ${VAR} expands within the env: block
@@ -307,7 +307,7 @@ env:
 |----------|-------------|
 | `REPO` | Path to Butler repository |
 | `STACK_DIR` | Path to LSST stack installation |
-| `OBS_NICKEL` | Path to obs_nickel package |
+| `INSTRUMENT_DIR` | Path to the active instrument package (e.g. obs_nickel) |
 | `RAW_PARENT_DIR` | Parent directory for raw data |
 
 ### Optional Variables
