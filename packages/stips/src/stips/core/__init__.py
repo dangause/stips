@@ -1,12 +1,12 @@
-"""Core pipeline functionality for obs_nickel.
+"""Core pipeline functionality for the active instrument.
 
-This module provides Python APIs for running LSST pipelines on Nickel data.
-All functions can be used programmatically or via the `nickel` CLI.
+This module provides Python APIs for running LSST pipelines on small-telescope
+data. All functions can be used programmatically or via the `stips` CLI.
 
 Example:
     from stips.core import config, calibs, science, dia
 
-    cfg = config.load()
+    cfg = config.load("config.yaml")
     calibs.run(night="20240625", jobs=4, config=cfg)
     science.run(night="20240625", jobs=8, config=cfg)
     dia.run(night="20240625", config=cfg, auto_template=True)

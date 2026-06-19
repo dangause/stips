@@ -1,7 +1,7 @@
-"""Exploratory Data Analysis (EDA) tools for obs_nickel.
+"""Exploratory Data Analysis (EDA) tools for STIPS.
 
 This module provides tools for exploring and understanding:
-- Lick Observatory archive data availability
+- Archive data availability
 - Butler repository contents and structure
 - Calibration coverage and quality
 - Template availability and characteristics

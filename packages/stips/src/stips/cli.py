@@ -11,7 +11,7 @@ Usage:
 
 Configuration:
     The group-level ``-c/--config`` YAML file is the sole config source; its
-    ``env:`` block supplies REPO/STACK_DIR/OBS_NICKEL/RAW_PARENT_DIR.
+    ``env:`` block supplies REPO/STACK_DIR/INSTRUMENT_DIR/RAW_PARENT_DIR.
 
     stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml dia 20230519 --auto
     stips -c scripts/config/2020wnt/pipeline_ps1_template.yaml calibs 20201207
@@ -49,7 +49,7 @@ def _print_info(msg: str) -> None:
     "--config",
     "config_path",
     type=click.Path(exists=True, path_type=Path),
-    help="YAML config file (its env: block supplies REPO/STACK_DIR/OBS_NICKEL/RAW_PARENT_DIR)",
+    help="YAML config file (its env: block supplies REPO/STACK_DIR/INSTRUMENT_DIR/RAW_PARENT_DIR)",
 )
 @click.option(
     "-v",
@@ -753,7 +753,7 @@ def clean(
     "--band",
     required=True,
     type=click.Choice(["r", "i"]),
-    help="Nickel band (r or i)",
+    help="Band (e.g. r or i)",
 )
 @click.option("--collection", help="Output collection (default: templates/ps1/{band})")
 @click.option("--tract", type=int, help="Tract number (auto-determined if not set)")
@@ -1261,7 +1261,7 @@ def run_pipeline(
         env:
           REPO: "/path/to/repo"
           STACK_DIR: "/path/to/stack"
-          OBS_NICKEL: "/path/to/obs_nickel"
+          INSTRUMENT_DIR: "/path/to/obs_nickel"
           RAW_PARENT_DIR: "/path/to/raw"
         object: "2023ixf"
         ...
@@ -1544,7 +1544,7 @@ def dashboard(
     """
     # Determine logs directory and resolve the instrument name from the
     # active profile (used to drive Butler dataset queries in the dashboard).
-    instrument_name = "Nickel"
+    instrument_name = "STIPS"
     config = None
     try:
         config = _load_config(ctx)
@@ -1555,7 +1555,7 @@ def dashboard(
         try:
             instrument_name = config.require_profile().name
         except Exception:
-            instrument_name = "Nickel"
+            instrument_name = "STIPS"
 
     if logs_dir is None:
         if config is not None:
