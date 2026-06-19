@@ -132,7 +132,7 @@ def find_bps_config(pipeline: str, config: Config) -> Path:
         FileNotFoundError: If config file doesn't exist
     """
     # Look in the bps/pipelines directory relative to obs_nickel
-    bps_dir = config.obs_nickel.parent.parent / "bps" / "pipelines"
+    bps_dir = config.instrument_dir.parent.parent / "bps" / "pipelines"
     config_file = bps_dir / f"{pipeline}.yaml"
 
     if not config_file.exists():
@@ -168,6 +168,7 @@ def render_bps_config(
         Path to the rendered config file
     """
     timestamp = generate_timestamp()
+    prof = config.require_profile()
 
     # Load template config
     template_path = find_bps_config(bps_cfg.pipeline, config)
@@ -183,7 +184,10 @@ def render_bps_config(
         "repo": str(config.repo),
         "night": bps_cfg.night,
         "timestamp": timestamp,
-        "obs_nickel": str(config.obs_nickel),
+        # kept for the static bps/*.yaml templates (instrument-dir path); product-name genericity deferred
+        "obs_nickel": str(config.instrument_dir),
+        "eups_package": prof.eups_package or "",
+        "obs_data_package": prof.obs_data_package or "",
         "stack_dir": str(config.stack_dir),
         "cp_pipe_dir": str(config.cp_pipe_dir) if config.cp_pipe_dir else "",
         "raw_parent_dir": str(config.raw_parent_dir),

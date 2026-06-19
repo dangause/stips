@@ -189,7 +189,7 @@ def env(ctx: click.Context) -> None:
 
     click.echo(f"\n{'REPO:':<20} {config.repo}")
     click.echo(f"{'STACK_DIR:':<20} {config.stack_dir}")
-    click.echo(f"{'OBS_NICKEL:':<20} {config.obs_nickel}")
+    click.echo(f"{'INSTRUMENT_DIR:':<20} {config.instrument_dir}")
     click.echo(f"{'RAW_PARENT_DIR:':<20} {config.raw_parent_dir}")
 
     if config.cp_pipe_dir:
@@ -1560,7 +1560,7 @@ def dashboard(
     if logs_dir is None:
         if config is not None:
             try:
-                repo_root = config.obs_nickel.parent.parent
+                repo_root = config.instrument_dir.parent.parent
                 logs_dir = repo_root / "logs"
             except Exception:
                 logs_dir = Path.cwd() / "logs"

@@ -278,7 +278,7 @@ def _setup_run_logging(run_id: str, config: Config) -> Path:
     """
     # Use the same LOG_ROOT as logging.sh: {REPO_ROOT}/logs
     # REPO_ROOT is the monorepo root (obs_nickel.parent.parent)
-    repo_root = config.obs_nickel.parent.parent
+    repo_root = config.instrument_dir.parent.parent
     log_root = repo_root / "logs"
     run_log_dir = log_root / run_id
 

@@ -70,9 +70,9 @@ class TestRenderBpsConfigQgraph:
         """Create a mock Config object pointing at the real bps/ templates."""
         from unittest.mock import MagicMock
 
-        # find_bps_config() goes: config.obs_nickel.parent.parent / "bps" / "pipelines"
+        # find_bps_config() goes: config.instrument_dir.parent.parent / "bps" / "pipelines"
         mock_config = MagicMock()
-        mock_config.obs_nickel = REPO_ROOT / "packages" / "obs_nickel"
+        mock_config.instrument_dir = REPO_ROOT / "packages" / "obs_nickel"
         mock_config.repo = tmp_path / "repo"
         mock_config.stack_dir = Path("/fake/stack")
         mock_config.cp_pipe_dir = Path("/fake/cp_pipe")
@@ -143,7 +143,7 @@ class TestFullBPSLifecycle:
 
     def _make_mock_config(self, tmp_path):
         mock_config = MagicMock()
-        mock_config.obs_nickel = REPO_ROOT / "packages" / "obs_nickel"
+        mock_config.instrument_dir = REPO_ROOT / "packages" / "obs_nickel"
         mock_config.repo = tmp_path / "repo"
         mock_config.stack_dir = Path("/fake/stack")
         mock_config.cp_pipe_dir = Path("/fake/cp_pipe")

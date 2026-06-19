@@ -82,8 +82,8 @@ def find_bootstrap_script(config: Config) -> Path | None:
     """
     script_candidates = [
         # From obs_nickel in monorepo
-        config.obs_nickel.parent.parent / "scripts/pipeline/00_bootstrap_repo.sh",
-        config.obs_nickel / "../../scripts/pipeline/00_bootstrap_repo.sh",
+        config.instrument_dir.parent.parent / "scripts/pipeline/00_bootstrap_repo.sh",
+        config.instrument_dir / "../../scripts/pipeline/00_bootstrap_repo.sh",
     ]
 
     # Also check current working directory
