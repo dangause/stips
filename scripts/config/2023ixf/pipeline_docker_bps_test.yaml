@@ -13,7 +13,7 @@
 env:
   REPO: "/data/repo"
   STACK_DIR: "/opt/lsst/software/stack"
-  INSTRUMENT_DIR: "/opt/nps/packages/obs_nickel"
+  INSTRUMENT_DIR: "/opt/nps/instruments/nickel"
   RAW_PARENT_DIR: "/data/raw"
   REFCAT_REPO: "/data/refcats"
 

@@ -12,7 +12,7 @@ tasks:
       # detector info is unavailable (BPS run-qbb on compute nodes).
       doLinearize: false
   cpFlatCombine:
-    class: lsst.obs.nickel.calibCombine.NickelCalibCombineByFilterTask
+    class: lsst.obs.stips.calibCombine.StipsCalibCombineByFilterTask
     config:
       connections.inputExpHandles: "cpFlatIsrExp"
       connections.inputScales: "cpFlatNormalizeScales"

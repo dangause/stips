@@ -6,7 +6,7 @@ imports:
   - location: $CP_PIPE_DIR/pipelines/_ingredients/cpBias.yaml
 tasks:
   cpBiasCombine:
-    class: lsst.obs.nickel.calibCombine.NickelCalibCombineTask
+    class: lsst.obs.stips.calibCombine.StipsCalibCombineTask
     config:
       connections.inputExpHandles: 'cpBiasIsrExp'
       connections.outputData: 'bias'
