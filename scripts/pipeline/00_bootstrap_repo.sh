@@ -18,7 +18,7 @@ set +a
 source "$(dirname "$0")/../utilities/logging.sh"
 
 ########## ENVIRONMENT VARS ##########
-INSTRUMENT="lsst.obs.nickel.Nickel"
+INSTRUMENT="lsst.obs.stips.active.Instrument"
 TS="$(date -u +%Y%m%dT%H%M%SZ)"
 
 # Setup logging (creates LOG_DIR and LOG_FILE)

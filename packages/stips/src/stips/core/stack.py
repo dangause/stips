@@ -38,13 +38,13 @@ def _build_setup_script(config: Config) -> str:
     """Build the bash script prefix that activates the LSST stack.
 
     Returns everything EXCEPT the trailing command: the loader source, the
-    config env exports, the instrument-package setup, and the STIPS framework
-    sibling setup. The instrument EUPS product name, its OBS_* export variable,
-    and the data package are all derived from the active profile so a fork's
-    instrument package (not just obs_nickel) is set up correctly.
+    config env exports, the data-package setup, and the STIPS framework sibling
+    setup. The instrument is declarative (loaded by path from INSTRUMENT_DIR);
+    only its data package is derived from the active profile so a fork's data
+    package (not just obs_nickel_data) is set up correctly.
 
     Args:
-        config: Pipeline configuration (must have an importable profile).
+        config: Pipeline configuration (must have a loaded profile).
 
     Returns:
         The bash script prefix, ending with a trailing newline.
@@ -52,26 +52,21 @@ def _build_setup_script(config: Config) -> str:
     loader = _find_stack_loader(config.stack_dir)
 
     prof = config.require_profile()
-    eups_name = prof.eups_package
     data_pkg = prof.obs_data_package
 
     instrument_dir = config.instrument_dir
 
     # Build environment exports from config.
     # These override any .env file sourcing in scripts. INSTRUMENT_DIR is the
-    # fixed export name that pipeline YAMLs reference ($INSTRUMENT_DIR/...). The
-    # dynamic OBS_* export (name derived from the profile's EUPS package, e.g.
-    # OBS_NICKEL) is back-compat only: emitted just when the profile still
-    # declares an EUPS product. A declarative instrument has eups_package=None
-    # and so gets no OBS_* export and no EUPS setup line.
+    # fixed export name that pipeline YAMLs reference ($INSTRUMENT_DIR/...); the
+    # instrument is declarative (profile.py loaded by path), so there is no
+    # per-instrument EUPS product to set up.
     env_exports = f"""
 export REPO="{config.repo}"
 export STACK_DIR="{config.stack_dir}"
 export INSTRUMENT_DIR="{instrument_dir}"
 export RAW_PARENT_DIR="{config.raw_parent_dir}"
 """
-    if eups_name:
-        env_exports += f'export {eups_name.upper()}="{instrument_dir}"\n'
     if config.cp_pipe_dir:
         env_exports += f'export CP_PIPE_DIR="{config.cp_pipe_dir}"\n'
     if config.refcat_repo:
@@ -100,20 +95,12 @@ fi
     obs_stips_dir = _PACKAGES_DIR / "obs_stips"
     stips_src = _PACKAGES_DIR / "stips" / "src"
 
-    # Instrument EUPS setup — only when the profile declares an EUPS product.
-    instrument_setup = (
-        f'setup -r "{instrument_dir}" {eups_name} 2>/dev/null || true'
-        if eups_name
-        else ""
-    )
-
     script = f"""
 set -e
 {env_exports}
 cd "{config.stack_dir}"
 source "{loader}"
 setup lsst_distrib
-{instrument_setup}
 {data_block}
 # STIPS framework: obs_stips (LSST glue) + stips (core, src-layout)
 OBS_STIPS="{obs_stips_dir}"

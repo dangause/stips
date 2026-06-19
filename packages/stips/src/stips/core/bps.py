@@ -186,7 +186,6 @@ def render_bps_config(
         "timestamp": timestamp,
         # kept for the static bps/*.yaml templates (instrument-dir path); product-name genericity deferred
         "obs_nickel": str(config.instrument_dir),
-        "eups_package": prof.eups_package or "",
         "obs_data_package": prof.obs_data_package or "",
         "stack_dir": str(config.stack_dir),
         "cp_pipe_dir": str(config.cp_pipe_dir) if config.cp_pipe_dir else "",
