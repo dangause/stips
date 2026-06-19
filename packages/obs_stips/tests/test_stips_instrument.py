@@ -89,11 +89,12 @@ class TestStipsInstrument(unittest.TestCase):
         from dataclasses import replace
         from pathlib import Path
 
-        # Path to the real camera yaml (packages/obs_nickel/camera/nickel.yaml).
-        # tests/ -> obs_stips -> packages, so parents[2] reaches packages/.
+        # Path to the real camera yaml (instruments/nickel/camera/nickel.yaml).
+        # tests/ -> obs_stips -> packages -> repo root, so parents[3] is the root.
         REAL_CAMERA = (
-            Path(__file__).resolve().parents[2]
-            / "obs_nickel"
+            Path(__file__).resolve().parents[3]
+            / "instruments"
+            / "nickel"
             / "camera"
             / "nickel.yaml"
         )
