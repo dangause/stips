@@ -1,12 +1,24 @@
-"""Unit tests for Gen3 Nickel raw data ingest."""
+"""Unit tests for Gen3 Nickel raw data ingest.
+
+Uses the generic synthesized instrument (``lsst.obs.stips.active.Instrument``,
+bound to ``INSTRUMENT_DIR=instruments/nickel``) rather than the deleted
+``lsst.obs.nickel.Nickel`` class. Gated on ``testdata_nickel`` so it skips when
+that package is not set up.
+"""
 
 import os
 import unittest
+from pathlib import Path
 
 import lsst.utils.tests
 from lsst.afw.image import FilterLabel
 from lsst.daf.butler import Butler, DataCoordinate
 from lsst.obs.base.ingest_tests import IngestTestBase
+
+# IngestTestBase re-imports instrumentClassName by FQN; the synthesized
+# instrument resolves its profile from INSTRUMENT_DIR, so set it here.
+# instruments/nickel/tests/test_ingest.py -> parents[1] == instruments/nickel
+os.environ["INSTRUMENT_DIR"] = str(Path(__file__).resolve().parents[1])
 
 testDataPackage = "testdata_nickel"
 try:
@@ -20,7 +32,7 @@ class TestNickelIngest(IngestTestBase, lsst.utils.tests.TestCase):
     """Test ingestion of Nickel raw data."""
 
     ingestDir = os.path.dirname(__file__)
-    instrumentClassName = "lsst.obs.nickel.Nickel"
+    instrumentClassName = "lsst.obs.stips.active.Instrument"
     filterLabel = FilterLabel(physical="B", band="b")
 
     # One raw

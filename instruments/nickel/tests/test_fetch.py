@@ -1,8 +1,25 @@
+import importlib.util
 import unittest
 from pathlib import Path
 from unittest import mock
 
-from lsst.obs.nickel import fetch
+
+def _load_fetch():
+    """Load the Nickel fetch hook module from instruments/nickel/fetch.py by path.
+
+    The fetch implementation moved out of the deleted ``lsst.obs.nickel`` package
+    into ``instruments/nickel/fetch.py`` (loaded by the profile's ``fetch_data``
+    hook). It is stdlib-only at import time, so this stays stack-free.
+    """
+    # instruments/nickel/tests/test_fetch.py -> parents[1] == instruments/nickel
+    fetch_py = Path(__file__).resolve().parents[1] / "fetch.py"
+    spec = importlib.util.spec_from_file_location("_nickel_fetch", fetch_py)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+fetch = _load_fetch()
 
 
 class _Cfg:

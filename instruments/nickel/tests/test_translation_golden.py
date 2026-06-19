@@ -10,11 +10,33 @@ reproduced by the reimplementation).
 Do NOT edit the literals; if a value changes, the reimplementation diverged from
 the legacy and must be fixed, not the test.
 """
+
+import importlib
+import os
 import unittest
+from pathlib import Path
 
 import astropy.units as u
 from astropy.time import Time
-from lsst.obs.nickel.translator import NickelTranslator
+
+# instruments/nickel/tests/test_translation_golden.py -> parents[1] == instruments/nickel
+_INSTRUMENT_DIR = str(Path(__file__).resolve().parents[1])
+
+
+def _load_translator():
+    """Synthesize the Nickel-bound Translator from the generic machinery.
+
+    Sets ``INSTRUMENT_DIR`` to the reference Nickel dir and (re)loads
+    ``lsst.obs.stips.active`` so the golden literals below run against the
+    profile loaded from ``instruments/nickel/profile.py``.
+    """
+    os.environ["INSTRUMENT_DIR"] = _INSTRUMENT_DIR
+    import lsst.obs.stips.active as active
+
+    return importlib.reload(active).Translator
+
+
+NickelTranslator = _load_translator()
 
 # Science header: copied VERBATIM from test_translator.py's setUp, plus
 # RA/DEC keywords so the stuck-DEC tracking path has telescope coordinates.

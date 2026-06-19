@@ -89,7 +89,7 @@ class TestAngularSeparation:
 
 class TestCatalogCSV:
     def test_catalog_file_exists(self):
-        # tests/ is at packages/obs_nickel/tests/, repo root is 3 levels up
+        # tests/ is at instruments/nickel/tests/, repo root is 3 levels up
         catalog = (
             Path(__file__).resolve().parents[3]
             / "scripts"
