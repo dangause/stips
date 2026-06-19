@@ -280,10 +280,13 @@ def load(
         import importlib.util
         import sys
 
-        # Insert the instrument dir on sys.path BEFORE exec so the profile's
-        # co-located hook modules resolve — mirrors profile_loader.
+        # APPEND (not insert(0)) the instrument dir so the profile's co-located
+        # hook modules (e.g. `from fetch import ...`) resolve WITHOUT shadowing
+        # stdlib/installed modules of the same generic name (profile, camera,
+        # ...). Mirrors profile_loader; see its comment for the galsim `import
+        # profile` collision this avoids.
         if str(candidate.parent) not in sys.path:
-            sys.path.insert(0, str(candidate.parent))
+            sys.path.append(str(candidate.parent))
         spec = importlib.util.spec_from_file_location("_stips_profile", candidate)
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)

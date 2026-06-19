@@ -25,8 +25,14 @@ def load_profile_from_dir(instrument_dir: str):
     profile_py = d / "profile.py"
     if not profile_py.is_file():
         raise FileNotFoundError(f"No profile.py in INSTRUMENT_DIR: {instrument_dir}")
+    # APPEND (not insert(0)): the instrument dir holds generically-named modules
+    # (profile.py, camera/, an optional fetch.py) that would SHADOW stdlib /
+    # installed modules if placed at the front of sys.path — e.g. galsim's
+    # `import profile` would resolve to instruments/<name>/profile.py. Appending
+    # makes stdlib/installed packages win, while a non-stdlib co-located hook
+    # (e.g. `fetch`) still resolves because nothing else provides it.
     if str(d) not in sys.path:
-        sys.path.insert(0, str(d))
+        sys.path.append(str(d))
     spec = importlib.util.spec_from_file_location("_stips_active_profile", profile_py)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

@@ -13,18 +13,12 @@ but the helpers below set it themselves and restore the prior value).
 
 from __future__ import annotations
 
-# Pre-cache stdlib modules whose names collide with files in instruments/nickel/.
-# Loading the active instrument (lsst.obs.stips.active -> load_profile_from_dir)
-# inserts INSTRUMENT_DIR=instruments/nickel onto sys.path so the co-located
-# fetch.py hook is importable by name. That dir also contains profile.py, which
-# would otherwise shadow the stdlib ``profile`` module — tripping any later
-# ``import profile`` (e.g. galsim -> cProfile -> profile, reached via
-# lsst.pipe.base in test_drp_pipeline_config). conftest.py is imported before any
-# test module, so importing these here pins the stdlib versions in sys.modules.
-import cProfile  # noqa: F401
+# NOTE: the instrument dir holds generically-named files (profile.py, camera/,
+# fetch.py). The profile loaders (lsst.obs.stips.profile_loader and
+# stips.core.config) APPEND it to sys.path (not insert(0)), so stdlib/installed
+# modules of the same name win and are not shadowed — no pre-caching needed here.
 import importlib
 import os
-import profile  # noqa: F401
 from contextlib import contextmanager
 from pathlib import Path
 
