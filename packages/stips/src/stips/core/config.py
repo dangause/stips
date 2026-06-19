@@ -34,6 +34,39 @@ def load_profile(instrument_package: str):
     return importlib.import_module(f"{instrument_package}.profile").profile
 
 
+def load_active_profile(instrument_dir: str | Path | None = None):
+    """Load the active instrument profile by path from INSTRUMENT_DIR.
+
+    The collapsed framework defines a telescope as instruments/<name>/profile.py
+    loaded by path (no importable obs package). Reads INSTRUMENT_DIR from the env
+    if not given. APPENDS the instrument dir to sys.path (so co-located hook
+    modules like fetch.py resolve) WITHOUT shadowing stdlib/installed modules.
+
+    NOTE: this mirrors lsst.obs.stips.profile_loader.load_profile_from_dir — the
+    intentional dual-loader (stips-side here for the CLI/tools; obs_stips-side
+    for the stack-import path). Keep the two in sync.
+    """
+    import importlib.util
+    import os
+    import sys
+
+    d = instrument_dir or os.environ.get("INSTRUMENT_DIR")
+    if not d:
+        raise RuntimeError(
+            "INSTRUMENT_DIR is not set; it must point at instruments/<name>/ "
+            "(containing profile.py)."
+        )
+    profile_py = Path(d) / "profile.py"
+    if not profile_py.is_file():
+        raise FileNotFoundError(f"No profile.py in INSTRUMENT_DIR: {d}")
+    if str(profile_py.parent) not in sys.path:
+        sys.path.append(str(profile_py.parent))
+    spec = importlib.util.spec_from_file_location("_stips_profile", profile_py)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod.profile
+
+
 def _discover_cp_pipe_dir(stack_dir: Path) -> Path | None:
     """Auto-discover CP_PIPE_DIR from the LSST stack.
 
@@ -277,20 +310,11 @@ def load(
     instrument_package = merged.get("INSTRUMENT_PACKAGE", "lsst.obs.nickel")
     candidate = Path(instrument_dir_val).expanduser() / "profile.py"
     if candidate.is_file():
-        import importlib.util
-        import sys
-
-        # APPEND (not insert(0)) the instrument dir so the profile's co-located
-        # hook modules (e.g. `from fetch import ...`) resolve WITHOUT shadowing
-        # stdlib/installed modules of the same generic name (profile, camera,
-        # ...). Mirrors profile_loader; see its comment for the galsim `import
-        # profile` collision this avoids.
-        if str(candidate.parent) not in sys.path:
-            sys.path.append(str(candidate.parent))
-        spec = importlib.util.spec_from_file_location("_stips_profile", candidate)
-        mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
-        profile = mod.profile
+        # Primary path: load instruments/<name>/profile.py BY PATH via the
+        # shared helper (also used by the standalone stips-* tools), so there is
+        # ONE by-path load implementation. The helper appends the instrument dir
+        # to sys.path so co-located hook modules resolve.
+        profile = load_active_profile(Path(instrument_dir_val).expanduser())
     else:
         # Back-compat: importable obs package. (INSTRUMENT_PACKAGE comes from the
         # config YAML's env: block, defaulting to lsst.obs.nickel when unset.)

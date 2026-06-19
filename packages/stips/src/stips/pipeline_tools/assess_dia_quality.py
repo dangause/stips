@@ -26,7 +26,6 @@ Example:
 from __future__ import annotations
 
 import argparse
-import os
 import sys
 from collections import defaultdict
 from pathlib import Path
@@ -34,7 +33,7 @@ from pathlib import Path
 import numpy as np
 from lsst.daf.butler import Butler
 
-from stips.core.config import load_profile
+from stips.core.config import load_active_profile
 
 
 def _resolve_instrument(instrument):
@@ -45,9 +44,7 @@ def _resolve_instrument(instrument):
     if instrument:
         return instrument
     try:
-        return load_profile(
-            os.environ.get("INSTRUMENT_PACKAGE", "lsst.obs.nickel")
-        ).name
+        return load_active_profile().name
     except Exception:
         return "Nickel"
 
@@ -84,7 +81,7 @@ def parse_args():
     parser.add_argument(
         "--instrument",
         default=None,
-        help="Instrument name (default: from INSTRUMENT_PACKAGE profile)",
+        help="Instrument name (default: from the INSTRUMENT_DIR profile)",
     )
 
     return parser.parse_args()

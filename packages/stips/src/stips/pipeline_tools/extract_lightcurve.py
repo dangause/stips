@@ -24,7 +24,6 @@ Example with object name (looks up coordinates):
 from __future__ import annotations
 
 import argparse
-import os
 import sys
 from pathlib import Path
 
@@ -35,7 +34,7 @@ import numpy as np
 import pandas as pd
 from lsst.daf.butler import Butler
 
-from stips.core.config import load_profile
+from stips.core.config import load_active_profile
 
 
 def _resolve_instrument(instrument):
@@ -46,9 +45,7 @@ def _resolve_instrument(instrument):
     if instrument:
         return instrument
     try:
-        return load_profile(
-            os.environ.get("INSTRUMENT_PACKAGE", "lsst.obs.nickel")
-        ).name
+        return load_active_profile().name
     except Exception:
         return "Nickel"
 
@@ -141,7 +138,7 @@ def parse_args():
     parser.add_argument(
         "--instrument",
         default=None,
-        help="Instrument name (default: from INSTRUMENT_PACKAGE profile)",
+        help="Instrument name (default: from the INSTRUMENT_DIR profile)",
     )
 
     args = parser.parse_args()
@@ -340,9 +337,7 @@ def get_photocalib_for_visit(
         # single-CCD instruments collection_prefix == instrument name (Nickel),
         # but resolve it from the profile to stay correct for non-Nickel forks.
         try:
-            prefix = load_profile(
-                os.environ.get("INSTRUMENT_PACKAGE", "lsst.obs.nickel")
-            ).collection_prefix
+            prefix = load_active_profile().collection_prefix
         except Exception:
             prefix = instrument
         try:
