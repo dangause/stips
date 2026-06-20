@@ -2,12 +2,15 @@
 
 STIPS runs the LSST Science Pipelines on small (1-meter, single-CCD) telescopes.
 The design splits cleanly into a **generic framework** and a per-telescope
-**instrument profile**. To adopt STIPS for your telescope you fork the repo and
-add **one** instrument package (`obs_<your_instrument>`) that describes your
-hardware and header conventions. You do not modify the framework.
+**declarative instrument definition**. To adopt STIPS for your telescope you fork
+the repo and add **one directory** — `instruments/<your_instrument>/` — that
+describes your hardware and header conventions. **You write no LSST Python: no
+instrument class, no translator/formatter bindings, no `pyproject.toml`, no EUPS
+table.** The generic `obs_stips` package synthesizes all of that from your
+profile at runtime.
 
 This guide walks through that fork end to end, using the reference instrument
-`obs_nickel` (Lick Observatory's Nickel 1-m) as the worked example.
+`instruments/nickel/` (Lick Observatory's Nickel 1-m) as the worked example.
 
 ---
 
@@ -17,14 +20,14 @@ This guide walks through that fork end to end, using the reference instrument
 
 | Package | Import root | What it provides |
 |---------|-------------|------------------|
-| `stips` | `stips` | The `stips` CLI + tooling. Exposes `stips.InstrumentProfile`, `stips.Site`, `stips.Field`, `stips.hook`. Selects the active instrument via the `INSTRUMENT_PACKAGE` env var (default `lsst.obs.nickel`), imports `<pkg>.profile`, and drives all collection names / Butler queries / skymap from the profile. |
-| `obs_stips` | `lsst.obs.stips` | Generic LSST glue: `StipsInstrument`, `StipsTranslator`, `StipsRawFormatter`, and shared pipeline tasks under `lsst.obs.stips.tasks.*`. |
+| `stips` | `stips` | The `stips` CLI + tooling. Exposes `stips.InstrumentProfile`, `stips.Site`, `stips.Field`, `stips.hook`. Loads the active instrument's `profile.py` **by path** from `INSTRUMENT_DIR`, and drives all collection names / Butler queries / skymap from the profile. |
+| `obs_stips` | `lsst.obs.stips` | Generic LSST glue. The `lsst.obs.stips.active` submodule **synthesizes** a concrete, registerable instrument + translator + raw formatter from your profile (Butler registers `lsst.obs.stips.active.Instrument` — the same class for every fork). Also ships the shared/generic pipeline tasks (`StipsCalibCombineTask`, `lsst.obs.stips.tasks.*`). |
 
-**The fork — you DO write this:**
+**The fork — you DO write this (data, not code):**
 
-| Package | Import root | What it is |
-|---------|-------------|-----------|
-| `obs_<x>` | `lsst.obs.<x>` | Your instrument package. The heart is `profile.py` (one `InstrumentProfile(...)`). Everything else is thin bindings, a camera geometry file, and instrument-tuned pipelines/configs. |
+| Location | What it is |
+|----------|-----------|
+| `instruments/<x>/` | Your telescope definition: `profile.py` (one `InstrumentProfile(...)` + a few `@hook`s), a camera geometry YAML, and instrument-tuned pipelines/configs. **Loaded by path** — it is *not* an importable Python package. |
 
 **Honest scope.** STIPS targets **1-meter, single-CCD** telescopes. The generic
 translator handles the common FITS conventions; your telescope's header quirks
@@ -41,55 +44,46 @@ for a similar order of magnitude.
 # Fork the repo on your host (GitHub fork, or a clone you control), then:
 git clone <your-fork-url> stips
 cd stips
-git checkout -b feature/obs-<x>
+git checkout -b feature/instrument-<x>
 ```
 
 ---
 
-## 3. Step 2 — Create your instrument package
+## 3. Step 2 — Create your instrument directory
 
-Copy `obs_nickel` as your template, then rename. This is faster and safer than
-starting from scratch — it gives you a working file layout, bindings, and a real
-example for every field.
+Copy `instruments/nickel/` as your template. There is no package to scaffold,
+nothing to rename in Python, no metadata files to edit — it is pure data:
 
 ```bash
-cp -r packages/obs_nickel packages/obs_<x>
+cp -r instruments/nickel instruments/<x>
+rm -rf instruments/<x>/tests   # optional: keep & adapt, or start fresh
 ```
 
-Resulting layout (rename the `nickel` python dir to `<x>` and remove
-`__pycache__`):
+Resulting layout:
 
 ```
-packages/obs_<x>/
-├── pyproject.toml                       # package metadata + translator entry point
+instruments/<x>/
+├── profile.py                 # THE file you edit — your InstrumentProfile + @hooks
 ├── camera/
-│   └── <x>.yaml                         # LSST yamlCamera geometry (detectors, plate scale)
-├── pipelines/                           # instrument-tuned pipeline YAMLs (copy & tune)
-├── configs/                             # pipeline task config overrides (copy & tune)
-└── python/lsst/obs/<x>/
-    ├── __init__.py                      # imports profile + bindings (copy as-is, rename symbols)
-    ├── profile.py                       # THE file you edit — your InstrumentProfile
-    ├── translator.py                    # binding: class <X>Translator(StipsTranslator)
-    ├── _instrument.py                   # binding: class <X>(StipsInstrument)
-    ├── rawFormatter.py                  # binding: class <X>RawFormatter(StipsRawFormatter)
-    ├── calibCombine.py                  # instrument quirk task — keep only if needed
-    └── visitInfo.py                     # instrument quirk task — keep only if needed
+│   └── <x>.yaml               # LSST yamlCamera geometry (detectors, plate scale)
+├── pipelines/                 # instrument-tuned pipeline YAMLs (copy & tune)
+├── configs/                   # pipeline task config overrides (copy & tune)
+├── fetch.py                   # OPTIONAL: a data-fetch hook (delete if you place raws by hand)
+└── tests/                     # OPTIONAL: reference tests, adapt to your golden values
 ```
 
-Rename the python package directory:
-
-```bash
-git -C packages/obs_<x> mv python/lsst/obs/nickel python/lsst/obs/<x>
-rm -rf packages/obs_<x>/python/lsst/obs/<x>/__pycache__
-```
+That's the whole fork. No `python/lsst/obs/<x>/`, no bindings, no
+`pyproject.toml`, no `ups/` table — `obs_stips` builds the LSST instrument
+machinery from `profile.py` at runtime.
 
 ---
 
 ## 4. Step 3 — Write `profile.py` (the heart)
 
 `profile.py` builds one `stips.InstrumentProfile(...)` object plus a few
-`@hook(profile)` functions. The real Nickel constructor call looks like this
-(values are the actual Nickel values):
+`@hook(profile)` functions, and assigns it to a module-level `profile`. The
+framework loads this file **by path** (so the imports below resolve against the
+installed `stips`). The real Nickel constructor call looks like this:
 
 ```python
 from stips import Field, InstrumentProfile, Site, hook
@@ -129,13 +123,11 @@ profile = InstrumentProfile(
     },
     const_map={"boresight_rotation_angle": 0.0, "boresight_rotation_coord": "sky"},
     camera="camera/nickel.yaml",
-    eups_package="obs_nickel",
-    instrument_class="lsst.obs.nickel.Nickel",
+    instrument_class="lsst.obs.stips.active.Instrument",   # see note — same for every fork
     night_to_dayobs_offset_days=1,
     skymap_name="nickelRings-v1",
     skymap_collection="skymaps/nickelRings",
     obs_data_package="obs_nickel_data",
-    package_dir="lsst.obs.nickel",
 )
 ```
 
@@ -166,11 +158,13 @@ These are the real `InstrumentProfile` fields (from
   goes in a `@hook` instead.
 - **`const_map`** — Constants for metadata that your headers don't carry (Nickel
   has no rotator, so `boresight_rotation_angle: 0.0`).
-- **`camera`** *(required)* — Relative path to your camera geometry YAML, e.g.
-  `"camera/<x>.yaml"`.
-- **`eups_package`** — EUPS package name (`"obs_nickel"`).
-- **`instrument_class`** — Fully-qualified instrument class path used by
-  `butler register-instrument`, e.g. `"lsst.obs.<x>.<X>"`.
+- **`camera`** *(required)* — Path to your camera geometry YAML **relative to
+  `instruments/<x>/`**, e.g. `"camera/<x>.yaml"`. Loaded from `INSTRUMENT_DIR`.
+- **`instrument_class`** — The fully-qualified instrument class
+  `butler register-instrument` uses. **Keep the Nickel value
+  `"lsst.obs.stips.active.Instrument"` unchanged** — this is the generic class
+  `obs_stips` synthesizes from your profile; it is the *same string for every
+  instrument*. You do not write or name an instrument class.
 - **`night_to_dayobs_offset_days`** — Offset between local observing night and
   UTC `day_obs` (Nickel: `1`, since Pacific-evening obs roll into the next UTC
   day).
@@ -178,10 +172,15 @@ These are the real `InstrumentProfile` fields (from
   omitted, so Nickel collections begin with `Nickel/...`.
 - **`skymap_name` / `skymap_collection`** — Skymap registry name and its
   collection (`"nickelRings-v1"`, `"skymaps/nickelRings"`).
-- **`obs_data_package`** — Optional companion data package with curated calibs
-  (`"obs_nickel_data"`).
-- **`policy_name`**, **`package_dir`**, **`refcat_path`**, **`fetch_data`** —
-  Optional. `policy_name` defaults to `name`; the rest are advanced/optional.
+- **`obs_data_package`** — Optional companion EUPS data package with curated
+  calibs / defects / crosstalk (`"obs_nickel_data"`). Left as a normal EUPS
+  package; the stack activation sets it up by name. Omit if you have none.
+- **`fetch_data`** — Optional callable hook: `fetch_data(night, config, *,
+  overwrite=False) -> "ok" | "not_found" | "failed"`, used by `stips download`.
+  Wire it from a co-located module (Nickel's `profile.py` does `from fetch import
+  fetch_data` — the loader puts `instruments/<x>/` on `sys.path` so a co-located
+  `fetch.py` is importable). Leave unset if you place raws by hand.
+- **`policy_name`**, **`refcat_path`** — Optional; `policy_name` defaults to `name`.
 
 ### Quirk hooks (`@hook(profile)`)
 
@@ -236,147 +235,75 @@ def temperature(header):
 
 ---
 
-## 5. Step 4 — Bindings, camera, pyproject
-
-### Bindings (3 thin classes)
-
-The bindings just attach your `profile` to the generic framework classes. Copy
-Nickel's and rename. These are complete files, not snippets:
-
-```python
-# python/lsst/obs/<x>/translator.py
-from lsst.obs.stips.translator import StipsTranslator
-from .profile import profile
-
-class <X>Translator(StipsTranslator):
-    profile = profile
-```
-
-```python
-# python/lsst/obs/<x>/_instrument.py
-from lsst.obs.stips.instrument import StipsInstrument
-from .profile import profile
-from .translator import <X>Translator
-
-class <X>(StipsInstrument):
-    profile = profile
-    translatorClass = <X>Translator
-
-    def getRawFormatter(self, dataId):
-        from .rawFormatter import <X>RawFormatter   # local import breaks the cycle
-        return <X>RawFormatter
-```
-
-```python
-# python/lsst/obs/<x>/rawFormatter.py
-from lsst.obs.stips.formatter import StipsRawFormatter
-from ._instrument import <X>
-from .translator import <X>Translator
-
-class <X>RawFormatter(StipsRawFormatter):
-    instrumentClass = <X>
-    translatorClass = <X>Translator
-    filterDefinitions = <X>.filterDefinitions
-```
-
-`__init__.py` wires these together (exports `profile`, the translator, and —
-guarded by `try/except ImportError` so the translator works even without the
-full LSST stack — the instrument, raw formatter, and any quirk tasks like
-`calibCombine`/`visitInfo`). Copy Nickel's verbatim and rename the symbols.
-
-### Camera geometry
+## 5. Step 4 — Camera geometry
 
 `camera/<x>.yaml` is a standard LSST `yamlCamera`-format file describing detector
 layout, pixel size, and plate scale. For a single-CCD telescope this is one
 detector. Use `camera/nickel.yaml` as your template and edit the dimensions,
-pixel scale, and detector name/serial to match your CCD.
+pixel scale, and detector name/serial to match your CCD. It is loaded by path
+from `INSTRUMENT_DIR` (no EUPS package lookup).
 
-### pyproject.toml
-
-Copy `obs_nickel/pyproject.toml` and change the package name, the
-`astro_metadata_translator` entry point, and the workspace sources:
-
-```toml
-[project]
-name = "obs-<x>"
-# ...
-dependencies = ["obs-stips", "stips", "astro_metadata_translator>=0.11.0", "astropy"]
-
-[project.entry-points."astro_metadata_translator.translators"]
-<X> = "lsst.obs.<x>.translator:<X>Translator"
-
-[tool.uv.sources]
-obs-stips = { workspace = true }
-stips = { workspace = true }
-
-[tool.setuptools.packages.find]
-where = ["python"]
-```
-
-The entry point is what makes `astro_metadata_translator` discover your
-translator when reading raw FITS.
+> A friendlier camera spec (declare CCD size / pixel scale / orientation and let
+> STIPS generate the LSST camera) is a planned follow-on. For now, this one YAML
+> is the only LSST-format file you author.
 
 ---
 
 ## 6. Step 5 — Pipelines & configs
 
-Copy `obs_nickel/pipelines/` and `obs_nickel/configs/` into your package and tune
-them for your instrument. Two rules:
+Copy `instruments/nickel/pipelines/` and `instruments/nickel/configs/` into your
+instrument dir and tune them. The rules:
 
 - **Generic tasks stay generic.** Pipeline steps that reference
-  `lsst.obs.stips.tasks.*` are framework tasks — keep those references as-is.
-- **Instrument quirk tasks stay in your package.** If your telescope needs a
-  custom step (Nickel keeps `calibCombine.py` and `visitInfo.py`), reference it
-  as `lsst.obs.<x>.<module>.<Task>` and ship the module in your package. Only
-  write a quirk task if a generic one doesn't fit.
+  `lsst.obs.stips.tasks.*` or `lsst.obs.stips.calibCombine.StipsCalibCombineTask`
+  are framework tasks — keep those references as-is. (The robust calib-combine
+  that Nickel used to ship is now a generic obs_stips task.)
+- **Use `$INSTRUMENT_DIR` for in-instrument includes.** Pipeline `location:` /
+  `file:` includes that point inside your instrument dir use the
+  `$INSTRUMENT_DIR/...` env var (exported by the stack activation), e.g.
+  `$INSTRUMENT_DIR/pipelines/nickel-analysis-dia-detector.yaml`.
+- **`instrument:` is the generic class.** Pipelines with an `instrument:` field
+  use `lsst.obs.stips.active.Instrument` (same as `profile.instrument_class`).
+- **Genuinely instrument-specific tasks (rare).** If your telescope needs a
+  custom PipelineTask that no generic one covers, ship a Python module in your
+  instrument dir (namespaced, e.g. `instruments/<x>/<x>_tasks.py`, so it can't
+  shadow a stack module), declare its FQN, and reference it from your pipeline.
+  Nickel ships none — both of its old quirk tasks generalized into `obs_stips`.
 
 The Nickel pipelines (`DRP.yaml`, `DIA.yaml`, `ForcedPhotRaDec.yaml`,
 `ProcessCcd.yaml`, the CpBias/CpFlat calib pipelines, etc.) and the `configs/`
-overrides (`calibrateImage/`, `dia/`, `coadds/`, `makeSkyMap.py`, ...) are good
-starting points — most tuning is relaxing thresholds for a small-aperture,
-sparse-field instrument.
+overrides are good starting points — most tuning is relaxing thresholds for a
+small-aperture, sparse-field instrument.
 
 ---
 
-## 7. Step 6 — Install & point STIPS at your instrument
+## 7. Step 6 — Point STIPS at your instrument
 
-Install your package into the dev environment so it is importable in the venv
-(the framework imports `lsst.obs.<x>.profile` at runtime — it must be on the
-Python path):
-
-```bash
-# either install editable directly...
-uv pip install -e packages/obs_<x>
-
-# ...or add it to the uv workspace (packages/* is already a member) and sync
-uv sync
-```
-
-Then tell STIPS which instrument is active:
+There is **nothing to install** — the instrument is loaded by path. Just tell
+STIPS where your instrument dir is, via the `env:` block of the config YAML you
+pass with `-c`:
 
 ```yaml
-# in your config YAML's env: block
 env:
-  INSTRUMENT_PACKAGE: lsst.obs.<x>
+  INSTRUMENT_DIR: /path/to/stips/instruments/<x>
+  # ...plus REPO, STACK_DIR, RAW_PARENT_DIR (and optional REFCAT_REPO, CP_PIPE_DIR)
 ```
 
-`INSTRUMENT_PACKAGE` defaults to `lsst.obs.nickel`. Set it in the `env:` block of
-the config YAML you pass with `-c` (it is one of the recognized env keys). Once
-set, `stips` imports `lsst.obs.<x>.profile`, and every collection name, Butler
-query, and skymap reference is driven by your profile — collections become
+`stips` loads `INSTRUMENT_DIR/profile.py` by path; `obs_stips` synthesizes the
+LSST instrument from it and Butler registers `lsst.obs.stips.active.Instrument`
+(which reports your `profile.name`). Every collection name, Butler query, and
+skymap reference is driven by your profile — collections become
 `<your collection_prefix>/...`.
 
-> If the package isn't installed, config loading does **not** crash: the profile
-> is left as `None` and commands that need it raise a clear "pip install it and
-> set INSTRUMENT_PACKAGE" error. If you hit that, your obs package isn't
-> importable in the active venv.
+> If `INSTRUMENT_DIR` is unset (or has no `profile.py`), the framework fails loud
+> with a clear message rather than guessing. There is no `INSTRUMENT_PACKAGE` and
+> no obs-package import — the old package-based selection is gone.
 
 ---
 
 ## 8. Step 7 — Run
 
-Same CLI, your instrument. Pass your config once with the group-level `-c`
-(its `env:` block supplies REPO/STACK_DIR/INSTRUMENT paths/RAW_PARENT_DIR):
+Same CLI, your instrument. Pass your config once with the group-level `-c`:
 
 ```bash
 CFG=scripts/config/<target>/pipeline.yaml
@@ -399,6 +326,8 @@ stips -c $CFG run
 confirm the translator resolves `physical_filter`, `observation_type`,
 `exposure_id`, `datetime_begin/end`, `day_obs`, and `tracking_radec` to sane
 values. Most fork bugs are header-mapping bugs, and they surface here cheaply.
+(`instruments/nickel/tests/test_translation_golden.py` shows the pattern: set
+`INSTRUMENT_DIR`, import `lsst.obs.stips.active`, and assert on its `Translator`.)
 
 **Checklist:**
 
@@ -408,12 +337,9 @@ values. Most fork bugs are header-mapping bugs, and they surface here cheaply.
 - [ ] `filter_key` matches your FITS filter keyword.
 - [ ] A `@hook` exists for every header quirk (observation typing, coordinate
       bugs, exposure-ID scheme, temperature units, datetime derivation).
-- [ ] Bindings renamed: `<X>Translator`, `<X>`, `<X>RawFormatter`.
 - [ ] `camera/<x>.yaml` reflects your CCD dimensions, pixel scale, plate scale.
-- [ ] `pyproject.toml` name + `astro_metadata_translator` entry point renamed.
-- [ ] `instrument_class` points to `lsst.obs.<x>.<X>`.
-- [ ] Package installed editable in the venv (`uv pip install -e` or `uv sync`).
-- [ ] `INSTRUMENT_PACKAGE: lsst.obs.<x>` set in the config YAML's `env:` block.
+- [ ] `instrument_class` left as `"lsst.obs.stips.active.Instrument"` (the generic class).
+- [ ] `INSTRUMENT_DIR: /path/to/instruments/<x>` set in the config YAML's `env:` block.
 - [ ] Translator parity verified against a real header.
 
 **Other gotchas:**
@@ -422,6 +348,10 @@ values. Most fork bugs are header-mapping bugs, and they surface here cheaply.
   multi-detector mosaic needs more than a profile and is out of scope here.
 - **Camera geometry matters.** A wrong plate scale or detector size silently
   corrupts WCS fitting and source matching. Get `camera/<x>.yaml` right early.
+- **Don't name your in-instrument files after stdlib/stack modules.** The loader
+  puts `instruments/<x>/` on `sys.path` (so `profile.py`'s co-located hooks like
+  `fetch.py` import). The framework appends it (so stdlib/installed modules still
+  win), but avoid generic names that could collide if another path entry is added.
 - **`night_to_dayobs_offset_days`.** Local observing night vs. UTC `day_obs`
   trips up collection naming and Butler queries — set it correctly for your
   longitude (Nickel uses `1`).
@@ -430,3 +360,5 @@ values. Most fork bugs are header-mapping bugs, and they surface here cheaply.
 - **Hooks return the right types.** `temperature` returns an astropy
   `Quantity`; `datetime_*` return `astropy.time.Time`; `tracking_radec` returns
   a `SkyCoord`. Match the framework's expectations.
+- **One instrument per repo.** A Butler repo holds one synthesized instrument
+  (the fork-per-telescope model). Multi-instrument repos are unsupported.
