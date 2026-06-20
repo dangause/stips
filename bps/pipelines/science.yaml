@@ -9,7 +9,7 @@
 # Variables:
 #   {night}        - Observing night (YYYYMMDD)
 #   {repo}         - Butler repository path
-#   {obs_nickel}   - Path to obs_nickel package
+#   {instrument_dir} - Path to the declarative instrument package
 #   {object}       - Optional object name filter
 
 # Inherit site-specific settings
@@ -37,7 +37,7 @@ payload:
 # =============================================================================
 # Pipeline Definition
 # =============================================================================
-pipelineYaml: "{obs_nickel}/pipelines/ProcessCcd.yaml#processCcd"
+pipelineYaml: "{instrument_dir}/pipelines/ProcessCcd.yaml#processCcd"
 
 # =============================================================================
 # Task-Specific Settings

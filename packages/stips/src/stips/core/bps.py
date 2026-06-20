@@ -27,6 +27,12 @@ if TYPE_CHECKING:
     from stips.core.config import Config
 
 
+# Repo's packages/ directory (bps.py is at packages/stips/src/stips/core/bps.py;
+# parents[4] == packages/). Used to locate sibling framework packages
+# (obs_stips, stips) and the instrument data package for BPS preScript setup.
+_PACKAGES_DIR = Path(__file__).resolve().parents[4]
+
+
 # Valid pipeline names
 VALID_PIPELINES = ("calibs", "science", "dia", "fphot", "custom")
 
@@ -184,9 +190,15 @@ def render_bps_config(
         "repo": str(config.repo),
         "night": bps_cfg.night,
         "timestamp": timestamp,
-        # kept for the static bps/*.yaml templates (instrument-dir path); product-name genericity deferred
-        "obs_nickel": str(config.instrument_dir),
+        # STIPS framework: the instrument is declarative (loaded by path from
+        # INSTRUMENT_DIR); LSST machinery lives in obs_stips + stips (src-layout).
+        "instrument_dir": str(config.instrument_dir),
+        "obs_stips_dir": str(_PACKAGES_DIR / "obs_stips"),
+        "stips_src": str(_PACKAGES_DIR / "stips" / "src"),
         "obs_data_package": prof.obs_data_package or "",
+        "instrument_data_dir": (
+            str(_PACKAGES_DIR / prof.obs_data_package) if prof.obs_data_package else ""
+        ),
         "stack_dir": str(config.stack_dir),
         "cp_pipe_dir": str(config.cp_pipe_dir) if config.cp_pipe_dir else "",
         "raw_parent_dir": str(config.raw_parent_dir),

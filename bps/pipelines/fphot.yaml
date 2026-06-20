@@ -8,7 +8,7 @@
 # Variables:
 #   {night}             - Observing night (YYYYMMDD)
 #   {repo}              - Butler repository path
-#   {obs_nickel}        - Path to obs_nickel package
+#   {instrument_dir}    - Path to the declarative instrument package
 #   {coord_collection}  - Collection containing coordinate table
 
 # Inherit site-specific settings
@@ -35,7 +35,7 @@ payload:
 # =============================================================================
 # Pipeline Definition
 # =============================================================================
-pipelineYaml: "{obs_nickel}/pipelines/ForcedPhotRaDec.yaml#diffim"
+pipelineYaml: "{instrument_dir}/pipelines/ForcedPhotRaDec.yaml#diffim"
 
 # =============================================================================
 # Task-Specific Settings
