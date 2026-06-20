@@ -110,21 +110,31 @@ set +u
 # Ensure base stack is ready
 setup lsst_distrib
 
-# Declare + setup obs_nickel from the current working tree
-eups declare -r "$OBS_NICKEL" obs_nickel -t current 2>/dev/null || true
-setup obs_nickel
+# STIPS framework: set up obs_stips (generic, instrument-neutral LSST glue).
+# The instrument itself is declarative — a profile.py loaded BY PATH from
+# INSTRUMENT_DIR — so there is no per-instrument EUPS product to set up.
+OBS_STIPS_DIR="${REPO_ROOT}/packages/obs_stips"
+if [[ -d "$OBS_STIPS_DIR" ]]; then
+  eups declare -r "$OBS_STIPS_DIR" obs_stips -t current 2>/dev/null || true
+  setup obs_stips 2>/dev/null || setup -r "$OBS_STIPS_DIR" obs_stips
+fi
 
-# Declare + setup obs_nickel_data (curated calibrations)
+# Point at the active instrument directory (defaults to the reference Nickel
+# instrument; override by exporting INSTRUMENT_DIR before invoking this script).
+export INSTRUMENT_DIR="${INSTRUMENT_DIR:-${REPO_ROOT}/instruments/nickel}"
+
+# Declare + setup the instrument data package (curated calibrations), if present.
 OBS_NICKEL_DATA_DIR="${REPO_ROOT}/packages/obs_nickel_data"
 if [[ -d "$OBS_NICKEL_DATA_DIR" ]]; then
   eups declare -r "$OBS_NICKEL_DATA_DIR" obs_nickel_data -t current 2>/dev/null || true
-  setup obs_nickel_data
+  setup obs_nickel_data 2>/dev/null || setup -r "$OBS_NICKEL_DATA_DIR" obs_nickel_data
 fi
 
-# Ensure workspace packages are available in PYTHONPATH
-# This allows tests to import stips, etc.
-WORKSPACE_ROOT="$REPO_ROOT"
-for pkg_dir in "${WORKSPACE_ROOT}"/packages/*/src; do
+# Ensure workspace packages are importable: stips (src-layout) + obs_stips
+# (python-layout, in case the EUPS setup above did not add it) + any other
+# src-layout packages.
+export PYTHONPATH="${REPO_ROOT}/packages/stips/src:${REPO_ROOT}/packages/obs_stips/python:${PYTHONPATH:-}"
+for pkg_dir in "${REPO_ROOT}"/packages/*/src; do
   if [[ -d "$pkg_dir" ]]; then
     export PYTHONPATH="${pkg_dir}:${PYTHONPATH:-}"
   fi
