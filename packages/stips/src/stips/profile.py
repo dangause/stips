@@ -26,6 +26,24 @@ class Field:
     default: Any = None
 
 
+@dataclass(frozen=True)
+class CameraSpec:
+    """Friendly single-CCD camera description. obs_stips builds the afw Camera
+    from this at runtime (alternative to a raw camera/<name>.yaml)."""
+
+    nx: int
+    ny: int
+    pixel_size_um: float
+    plate_scale_arcsec_per_pixel: float
+    flip_x: bool = False
+    flip_y: bool = False
+    name: str | None = None
+    serial: str | None = None
+    gain: float = 1.0
+    read_noise: float = 0.0
+    saturation: float = 65535.0
+
+
 @dataclass
 class InstrumentProfile:
     """Everything instrument-specific, in one object.
@@ -39,7 +57,9 @@ class InstrumentProfile:
     # physical_filter -> band (canonical registry; drives FilterDefinitionCollection)
     filters: dict[str, str | None]
     header_map: dict[str, Field]
-    camera: str
+    # Either a path to a raw LSST camera/<name>.yaml, or a friendly CameraSpec
+    # (obs_stips builds the afw Camera from a CameraSpec at runtime).
+    camera: str | CameraSpec
     filter_key: str = "FILTNAM"
     # raw FITS filter value -> physical_filter (case-insensitive lookup; drives to_physical_filter)
     filter_aliases: dict[str, str] = field(default_factory=dict)
