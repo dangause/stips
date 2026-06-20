@@ -126,6 +126,41 @@ class TestStipsInstrument(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             DemoInst().getCamera()
 
+    def test_getcamera_dispatches_cameraspec(self):
+        import os
+
+        import lsst.afw.cameraGeom as cg
+        from lsst.obs.stips.instrument import StipsInstrument
+        from stips import CameraSpec, Field, InstrumentProfile, Site
+
+        prof = InstrumentProfile(
+            name="DemoCam",
+            site=Site(0.0, 0.0, 0.0),
+            filters={"clear": None},
+            header_map={"exposure_time": Field("EXPTIME", unit="s", default=0.0)},
+            camera=CameraSpec(
+                nx=1024,
+                ny=1024,
+                pixel_size_um=30.0,
+                plate_scale_arcsec_per_pixel=0.368,
+                flip_y=True,
+            ),
+        )
+
+        class DemoCamInst(StipsInstrument):
+            profile = prof
+
+        # INSTRUMENT_DIR unset → would break the str path, but a CameraSpec
+        # needs no file:
+        old = os.environ.pop("INSTRUMENT_DIR", None)
+        try:
+            cam = DemoCamInst().getCamera()
+        finally:
+            if old is not None:
+                os.environ["INSTRUMENT_DIR"] = old
+        self.assertIsInstance(cam, cg.Camera)
+        self.assertEqual(len(list(cam)), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

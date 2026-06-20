@@ -67,13 +67,20 @@ class StipsInstrument(Instrument):
         return cls.profile.name
 
     def getCamera(self):
+        from stips import CameraSpec
+
+        cam = self.profile.camera
+        if isinstance(cam, CameraSpec):
+            from .camera_builder import build_camera
+
+            return build_camera(cam, self.profile.name)
         instrument_dir = os.environ.get("INSTRUMENT_DIR")
         if not instrument_dir:
             raise RuntimeError(
                 "INSTRUMENT_DIR must be set to load the camera "
                 "(it points at instruments/<name>/, containing the camera yaml)."
             )
-        return yamlCamera.makeCamera(os.path.join(instrument_dir, self.profile.camera))
+        return yamlCamera.makeCamera(os.path.join(instrument_dir, cam))
 
     def register(self, registry, update: bool = False):
         camera = self.getCamera()
