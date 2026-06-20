@@ -73,8 +73,8 @@ env:
   # LSST stack location
   STACK_DIR: "/path/to/lsst_stack"
 
-  # NPS obs_nickel package
-  OBS_NICKEL: "/path/to/nickel_processing_suite/packages/obs_nickel"
+  # Declarative instrument directory (instruments/<name>/)
+  INSTRUMENT_DIR: "/path/to/nickel_processing_suite/instruments/nickel"
 
   # Parent directory containing YYYYMMDD/raw/ subdirectories
   RAW_PARENT_DIR: "/path/to/nickel/raw_data"
@@ -324,7 +324,7 @@ configs:
 env:
   REPO: "/data/nickel/2024abc_repo"
   STACK_DIR: "/opt/lsst/stack"
-  OBS_NICKEL: "/home/user/nickel_processing_suite/packages/obs_nickel"
+  INSTRUMENT_DIR: "/home/user/nickel_processing_suite/instruments/nickel"
   RAW_PARENT_DIR: "/data/nickel/raw"
   REFCAT_REPO: "/data/refcats"
 

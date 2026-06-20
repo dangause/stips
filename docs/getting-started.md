@@ -71,7 +71,7 @@ Create a file `my_pipeline.yaml`:
 env:
   REPO: "/path/to/my/butler_repo"
   STACK_DIR: "/path/to/lsst_stack"
-  OBS_NICKEL: "/path/to/nickel_processing_suite/packages/obs_nickel"
+  INSTRUMENT_DIR: "/path/to/nickel_processing_suite/instruments/nickel"
   RAW_PARENT_DIR: "/path/to/raw/data"
   REFCAT_REPO: "/path/to/refcats"
 

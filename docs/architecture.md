@@ -1,6 +1,6 @@
 # Architecture Overview
 
-This document describes the architecture of STIPS — the Small Telescope Image Processing Suite. STIPS is a generic framework that brings the LSST Science Pipelines to 1-meter class telescopes, plus a per-telescope instrument *profile*. The Nickel 1-m at Lick is the reference instrument; a fork supports another telescope by adding its own `obs_<instrument>` profile package.
+This document describes the architecture of STIPS — the Small Telescope Image Processing Suite. STIPS is a generic framework that brings the LSST Science Pipelines to 1-meter class telescopes, plus a per-telescope instrument *profile*. The Nickel 1-m at Lick is the reference instrument; a fork supports another telescope by copying the declarative `instruments/nickel/` directory and editing its profile — no new code package is needed.
 
 ## High-Level Architecture
 
@@ -54,7 +54,7 @@ This document describes the architecture of STIPS — the Small Telescope Image 
 
 ## Package Structure
 
-STIPS is a monorepo organized around a three-package framework split: the CLI/tooling (`stips`), the instrument-agnostic LSST glue (`obs_stips`), and a per-telescope instrument profile (`obs_nickel`, the reference). A fork adds its own `obs_<instrument>` profile alongside `obs_nickel`. The runtime instrument is chosen via the `INSTRUMENT_PACKAGE` environment variable (default `lsst.obs.nickel`); the tooling imports `<pkg>.profile` and drives all collection names, Butler queries, and skymap behavior from it.
+STIPS is a monorepo organized around a two-package framework split — the CLI/tooling (`stips`) and the instrument-agnostic LSST glue (`obs_stips`) — plus a curated data package (`obs_nickel_data`). A telescope is **not** a code package: it is a declarative `instruments/<name>/` directory (a `profile.py` alongside `camera/`, `configs/`, and `pipelines/`). `instruments/nickel/` is the reference. The active instrument is chosen via the `INSTRUMENT_DIR` environment variable (e.g. `/path/to/instruments/nickel`); the tooling loads `<dir>/profile.py` by path and drives all collection names, Butler queries, and skymap behavior from it. `obs_stips` synthesizes the concrete LSST instrument/translator/formatter from that profile at import time, and Butler registers it under the fixed class name `lsst.obs.stips.active.Instrument`.
 
 ### 1. stips (Framework Core, CLI & Tooling)
 
@@ -87,7 +87,7 @@ packages/stips/src/stips/
 
 ### 2. obs_stips (Instrument-Agnostic LSST Glue)
 
-The generic LSST middleware layer (`lsst.obs.stips`). It provides the base instrument/translator/formatter that profiles specialize, plus the shared PipelineTasks every instrument reuses:
+The generic LSST middleware layer (`lsst.obs.stips`). It provides the base instrument/translator/formatter and *synthesizes* a concrete, registerable instrument from the active profile, plus the shared PipelineTasks every instrument reuses:
 
 ```
 obs_stips/
@@ -95,6 +95,8 @@ obs_stips/
     ├── instrument.py       # Generic StipsInstrument base
     ├── translator.py       # Generic StipsTranslator base
     ├── formatter.py        # Generic StipsRawFormatter base
+    ├── profile_loader.py   # Load instruments/<name>/profile.py by path (INSTRUMENT_DIR)
+    ├── active.py           # Synthesizes lsst.obs.stips.active.Instrument from the profile
     ├── plotting.py         # Shared plotting helpers
     └── tasks/              # Shared PipelineTasks (lsst.obs.stips.tasks.*)
         ├── forcedPhotRaDec.py
@@ -102,28 +104,28 @@ obs_stips/
         └── diaLightcurve*.py
 ```
 
-### 3. obs_nickel (Reference Instrument Profile)
+`active.py` reads `INSTRUMENT_DIR`, loads the profile by path, and binds it onto the generic base classes to produce `Instrument` / `Translator` / `RawFormatter`. Butler stores the FQN `lsst.obs.stips.active.Instrument` and re-imports it whenever it needs to re-instantiate the instrument — each import re-resolves the profile from `INSTRUMENT_DIR`, so there is no per-telescope instrument class or package to register.
 
-The Nickel telescope profile (`lsst.obs.nickel`) — a thin specialization of `obs_stips`:
+### 3. instruments/nickel (Reference Instrument)
+
+The Nickel telescope is a declarative directory — no code package, no `lsst.obs.nickel`. It is a `profile.py` plus the camera geometry, pipelines, and configs that the generic `obs_stips` machinery loads by path (`INSTRUMENT_DIR`):
 
 ```
-obs_nickel/
-├── python/lsst/obs/nickel/
-│   ├── profile.py          # InstrumentProfile + @hook quirks (the profile)
-│   ├── _instrument.py      # Nickel binding (StipsInstrument subclass)
-│   ├── translator.py       # NickelTranslator (StipsTranslator subclass)
-│   ├── rawFormatter.py     # NickelRawFormatter
-│   ├── calibCombine.py     # Nickel-specific calib combination task
-│   └── visitInfo.py        # Nickel-specific visit info task
+instruments/nickel/
+├── profile.py             # InstrumentProfile + @hook quirks (the profile)
+├── fetch.py               # Optional co-located hook (raw-data fetch)
 ├── camera/
-│   └── nickel.yaml         # Camera geometry (1024×1024 CCD)
-├── pipelines/              # DIA.yaml, ForcedPhotRaDec.yaml, ...
-└── configs/                # calibrateImage/, dia/, coadds/
+│   └── nickel.yaml        # Camera geometry (1024×1024 CCD)
+├── pipelines/             # DRP.yaml, DIA.yaml, ForcedPhotRaDec.yaml, ...
+├── configs/               # calibrateImage/, dia/, coadds/
+└── template_metadata.json # Coadd-template bookkeeping
 ```
+
+There are no instrument/translator/formatter subclasses here — `obs_stips` synthesizes those from `profile.py` at import time (see `active.py` above). The instrument and translator quirks that used to live in a `lsst.obs.nickel` package are expressed declaratively via the `InstrumentProfile` fields and `@hook`s in `profile.py`.
 
 ### 4. obs_nickel_data (Curated Calibrations)
 
-Pre-built calibration products following LSST conventions:
+A standalone EUPS data package (unaffected by the instrument collapse — it stays a real package, `setup -r packages/obs_nickel_data obs_nickel_data`). Pre-built calibration products following LSST conventions:
 
 ```
 obs_nickel_data/
@@ -210,7 +212,7 @@ All LSST commands run through `stack.py`:
 def run_with_stack(cmd: list[str], config: Config, **kwargs) -> subprocess.CompletedProcess:
     """Execute command with LSST stack activated."""
     # Sources loadLSST.bash
-    # Sets up lsst_distrib and obs_nickel
+    # Sets up lsst_distrib and obs_stips; exports INSTRUMENT_DIR
     # Exports config as environment variables
     # Runs the command
 ```
@@ -336,18 +338,17 @@ The `processCcd/timestamp/` CHAINED collection is what downstream steps (DIA, co
 
 ### Adding New Instruments
 
-Fork STIPS and add an `obs_<instrument>` profile alongside `obs_nickel`, following the same thin-profile pattern:
-1. Create the `obs_{instrument}/` package providing `lsst.obs.<instrument>`
-2. Add `profile.py` (an `InstrumentProfile` plus any `@hook` quirks)
-3. Bind the instrument/translator/formatter on top of the `obs_stips` base classes
-4. Create the camera geometry YAML and any instrument-specific pipeline configs
-5. Set `INSTRUMENT_PACKAGE=lsst.obs.<instrument>` so the CLI loads the new profile
+Copy the reference `instruments/nickel/` directory to `instruments/<instrument>/` and edit it — no new code package is required:
+1. Edit `profile.py` (an `InstrumentProfile` plus any `@hook` quirks)
+2. Replace `camera/<instrument>.yaml` with your camera geometry
+3. Add any instrument-specific pipeline configs under `pipelines/` and `configs/`
+4. Point `INSTRUMENT_DIR` at the new directory (via the config `env:` block) so the tooling — and `obs_stips`'s synthesis — load the new profile
 
-The shared PipelineTasks in `obs_stips` and the `stips` tooling work unchanged. See the [forking guide](forking-stips.md) for the full walkthrough.
+The instrument/translator/formatter are synthesized from the profile by `obs_stips`, so there is nothing to subclass or register. The shared PipelineTasks in `obs_stips` and the `stips` tooling work unchanged. See the [forking guide](forking-stips.md) for the full walkthrough.
 
 ## Dependencies
 
-The framework splits into three layers. `stips` (CLI/tooling) defines the profile types and loads the active instrument profile at runtime. `obs_stips` is the generic LSST glue. `obs_nickel` is the reference instrument profile and depends on `obs_stips`; a fork adds its own `obs_<instrument>` profile in the same slot.
+The framework is two packages plus declarative instrument directories. `stips` (CLI/tooling) defines the profile types and loads the active instrument's `profile.py` by path at runtime. `obs_stips` is the generic LSST glue, and it *synthesizes* the registerable instrument from that profile. A telescope is a declarative `instruments/<name>/` directory (the reference is `instruments/nickel/`), selected via `INSTRUMENT_DIR`; a fork is just another such directory.
 
 ```
                       ┌──────────────────────────────────┐
@@ -356,21 +357,22 @@ The framework splits into three layers. `stips` (CLI/tooling) defines the profil
                       │  (InstrumentProfile, @hook,      │
                       │   CollectionNames)               │
                       └──────────────────────────────────┘
-                       │ defines profile API      │ loads profile
-                       │ (imported by profiles)   │ at runtime via
-                       ▼                          ▼ INSTRUMENT_PACKAGE
+                       │ defines profile API      │ loads profile.py
+                       │ (imported by profiles)   │ by path at runtime
+                       ▼                          ▼ via INSTRUMENT_DIR
    ┌───────────────────────────┐      ┌──────────────────────────────────────┐
-   │      obs_nickel           │      │     obs_<instrument>  (a fork)        │
-   │  reference profile        │ ...  │  another telescope's profile          │
-   │  profile.py + bindings    │      │  profile.py + bindings                │
-   │  + obs_nickel_data        │      │                                       │
+   │   instruments/nickel/     │      │   instruments/<name>/   (a fork)      │
+   │  reference instrument     │ ...  │  another telescope's directory        │
+   │  profile.py + camera/     │      │  profile.py + camera/                 │
+   │  + configs/ + pipelines/  │      │  + configs/ + pipelines/              │
    └───────────────────────────┘      └──────────────────────────────────────┘
-                       │  each profile depends on  │
-                       ▼                           ▼
+                       │  each profile loaded by   │
+                       ▼   & synthesized in ───────▼
                       ┌──────────────────────────────────┐
                       │             obs_stips            │
-                      │  generic LSST glue (instrument,  │
-                      │  translator, formatter, shared   │
+                      │  generic LSST glue + synthesis   │
+                      │  (instrument, translator,        │
+                      │  formatter, active.Instrument;   │
                       │  PipelineTasks: lsst.obs.stips.*)│
                       └──────────────────────────────────┘
                                        │
