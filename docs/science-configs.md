@@ -264,6 +264,4 @@ Notable findings from the audit:
 
 ## See Also
 
-- [Configuration Guide](configuration.md) - Pipeline YAML and environment setup
 - [Architecture Overview](architecture.md) - System architecture
-- [CLI Reference](cli-reference.md) - Command-line options

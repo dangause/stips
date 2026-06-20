@@ -43,7 +43,6 @@ stips-skymap-build-config = "stips.skymap.build_discrete_skymap_config:main"
 stips-skymap-make = "stips.skymap.make_skymap_from_datasets:main"
 
 # EDA tools
-stips-eda-archive = "stips.eda.archive_query:main"
 stips-eda-butler = "stips.eda.butler_inspect:main"
 
 [tool.setuptools.packages.find]

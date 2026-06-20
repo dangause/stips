@@ -8,8 +8,6 @@ Welcome to the NPS documentation. This guide will help you understand, set up, a
 |--------------|-----------|
 | Get started quickly | [Getting Started](getting-started.md) |
 | Set up a new transient campaign | [New Campaign Guide](new-campaign.md) |
-| Look up a CLI command | [CLI Reference](cli-reference.md) |
-| Configure pipeline options | [Configuration Guide](configuration.md) |
 | Understand how NPS works | [Architecture Overview](architecture.md) |
 
 ## Documentation Map
@@ -19,8 +17,6 @@ docs/
 ├── README.md              ← You are here
 ├── getting-started.md     # Installation & first pipeline
 ├── new-campaign.md        # Setting up new transient targets
-├── cli-reference.md       # Complete command reference
-├── configuration.md       # YAML & environment options
 ├── architecture.md        # System design & internals
 ├── architecture-bps-docker-slurm.md  # BPS/Docker/Slurm deployment
 ├── science-configs.md     # CalibrateImage tuning & fallbacks
@@ -54,7 +50,6 @@ docs/
 - Choosing template strategy
 - Running and validating
 
-### [CLI Reference](cli-reference.md)
 
 **Complete command documentation.**
 
@@ -63,7 +58,6 @@ docs/
 - BPS commands for HPC
 - Environment variables
 
-### [Configuration Guide](configuration.md)
 
 **Deep dive into configuration options.**
 

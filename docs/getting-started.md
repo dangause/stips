@@ -211,13 +211,10 @@ This usually means some exposures have incorrect coordinates in their FITS heade
 nickel science 20230519 --object 2023ixf --ra 210.91 --dec 54.32
 ```
 
-See [Configuration Guide: Stale DEC Headers](configuration.md#stale-dec-headers) for details.
 
 ## Next Steps
 
-- Read the [Configuration Guide](configuration.md) for detailed config options
 - See [Starting a New Campaign](new-campaign.md) for new transient targets
-- Check the [CLI Reference](cli-reference.md) for all available commands
 - Explore [Architecture Overview](architecture.md) to understand how NPS works
 
 ## Getting Help

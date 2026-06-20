@@ -410,6 +410,4 @@ Some nights may have failed. Check processing logs and re-run failed nights indi
 
 ## See Also
 
-- [Configuration Reference](configuration.md) - All config options
-- [CLI Reference](cli-reference.md) - Command details
 - [Pipeline Flow](diagrams/pipeline-flow.mmd) - Visual pipeline overview

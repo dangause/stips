@@ -7,4 +7,4 @@ This module provides tools for exploring and understanding:
 - Template availability and characteristics
 """
 
-__all__ = ["archive_query", "butler_inspect", "formatters"]
+__all__ = ["butler_inspect", "formatters"]
