@@ -145,8 +145,7 @@ def run(
     bootstrap_script = find_bootstrap_script(config)
     if not bootstrap_script:
         result.error = (
-            "Bootstrap script not found. "
-            "Run from the nickel_processing_suite directory."
+            "Bootstrap script not found. Run from the repository root directory."
         )
         log.error(result.error)
         return result
