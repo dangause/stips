@@ -87,7 +87,7 @@ From: nps:latest
 %environment
     # Standard environment variables
     export STACK_DIR=/opt/lsst/software/stack
-    export OBS_NICKEL=/opt/nps/packages/obs_nickel
+    export INSTRUMENT_DIR=/opt/nps/instruments/nickel
     export OBS_NICKEL_DATA=/opt/nps/packages/obs_nickel_data
     export NPS_ROOT=/opt/nps
 
@@ -118,9 +118,9 @@ From: nps:latest
         exit 1
     fi
 
-    # Check that obs_nickel is present
-    if [ ! -d "${OBS_NICKEL}" ]; then
-        echo "ERROR: obs_nickel not found at ${OBS_NICKEL}"
+    # Check that the nickel instrument is present
+    if [ ! -d "${INSTRUMENT_DIR}" ]; then
+        echo "ERROR: nickel instrument not found at ${INSTRUMENT_DIR}"
         exit 1
     fi
 

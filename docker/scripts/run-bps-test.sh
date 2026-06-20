@@ -3,7 +3,7 @@
 #
 # Runs inside the 'login' container. Verifies:
 #   1. LSST stack is available
-#   2. obs_nickel is setup
+#   2. obs_stips is setup (instrument loaded by path from INSTRUMENT_DIR)
 #   3. stips CLI works
 #   4. BPS submit to Slurm works (basic connectivity)
 #
@@ -61,15 +61,17 @@ check "bps command available" which bps
 echo
 
 # -------------------------------------------------------------------
-# 3. obs_nickel
+# 3. obs_stips + nickel instrument
 # -------------------------------------------------------------------
-echo "[3/5] obs_nickel"
-OBS_NICKEL_DIR="${OBS_NICKEL:-/opt/nps/packages/obs_nickel}"
-if [[ -d "$OBS_NICKEL_DIR" ]]; then
-    setup -r "$OBS_NICKEL_DIR" obs_nickel 2>/dev/null || true
+echo "[3/5] obs_stips + nickel instrument"
+OBS_STIPS_DIR="${OBS_STIPS:-/opt/nps/packages/obs_stips}"
+INSTRUMENT_DIR="${INSTRUMENT_DIR:-/opt/nps/instruments/nickel}"
+if [[ -d "$OBS_STIPS_DIR" ]]; then
+    setup -r "$OBS_STIPS_DIR" obs_stips 2>/dev/null || true
 fi
-check "obs_nickel package exists" test -d "$OBS_NICKEL_DIR"
-check "import lsst.obs.nickel" python -c "import lsst.obs.nickel"
+check "obs_stips package exists" test -d "$OBS_STIPS_DIR"
+check "nickel instrument dir exists" test -d "$INSTRUMENT_DIR"
+check "import lsst.obs.stips" python -c "import lsst.obs.stips"
 
 echo
 

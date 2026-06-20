@@ -57,7 +57,8 @@ services:
       # Optional: Mount source for development
       # Uncomment to enable live code reloading
       # - ../packages/stips/src:/opt/nps/packages/stips/src:ro
-      # - ../packages/obs_nickel:/opt/nps/packages/obs_nickel:ro
+      # - ../packages/obs_stips:/opt/nps/packages/obs_stips:ro
+      # - ../instruments/nickel:/opt/nps/instruments/nickel:ro
 
     ports:
       - "${NPS_DASHBOARD_PORT:-8080}:8080"
@@ -67,7 +68,7 @@ services:
       - REPO=/data/repo
       - RAW_PARENT_DIR=/data/raw
       - REFCAT_REPO=/data/refcats
-      - OBS_NICKEL=/opt/nps/packages/obs_nickel
+      - INSTRUMENT_DIR=/opt/nps/instruments/nickel
       - KMP_AFFINITY=disabled
 
       # Optional: Profile to load from /config/.env.{profile}

@@ -3,7 +3,7 @@
 #
 # This script:
 # 1. Sources the LSST stack
-# 2. Sets up obs_nickel and obs_nickel_data
+# 2. Sets up obs_stips and obs_nickel_data (instrument is declarative, by path)
 # 3. Loads environment from mounted config if present
 # 4. Executes the provided command
 
@@ -21,10 +21,12 @@ setup lsst_distrib
 # NPS Package Setup
 # =============================================================================
 
-# Setup obs_nickel
-if [[ -d "${OBS_NICKEL}" ]]; then
-    echo "[NPS] Setting up obs_nickel from ${OBS_NICKEL}"
-    setup -r "${OBS_NICKEL}" obs_nickel 2>/dev/null || true
+# Setup obs_stips (generic LSST glue). The nickel instrument is declarative
+# and loaded by path from INSTRUMENT_DIR — no EUPS setup required.
+OBS_STIPS="${OBS_STIPS:-${NPS_ROOT}/packages/obs_stips}"
+if [[ -d "${OBS_STIPS}" ]]; then
+    echo "[NPS] Setting up obs_stips from ${OBS_STIPS}"
+    setup -r "${OBS_STIPS}" obs_stips 2>/dev/null || true
 fi
 
 # Setup obs_nickel_data
@@ -90,7 +92,7 @@ echo "[NPS] Environment:"
 echo "  REPO=${REPO}"
 echo "  RAW_PARENT_DIR=${RAW_PARENT_DIR}"
 echo "  REFCAT_REPO=${REFCAT_REPO}"
-echo "  OBS_NICKEL=${OBS_NICKEL}"
+echo "  INSTRUMENT_DIR=${INSTRUMENT_DIR}"
 
 # Verify critical paths exist (warnings only, don't fail)
 if [[ ! -d "${REPO}" ]]; then

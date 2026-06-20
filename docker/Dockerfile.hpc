@@ -40,7 +40,8 @@ USER root
 WORKDIR /opt/nps
 
 COPY packages/stips/ packages/stips/
-COPY packages/obs_nickel/ packages/obs_nickel/
+COPY packages/obs_stips/ packages/obs_stips/
+COPY instruments/nickel/ instruments/nickel/
 COPY packages/obs_nickel_data/ packages/obs_nickel_data/
 COPY scripts/ /opt/nps/scripts/
 COPY bps/ /opt/nps/bps/
@@ -49,7 +50,7 @@ RUN source /opt/lsst/software/stack/loadLSST.bash && \
     setup lsst_distrib && \
     cd /opt/nps && \
     pip install --no-deps -e packages/stips && \
-    pip install --no-deps -e packages/obs_nickel && \
+    pip install --no-deps -e packages/obs_stips && \
     chmod +x /opt/nps/scripts/pipeline/*.sh 2>/dev/null || true
 
 # =============================================================================
@@ -63,7 +64,7 @@ RUN mkdir -p /data/repo /data/raw /data/refcats /data/outputs /config
 
 # Environment
 ENV NPS_ROOT=/opt/nps
-ENV OBS_NICKEL=/opt/nps/packages/obs_nickel
+ENV INSTRUMENT_DIR=/opt/nps/instruments/nickel
 ENV OBS_NICKEL_DATA=/opt/nps/packages/obs_nickel_data
 ENV STACK_DIR=/opt/lsst/software/stack
 ENV REPO=/data/repo
