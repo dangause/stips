@@ -185,8 +185,8 @@ configs:
 
 ```bash
 # Download each night
-nickel download 20230519
-nickel download 20230521
+stips download 20230519
+stips download 20230521
 # ... etc
 ```
 
@@ -214,7 +214,7 @@ Each night should have:
 ### Dry Run First
 
 ```bash
-nickel run scripts/config/my_target/pipeline.yaml --dry-run
+stips run scripts/config/my_target/pipeline.yaml --dry-run
 ```
 
 This shows what would be executed without running anything.
@@ -222,7 +222,7 @@ This shows what would be executed without running anything.
 ### Full Run
 
 ```bash
-nickel run scripts/config/my_target/pipeline.yaml
+stips run scripts/config/my_target/pipeline.yaml
 ```
 
 ### Monitor Progress
@@ -230,7 +230,7 @@ nickel run scripts/config/my_target/pipeline.yaml
 The pipeline outputs progress to stdout. For long runs, consider:
 
 ```bash
-nickel run scripts/config/my_target/pipeline.yaml 2>&1 | tee pipeline.log
+stips run scripts/config/my_target/pipeline.yaml 2>&1 | tee pipeline.log
 ```
 
 ## Step 6: Check Results
@@ -386,12 +386,12 @@ python -c "from astropy.io import fits; print(fits.getheader('frame.fits')['OBJE
 
 ### Science qgraph fails with "FileNotFoundError: astrometry_ref_cat"
 
-This is caused by exposures with incorrect coordinates in their FITS headers (the Nickel telescope's DEC keyword sometimes gets stuck at a previous pointing's value). When using `nickel run`, the `ra`/`dec` from your YAML config automatically triggers pre-flight coordinate validation, which excludes bad exposures before building the qgraph.
+This is caused by exposures with incorrect coordinates in their FITS headers (the Nickel telescope's DEC keyword sometimes gets stuck at a previous pointing's value). When using `stips run`, the `ra`/`dec` from your YAML config automatically triggers pre-flight coordinate validation, which excludes bad exposures before building the qgraph.
 
-If running `nickel science` standalone, pass `--ra` and `--dec`:
+If running `stips science` standalone, pass `--ra` and `--dec`:
 
 ```bash
-nickel science 20230519 --object 2023ixf --ra 210.91 --dec 54.32
+stips science 20230519 --object 2023ixf --ra 210.91 --dec 54.32
 ```
 
 ### Astrometry failures
