@@ -5,6 +5,7 @@ import unittest
 from pathlib import Path
 
 FIX = str(Path(__file__).parent / "data" / "demo_instrument")
+FIX_CAM = str(Path(__file__).parent / "data" / "demo_camera_instrument")
 
 
 class TestActive(unittest.TestCase):
@@ -36,6 +37,23 @@ class TestActive(unittest.TestCase):
             cls.__module__ + "." + cls.__qualname__,
             "lsst.obs.stips.active.Instrument",
         )
+
+    def test_camera_spec_profile_builds_camera_end_to_end(self):
+        # A profile whose `camera` is a CameraSpec (not a yaml path) must
+        # synthesize and produce a usable in-memory afw Camera.
+        import lsst.afw.cameraGeom as cg
+        import lsst.geom as geom
+
+        os.environ["INSTRUMENT_DIR"] = FIX_CAM
+        import lsst.obs.stips.active as active
+
+        importlib.reload(active)
+        cam = active.Instrument().getCamera()
+        self.assertIsInstance(cam, cg.Camera)
+        dets = list(cam)
+        self.assertEqual(len(dets), 1)
+        # bbox [[0,0],[nx,ny]] → inclusive max corner (nx, ny)
+        self.assertEqual(dets[0].getBBox().getMax(), geom.Point2I(1024, 1024))
 
     def test_package_import_without_instrument_dir_is_safe(self):
         os.environ.pop("INSTRUMENT_DIR", None)

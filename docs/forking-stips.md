@@ -237,15 +237,36 @@ def temperature(header):
 
 ## 5. Step 4 — Camera geometry
 
-`camera/<x>.yaml` is a standard LSST `yamlCamera`-format file describing detector
-layout, pixel size, and plate scale. For a single-CCD telescope this is one
-detector. Use `camera/nickel.yaml` as your template and edit the dimensions,
-pixel scale, and detector name/serial to match your CCD. It is loaded by path
-from `INSTRUMENT_DIR` (no EUPS package lookup).
+There are two ways to give STIPS a camera.
 
-> A friendlier camera spec (declare CCD size / pixel scale / orientation and let
-> STIPS generate the LSST camera) is a planned follow-on. For now, this one YAML
-> is the only LSST-format file you author.
+**Simple path — `CameraSpec`.** For a single-CCD, geometry-only camera, set
+`profile.camera` to a `CameraSpec` (imported from `stips`) instead of a YAML
+path. You declare CCD size, pixel size, plate scale, and orientation, and STIPS
+synthesizes a usable LSST camera in-memory with a default single-amp readout:
+
+```python
+from stips import CameraSpec
+
+profile = InstrumentProfile(
+    ...,
+    camera=CameraSpec(
+        nx=1024, ny=1024,
+        pixel_size_um=30.0,
+        plate_scale_arcsec_per_pixel=0.368,
+        flip_x=False, flip_y=True,
+    ),
+)
+```
+
+`gain` / `read_noise` / `saturation` are optional (sensible defaults). This is
+all most single-CCD telescopes need.
+
+**Full-control escape hatch — `camera/<x>.yaml`.** A standard LSST
+`yamlCamera`-format file describing detector layout, amps, gain, and read noise.
+Set `profile.camera` to its path (loaded from `INSTRUMENT_DIR`, no EUPS lookup);
+use `camera/nickel.yaml` as a template. Nickel deliberately uses the YAML to get
+real multi-amp / gain / read-noise fidelity that the simple `CameraSpec` path
+does not model.
 
 ---
 
