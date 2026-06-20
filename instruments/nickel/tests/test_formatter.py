@@ -1,10 +1,11 @@
+import importlib
 import os
 import unittest
+from pathlib import Path
 
 import lsst.afw.fits
 import lsst.afw.geom
 import lsst.afw.image
-import lsst.obs.nickel  # Your obs package
 import lsst.utils
 import lsst.utils.tests
 from lsst.daf.butler import (
@@ -16,7 +17,16 @@ from lsst.daf.butler import (
     Location,
     StorageClassFactory,
 )
-from lsst.obs.nickel.rawFormatter import NickelRawFormatter  # Adjust path if needed
+
+# Obtain the synthesized RawFormatter from the generic machinery
+# (lsst.obs.stips.active, bound to INSTRUMENT_DIR=instruments/nickel).
+# instruments/nickel/tests/test_formatter.py -> parents[1] == instruments/nickel
+_INSTRUMENT_DIR = str(Path(__file__).resolve().parents[1])
+os.environ["INSTRUMENT_DIR"] = _INSTRUMENT_DIR
+import lsst.obs.stips.active as _active  # noqa: E402
+
+_active = importlib.reload(_active)
+NickelRawFormatter = _active.RawFormatter
 
 testDataPackage = "testdata_nickel"
 try:

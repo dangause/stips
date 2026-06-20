@@ -61,6 +61,13 @@ logs
 !packages/testdata/data/
 !packages/testdata/data/**
 
+# Allow tracked test fixtures (the bare `data` rule above would hide these)
+!packages/obs_stips/tests/data/
+!packages/obs_stips/tests/data/**
+# ...but keep build artifacts under it ignored (the `**` negation re-included them)
+packages/obs_stips/tests/data/**/__pycache__/
+packages/obs_stips/tests/data/**/*.pyc
+
 # Defect visualization outputs
 packages/defects/defects_tools/defects/defects_*/
 **/defects/defects/

@@ -1,9 +1,27 @@
 """Lock the Nickel filter alias table (raw FITS FILTNAM -> physical_filter).
-Stack-free: exercises the new StipsTranslator-based NickelTranslator."""
 
+Exercises the generic ``StipsTranslator`` synthesized from
+``INSTRUMENT_DIR=instruments/nickel`` (``lsst.obs.stips.active.Translator``).
+The alias golden values are unchanged from the legacy suite.
+"""
+
+import importlib
+import os
 import unittest
+from pathlib import Path
 
-from lsst.obs.nickel.translator import NickelTranslator
+# instruments/nickel/tests/test_filter_aliases.py -> parents[1] == instruments/nickel
+_INSTRUMENT_DIR = str(Path(__file__).resolve().parents[1])
+
+
+def _load_translator():
+    os.environ["INSTRUMENT_DIR"] = _INSTRUMENT_DIR
+    import lsst.obs.stips.active as active
+
+    return importlib.reload(active).Translator
+
+
+NickelTranslator = _load_translator()
 
 
 def _phys(raw):

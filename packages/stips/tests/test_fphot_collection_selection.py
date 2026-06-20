@@ -30,7 +30,7 @@ def _nickel_config() -> SimpleNamespace:
         collection_prefix="Nickel",
         skymap_name="nickelRings-v1",
         skymap_collection="skymaps/nickelRings",
-        instrument_class="lsst.obs.nickel.Nickel",
+        instrument_class="lsst.obs.stips.active.Instrument",
         night_to_dayobs_offset_days=1,
     )
     return SimpleNamespace(require_profile=lambda: profile)

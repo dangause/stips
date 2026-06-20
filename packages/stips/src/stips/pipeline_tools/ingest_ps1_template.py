@@ -1130,9 +1130,9 @@ def ingest_exposure_to_butler(
     # Prefer the active instrument's profile values, allowing env overrides.
     # Wrapped in try/except so this script stays runnable without the obs package.
     try:
-        from stips.core.config import load_profile
+        from stips.core.config import load_active_profile
 
-        prof = load_profile(os.environ.get("INSTRUMENT_PACKAGE", "lsst.obs.nickel"))
+        prof = load_active_profile()
         prof_skymap_name = prof.skymap_name
         prof_skymap_collection = prof.skymap_collection
         prof_instrument = prof.name

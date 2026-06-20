@@ -36,7 +36,7 @@ rsp = [
 line-length = 110
 target-version = "py312"
 src = [
-    "packages/obs_nickel",
+    "instruments/nickel",
     "packages/defects",
     "packages/refcats",
     "packages/testdata",
@@ -73,11 +73,11 @@ max-doc-length = 79
 convention = "numpy"
 
 [tool.pytest.ini_options]
-# stips tests live in packages/stips/tests; obs_nickel tests in
-# packages/obs_nickel/tests. Add additional packages here as they add
+# stips tests live in packages/stips/tests; reference-instrument tests in
+# instruments/nickel/tests. Add additional packages here as they add
 # tests/ directories.
 testpaths = [
-    "packages/obs_nickel/tests",
+    "instruments/nickel/tests",
     "packages/stips/tests",
     "packages/obs_stips/tests",
     # "packages/defects/tests",
@@ -106,7 +106,7 @@ pythonVersion = "3.12"
 venvPath = "."
 venv = ".venv"
 include = [
-    "packages/obs_nickel",
+    "instruments/nickel",
     "packages/stips",
     "packages/obs_stips",
     "packages/defects",
@@ -128,7 +128,7 @@ exclude = [
 ]
 ignore = [
     # LSST pipeline configs are executed with an injected `config` object.
-    "packages/obs_nickel/configs",
+    "instruments/nickel/configs",
 ]
 # Keep noise down when LSST/Rubin dependencies are not in the active venv.
 reportMissingImports = "warning"

@@ -18,7 +18,6 @@ from lsst.obs.base import (
     yamlCamera,
 )
 from lsst.obs.base._instrument import Instrument
-from lsst.utils import getPackageDir
 from lsst.utils.introspection import get_full_type_name
 
 from .formatter import StipsRawFormatter
@@ -68,10 +67,13 @@ class StipsInstrument(Instrument):
         return cls.profile.name
 
     def getCamera(self):
-        path = os.path.join(
-            getPackageDir(self.profile.eups_package), self.profile.camera
-        )
-        return yamlCamera.makeCamera(path)
+        instrument_dir = os.environ.get("INSTRUMENT_DIR")
+        if not instrument_dir:
+            raise RuntimeError(
+                "INSTRUMENT_DIR must be set to load the camera "
+                "(it points at instruments/<name>/, containing the camera yaml)."
+            )
+        return yamlCamera.makeCamera(os.path.join(instrument_dir, self.profile.camera))
 
     def register(self, registry, update: bool = False):
         camera = self.getCamera()

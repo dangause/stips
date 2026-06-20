@@ -12,14 +12,14 @@
 #
 #   # Using an input coordinate catalog:
 #   pipetask run -b $REPO \
-#     -p $OBS_NICKEL/pipelines/ForcedPhotRaDec.yaml#visit-image \
+#     -p $INSTRUMENT_DIR/pipelines/ForcedPhotRaDec.yaml#visit-image \
 #     -i Nickel/runs/20201207/processCcd/...,my_targets \
 #     -o Nickel/runs/20201207/forcedPhot/run \
 #     -d "instrument='Nickel' AND visit=12345"
 #
 #   # Using config coordinates (single target):
 #   pipetask run -b $REPO \
-#     -p $OBS_NICKEL/pipelines/ForcedPhotRaDec.yaml#visit-image \
+#     -p $INSTRUMENT_DIR/pipelines/ForcedPhotRaDec.yaml#visit-image \
 #     -i Nickel/runs/20201207/processCcd/... \
 #     -o Nickel/runs/20201207/forcedPhot/run \
 #     -d "instrument='Nickel' AND visit=12345" \
@@ -29,7 +29,7 @@
 #
 #   # Forced photometry on difference images:
 #   pipetask run -b $REPO \
-#     -p $OBS_NICKEL/pipelines/ForcedPhotRaDec.yaml#diffim \
+#     -p $INSTRUMENT_DIR/pipelines/ForcedPhotRaDec.yaml#diffim \
 #     -i Nickel/runs/20201207/diff/...,my_targets \
 #     -o Nickel/runs/20201207/forcedPhotDiffim/run \
 #     -d "instrument='Nickel' AND visit=12345"
@@ -41,7 +41,7 @@ description: |
   Forced photometry at user-specified RA/Dec coordinates.
   Supports both calibrated visit images and difference images.
 
-instrument: lsst.obs.nickel.Nickel
+instrument: lsst.obs.stips.active.Instrument
 
 tasks:
   # ============================================

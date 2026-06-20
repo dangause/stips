@@ -2,7 +2,7 @@
 
 This is the Nickel-specific implementation of the framework's
 ``InstrumentProfile.fetch_data`` hook. It downloads a night's raw frames from
-the Lick searchable archive into the layout expected by obs_nickel ingestion:
+the Lick searchable archive into the layout expected by Nickel ingestion:
 
   ${RAW_PARENT_DIR}/${NIGHT}/raw/<filename>.fits
 

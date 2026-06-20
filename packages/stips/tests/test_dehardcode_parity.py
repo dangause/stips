@@ -3,11 +3,34 @@ After de-hardcode, the Nickel profile must reproduce these EXACT strings (byte-f
 Do NOT change these literals to make a refactor pass — a difference means the de-hardcode
 diverged from current Nickel behavior."""
 
+import importlib.util
+import sys
 import unittest
+from pathlib import Path
 
 from stips.collections import CollectionNames
-from stips.core.config import load_profile
 from stips.core.pipeline import night_to_day_obs
+
+# Repo root: <root>/packages/stips/tests/test_dehardcode_parity.py -> up 3.
+REPO_ROOT = Path(__file__).resolve().parents[3]
+NICKEL_PROFILE = REPO_ROOT / "instruments" / "nickel" / "profile.py"
+
+
+def _load_nickel_profile_by_path():
+    """Load the migrated Nickel profile BY PATH (post-obs_nickel-collapse).
+
+    The obs_nickel package was collapsed into ``instruments/nickel/``; the
+    profile is now loaded by path (mirroring ``stips.core.config.load()``)
+    rather than via ``load_profile("lsst.obs.nickel")``.
+    """
+    if str(NICKEL_PROFILE.parent) not in sys.path:
+        sys.path.insert(0, str(NICKEL_PROFILE.parent))
+    spec = importlib.util.spec_from_file_location(
+        "_stips_nickel_profile", NICKEL_PROFILE
+    )
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod.profile
 
 
 class TestNickelCollectionGolden(unittest.TestCase):
@@ -63,7 +86,7 @@ class TestNickelCollectionGolden(unittest.TestCase):
 
 class TestProfileDrivenParity(unittest.TestCase):
     def test_nickel_profile_reproduces_golden(self):
-        prof = load_profile("lsst.obs.nickel")
+        prof = _load_nickel_profile_by_path()
         c = CollectionNames("20230519", "ts1", prefix=prof.collection_prefix)
         # SAME literals as the golden (proves the threaded profile yields identical Nickel output):
         self.assertEqual(c.raw_run, "Nickel/raw/20230519/ts1")

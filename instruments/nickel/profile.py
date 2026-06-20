@@ -6,10 +6,10 @@ import logging
 
 # Safe to import at module load: fetch.py is stdlib-only at import time
 # (the lick_archive client is lazy-imported inside the fetch implementation).
-from lsst.obs.nickel.fetch import fetch_data as _fetch_data
+from fetch import fetch_data as _fetch_data
 from stips import Field, InstrumentProfile, Site, hook
 
-log = logging.getLogger("lsst.obs.nickel.translator")
+log = logging.getLogger("lsst.obs.stips.nickel.profile")
 
 profile = InstrumentProfile(
     name="Nickel",
@@ -68,13 +68,11 @@ profile = InstrumentProfile(
     },
     const_map={"boresight_rotation_angle": 0.0, "boresight_rotation_coord": "sky"},
     camera="camera/nickel.yaml",
-    eups_package="obs_nickel",
-    instrument_class="lsst.obs.nickel.Nickel",
+    instrument_class="lsst.obs.stips.active.Instrument",
     night_to_dayobs_offset_days=1,
     skymap_name="nickelRings-v1",
     skymap_collection="skymaps/nickelRings",
     obs_data_package="obs_nickel_data",
-    package_dir="lsst.obs.nickel",
     fetch_data=_fetch_data,
 )
 

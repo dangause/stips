@@ -1,16 +1,22 @@
-"""Nickel-specific CalibCombineTask that handles missing VisitInfo dates.
+"""Small-telescope CalibCombineTask that handles missing VisitInfo dates.
 
-The Nickel telescope ISR pipeline does not preserve VisitInfo dates in
-its FITS output (the afw ExposureF writer does not serialize VisitInfo
+Small-telescope ISR pipelines do not always preserve VisitInfo dates in
+their FITS output (the afw ExposureF writer does not serialize VisitInfo
 for calibration ISR exposures). This causes the standard CalibCombineTask
 to crash in combineHeaders() when it tries to format the date.
 
 This subclass overrides combineHeaders() to gracefully handle invalid
 dates by falling back to the merged FITS header DATE-BEG/DATE-END
 values from the raw metadata.
+
+PINNED VERBATIM COPY: combineHeaders() below is a pinned, verbatim fork of
+cp_pipe's ``CalibCombineTask.combineHeaders`` (tracking the installed
+``lsst_distrib`` as of 2026-06), with the date-fallback logic added. It must
+be re-verified against cp_pipe on every stack upgrade — if the upstream
+combineHeaders changes, this fork may drift out of sync.
 """
 
-__all__ = ["NickelCalibCombineTask", "NickelCalibCombineByFilterTask"]
+__all__ = ["StipsCalibCombineTask", "StipsCalibCombineByFilterTask"]
 
 import logging
 
@@ -21,8 +27,8 @@ from lsst.cp.pipe.cpCombine import CalibCombineByFilterTask, CalibCombineTask
 log = logging.getLogger(__name__)
 
 
-class NickelCalibCombineTask(CalibCombineTask):
-    """CalibCombineTask with robust date handling for Nickel telescope data."""
+class StipsCalibCombineTask(CalibCombineTask):
+    """CalibCombineTask with robust date handling for small-telescope data."""
 
     def combineHeaders(
         self, expHandleList, calib=None, calibType="CALIB", scales=None, metadata=None
@@ -219,12 +225,12 @@ class NickelCalibCombineTask(CalibCombineTask):
         return header
 
 
-class NickelCalibCombineByFilterTask(CalibCombineByFilterTask):
-    """CalibCombineByFilterTask with robust date handling for Nickel data.
+class StipsCalibCombineByFilterTask(CalibCombineByFilterTask):
+    """CalibCombineByFilterTask with robust date handling for small-telescope data.
 
-    Inherits the same combineHeaders fix from NickelCalibCombineTask
+    Inherits the same combineHeaders fix from StipsCalibCombineTask
     via method resolution. CalibCombineByFilterTask inherits from
     CalibCombineTask, so we just need to override combineHeaders.
     """
 
-    combineHeaders = NickelCalibCombineTask.combineHeaders
+    combineHeaders = StipsCalibCombineTask.combineHeaders
