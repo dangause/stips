@@ -72,6 +72,16 @@ export RAW_PARENT_DIR="{config.raw_parent_dir}"
     if config.refcat_repo:
         env_exports += f'export REFCAT_REPO="{config.refcat_repo}"\n'
 
+    # Profile-derived skymap identity so the (instrument-neutral) bootstrap
+    # script registers/chains the skymap under the active instrument's names
+    # (e.g. ctio1mRings-v1 / skymaps/ctio1mRings) instead of a hardcoded one.
+    skymap_name = getattr(prof, "skymap_name", None)
+    skymap_collection = getattr(prof, "skymap_collection", None)
+    if skymap_name:
+        env_exports += f'export SKYMAP_NAME="{skymap_name}"\n'
+    if skymap_collection:
+        env_exports += f'export SKYMAP_COLLECTION="{skymap_collection}"\n'
+
     # Pass through RUN_ID so shell scripts log to the same directory
     run_id = os.environ.get("RUN_ID")
     if run_id:

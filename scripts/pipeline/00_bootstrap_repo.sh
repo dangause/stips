@@ -181,23 +181,29 @@ fi
 log_section "SkyMap Registration"
 # SkyMap config now ships with the framework reference configs (the obs-package
 # collapse + generic-pipelines move relocated configs to instrument_defaults/).
+# The skymap NAME and chain COLLECTION are profile-driven (exported by
+# core/stack.py as SKYMAP_NAME / SKYMAP_COLLECTION); the shared config supplies
+# only the geometry. Fall back to the Nickel reference names for a direct
+# invocation without those exports.
 SKYMAP_CFG="${STIPS_DEFAULTS:-$REPO_ROOT/packages/obs_stips/instrument_defaults}/configs/makeSkyMap.py"
-log_info "Registering SkyMap (config: ${SKYMAP_CFG})"
+SKYMAP_NAME="${SKYMAP_NAME:-nickelRings-v1}"
+SKYMAP_COLLECTION="${SKYMAP_COLLECTION:-skymaps/nickelRings}"
+log_info "Registering SkyMap '${SKYMAP_NAME}' (config: ${SKYMAP_CFG})"
 SKYMAP_LOG="${LOG_DIR}/register_skymap_${TS}.log"
-if ! butler register-skymap "$REPO" -C "$SKYMAP_CFG" > "$SKYMAP_LOG" 2>&1; then
+if ! butler register-skymap "$REPO" -C "$SKYMAP_CFG" -c "name=${SKYMAP_NAME}" > "$SKYMAP_LOG" 2>&1; then
   log_warn "register-skymap reported non-zero status; see ${SKYMAP_LOG}"
 else
   log_info "register-skymap output captured in ${SKYMAP_LOG}"
 fi
 
 # In 11.0.0 weekly the default RUN is literally 'skymaps'.
-log_info "Creating SkyMap chain: skymaps/nickelRings -> skymaps"
-butler collection-chain "$REPO" skymaps/nickelRings skymaps --mode redefine \
-  || butler collection-chain "$REPO" skymaps/nickelRings skymaps
+log_info "Creating SkyMap chain: ${SKYMAP_COLLECTION} -> skymaps"
+butler collection-chain "$REPO" "$SKYMAP_COLLECTION" skymaps --mode redefine \
+  || butler collection-chain "$REPO" "$SKYMAP_COLLECTION" skymaps
 
 # (Optional) sanity print
 log_info "Verifying SkyMap datasets:"
-butler query-datasets "$REPO" skyMap --collections skymaps/nickelRings | sed -n '1,50p'
+butler query-datasets "$REPO" skyMap --collections "$SKYMAP_COLLECTION" | sed -n '1,50p'
 
 log_section "Bootstrap Complete"
 print_log_summary

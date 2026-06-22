@@ -67,10 +67,14 @@ profile = InstrumentProfile(
     const_map={"boresight_rotation_angle": 0.0, "boresight_rotation_coord": "sky"},
     camera="camera/y4kcam.yaml",
     instrument_class="lsst.obs.stips.active.Instrument",
-    # day_obs comes from DTCALDAT (the observing-night local date), which already
-    # equals the night we name collections by, so no offset is needed. (Confirmed
-    # on real 2007-03-21 data: frames spanning UTC midnight all share DTCALDAT.)
-    night_to_dayobs_offset_days=0,
+    # The Butler ``day_obs`` dimension is derived by astro_metadata_translator's
+    # ``to_observing_day`` from the UT exposure datetime (NOT the profile's
+    # ``day_obs`` hook / DTCALDAT, which only feeds ``observation_id``). CTIO is
+    # at -70 deg longitude, so a local observing night (e.g. 2007-03-21) records
+    # UT dates on the following calendar day (2007-03-22). Like Nickel, the local
+    # night therefore maps to UT day_obs + 1. (Verified on real 2007-03-21 data:
+    # DTCALDAT=2007-03-21 but the ingested exposures carry day_obs=20070322.)
+    night_to_dayobs_offset_days=1,
     skymap_name="ctio1mRings-v1",
     skymap_collection="skymaps/ctio1mRings",
 )
