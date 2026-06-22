@@ -44,11 +44,23 @@ else
   exit 1
 fi
 setup lsst_distrib
-setup -r "$OBS_NICKEL" obs_nickel || true
-OBS_NICKEL_DATA="${OBS_NICKEL_DATA:-$(dirname "$OBS_NICKEL")/obs_nickel_data}"
+# STIPS framework: the instrument is declarative (loaded by path from
+# INSTRUMENT_DIR); LSST machinery lives in obs_stips. Set it up from the repo
+# packages/ dir (this script lives at scripts/pipeline/, so ../../packages).
+REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+OBS_STIPS_DIR="${OBS_STIPS_DIR:-$REPO_ROOT/packages/obs_stips}"
+if [ -d "$OBS_STIPS_DIR" ]; then
+  setup -r "$OBS_STIPS_DIR" obs_stips 2>/dev/null || true
+fi
+OBS_NICKEL_DATA="${OBS_NICKEL_DATA:-$REPO_ROOT/packages/obs_nickel_data}"
 if [ -d "$OBS_NICKEL_DATA" ]; then
   setup -r "$OBS_NICKEL_DATA" obs_nickel_data || true
 fi
+# Re-sourcing loadLSST above can reset PYTHONPATH, dropping the src-layout
+# `stips` core package (NOT an EUPS product) that lsst.obs.stips.active imports
+# when register-instrument re-instantiates the instrument. Put it back, plus
+# obs_stips/python as belt-and-suspenders.
+export PYTHONPATH="$REPO_ROOT/packages/stips/src:$OBS_STIPS_DIR/python:${PYTHONPATH:-}"
 
 ########## REPO ##########
 log_section "Butler Repository Setup"
@@ -167,7 +179,9 @@ fi
 
 ########## SKYMAP: register + alias to a stable chain ##########
 log_section "SkyMap Registration"
-SKYMAP_CFG="$OBS_NICKEL/configs/makeSkyMap.py"
+# SkyMap config now ships with the framework reference configs (the obs-package
+# collapse + generic-pipelines move relocated configs to instrument_defaults/).
+SKYMAP_CFG="${STIPS_DEFAULTS:-$REPO_ROOT/packages/obs_stips/instrument_defaults}/configs/makeSkyMap.py"
 log_info "Registering SkyMap (config: ${SKYMAP_CFG})"
 SKYMAP_LOG="${LOG_DIR}/register_skymap_${TS}.log"
 if ! butler register-skymap "$REPO" -C "$SKYMAP_CFG" > "$SKYMAP_LOG" 2>&1; then
