@@ -93,6 +93,7 @@ fi
     # STIPS framework packages live in the framework `packages/` dir, derived
     # from this file's location — independent of where the instrument dir lives.
     obs_stips_dir = _PACKAGES_DIR / "obs_stips"
+    stips_defaults = obs_stips_dir / "instrument_defaults"
     stips_src = _PACKAGES_DIR / "stips" / "src"
 
     script = f"""
@@ -107,6 +108,8 @@ OBS_STIPS="{obs_stips_dir}"
 if [ -d "$OBS_STIPS" ]; then
     setup -r "$OBS_STIPS" obs_stips 2>/dev/null || true
 fi
+# Reference pipelines/configs; moved framework YAMLs import siblings via this.
+export STIPS_DEFAULTS="{stips_defaults}"
 STIPS_SRC="{stips_src}"
 if [ -d "$STIPS_SRC" ]; then
     export PYTHONPATH="${{STIPS_SRC}}:${{PYTHONPATH:-}}"
