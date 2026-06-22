@@ -10,10 +10,10 @@ imports:
   - location: $DRP_PIPE_DIR/pipelines/_ingredients/analysis-visit-source.yaml
   - location: $DRP_PIPE_DIR/pipelines/_ingredients/analysis-association-source.yaml
   - location: $DRP_PIPE_DIR/pipelines/_ingredients/analysis-dia.yaml
-  - location: $INSTRUMENT_DIR/pipelines/nickel-visit-quality-detector.yaml
-  - location: $INSTRUMENT_DIR/pipelines/nickel-analysis-visit-single-visit.yaml
-  - location: $INSTRUMENT_DIR/pipelines/nickel-analysis-dia-detector.yaml
-  - location: $INSTRUMENT_DIR/pipelines/nickel-analysis-dia-lightcurve.yaml
+  - location: $STIPS_DEFAULTS/pipelines/visit-quality-detector.yaml
+  - location: $STIPS_DEFAULTS/pipelines/analysis-visit-single-visit.yaml
+  - location: $STIPS_DEFAULTS/pipelines/analysis-dia-detector.yaml
+  - location: $STIPS_DEFAULTS/pipelines/analysis-dia-lightcurve.yaml
 
 parameters:
   release_id: 0

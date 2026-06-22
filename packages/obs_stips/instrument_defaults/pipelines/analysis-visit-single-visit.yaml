@@ -47,7 +47,7 @@ tasks:
   makeAnalysisSingleVisitStarPhotometricRefMatchNickel:
     class: lsst.analysis.tools.tasks.photometricCatalogMatch.PhotometricCatalogMatchVisitTask
     config:
-      file: $INSTRUMENT_DIR/configs/analysisToolsPhotometricCatalogMatchVisit.py
+      file: $STIPS_DEFAULTS/configs/analysisToolsPhotometricCatalogMatchVisit.py
       connections.targetCatalog: single_visit_star
       connections.visitSummaryTable: preliminary_visit_summary
       connections.refCat: the_monster_20250219_local

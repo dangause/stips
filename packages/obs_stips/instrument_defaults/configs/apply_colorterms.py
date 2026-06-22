@@ -1,5 +1,5 @@
 # ruff: noqa: F821
-# obs_nickel/configs/apply_colorterms.py
+# instrument_defaults/configs/apply_colorterms.py
 import os
 
 config_dir = os.path.dirname(__file__)
