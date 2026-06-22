@@ -61,6 +61,11 @@ class InstrumentProfile:
     # (obs_stips builds the afw Camera from a CameraSpec at runtime).
     camera: str | CameraSpec
     filter_key: str = "FILTNAM"
+    # Substring matched (case-insensitive) against the FITS INSTRUME header to
+    # decide whether this profile's translator handles a file. Defaults to
+    # `name`; set it when the instrument name differs from INSTRUME (e.g. name
+    # "CTIO1m" but INSTRUME "Y4KCam").
+    instrument_header_value: Optional[str] = None
     # raw FITS filter value -> physical_filter (case-insensitive lookup; drives to_physical_filter)
     filter_aliases: dict[str, str] = field(default_factory=dict)
     const_map: dict[str, Any] = field(default_factory=dict)

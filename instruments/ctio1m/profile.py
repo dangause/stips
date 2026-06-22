@@ -53,11 +53,15 @@ profile = InstrumentProfile(
         "I": "I",
     },
     filter_key="FILTERID",
+    # FITS INSTRUME is "Y4KCam" (the camera), not the instrument name "CTIO1m".
+    instrument_header_value="Y4KCam",
     header_map={
         "exposure_time": Field("EXPTIME", unit="s", default=0.0),
         "dark_time": Field("DARKTIME", unit="s", default=0.0),
         "boresight_airmass": Field("SECZ", default=float("nan")),
         "object": Field("OBJECT", default="UNKNOWN"),
+        "science_program": Field("DTPROPID", default="unknown"),
+        "relative_humidity": Field("HUMIDITY", default=0.0),
         "telescope": Field("TELESCOP", default="ct1m"),
     },
     const_map={"boresight_rotation_angle": 0.0, "boresight_rotation_coord": "sky"},

@@ -24,7 +24,11 @@ class StipsTranslator(FitsTranslator):
     def can_translate(cls, header, filename=None):
         if cls.profile is None:
             return False
-        return cls.profile.name.lower() in str(header.get("INSTRUME", "")).lower()
+        # Match the profile's INSTRUME value (falls back to its name) against the
+        # FITS INSTRUME — supports instruments whose name differs from INSTRUME
+        # (e.g. name "CTIO1m" but INSTRUME "Y4KCam").
+        match = cls.profile.instrument_header_value or cls.profile.name
+        return match.lower() in str(header.get("INSTRUME", "")).lower()
 
     def _hook(self, name):
         return self.profile.hooks.get(name)
