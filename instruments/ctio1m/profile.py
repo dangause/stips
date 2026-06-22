@@ -63,7 +63,10 @@ profile = InstrumentProfile(
     const_map={"boresight_rotation_angle": 0.0, "boresight_rotation_coord": "sky"},
     camera="camera/y4kcam.yaml",
     instrument_class="lsst.obs.stips.active.Instrument",
-    night_to_dayobs_offset_days=1,
+    # day_obs comes from DTCALDAT (the observing-night local date), which already
+    # equals the night we name collections by, so no offset is needed. (Confirmed
+    # on real 2007-03-21 data: frames spanning UTC midnight all share DTCALDAT.)
+    night_to_dayobs_offset_days=0,
     skymap_name="ctio1mRings-v1",
     skymap_collection="skymaps/ctio1mRings",
 )
