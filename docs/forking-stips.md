@@ -272,17 +272,43 @@ does not model.
 
 ## 6. Step 5 — Pipelines & configs
 
-Copy `instruments/nickel/pipelines/` and `instruments/nickel/configs/` into your
-instrument dir and tune them. The rules:
+**You inherit the whole reference set — no copying required for the common
+case.** STIPS ships reference pipelines
+(`packages/obs_stips/instrument_defaults/pipelines/`) and config overrides
+(`packages/obs_stips/instrument_defaults/configs/`), and every fork inherits all
+of them by default. A minimal fork carries **zero** pipeline/config files. These
+framework defaults *are* the reference Nickel tuning — a working starting point
+(mostly relaxed thresholds for a small-aperture, sparse-field instrument) that
+you tweak only where your telescope differs. The rules:
 
+- **Override one file by dropping a same-named file.** The CLI resolves each
+  pipeline/config **instrument-dir-first, else framework default** (via
+  `Config.resolve_pipeline` / `resolve_config`). To override `DIA.yaml`, place
+  your own `instruments/<x>/pipelines/DIA.yaml`; everything else keeps coming
+  from the defaults. You override files individually — there is no all-or-nothing
+  copy.
+- **Make overrides thin.** An override is usually a few tweaks layered on top of
+  the framework version via LSST's `imports:`, e.g.
+
+  ```yaml
+  imports:
+    - location: $STIPS_DEFAULTS/pipelines/DIA.yaml
+  tasks:
+    subtractImages:
+      config:
+        # ...your tweaks...
+  ```
+
+  `$STIPS_DEFAULTS` is the env var (exported by the stack activation) pointing at
+  the framework defaults dir, so reference pipelines and your overrides can
+  reference siblings as `$STIPS_DEFAULTS/pipelines/<name>.yaml` and
+  `$STIPS_DEFAULTS/configs/<name>.py`. Use `$STIPS_DEFAULTS/...` to reference
+  framework siblings and `$INSTRUMENT_DIR/...` to reference your fork's own
+  sibling files — both are exported by stack activation.
 - **Generic tasks stay generic.** Pipeline steps that reference
   `lsst.obs.stips.tasks.*` or `lsst.obs.stips.calibCombine.StipsCalibCombineTask`
   are framework tasks — keep those references as-is. (The robust calib-combine
   that Nickel used to ship is now a generic obs_stips task.)
-- **Use `$INSTRUMENT_DIR` for in-instrument includes.** Pipeline `location:` /
-  `file:` includes that point inside your instrument dir use the
-  `$INSTRUMENT_DIR/...` env var (exported by the stack activation), e.g.
-  `$INSTRUMENT_DIR/pipelines/nickel-analysis-dia-detector.yaml`.
 - **`instrument:` is the generic class.** Pipelines with an `instrument:` field
   use `lsst.obs.stips.active.Instrument` (same as `profile.instrument_class`).
 - **Genuinely instrument-specific tasks (rare).** If your telescope needs a
@@ -290,11 +316,6 @@ instrument dir and tune them. The rules:
   instrument dir (namespaced, e.g. `instruments/<x>/<x>_tasks.py`, so it can't
   shadow a stack module), declare its FQN, and reference it from your pipeline.
   Nickel ships none — both of its old quirk tasks generalized into `obs_stips`.
-
-The Nickel pipelines (`DRP.yaml`, `DIA.yaml`, `ForcedPhotRaDec.yaml`,
-`ProcessCcd.yaml`, the CpBias/CpFlat calib pipelines, etc.) and the `configs/`
-overrides are good starting points — most tuning is relaxing thresholds for a
-small-aperture, sparse-field instrument.
 
 ---
 
