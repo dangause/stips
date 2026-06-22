@@ -61,7 +61,8 @@ print(sum(1 for _ in rows))
 class ScienceConfig:
     """Configuration for science processing."""
 
-    # Config file paths (relative to the instrument package dir or absolute)
+    # Config file paths (resolved instrument-dir-first, else framework defaults;
+    # callers may still pass relative or absolute Path values)
     calibrate_image: Path | None = None
     colorterms: Path | None = None
 
@@ -69,15 +70,17 @@ class ScienceConfig:
     calibrate_image_fallbacks: list[Path] = field(default_factory=list)
 
     @classmethod
-    def default(cls, instrument_dir: Path) -> "ScienceConfig":
-        """Create default config with standard paths."""
-        configs = instrument_dir / "configs"
+    def default(cls, config: "Config") -> "ScienceConfig":
+        """Create default config with standard paths (resolver-aware)."""
         return cls(
-            calibrate_image=configs / "calibrateImage/tuned_configs/2023ixf_relaxed.py",
-            colorterms=configs / "apply_colorterms.py",
+            calibrate_image=config.resolve_config(
+                "calibrateImage/tuned_configs/2023ixf_relaxed.py"
+            ),
+            colorterms=config.resolve_config("apply_colorterms.py"),
             calibrate_image_fallbacks=[
-                configs
-                / "calibrateImage/tuned_configs/2023ixf_relaxed_psfex_sparse.py",
+                config.resolve_config(
+                    "calibrateImage/tuned_configs/2023ixf_relaxed_psfex_sparse.py"
+                ),
             ],
         )
 
@@ -256,7 +259,7 @@ def run(
 
     # Build config chain: explicit > legacy > default
     if science_cfg is None:
-        science_cfg = ScienceConfig.default(config.instrument_dir)
+        science_cfg = ScienceConfig.default(config)
     if science_config is not None:
         science_cfg.calibrate_image = science_config
 
@@ -365,9 +368,9 @@ def run(
     exclusion_expr = build_exclusion_expr(bad_ids)
 
     # Pipeline and config paths
-    pipeline = config.instrument_dir / "pipelines" / "DRP.yaml"
-    colorterms_config = (
-        science_cfg.colorterms or config.instrument_dir / "configs/apply_colorterms.py"
+    pipeline = config.resolve_pipeline("DRP.yaml")
+    colorterms_config = science_cfg.colorterms or config.resolve_config(
+        "apply_colorterms.py"
     )
 
     # Build list of configs to try (primary + fallbacks)

@@ -779,11 +779,7 @@ def _run_coadd_templates(
         if not dry_run:
             coadd_config_files = []
             if run_cfg.coadd_configs.make_direct_warp:
-                cfg_path = (
-                    config.instrument_dir
-                    / "configs"
-                    / run_cfg.coadd_configs.make_direct_warp
-                )
+                cfg_path = config.resolve_config(run_cfg.coadd_configs.make_direct_warp)
                 coadd_config_files.append(f"makeDirectWarp:{cfg_path}")
 
             coadd_log = _get_step_log_file("coadd_template", band=band)
@@ -1123,13 +1119,12 @@ def _run_dia_step(
         return None
 
     # Resolve DIA config file paths from YAML (shared across all nights)
-    configs_dir = config.instrument_dir / "configs"
     subtract_cfg = None
     if run_cfg.dia_configs.subtract_images:
-        subtract_cfg = configs_dir / run_cfg.dia_configs.subtract_images
+        subtract_cfg = config.resolve_config(run_cfg.dia_configs.subtract_images)
     detect_cfg = None
     if run_cfg.dia_configs.detect_and_measure:
-        detect_cfg = configs_dir / run_cfg.dia_configs.detect_and_measure
+        detect_cfg = config.resolve_config(run_cfg.dia_configs.detect_and_measure)
 
     if run_cfg.concurrent_nights > 1:
         # Pre-filter: skip nights with failed science or no bands
@@ -1564,7 +1559,6 @@ def _run_differential_phot_step(
 
     prof = config.require_profile()
     repo = str(config.repo)
-    instrument_dir = str(config.instrument_dir)
 
     # Discover science collection via Butler (consistent with fphot.py pattern)
     science_coll = None
@@ -1600,7 +1594,7 @@ def _run_differential_phot_step(
 
     log.info(f"Running LSST differential photometry on {science_coll}")
 
-    pipeline_yaml = str(Path(instrument_dir) / "pipelines" / "DifferentialPhot.yaml")
+    pipeline_yaml = str(config.resolve_pipeline("DifferentialPhot.yaml"))
     input_colls = (
         f"{science_coll},{prof.collection_prefix}/calib/current,"
         f"refcats,{prof.skymap_collection}"
@@ -1838,18 +1832,19 @@ def run(
     log.info(f"Execution: {run_cfg.execution} (site={run_cfg.site})")
 
     # Build ScienceConfig from YAML paths
-    configs_dir = config.instrument_dir / "configs"
-    science_cfg = ScienceConfig.default(config.instrument_dir)
-
+    science_cfg = ScienceConfig.default(config)
     if run_cfg.science_configs.calibrate_image:
-        science_cfg.calibrate_image = (
-            configs_dir / run_cfg.science_configs.calibrate_image
+        science_cfg.calibrate_image = config.resolve_config(
+            run_cfg.science_configs.calibrate_image
         )
     if run_cfg.science_configs.colorterms:
-        science_cfg.colorterms = configs_dir / run_cfg.science_configs.colorterms
+        science_cfg.colorterms = config.resolve_config(
+            run_cfg.science_configs.colorterms
+        )
     if run_cfg.science_configs.calibrate_image_fallbacks:
         science_cfg.calibrate_image_fallbacks = [
-            configs_dir / fb for fb in run_cfg.science_configs.calibrate_image_fallbacks
+            config.resolve_config(fb)
+            for fb in run_cfg.science_configs.calibrate_image_fallbacks
         ]
 
     result = RunResult(success=True, log_dir=str(run_log_dir))

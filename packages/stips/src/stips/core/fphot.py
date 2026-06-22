@@ -140,7 +140,6 @@ def run(
     night = validate_night(night)
     run_ts = generate_run_timestamp()
     repo = str(config.repo)
-    instrument_dir = str(config.instrument_dir)
 
     output_collections: list[str] = []
     errors: list[str] = []
@@ -225,7 +224,7 @@ def run(
                     str(jobs),
                     "--register-dataset-types",
                     "--pipeline",
-                    f"{instrument_dir}/pipelines/ForcedPhotRaDec.yaml#visit-image",
+                    f"{config.resolve_pipeline('ForcedPhotRaDec.yaml')}#visit-image",
                     "--data-query",
                     data_query,
                     "-c",
@@ -298,7 +297,7 @@ def run(
                         str(jobs),
                         "--register-dataset-types",
                         "--pipeline",
-                        f"{instrument_dir}/pipelines/ForcedPhotRaDec.yaml#diffim",
+                        f"{config.resolve_pipeline('ForcedPhotRaDec.yaml')}#diffim",
                         "--data-query",
                         data_query,
                         "-c",

@@ -228,12 +228,12 @@ def run(
     )
 
     # Pipeline and config paths
-    pipeline = config.instrument_dir / "pipelines" / "DIA.yaml"
+    pipeline = config.resolve_pipeline("DIA.yaml")
     subtract_config = subtract_config_file or (
-        config.instrument_dir / "configs/dia/subtractImages.py"
+        config.resolve_config("dia/subtractImages.py")
     )
     detect_config = detect_config_file or (
-        config.instrument_dir / "configs/dia/detectAndMeasure.py"
+        config.resolve_config("dia/detectAndMeasure.py")
     )
 
     try:
