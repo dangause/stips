@@ -82,10 +82,11 @@ CCD: &CCD
       <<: *AMP
       readCorner: LR
       ixy: [1, 0]
-      rawBBox: [[2032, 0], [2052, 2052]]
-      rawDataBBox: [[2052, 0], [2032, 2032]]
-      rawSerialOverscanBBox: [[2032, 0], [20, 2032]]
-      rawParallelOverscanBBox: [[2052, 2032], [2032, 20]]
+      # right half: overscan [2052:2072) then imaging [2072:4104) (two-strip central overscan)
+      rawBBox: [[2052, 0], [2052, 2052]]
+      rawDataBBox: [[2072, 0], [2032, 2032]]
+      rawSerialOverscanBBox: [[2052, 0], [20, 2032]]
+      rawParallelOverscanBBox: [[2072, 2032], [2032, 20]]
       flipXY: [true, false]
     # A02 — upper-left quadrant. Read corner UL; overscan on bottom + right (inner).
     A02:
@@ -102,10 +103,11 @@ CCD: &CCD
       <<: *AMP
       readCorner: UR
       ixy: [1, 1]
-      rawBBox: [[2032, 2052], [2052, 2052]]
-      rawDataBBox: [[2052, 2072], [2032, 2032]]
-      rawSerialOverscanBBox: [[2032, 2072], [20, 2032]]
-      rawParallelOverscanBBox: [[2052, 2052], [2032, 20]]
+      # right half (cols), top half (rows): overscan strips [2052:2072), imaging [2072:4104)
+      rawBBox: [[2052, 2052], [2052, 2052]]
+      rawDataBBox: [[2072, 2072], [2032, 2032]]
+      rawSerialOverscanBBox: [[2052, 2072], [20, 2032]]
+      rawParallelOverscanBBox: [[2072, 2052], [2032, 20]]
       flipXY: [true, true]
 
 # Optical plate scale: 0.289"/15um => 19.27 arcsec/mm.
