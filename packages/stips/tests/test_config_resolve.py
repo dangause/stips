@@ -46,3 +46,13 @@ def test_defaults_root_points_at_obs_stips_instrument_defaults(tmp_path):
     cfg = _make_config(tmp_path)
     assert cfg._defaults_root.name == "instrument_defaults"
     assert cfg._defaults_root.parent.name == "obs_stips"
+
+
+def test_minimal_fork_resolves_to_existing_framework_files(tmp_path):
+    # A fork dir with NO pipelines/ or configs/ must inherit real framework files.
+    cfg = _make_config(tmp_path)
+    dia = cfg.resolve_pipeline("DIA.yaml")
+    sub = cfg.resolve_config("dia/subtractImages.py")
+    assert dia == cfg._defaults_root / "pipelines" / "DIA.yaml"
+    assert dia.is_file(), f"framework DIA.yaml missing: {dia}"
+    assert sub.is_file(), f"framework subtractImages.py missing: {sub}"
