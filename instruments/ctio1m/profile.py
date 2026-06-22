@@ -156,7 +156,12 @@ def _epoch0():
 
 @hook(profile)
 def observation_type(header):
-    """Return one of: object | flat | bias | focus."""
+    """Return an LSST observation_type: science | flat | bias | focus.
+
+    NOTE: science frames map to "science" (the LSST vocabulary the pipeline
+    filters on), NOT "object" — calibrateImage/the science step select
+    observation_type='science'.
+    """
     obstype = str(header.get("OBSTYPE") or header.get("IMGTYPE") or "").strip().lower()
     obj = str(header.get("OBJECT", "")).strip().lower()
 
@@ -165,14 +170,14 @@ def observation_type(header):
     if obstype == "flat" or "flat" in obj:
         return "flat"
     if obstype == "object":
-        return "object"
+        return "science"
 
     if "bias" in obj or "zero" in obj:
         return "bias"
     if any(w in obj for w in ("focus", "focusing", "point")):
         return "focus"
 
-    return "object"
+    return "science"
 
 
 @hook(profile)

@@ -59,8 +59,10 @@ FLAT_HEADER = dict(
 )
 
 
-def test_observation_type_object():
-    assert _hook("observation_type")(SCIENCE_HEADER) == "object"
+def test_observation_type_science():
+    # OBJECT frames map to the LSST "science" observation_type (not "object"),
+    # which the pipeline's science/calibrateImage selection filters on.
+    assert _hook("observation_type")(SCIENCE_HEADER) == "science"
 
 
 def test_observation_type_bias():
