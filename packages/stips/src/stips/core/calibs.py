@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 from stips.core.pipeline import (
     CollectionNames,
     get_raw_dir,
+    isr_config_args,
     night_to_date_range,
     validate_night,
 )
@@ -259,6 +260,7 @@ def run(
                     "-d",
                     f"instrument='{prof.name}' AND exposure.observation_type='bias'",
                 ]
+                + isr_config_args(prof, "cpBiasIsr")
                 + (
                     ["--qgraph-datastore-records"]
                     if executor.needs_datastore_records
@@ -356,6 +358,7 @@ def run(
                     "-c",
                     "cpFlatIsr:doOverscan=True",
                 ]
+                + isr_config_args(prof, "cpFlatIsr")
                 + (
                     ["--qgraph-datastore-records"]
                     if executor.needs_datastore_records

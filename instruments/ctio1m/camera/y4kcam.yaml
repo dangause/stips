@@ -23,12 +23,13 @@ name: CTIO1m
 #   A01 LR: imaging x[2052:4084) y[0:2032)    OS on inner (top + left)  edges
 #   A02 UL: imaging x[0:2032)    y[2072:4104) OS on inner (bottom + right) edges
 #   A03 UR: imaging x[2052:4084) y[2072:4104) OS on inner (bottom + left)  edges
-# flipXY per quadrant so each amp's read corner maps to LL of its data sub-image
-# and the assembled science image is geometrically consistent.
+# Each amp's data is stored already in physical orientation (inner corner toward
+# detector centre), so flipXY is [false, false] for all four — assembly just
+# removes the central overscan cross and closes up the quadrants. See the
+# amplifiers block for the verification.
 #
-# NOTE: per-amp gain/readNoise are placeholders (not in the header); exact
-# overscan pixel ranges are refined later by the no-seams calib check. The bar
-# for THIS file is that yamlCamera.makeCamera builds a 4-amp afw Camera.
+# NOTE: per-amp gain/readNoise are still placeholders (not in the header) — a
+# separate amp-step source addressed elsewhere.
 
 # Shared amp keys (gain/readNoise/bboxes/readCorner/flipXY overridden per amp).
 AMP: &AMP
@@ -67,48 +68,57 @@ CCD: &CCD
   yaw: 0.0
   roll: 0.0
   amplifiers:
-    # A00 — lower-left quadrant. Read corner LL; overscan on top + right (inner).
+    # Each amp reads out at its INNER corner (toward the detector centre — that is
+    # where its serial+parallel overscan strips sit). The raw stores each amp's
+    # data already in physical orientation (verified: in a dome flat each amp is
+    # brightest at its inner corner, i.e. the vignetting peak at detector centre),
+    # so NO flip is needed — flipXY is [false, false] for every amp. Assembly is
+    # just "remove the central overscan cross and close up the four quadrants".
+    # (An earlier revision used the textbook outer-corner-readout flip pattern
+    # [F,F]/[T,F]/[F,T]/[T,T], which mirrored A01/A02/A03 and threw their readout
+    # glow to the outer corners — visible as a vertical-seam reversal.)
+    # A00 — lower-left quadrant. Readout UR (inner); overscan on top + right.
     A00:
       <<: *AMP
-      readCorner: LL
+      readCorner: UR
       ixy: [0, 0]
       rawBBox: [[0, 0], [2052, 2052]]
       rawDataBBox: [[0, 0], [2032, 2032]]
       rawSerialOverscanBBox: [[2032, 0], [20, 2032]]
       rawParallelOverscanBBox: [[0, 2032], [2032, 20]]
       flipXY: [false, false]
-    # A01 — lower-right quadrant. Read corner LR; overscan on top + left (inner).
+    # A01 — lower-right quadrant. Readout UL (inner); overscan on top + left.
     A01:
       <<: *AMP
-      readCorner: LR
+      readCorner: UL
       ixy: [1, 0]
       # right half: overscan [2052:2072) then imaging [2072:4104) (two-strip central overscan)
       rawBBox: [[2052, 0], [2052, 2052]]
       rawDataBBox: [[2072, 0], [2032, 2032]]
       rawSerialOverscanBBox: [[2052, 0], [20, 2032]]
       rawParallelOverscanBBox: [[2072, 2032], [2032, 20]]
-      flipXY: [true, false]
-    # A02 — upper-left quadrant. Read corner UL; overscan on bottom + right (inner).
+      flipXY: [false, false]
+    # A02 — upper-left quadrant. Readout LR (inner); overscan on bottom + right.
     A02:
       <<: *AMP
-      readCorner: UL
+      readCorner: LR
       ixy: [0, 1]
       rawBBox: [[0, 2052], [2052, 2052]]
       rawDataBBox: [[0, 2072], [2032, 2032]]
       rawSerialOverscanBBox: [[2032, 2072], [20, 2032]]
       rawParallelOverscanBBox: [[0, 2052], [2032, 20]]
-      flipXY: [false, true]
-    # A03 — upper-right quadrant. Read corner UR; overscan on bottom + left (inner).
+      flipXY: [false, false]
+    # A03 — upper-right quadrant. Readout LL (inner); overscan on bottom + left.
     A03:
       <<: *AMP
-      readCorner: UR
+      readCorner: LL
       ixy: [1, 1]
       # right half (cols), top half (rows): overscan strips [2052:2072), imaging [2072:4104)
       rawBBox: [[2052, 2052], [2052, 2052]]
       rawDataBBox: [[2072, 2072], [2032, 2032]]
       rawSerialOverscanBBox: [[2052, 2072], [20, 2032]]
       rawParallelOverscanBBox: [[2072, 2052], [2032, 20]]
-      flipXY: [true, true]
+      flipXY: [false, false]
 
 # Optical plate scale: 0.289"/15um => 19.27 arcsec/mm.
 plateScale: 19.27

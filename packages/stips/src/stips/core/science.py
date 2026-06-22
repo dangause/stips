@@ -13,6 +13,7 @@ from stips.core.pipeline import (
     CollectionNames,
     build_exclusion_expr,
     find_bad_coord_exposures,
+    isr_config_args,
     night_to_day_obs,
     parse_bad_exposures,
     parse_butler_query_output,
@@ -497,10 +498,10 @@ def run(
             ]
 
             # Profile-declared ISR overrides (e.g. doDefect=False for an
-            # instrument without curated defect maps). Applied as inline config
-            # so instruments need not fork the shared DRP pipeline.
-            for isr_key, isr_val in prof.isr_overrides.items():
-                qgraph_args.extend(["--config", f"isr:{isr_key}={isr_val}"])
+            # instrument without curated defect maps, or parallel overscan).
+            # Applied as inline config so instruments need not fork the shared DRP
+            # pipeline; the same overrides feed the calib-build ISR (calibs.py).
+            qgraph_args.extend(isr_config_args(prof))
 
             if executor.needs_datastore_records:
                 qgraph_args.append("--qgraph-datastore-records")

@@ -94,6 +94,21 @@ def night_to_day_obs(night: str, offset_days: int = 1) -> str:
     return (dt + timedelta(days=offset_days)).strftime("%Y%m%d")
 
 
+def isr_config_args(profile, label: str = "isr") -> list[str]:
+    """Build ``pipetask --config`` args from the profile's ``isr_overrides``.
+
+    The same overrides are applied to every ISR invocation — calib build
+    (``cpBiasIsr``/``cpFlatIsr``) and science (``isr``) — by passing the task
+    label, so e.g. parallel-overscan settings stay consistent between the master
+    bias/flat and the science frames they correct.
+    """
+    overrides = getattr(profile, "isr_overrides", None) or {}
+    args: list[str] = []
+    for key, value in overrides.items():
+        args.extend(["--config", f"{label}:{key}={value}"])
+    return args
+
+
 def get_raw_dir(config: Config, night: str) -> Path:
     """Get the raw data directory for a night."""
     return config.raw_parent_dir / night / "raw"

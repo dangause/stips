@@ -77,10 +77,12 @@ class InstrumentProfile:
     collection_prefix: Optional[str] = None
     skymap_name: Optional[str] = None
     skymap_collection: Optional[str] = None
-    # ISR config overrides applied to the `isr` task at science qgraph-build time
-    # (as `pipetask -c isr:<key>=<value>`). Lets an instrument toggle ISR steps
-    # whose curated calibs it does not ship — e.g. an instrument without defect
-    # maps sets `{"doDefect": False}` — without forking the shared DRP pipeline.
+    # ISR config overrides applied (as `pipetask -c <isr_label>:<key>=<value>`) to
+    # every ISR invocation — calib build (`cpBiasIsr`/`cpFlatIsr`) and science
+    # (`isr`) — so the master bias/flat and the science frames they correct stay
+    # consistent. Lets an instrument toggle ISR steps without forking the shared
+    # pipelines, e.g. `{"doDefect": False}` (no defect maps) or
+    # `{"overscan.doParallelOverscan": True}` (multi-amp parallel overscan).
     isr_overrides: dict[str, Any] = field(default_factory=dict)
     obs_data_package: Optional[str] = None
     package_dir: Optional[str] = None

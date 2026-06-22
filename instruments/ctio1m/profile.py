@@ -77,11 +77,18 @@ profile = InstrumentProfile(
     night_to_dayobs_offset_days=1,
     skymap_name="ctio1mRings-v1",
     skymap_collection="skymaps/ctio1mRings",
-    # CTIO ships no curated defect maps (obs_nickel_data is Nickel-specific), so
-    # the ISR `defects` connection has no datasets. Disable defect masking via a
-    # profile override instead of forking the shared DRP pipeline. Overscan/bias/
-    # flat — the ISR steps CTIO has calibs for — stay on.
-    isr_overrides={"doDefect": False},
+    # ISR config overrides, applied to every ISR invocation (calib build +
+    # science) so the master bias/flat and the science frames are corrected
+    # consistently:
+    #   - doDefect=False: CTIO ships no curated defect maps (obs_nickel_data is
+    #     Nickel-specific), so the ISR `defects` connection has no datasets.
+    #   - overscan.doParallelOverscan=True: Y4KCam reads 4 amps toward the
+    #     detector centre with parallel-overscan strips on the inner edges.
+    #     Serial overscan alone leaves a per-frame amp-row bias step (~2.5 ADU,
+    #     visible as a top/bottom seam in the assembled image); the parallel pass
+    #     tracks it. Must be on for the bias build too, else the master bias keeps
+    #     the parallel structure and science would double-subtract it.
+    isr_overrides={"doDefect": False, "overscan.doParallelOverscan": True},
 )
 
 
