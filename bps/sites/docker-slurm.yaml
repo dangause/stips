@@ -61,6 +61,7 @@ site:
       fi
       export REPO=/data/repo
       export INSTRUMENT_DIR=/opt/nps/instruments/nickel
+      export STIPS_DEFAULTS=/opt/nps/packages/obs_stips/instrument_defaults
       export RAW_PARENT_DIR=/data/raw
       export REFCAT_REPO=/data/refcats
 

@@ -48,6 +48,7 @@ bpsUseShared: true
 environment: |
   STACK_DIR={stack_dir}
   INSTRUMENT_DIR={instrument_dir}
+  STIPS_DEFAULTS={stips_defaults}
   REPO={repo}
   RAW_PARENT_DIR={raw_parent_dir}
   REFCAT_REPO={refcat_repo}

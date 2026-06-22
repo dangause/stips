@@ -194,6 +194,7 @@ def render_bps_config(
         # INSTRUMENT_DIR); LSST machinery lives in obs_stips + stips (src-layout).
         "instrument_dir": str(config.instrument_dir),
         "obs_stips_dir": str(_PACKAGES_DIR / "obs_stips"),
+        "stips_defaults": str(_PACKAGES_DIR / "obs_stips" / "instrument_defaults"),
         "stips_src": str(_PACKAGES_DIR / "stips" / "src"),
         "obs_data_package": prof.obs_data_package or "",
         "instrument_data_dir": (

@@ -128,7 +128,7 @@ exclude = [
 ]
 ignore = [
     # LSST pipeline configs are executed with an injected `config` object.
-    "instruments/nickel/configs",
+    "packages/obs_stips/instrument_defaults/configs",
 ]
 # Keep noise down when LSST/Rubin dependencies are not in the active venv.
 reportMissingImports = "warning"

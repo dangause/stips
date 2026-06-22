@@ -93,6 +93,7 @@ echo "  REPO=${REPO}"
 echo "  RAW_PARENT_DIR=${RAW_PARENT_DIR}"
 echo "  REFCAT_REPO=${REFCAT_REPO}"
 echo "  INSTRUMENT_DIR=${INSTRUMENT_DIR}"
+echo "  STIPS_DEFAULTS=${STIPS_DEFAULTS}"
 
 # Verify critical paths exist (warnings only, don't fail)
 if [[ ! -d "${REPO}" ]]; then

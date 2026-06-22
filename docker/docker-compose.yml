@@ -69,6 +69,7 @@ services:
       - RAW_PARENT_DIR=/data/raw
       - REFCAT_REPO=/data/refcats
       - INSTRUMENT_DIR=/opt/nps/instruments/nickel
+      - STIPS_DEFAULTS=/opt/nps/packages/obs_stips/instrument_defaults
       - KMP_AFFINITY=disabled
 
       # Optional: Profile to load from /config/.env.{profile}

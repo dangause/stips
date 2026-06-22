@@ -88,6 +88,7 @@ From: nps:latest
     # Standard environment variables
     export STACK_DIR=/opt/lsst/software/stack
     export INSTRUMENT_DIR=/opt/nps/instruments/nickel
+    export STIPS_DEFAULTS=/opt/nps/packages/obs_stips/instrument_defaults
     export OBS_NICKEL_DATA=/opt/nps/packages/obs_nickel_data
     export NPS_ROOT=/opt/nps
 

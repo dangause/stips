@@ -67,7 +67,7 @@ COPY packages/obs_nickel_data/ packages/obs_nickel_data/
 RUN source /opt/lsst/software/stack/loadLSST.bash && \
     setup lsst_distrib && \
     pip install --no-deps -e packages/obs_stips && \
-    chmod +x /opt/nps/instruments/nickel/pipelines/*.yaml 2>/dev/null || true
+    chmod +x /opt/nps/packages/obs_stips/instrument_defaults/pipelines/*.yaml 2>/dev/null || true
 
 # Add LSST conda env to default PATH so Parsl's process_worker_pool.py
 # is available when Slurm jobs start on compute nodes

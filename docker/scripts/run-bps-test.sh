@@ -66,11 +66,13 @@ echo
 echo "[3/5] obs_stips + nickel instrument"
 OBS_STIPS_DIR="${OBS_STIPS:-/opt/nps/packages/obs_stips}"
 INSTRUMENT_DIR="${INSTRUMENT_DIR:-/opt/nps/instruments/nickel}"
+STIPS_DEFAULTS="${STIPS_DEFAULTS:-/opt/nps/packages/obs_stips/instrument_defaults}"
 if [[ -d "$OBS_STIPS_DIR" ]]; then
     setup -r "$OBS_STIPS_DIR" obs_stips 2>/dev/null || true
 fi
 check "obs_stips package exists" test -d "$OBS_STIPS_DIR"
 check "nickel instrument dir exists" test -d "$INSTRUMENT_DIR"
+check "stips_defaults dir exists" test -d "$STIPS_DEFAULTS"
 check "import lsst.obs.stips" python -c "import lsst.obs.stips"
 
 echo

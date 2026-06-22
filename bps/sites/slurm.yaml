@@ -80,6 +80,7 @@ site:
       # STIPS framework: obs_stips (LSST glue) + stips (core, src-layout).
       # The instrument is declarative (loaded by path from INSTRUMENT_DIR).
       export INSTRUMENT_DIR="{instrument_dir}"
+      export STIPS_DEFAULTS="{stips_defaults}"
       if [[ -d "{obs_stips_dir}" ]]; then
           setup -r {obs_stips_dir} obs_stips 2>/dev/null || true
       fi

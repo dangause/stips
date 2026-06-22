@@ -8,6 +8,7 @@
 #   {night}             - Observing night (YYYYMMDD)
 #   {timestamp}         - Run timestamp
 #   {instrument_dir}    - Path to the declarative instrument package
+#   {stips_defaults}    - Path to framework reference pipelines/configs
 #   {obs_stips_dir}     - Path to obs_stips (LSST glue) package
 #   {stips_src}         - Path to stips src-layout (src/)
 #   {obs_data_package}  - Instrument data package product name (may be empty)
@@ -76,6 +77,7 @@ preScript: |
   # The instrument is declarative (loaded by path from INSTRUMENT_DIR) — no
   # per-instrument EUPS product to set up.
   export INSTRUMENT_DIR="{instrument_dir}"
+  export STIPS_DEFAULTS="{stips_defaults}"
   if [[ -d "{obs_stips_dir}" ]]; then
       setup -r {obs_stips_dir} obs_stips 2>/dev/null || true
   fi

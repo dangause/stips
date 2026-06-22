@@ -74,7 +74,7 @@ RUN chmod +x /opt/nps/docker/entrypoint.sh
 
 # Create nps-exec helper for `docker exec` commands
 # (docker exec doesn't inherit entrypoint environment)
-RUN printf '#!/bin/bash\nsource /opt/lsst/software/stack/loadLSST.bash\nsetup lsst_distrib\nsetup -r /opt/nps/packages/obs_stips obs_stips 2>/dev/null || true\nif [ -d /opt/nps/packages/obs_nickel_data ]; then\n  setup -r /opt/nps/packages/obs_nickel_data obs_nickel_data 2>/dev/null || true\nfi\nexport REPO=/data/repo RAW_PARENT_DIR=/data/raw REFCAT_REPO=/data/refcats\nexport INSTRUMENT_DIR=/opt/nps/instruments/nickel\nexport STACK_DIR=/opt/lsst/software/stack\nexport KMP_AFFINITY=disabled\nexport NUMEXPR_MAX_THREADS=1\n# Copy munge key if available\nif [ -f /shared-munge/munge.key ] && [ ! -f /etc/munge/munge.key ]; then\n  cp /shared-munge/munge.key /etc/munge/munge.key\n  chown munge:munge /etc/munge/munge.key\n  chmod 400 /etc/munge/munge.key\nfi\n# Start munge if not running\nif ! pgrep -x munged >/dev/null 2>&1; then\n  runuser -u munge -- munged 2>/dev/null || true\nfi\nexec "$@"\n' > /usr/local/bin/nps-exec && \
+RUN printf '#!/bin/bash\nsource /opt/lsst/software/stack/loadLSST.bash\nsetup lsst_distrib\nsetup -r /opt/nps/packages/obs_stips obs_stips 2>/dev/null || true\nif [ -d /opt/nps/packages/obs_nickel_data ]; then\n  setup -r /opt/nps/packages/obs_nickel_data obs_nickel_data 2>/dev/null || true\nfi\nexport REPO=/data/repo RAW_PARENT_DIR=/data/raw REFCAT_REPO=/data/refcats\nexport INSTRUMENT_DIR=/opt/nps/instruments/nickel\nexport STIPS_DEFAULTS=/opt/nps/packages/obs_stips/instrument_defaults\nexport STACK_DIR=/opt/lsst/software/stack\nexport KMP_AFFINITY=disabled\nexport NUMEXPR_MAX_THREADS=1\n# Copy munge key if available\nif [ -f /shared-munge/munge.key ] && [ ! -f /etc/munge/munge.key ]; then\n  cp /shared-munge/munge.key /etc/munge/munge.key\n  chown munge:munge /etc/munge/munge.key\n  chmod 400 /etc/munge/munge.key\nfi\n# Start munge if not running\nif ! pgrep -x munged >/dev/null 2>&1; then\n  runuser -u munge -- munged 2>/dev/null || true\nfi\nexec "$@"\n' > /usr/local/bin/nps-exec && \
     chmod +x /usr/local/bin/nps-exec
 
 # Create data directories (will be mount points)
@@ -88,6 +88,7 @@ EXPOSE 8080
 # =============================================================================
 ENV NPS_ROOT=/opt/nps
 ENV INSTRUMENT_DIR=/opt/nps/instruments/nickel
+ENV STIPS_DEFAULTS=/opt/nps/packages/obs_stips/instrument_defaults
 ENV OBS_NICKEL_DATA=/opt/nps/packages/obs_nickel_data
 ENV STACK_DIR=/opt/lsst/software/stack
 

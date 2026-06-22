@@ -9,6 +9,7 @@
 #   {night}             - Observing night (YYYYMMDD)
 #   {repo}              - Butler repository path
 #   {instrument_dir}    - Path to the declarative instrument package
+#   {stips_defaults}    - Path to framework reference pipelines/configs
 #   {coord_collection}  - Collection containing coordinate table
 
 # Inherit site-specific settings
@@ -35,7 +36,7 @@ payload:
 # =============================================================================
 # Pipeline Definition
 # =============================================================================
-pipelineYaml: "{instrument_dir}/pipelines/ForcedPhotRaDec.yaml#diffim"
+pipelineYaml: "{stips_defaults}/pipelines/ForcedPhotRaDec.yaml#diffim"
 
 # =============================================================================
 # Task-Specific Settings
