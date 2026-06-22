@@ -1,0 +1,125 @@
+name: CTIO1m
+
+# CTIO 1.0m / Y4KCam — the first MULTI-AMPLIFIER camera in STIPS.
+#
+# Y4KCam is a single 4K CCD read out through FOUR amplifiers (a 2x2 quadrant
+# layout). The raw is a SINGLE 4104x4104 HDU (hdu: 0 for every amp) holding all
+# four quadrants plus a CENTRAL-CROSS overscan: the amps read toward the centre,
+# so each amp's serial + parallel overscan strips sit on its INNER edges.
+#
+# Empirically measured from a real Y4KCam raw (/tmp/cand_ct1m_y4kcam.fits,
+# HDU 1, 4104x4104) by per-column / per-row medians (imaging ~3830, flat
+# overscan ~3520):
+#   X (columns): left imaging  [0:2032)  | serial   OS [2032:2052) (20 cols)
+#                | right imaging [2052:4084)  (cols [4084:4104) are unused border)
+#   Y (rows):    bottom imaging [0:2032) | bottom parallel OS [2032:2052)
+#                | top parallel OS [2052:2072) | top imaging [2072:4104)
+# Each amp's imaging quadrant is 2032x2032. The central cross is 20 px wide
+# (serial) and 2x20 px tall (the two row-halves read at different bias levels —
+# separate top/bottom amps).
+#
+# Four-amp layout (LSST yaml convention: [[x0, y0], [xExtent, yExtent]]):
+#   A00 LL: imaging x[0:2032)    y[0:2032)    OS on inner (top + right) edges
+#   A01 LR: imaging x[2052:4084) y[0:2032)    OS on inner (top + left)  edges
+#   A02 UL: imaging x[0:2032)    y[2072:4104) OS on inner (bottom + right) edges
+#   A03 UR: imaging x[2052:4084) y[2072:4104) OS on inner (bottom + left)  edges
+# flipXY per quadrant so each amp's read corner maps to LL of its data sub-image
+# and the assembled science image is geometrically consistent.
+#
+# NOTE: per-amp gain/readNoise are placeholders (not in the header); exact
+# overscan pixel ranges are refined later by the no-seams calib check. The bar
+# for THIS file is that yamlCamera.makeCamera builds a 4-amp afw Camera.
+
+# Shared amp keys (gain/readNoise/bboxes/readCorner/flipXY overridden per amp).
+AMP: &AMP
+  perAmpData: true
+  dataExtent: [2032, 2032]                  # imaging quadrant (no binning)
+  readCorner: LL
+  rawBBox: [[0, 0], [2052, 2052]]
+  rawDataBBox: [[0, 0], [2032, 2032]]
+  rawSerialPrescanBBox: [[0, 0], [0, 0]]
+  rawSerialOverscanBBox: [[2032, 0], [20, 2032]]
+  rawParallelPrescanBBox: [[0, 0], [0, 0]]
+  rawParallelOverscanBBox: [[0, 2032], [2032, 20]]
+  gain: 1.4                                 # e-/ADU placeholder (ITL/OSU typical)
+  readNoise: 7.0                            # e- placeholder
+  saturation: 65535                         # ADU
+  linearityType: PROPORTIONAL
+  linearityThreshold: 0
+  linearityMax: 60000
+  linearityCoeffs: [0.0, 1.0]
+  hdu: 0
+  ixy: [0, 0]
+  flipXY: [false, false]
+
+CCD: &CCD
+  detectorType: 0
+  physicalType: SCIENCE
+  refpos: [2032.0, 2032.0]                  # centre of 4064x4064 assembled imaging
+  offset: [0.0, 0.0, 0.0]
+  bbox: [[0, 0], [4064, 4064]]
+  pixelSize: [0.015, 0.015]                 # mm (15 um pixels)
+  transformDict:
+    nativeSys: 'Pixels'
+    transforms: {}
+  transposeDetector: false
+  pitch: 0.0
+  yaw: 0.0
+  roll: 0.0
+  amplifiers:
+    # A00 — lower-left quadrant. Read corner LL; overscan on top + right (inner).
+    A00:
+      <<: *AMP
+      readCorner: LL
+      ixy: [0, 0]
+      rawBBox: [[0, 0], [2052, 2052]]
+      rawDataBBox: [[0, 0], [2032, 2032]]
+      rawSerialOverscanBBox: [[2032, 0], [20, 2032]]
+      rawParallelOverscanBBox: [[0, 2032], [2032, 20]]
+      flipXY: [false, false]
+    # A01 — lower-right quadrant. Read corner LR; overscan on top + left (inner).
+    A01:
+      <<: *AMP
+      readCorner: LR
+      ixy: [1, 0]
+      rawBBox: [[2032, 0], [2052, 2052]]
+      rawDataBBox: [[2052, 0], [2032, 2032]]
+      rawSerialOverscanBBox: [[2032, 0], [20, 2032]]
+      rawParallelOverscanBBox: [[2052, 2032], [2032, 20]]
+      flipXY: [true, false]
+    # A02 — upper-left quadrant. Read corner UL; overscan on bottom + right (inner).
+    A02:
+      <<: *AMP
+      readCorner: UL
+      ixy: [0, 1]
+      rawBBox: [[0, 2052], [2052, 2052]]
+      rawDataBBox: [[0, 2072], [2032, 2032]]
+      rawSerialOverscanBBox: [[2032, 2072], [20, 2032]]
+      rawParallelOverscanBBox: [[0, 2052], [2032, 20]]
+      flipXY: [false, true]
+    # A03 — upper-right quadrant. Read corner UR; overscan on bottom + left (inner).
+    A03:
+      <<: *AMP
+      readCorner: UR
+      ixy: [1, 1]
+      rawBBox: [[2032, 2052], [2052, 2052]]
+      rawDataBBox: [[2052, 2072], [2032, 2032]]
+      rawSerialOverscanBBox: [[2032, 2072], [20, 2032]]
+      rawParallelOverscanBBox: [[2052, 2052], [2032, 20]]
+      flipXY: [true, true]
+
+# Optical plate scale: 0.289"/15um => 19.27 arcsec/mm.
+plateScale: 19.27
+
+transforms:
+  nativeSys: 'FocalPlane'
+  FieldAngle:
+    transformType: radial
+    coeffs: [0.0, 1.0, 0.0]
+
+CCDs:
+  CCD0:
+    <<: *CCD
+    id: 0
+    name: CCD0
+    serial: CTIO1m-Y4KCam
