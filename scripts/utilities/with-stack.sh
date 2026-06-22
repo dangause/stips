@@ -130,10 +130,10 @@ if [[ -d "$OBS_NICKEL_DATA_DIR" ]]; then
   setup obs_nickel_data 2>/dev/null || setup -r "$OBS_NICKEL_DATA_DIR" obs_nickel_data
 fi
 
-# Ensure workspace packages are importable: stips (src-layout) + obs_stips
-# (python-layout, in case the EUPS setup above did not add it) + any other
-# src-layout packages.
-export PYTHONPATH="${REPO_ROOT}/packages/stips/src:${REPO_ROOT}/packages/obs_stips/python:${PYTHONPATH:-}"
+# Ensure workspace packages are importable. obs_stips is python-layout (not
+# matched by the */src loop below) so add it explicitly in case the EUPS setup
+# above did not; the loop covers every src-layout package (stips, refcats, ...).
+export PYTHONPATH="${REPO_ROOT}/packages/obs_stips/python:${PYTHONPATH:-}"
 for pkg_dir in "${REPO_ROOT}"/packages/*/src; do
   if [[ -d "$pkg_dir" ]]; then
     export PYTHONPATH="${pkg_dir}:${PYTHONPATH:-}"
