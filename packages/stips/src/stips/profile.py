@@ -77,6 +77,11 @@ class InstrumentProfile:
     collection_prefix: Optional[str] = None
     skymap_name: Optional[str] = None
     skymap_collection: Optional[str] = None
+    # ISR config overrides applied to the `isr` task at science qgraph-build time
+    # (as `pipetask -c isr:<key>=<value>`). Lets an instrument toggle ISR steps
+    # whose curated calibs it does not ship — e.g. an instrument without defect
+    # maps sets `{"doDefect": False}` — without forking the shared DRP pipeline.
+    isr_overrides: dict[str, Any] = field(default_factory=dict)
     obs_data_package: Optional[str] = None
     package_dir: Optional[str] = None
     refcat_path: Optional[str] = None

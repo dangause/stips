@@ -185,7 +185,10 @@ log_section "SkyMap Registration"
 # core/stack.py as SKYMAP_NAME / SKYMAP_COLLECTION); the shared config supplies
 # only the geometry. Fall back to the Nickel reference names for a direct
 # invocation without those exports.
-SKYMAP_CFG="${STIPS_DEFAULTS:-$REPO_ROOT/packages/obs_stips/instrument_defaults}/configs/makeSkyMap.py"
+# SKYMAP_CFG is exported by core/stack.py via instrument-dir-first resolution
+# (a fork's own configs/makeSkyMap.py shadows the framework geometry). Fall back
+# to the framework reference config for a direct invocation without that export.
+SKYMAP_CFG="${SKYMAP_CFG:-${STIPS_DEFAULTS:-$REPO_ROOT/packages/obs_stips/instrument_defaults}/configs/makeSkyMap.py}"
 SKYMAP_NAME="${SKYMAP_NAME:-nickelRings-v1}"
 SKYMAP_COLLECTION="${SKYMAP_COLLECTION:-skymaps/nickelRings}"
 log_info "Registering SkyMap '${SKYMAP_NAME}' (config: ${SKYMAP_CFG})"

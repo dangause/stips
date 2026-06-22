@@ -81,6 +81,14 @@ export RAW_PARENT_DIR="{config.raw_parent_dir}"
         env_exports += f'export SKYMAP_NAME="{skymap_name}"\n'
     if skymap_collection:
         env_exports += f'export SKYMAP_COLLECTION="{skymap_collection}"\n'
+    # SkyMap geometry config, resolved instrument-dir-first: a fork that wants its
+    # own tract/patch geometry (e.g. its native pixel scale) drops a
+    # configs/makeSkyMap.py into its instrument dir; otherwise the framework
+    # reference geometry is used.
+    try:
+        env_exports += f'export SKYMAP_CFG="{config.resolve_config("makeSkyMap.py")}"\n'
+    except Exception:
+        pass
 
     # Pass through RUN_ID so shell scripts log to the same directory
     run_id = os.environ.get("RUN_ID")

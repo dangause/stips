@@ -140,7 +140,7 @@ class TestTranslationGoldenScience(unittest.TestCase):
         )
 
     def test_day_obs(self):
-        self.assertEqual(self.tr.to_day_obs(), 20240625)
+        self.assertEqual(self.tr.to_observing_day(), 20240625)
 
     def test_observation_id(self):
         self.assertEqual(self.tr.to_observation_id(), "20240625_1032")
@@ -174,7 +174,7 @@ class TestTranslationGoldenCalib(unittest.TestCase):
         self.assertEqual(self.tr.to_telescope(), "Nickel 1m")
 
     def test_day_obs(self):
-        self.assertEqual(self.tr.to_day_obs(), 20240625)
+        self.assertEqual(self.tr.to_observing_day(), 20240625)
 
     def test_observation_id(self):
         self.assertEqual(self.tr.to_observation_id(), "20240625_1032")

@@ -496,6 +496,12 @@ def run(
                 data_query,
             ]
 
+            # Profile-declared ISR overrides (e.g. doDefect=False for an
+            # instrument without curated defect maps). Applied as inline config
+            # so instruments need not fork the shared DRP pipeline.
+            for isr_key, isr_val in prof.isr_overrides.items():
+                qgraph_args.extend(["--config", f"isr:{isr_key}={isr_val}"])
+
             if executor.needs_datastore_records:
                 qgraph_args.append("--qgraph-datastore-records")
 

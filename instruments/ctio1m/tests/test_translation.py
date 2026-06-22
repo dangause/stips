@@ -25,7 +25,9 @@ SCIENCE_HEADER = {
     "DETECTOR": "ITL SN3671",
     "FILTER": 3,
     "FILTERID": "V",
-    "DATE-OBS": "2011-06-09T08:58:18.9",
+    # MJD-OBS is authoritative (per the profile); it resolves to 2011-06-10T08:58
+    # UT. DATE-OBS/DTCALDAT are set consistent with it.
+    "DATE-OBS": "2011-06-10T08:58:18.9",
     "MJD-OBS": 55722.373831,
     "TIMESYS": "UTC",
     "RA": "16:54:17.40",
@@ -37,8 +39,8 @@ SCIENCE_HEADER = {
     "OBSTYPE": "OBJECT",
     "IMGTYPE": "OBJECT",
     "OBJECT": "some_target",
-    "DTCALDAT": "2011-06-09",
-    "FILENAME": "y110609.0042.fits",
+    "DTCALDAT": "2011-06-10",
+    "FILENAME": "y110610.0042.fits",
 }
 
 BIAS_HEADER = dict(
@@ -85,7 +87,7 @@ def test_exposure_id_positive_and_31bit_safe():
     assert isinstance(exp_id, int)
     assert 0 < exp_id < 2**31
     # days_since_2000 (end-of-exposure UTC) * 10000 + seqnum 42.
-    # 2011-06-09T08:58:18.9 + 120s -> day 4178 since 2000-01-01.
+    # 2011-06-10T08:58:18.9 + 120s -> day 4178 since 2000-01-01.
     assert exp_id == 4178 * 10000 + 42
 
 
@@ -93,12 +95,32 @@ def test_visit_id_matches_exposure_id():
     assert _hook("visit_id")(SCIENCE_HEADER) == _hook("exposure_id")(SCIENCE_HEADER)
 
 
-def test_day_obs_from_dtcaldat():
-    assert _hook("day_obs")(SCIENCE_HEADER) == 20110609
+def test_day_obs_is_ut_calendar_day():
+    # day_obs is the UT calendar day (drives the Butler day_obs dimension via
+    # to_observing_day), derived from the authoritative MJD-OBS (2011-06-10T08:58).
+    assert _hook("day_obs")(SCIENCE_HEADER) == 20110610
+
+
+def test_day_obs_follows_ut_not_dtcaldat():
+    # Regression: a frame taken after UT midnight has DTCALDAT on the local night
+    # (2007-03-21) but a UT calendar day one ahead (2007-03-22). day_obs MUST
+    # follow UT (20070322) — using DTCALDAT here would disagree with the Butler
+    # dimension and break the night_to_dayobs_offset_days=1 query mapping.
+    hdr = dict(
+        SCIENCE_HEADER,
+        **{
+            "MJD-OBS": 54181.189528,  # 2007-03-22T04:32:55 UTC
+            "DATE-OBS": "2007-03-22T04:32:55.250",
+            "DTCALDAT": "2007-03-21",
+            "EXPTIME": 120.0,
+            "FILENAME": "y070321.0042.fits",
+        },
+    )
+    assert _hook("day_obs")(hdr) == 20070322
 
 
 def test_observation_id():
-    assert _hook("observation_id")(SCIENCE_HEADER) == "20110609_42"
+    assert _hook("observation_id")(SCIENCE_HEADER) == "20110610_42"
 
 
 def test_datetime_begin_from_mjd():

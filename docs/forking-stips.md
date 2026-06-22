@@ -151,6 +151,11 @@ These are the real `InstrumentProfile` fields (from
   `OPEN`/`C`/`CLEAR` → `clear`, `G'` → `gp`, `6563/100` → `Halpha`, etc.).
 - **`filter_key`** — FITS keyword holding the raw filter name. Default
   `"FILTNAM"`; Nickel uses the default.
+- **`instrument_header_value`** — Substring matched (case-insensitive) against
+  the FITS `INSTRUME` header to decide whether your translator handles a file.
+  Defaults to `name`. Set it when the instrument **name differs from the camera
+  in `INSTRUME`** — e.g. the CTIO 1.0m profile is `name="CTIO1m"` but its raws
+  carry `INSTRUME="Y4KCam"`, so it sets `instrument_header_value="Y4KCam"`.
 - **`header_map`** *(required)* — `metadata field -> stips.Field(key, unit=None,
   default=None)`. Each `Field` maps an LSST metadata slot to a FITS keyword,
   with an astropy unit name (e.g. `"s"`) and a default for missing keys. Map the
@@ -165,16 +170,36 @@ These are the real `InstrumentProfile` fields (from
   `"lsst.obs.stips.active.Instrument"` unchanged** — this is the generic class
   `obs_stips` synthesizes from your profile; it is the *same string for every
   instrument*. You do not write or name an instrument class.
-- **`night_to_dayobs_offset_days`** — Offset between local observing night and
-  UTC `day_obs` (Nickel: `1`, since Pacific-evening obs roll into the next UTC
-  day).
+- **`night_to_dayobs_offset_days`** — Days to add to a local observing night to
+  get its UTC `day_obs` (Nickel and CTIO: `1`, since evening obs at western
+  longitudes roll into the next UTC day; an instrument that observes entirely
+  before UTC midnight uses `0`). **The Butler `day_obs` dimension is the UT
+  calendar day** (from `astro_metadata_translator.to_observing_day`); this offset
+  is how STIPS maps the human-readable local night you pass on the CLI to the UT
+  `day_obs` it queries. Pick the value by ingesting one frame and comparing the
+  stored `day_obs` to the local night — do **not** assume `0`. (See the day_obs
+  gotcha in §9.)
 - **`collection_prefix`** — Butler collection prefix. Defaults to `name` if
   omitted, so Nickel collections begin with `Nickel/...`.
 - **`skymap_name` / `skymap_collection`** — Skymap registry name and its
-  collection (`"nickelRings-v1"`, `"skymaps/nickelRings"`).
+  collection (`"nickelRings-v1"`, `"skymaps/nickelRings"`). Bootstrap registers
+  and chains the skymap under **these** names (profile-driven). The skymap
+  *geometry* comes from `configs/makeSkyMap.py`, resolved instrument-dir-first:
+  drop your own `instruments/<x>/configs/makeSkyMap.py` (set `config.name` to
+  match `skymap_name`, and your native `pixelScale`) to get tract/patch geometry
+  at your plate scale; otherwise the framework reference geometry is used. A
+  distinct geometry also gets a distinct skymap hash, so each instrument
+  registers cleanly under its own name.
+- **`isr_overrides`** — Dict of ISR config overrides applied to the `isr` task at
+  science qgraph-build time (as `pipetask -c isr:<key>=<value>`). Use it to
+  toggle ISR steps whose curated calibs your instrument does **not** ship —
+  without forking the shared `DRP.yaml`. E.g. an instrument with no defect maps
+  sets `isr_overrides={"doDefect": False}` (CTIO does exactly this). Default
+  `{}` (inherit the framework ISR config unchanged).
 - **`obs_data_package`** — Optional companion EUPS data package with curated
   calibs / defects / crosstalk (`"obs_nickel_data"`). Left as a normal EUPS
-  package; the stack activation sets it up by name. Omit if you have none.
+  package; the stack activation sets it up by name. Omit if you have none — and
+  disable the ISR steps that would need its products via `isr_overrides`.
 - **`fetch_data`** — Optional callable hook: `fetch_data(night, config, *,
   overwrite=False) -> "ok" | "not_found" | "failed"`, used by `stips download`.
   Wire it from a co-located module (Nickel's `profile.py` does `from fetch import
@@ -267,6 +292,16 @@ Set `profile.camera` to its path (loaded from `INSTRUMENT_DIR`, no EUPS lookup);
 use `camera/nickel.yaml` as a template. Nickel deliberately uses the YAML to get
 real multi-amp / gain / read-noise fidelity that the simple `CameraSpec` path
 does not model.
+
+**Multi-amp cameras.** A single CCD read out through several amplifiers is fully
+supported via the YAML path — list each amp under the CCD's `amplifiers:` with
+its own `rawBBox` / `rawDataBBox` / overscan bboxes / `readCorner` / `flipXY`,
+and ISR does per-amp overscan and assembly automatically. `camera/y4kcam.yaml`
+(CTIO 1.0m Y4KCam) is a worked **4-amp** example, including the trickier case of
+amps that read toward the detector centre (overscan strips on the *inner* edges).
+The single biggest source of master-bias seams is wrong overscan geometry, so
+measure your amp boundaries from a real raw (per-column / per-row medians) rather
+than trusting documentation.
 
 ---
 
@@ -377,6 +412,9 @@ values. Most fork bugs are header-mapping bugs, and they surface here cheaply.
 - [ ] `filter_aliases` covers every spelling your headers actually emit (check
       real files, not the manual).
 - [ ] `filter_key` matches your FITS filter keyword.
+- [ ] `instrument_header_value` set if your `name` differs from FITS `INSTRUME`.
+- [ ] `night_to_dayobs_offset_days` verified by ingesting one frame (not assumed).
+- [ ] `isr_overrides` disables ISR steps whose curated calibs you don't ship.
 - [ ] A `@hook` exists for every header quirk (observation typing, coordinate
       bugs, exposure-ID scheme, temperature units, datetime derivation).
 - [ ] `camera/<x>.yaml` reflects your CCD dimensions, pixel scale, plate scale.
@@ -394,9 +432,27 @@ values. Most fork bugs are header-mapping bugs, and they surface here cheaply.
   puts `instruments/<x>/` on `sys.path` (so `profile.py`'s co-located hooks like
   `fetch.py` import). The framework appends it (so stdlib/installed modules still
   win), but avoid generic names that could collide if another path entry is added.
-- **`night_to_dayobs_offset_days`.** Local observing night vs. UTC `day_obs`
-  trips up collection naming and Butler queries — set it correctly for your
-  longitude (Nickel uses `1`).
+- **`day_obs` is UT, derived from the datetime — not from a hook.** The Butler
+  `day_obs` dimension comes from `astro_metadata_translator.to_observing_day`
+  (the UT calendar day of the exposure). A profile `day_obs` hook *can* override
+  it, but it must return the **UT** day, not a local-night keyword like
+  `DTCALDAT`. Returning the local night makes the stored `day_obs` disagree with
+  the offset convention, and `stips science` then silently selects **zero**
+  exposures ("No target_name matches… Available: []") even though the data is
+  ingested. To find your `night_to_dayobs_offset_days`: ingest one frame, read
+  its stored `day_obs`, and compare to the local night you'd name it by. CTIO's
+  2007-03-21 (local) frames store `day_obs=20070322` (UT) → offset `1`.
+- **No defects/crosstalk/linearity calibs?** The framework ISR defaults assume
+  Nickel's curated calibs exist (`doDefect: true`). If your instrument ships
+  none, the qgraph build fails with *"Not enough datasets (0) found for
+  non-optional connection isr.defects"*. Fix it with `isr_overrides={"doDefect":
+  False}` in your profile — not by editing the shared `DRP.yaml`.
+- **Skymap hash collisions.** The stack registers one skymap *name* per geometry
+  *hash*. If you reuse the framework `makeSkyMap.py` geometry verbatim, a repo
+  that already registered another instrument's skymap with the same geometry will
+  refuse a second name. Ship your own `configs/makeSkyMap.py` at your native
+  `pixelScale` (distinct geometry → distinct hash) — or just bootstrap a fresh
+  repo, since it's one instrument per repo anyway.
 - **`exposure_id` must fit 31 bits.** If your scheme can overflow, the hook
   should raise (Nickel's does) rather than silently wrap.
 - **Hooks return the right types.** `temperature` returns an astropy

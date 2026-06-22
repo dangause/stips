@@ -48,9 +48,16 @@ class StipsTranslator(FitsTranslator):
         return h(self._header) if h else super().to_datetime_end()
 
     @cache_translation
-    def to_day_obs(self):
+    def to_observing_day(self):
+        # Drives the Butler `day_obs` exposure dimension. astro_metadata_translator
+        # reads `observing_day` (NOT a `day_obs`/`to_day_obs` property — the base
+        # class has none), so the profile's `day_obs` hook must be applied here to
+        # take effect. A hook returns an int YYYYMMDD (the UT calendar day, by
+        # convention; the local observing night is recovered at query time via
+        # `night_to_dayobs_offset_days`). Without a hook, fall back to the amt
+        # default (UT datetime + observing_day_offset).
         h = self._hook("day_obs")
-        return h(self._header) if h else super().to_day_obs()
+        return h(self._header) if h else super().to_observing_day()
 
     @cache_translation
     def to_observation_id(self):

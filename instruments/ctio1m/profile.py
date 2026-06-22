@@ -77,14 +77,19 @@ profile = InstrumentProfile(
     night_to_dayobs_offset_days=1,
     skymap_name="ctio1mRings-v1",
     skymap_collection="skymaps/ctio1mRings",
+    # CTIO ships no curated defect maps (obs_nickel_data is Nickel-specific), so
+    # the ISR `defects` connection has no datasets. Disable defect masking via a
+    # profile override instead of forking the shared DRP pipeline. Overscan/bias/
+    # flat — the ISR steps CTIO has calibs for — stay on.
+    isr_overrides={"doDefect": False},
 )
 
 
 # ---------------------------------------------------------------------------
 # Shared helpers (DRY): several hooks call into each other (exposure_id ->
-# day_obs/seqnum; day_obs -> datetime_end). Y4KCam headers are cleaner than
-# Nickel's: MJD-OBS is authoritative and DTCALDAT carries the observing-night
-# local date, so the date logic is simpler than the Nickel original.
+# day_obs/seqnum; day_obs -> datetime_end). Y4KCam's MJD-OBS is authoritative for
+# the begin time. day_obs is the UT calendar day (NOT DTCALDAT, the local night —
+# see _day_obs); the local night is recovered via night_to_dayobs_offset_days=1.
 # ---------------------------------------------------------------------------
 
 _SEQNUM_RE = re.compile(r"y\d{6}\.(\d+)\.fits", re.IGNORECASE)
@@ -136,13 +141,15 @@ def _seqnum(header):
 
 
 def _day_obs(header):
-    """Derive day_obs (YYYYMMDD int) from DTCALDAT if present, else datetime_end.
+    """Derive day_obs (YYYYMMDD int) from the end-of-exposure UT datetime.
 
-    DTCALDAT is the observing-night local date (e.g. '2011-06-09').
+    This is the UT calendar day (matching astro_metadata_translator's default),
+    which drives the Butler ``day_obs`` dimension via the ``day_obs`` hook ->
+    ``StipsTranslator.to_observing_day``. The local observing night (e.g. the
+    2007-03-21 DTCALDAT) is recovered at query time via
+    ``night_to_dayobs_offset_days=1``; DTCALDAT must NOT be used here, or day_obs
+    would disagree with the UT-based convention and break the offset mapping.
     """
-    dtcaldat = header.get("DTCALDAT")
-    if dtcaldat:
-        return int(str(dtcaldat).replace("-", ""))
     return int(_datetime_end(header).datetime.strftime("%Y%m%d"))
 
 

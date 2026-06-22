@@ -31,10 +31,51 @@ class DemoTranslator(StipsTranslator):
     profile = PROFILE
 
 
+# A profile whose instrument name differs from the FITS INSTRUME value (e.g.
+# CTIO1m / Y4KCam) and that provides a day_obs hook — exercises the
+# instrument_header_value match and the to_observing_day hook wiring.
+HDRVAL_PROFILE = InstrumentProfile(
+    name="FooScope",
+    instrument_header_value="BarCam",
+    site=Site(10.0, 20.0, 100.0),
+    filters={"B": "b"},
+    filter_aliases={"B": "B"},
+    header_map={"exposure_time": Field("EXPTIME", unit="s", default=0.0)},
+    const_map={"boresight_rotation_angle": 0.0, "boresight_rotation_coord": "sky"},
+    camera="camera/foo.yaml",
+    filter_key="FILTNAM",
+)
+
+
+@hook(HDRVAL_PROFILE)
+def day_obs(header):
+    return int(str(header["DTCALDAT"]).replace("-", ""))
+
+
+class HdrValTranslator(StipsTranslator):
+    profile = HDRVAL_PROFILE
+
+
 class TestStipsTranslator(unittest.TestCase):
     def test_can_translate_matches_name(self):
         self.assertTrue(DemoTranslator.can_translate({"INSTRUME": "Demo cam"}))
         self.assertFalse(DemoTranslator.can_translate({"INSTRUME": "Other"}))
+
+    def test_can_translate_uses_instrument_header_value(self):
+        # When the instrument name differs from INSTRUME, can_translate matches
+        # the profile's instrument_header_value, NOT its name.
+        self.assertTrue(HdrValTranslator.can_translate({"INSTRUME": "BarCam"}))
+        self.assertFalse(HdrValTranslator.can_translate({"INSTRUME": "FooScope"}))
+
+    def test_observing_day_uses_day_obs_hook(self):
+        # The Butler day_obs dimension comes from to_observing_day; a profile's
+        # day_obs hook must actually drive it (regression for the dead to_day_obs).
+        self.assertEqual(
+            HdrValTranslator(
+                {"INSTRUME": "BarCam", "DTCALDAT": "2007-03-21"}
+            ).to_observing_day(),
+            20070321,
+        )
 
     def test_known_filter_from_map(self):
         self.assertEqual(
