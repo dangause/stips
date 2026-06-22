@@ -89,7 +89,6 @@ class TestYamlConfig(unittest.TestCase):
         c = cfg.load(p)
         self.assertEqual(str(c.instrument_dir), "/tmp/instr")
         self.assertEqual(str(c.obs_nickel), "/tmp/instr")  # deprecated read-only alias
-        self.assertEqual(str(c.pipelines_dir), "/tmp/instr/pipelines")
 
     def test_obs_nickel_key_is_deprecated_alias(self):
         p = _write_yaml(

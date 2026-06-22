@@ -12,6 +12,11 @@ if TYPE_CHECKING:
     from stips.profile import InstrumentProfile
 
 
+# Repo packages/ dir, derived from this file's location
+# (packages/stips/src/stips/core/config.py -> parents[4] == packages/).
+_PACKAGES_DIR = Path(__file__).resolve().parents[4]
+
+
 def load_active_profile(instrument_dir: str | Path | None = None):
     """Load the active instrument profile by path from INSTRUMENT_DIR.
 
@@ -125,14 +130,32 @@ class Config:
     # it should call require_profile() to surface an actionable error.
     profile: "InstrumentProfile | None" = None
 
-    # Derived paths (set in __post_init__)
-    pipelines_dir: Path = field(init=False)
-    configs_dir: Path = field(init=False)
+    # Framework reference pipelines/configs root (set in __post_init__).
+    _defaults_root: Path = field(init=False, repr=False)
 
     def __post_init__(self):
-        # instrument_dir is the generic base for pipeline/config path joins.
-        self.pipelines_dir = self.instrument_dir / "pipelines"
-        self.configs_dir = self.instrument_dir / "configs"
+        # Framework-shipped reference pipelines/configs. A fork overrides any one
+        # by dropping a same-named file into its own instruments/<x>/{pipelines,
+        # configs}/; the resolver below picks instrument-dir-first, else this.
+        self._defaults_root = _PACKAGES_DIR / "obs_stips" / "instrument_defaults"
+
+    def resolve_pipeline(self, name: str) -> Path:
+        """Resolve a pipeline YAML by name, instrument-dir-first else framework.
+
+        e.g. config.resolve_pipeline("DIA.yaml")
+        """
+        return self._first_existing("pipelines", name)
+
+    def resolve_config(self, name: str) -> Path:
+        """Resolve a config .py by name, instrument-dir-first else framework.
+
+        e.g. config.resolve_config("dia/subtractImages.py")
+        """
+        return self._first_existing("configs", name)
+
+    def _first_existing(self, kind: str, name: str) -> Path:
+        p = self.instrument_dir / kind / name
+        return p if p.exists() else self._defaults_root / kind / name
 
     @property
     def obs_nickel(self) -> Path:
