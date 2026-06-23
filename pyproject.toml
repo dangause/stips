@@ -73,11 +73,12 @@ max-doc-length = 79
 convention = "numpy"
 
 [tool.pytest.ini_options]
-# stips tests live in packages/stips/tests; reference-instrument tests in
-# instruments/nickel/tests. Add additional packages here as they add
+# stips tests live in packages/stips/tests; per-instrument tests in
+# instruments/<name>/tests. Add additional packages here as they add
 # tests/ directories.
 testpaths = [
     "instruments/nickel/tests",
+    "instruments/ctio1m/tests",
     "packages/stips/tests",
     "packages/obs_stips/tests",
     # "packages/defects/tests",
@@ -107,6 +108,7 @@ venvPath = "."
 venv = ".venv"
 include = [
     "instruments/nickel",
+    "instruments/ctio1m",
     "packages/stips",
     "packages/obs_stips",
     "packages/defects",

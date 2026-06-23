@@ -4,14 +4,15 @@
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](pyproject.toml)
 
-**STIPS** brings the [LSST Science Pipelines](https://pipelines.lsst.io/) to 1-meter class telescopes. It wraps the Rubin/LSST reduction stack with the per-telescope plumbing — instrument package, prefab YAML pipelines, and a unified CLI — needed to run survey-grade calibration, difference imaging, forced photometry, and lightcurve extraction on small-telescope data, without requiring deep LSST middleware knowledge.
+**STIPS** brings the [LSST Science Pipelines](https://pipelines.lsst.io/) to 1-meter class telescopes. It wraps the Rubin/LSST reduction stack with the per-telescope plumbing — a declarative instrument profile, prefab YAML pipelines, and a unified CLI — needed to run survey-grade calibration, difference imaging, forced photometry, and lightcurve extraction on small-telescope data, without requiring deep LSST middleware knowledge.
 
 **Supported instruments:**
 
 - ✅ **Nickel 1-m** at Lick Observatory — reference implementation, used in active SN, exoplanet, and variable-star follow-up
-- ➕ **Other 1-m single-CCD telescopes** — supported by forking STIPS and adding an instrument profile (a thin `obs_<instrument>` package). The framework core and science pipelines work unchanged. See the [forking guide](docs/forking-stips.md).
+- ✅ **CTIO 1.0m / Y4KCam** — second instrument; validated end-to-end on archival standard-star data. Exercises the framework's **multi-amplifier camera** support (4-amp, central-cross overscan), **on-chip binning** (unbinned 4064² and 2×2-binned 2072²), **multi-band** B/V/R/I reductions, and a **NOIRLab Astro Data Archive** fetch hook.
+- ➕ **Other 1-m telescopes** — add one by dropping a declarative profile under `instruments/<name>/` (a `profile.py` + camera + hooks, loaded by path — no per-instrument LSST `obs_` package). The framework core and science pipelines work unchanged. See the [forking guide](docs/forking-stips.md).
 
-> The CLI is `stips`. The reference instrument is selected at runtime via the `INSTRUMENT_PACKAGE` environment variable, which defaults to `lsst.obs.nickel`.
+> The CLI is `stips`. The active instrument is a declarative profile under `instruments/<name>/`, selected at runtime via the `INSTRUMENT_DIR` path in your config's `env:` block (the reference profile is `instruments/nickel`).
 
 > Tested with LSST Science Pipelines `v30.0.3` and `v11.0.0`
 
@@ -39,7 +40,7 @@
 ## Quick Start
 
 ```bash
-# 1. Install all packages (stips + obs_stips + obs_nickel)
+# 1. Install the framework (stips + obs_stips); instruments load by path
 uv sync --group dev
 
 # 2. Run a full pipeline from a YAML config (self-contained)
@@ -51,7 +52,7 @@ stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml science 20230519  # S
 stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml dia 20230519 --auto  # Difference imaging
 ```
 
-> The reference instrument defaults to Nickel (`INSTRUMENT_PACKAGE=lsst.obs.nickel`); `uv sync` installs the `obs_*` packages the CLI imports at runtime.
+> The active instrument is whatever `INSTRUMENT_DIR` in the config's `env:` block points at (`instruments/nickel` here). `uv sync` installs the framework packages (`stips`, `obs_stips`); the instrument profile is loaded from its directory at runtime — there is no per-instrument package to install.
 
 ### Docker Quick Start
 
@@ -71,12 +72,11 @@ docker run -v /path/to/repo:/data/repo \
 
 ## Features
 
-### Core Instrument Package (`obs_nickel`)
-- Single-detector camera model (1024x1024 CCD)
-- FITS metadata translator (`NickelTranslator`)
-- Raw data formatter (`NickelRawFormatter`)
-- Filter definitions: Johnson/Bessell **B, V**; Cousins **R, I**
-- Optimized pipeline configurations for Nickel data
+### Declarative instrument profiles (`instruments/<name>/`)
+- An instrument is a directory — a `profile.py` (camera, site, filters, header translation, ISR overrides, data-fetch hook), an optional camera YAML, and tuned configs — **loaded by path** via `INSTRUMENT_DIR`. No per-instrument LSST `obs_` package or EUPS product.
+- `obs_stips` synthesizes the LSST `Instrument`, translator, and raw formatter from the profile at runtime.
+- **Cameras**: in-memory `CameraSpec` (single-amp) or a full multi-amp camera YAML; **on-chip binning** scales the geometry from a `CCD_BINNING` knob.
+- Ships two instruments: **Nickel** (reference, single-CCD, B/V/R/I) and **CTIO 1.0m / Y4KCam** (4-amp, binned/unbinned, B/V/R/I).
 
 ### Complete Processing Pipelines
 - **Calibration pipeline**: bias, flats, curated defect masks
@@ -87,7 +87,7 @@ docker run -v /path/to/repo:/data/repo \
 - **Light curve extraction**: multi-band light curves from DIA or forced photometry
 
 ### Unified CLI (`stips`)
-- **Profile-based configuration** for multi-repository workflows
+- **Single-YAML configuration** (`-c <config.yaml>`) — the sole config source per run
 - **YAML-driven pipeline orchestration** with automatic bootstrap
 - **BPS integration** for HPC cluster execution (Slurm, HTCondor)
 - **Processing logs** for tracking fallback configs and failures
@@ -105,16 +105,21 @@ docker run -v /path/to/repo:/data/repo \
 stips/
 ├── packages/
 │   ├── stips/                # Framework core + CLI (the `stips` command) + pipeline tools
-│   ├── obs_stips/            # Instrument-agnostic LSST glue (lsst.obs.stips) + shared tasks
-│   ├── obs_nickel/           # Reference instrument profile (lsst.obs.nickel)
-│   ├── obs_nickel_data/      # Curated calibrations (defects)
+│   ├── obs_stips/            # Instrument-neutral LSST glue (lsst.obs.stips): translator base,
+│   │                         #   camera builder, the `active` Instrument/translator synthesizer,
+│   │                         #   shared tasks, and reference pipelines/configs (instrument_defaults/)
+│   ├── obs_nickel_data/      # Curated Nickel calibrations (defects)
+│   ├── lick_searchable_archive/  # Lick archive client (Nickel data fetch)
 │   ├── defects/              # Defect mask generation
-│   ├── refcats/              # Reference catalog scripts
+│   ├── refcats/              # Reference catalog tooling (MONSTER shard dump/ingest)
 │   ├── colorterms/           # Color term fitting
 │   ├── testdata/             # Test fixtures and data
 │   └── tuning/               # Pipeline tuning utilities
+├── instruments/              # Declarative instrument profiles (loaded by INSTRUMENT_DIR)
+│   ├── nickel/               # Reference profile (profile.py, camera, fetch.py, tests)
+│   └── ctio1m/               # CTIO 1.0m / Y4KCam (4-amp camera, NOIRLab fetch, tests)
 ├── scripts/
-│   ├── config/               # Per-target YAML configs (2023ixf, 2020wnt)
+│   ├── config/               # Per-target YAML configs (2023ixf, 2020wnt, ctio1m, ...)
 │   ├── pipeline/             # Bootstrap script
 │   └── utilities/            # Helper scripts
 ├── docs/                     # User guides, architecture docs, diagrams
@@ -146,7 +151,7 @@ All commands take the group-level config via `stips -c <config.yaml> <command> .
 |---------|-------------|
 | `stips env` | Show configuration and validate paths |
 | `stips bootstrap` | Initialize Butler repository |
-| `stips download NIGHT` | Fetch data from Lick archive |
+| `stips download NIGHT` | Fetch raw data via the instrument's `fetch_data` hook (Nickel → Lick archive; CTIO → NOIRLab Astro Data Archive) |
 | `stips calibs NIGHT` | Run nightly calibrations (bias, flat, defects) |
 | `stips science NIGHT` | Process science frames (ISR, WCS, photometry) |
 | `stips dia NIGHT` | Run difference imaging analysis |
@@ -204,9 +209,9 @@ stips lightcurve --ra 210.91 --dec 54.32 \
 ```bash
 uv sync --group dev
 ```
-Installs all workspace packages (including `stips`, `obs_stips`, and `obs_nickel`) plus code quality tools (ruff, pyright, pre-commit). The CLI imports the instrument profile at runtime, so the `obs_*` packages must be installed alongside `stips` — `uv sync` handles this.
+Installs the framework workspace packages (`stips`, `obs_stips`, and support packages) plus code quality tools (ruff, pyright, pre-commit). Instrument profiles under `instruments/` are loaded by path at runtime (via `INSTRUMENT_DIR`), so there is no per-instrument package to install.
 
-A fork installs its own `obs_<instrument>` package here and sets `INSTRUMENT_PACKAGE` to point the CLI at it (default: `lsst.obs.nickel`).
+A fork adds its own profile directory under `instruments/<name>/` and points `INSTRUMENT_DIR` at it — no new `obs_` package required. See the [forking guide](docs/forking-stips.md).
 
 #### Full Development Setup
 ```bash
@@ -238,7 +243,7 @@ Self-contained YAML files with inline environment:
 env:
   REPO: "/path/to/butler/repo"
   STACK_DIR: "/path/to/lsst_stack"
-  INSTRUMENT_DIR: "/path/to/stips/packages/obs_nickel"
+  INSTRUMENT_DIR: "/path/to/stips/instruments/nickel"
   RAW_PARENT_DIR: "/path/to/raw/data"
   REFCAT_REPO: "/path/to/refcats"
 
@@ -295,10 +300,11 @@ Configuration lives in the `env:` block of the YAML you pass with `-c/--config`
 env:
   REPO: /path/to/butler/repo
   STACK_DIR: /path/to/lsst_stack
-  INSTRUMENT_DIR: /path/to/obs_nickel
+  INSTRUMENT_DIR: /path/to/stips/instruments/nickel   # the declarative instrument dir
   RAW_PARENT_DIR: /path/to/raw/data
   REFCAT_REPO: /path/to/refcats
   CP_PIPE_DIR: "${STACK_DIR}/cp_pipe"   # ${VAR} expands within the env: block
+  # CCD_BINNING: 2   # optional; scale the camera for 2x2-binned raws (default 1)
 ```
 
 ### Required Variables
@@ -307,7 +313,7 @@ env:
 |----------|-------------|
 | `REPO` | Path to Butler repository |
 | `STACK_DIR` | Path to LSST stack installation |
-| `INSTRUMENT_DIR` | Path to the active instrument package (e.g. obs_nickel) |
+| `INSTRUMENT_DIR` | Path to the active declarative instrument profile dir (e.g. `instruments/nickel`, `instruments/ctio1m`) |
 | `RAW_PARENT_DIR` | Parent directory for raw data |
 
 ### Optional Variables
@@ -316,7 +322,9 @@ env:
 |----------|-------------|
 | `REFCAT_REPO` | Path to reference catalog repository |
 | `CP_PIPE_DIR` | Path to cp_pipe (auto-discovered if not set) |
-| `LICK_ARCHIVE_DIR` | Path to lick_searchable_archive client |
+| `CCD_BINNING` | On-chip binning factor; scales the camera geometry (default 1 = unbinned) |
+| `LICK_ARCHIVE_DIR` | Path to the Lick archive client (Nickel `download`) |
+| `NOIRLAB_PROPOSAL` | Optional proposal-id filter for the CTIO NOIRLab `download` |
 
 ---
 
@@ -589,16 +597,25 @@ pipetask:
 
 ## Camera Specification
 
-- **Detector**: Single CCD (detector ID: 0)
-- **Format**: 1024x1024 imaging area + 32 column overscan
-- **Raw frame size**: 1056x1024 pixels
-- **Amplifier**: Single readout (A00)
-- **Pixel scale**: 0.37"/pixel
-- **Field of view**: ~6.3' x 6.3'
-- **Gain**: ~1.8 e-/ADU
-- **Read noise**: ~7 e-
+Each instrument declares its camera in its profile — either an in-memory
+`CameraSpec` (single-amplifier) or a full multi-amp camera YAML. On-chip
+binning is applied at build time from `CCD_BINNING` (imaging pixels scale by the
+factor; overscan strips stay fixed), so the same profile reduces binned and
+unbinned raws.
+
+| | **Nickel 1-m** | **CTIO 1.0m / Y4KCam** |
+|---|---|---|
+| Detector | single CCD | single CCD |
+| Amplifiers | 1 (`A00`) | **4** (central-cross overscan) |
+| Imaging area | 1024×1024 | 4064×4064 (unbinned) · 2032×2032 (2×2 binned) |
+| Pixel scale | 0.37″/pix | 0.289″/pix (0.578″ binned 2×2) |
+| Camera source | `CameraSpec` | `camera/y4kcam.yaml` |
+| Data fetch | Lick archive | NOIRLab Astro Data Archive |
 
 ### Filters
+
+Both instruments use Johnson/Bessell **B, V** and Cousins **R, I** (CTIO also
+defines **U**):
 
 | Physical Filter | Band | System | Central λ |
 |----------------|------|--------|-----------|
@@ -666,7 +683,8 @@ pre-commit run --all-files
 make test
 
 # Individual test modules
-pytest packages/obs_nickel/tests/ -v
+pytest packages/obs_stips/tests/ -v          # framework glue + camera builder
+pytest instruments/ctio1m/tests/ -v          # an instrument profile (translator, camera, fetch)
 ```
 
 ### Interactive Development
@@ -696,7 +714,7 @@ Install the stips package:
 ```bash
 uv sync --group dev
 # or
-pip install -e packages/stips -e packages/obs_stips -e packages/obs_nickel
+pip install -e packages/stips -e packages/obs_stips
 ```
 
 ### Pipeline fails with import errors

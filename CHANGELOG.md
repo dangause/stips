@@ -1,6 +1,22 @@
 # Changelog
 
-All notable changes to the Nickel Processing Suite are documented here.
+All notable changes to STIPS (the Small Telescope Image Processing Suite) are documented here.
+
+## [Unreleased] — STIPS multi-instrument framework + CTIO 1.0m
+
+### Framework refactor (instrument-neutral)
+- Renamed the suite to **STIPS**; split into `stips` (CLI + core) and `obs_stips` (generic LSST glue)
+- **Declarative instrument profiles** under `instruments/<name>/` (`profile.py` + camera + hooks), loaded by path via `INSTRUMENT_DIR` — no per-instrument `obs_` package or EUPS product
+- Single `-c <config.yaml>` is the sole config source (removed `.env`, `-p/--profile`, and `os.environ` fallbacks)
+- Profile-driven collection prefix, skymap name/geometry, filters, header translation, ISR overrides, `boresight_rotation_angle`, and `fetch_data`
+- Generic reference pipelines/configs shipped from `obs_stips/instrument_defaults/` with an instrument-dir-first resolver
+
+### CTIO 1.0m / Y4KCam — second instrument
+- First **multi-amplifier** camera (4-amp, central-cross overscan); measured per-amp gains; amp-flip + parallel-overscan ISR fixes (seam-free assembly)
+- **On-chip binning** support (`CCD_BINNING`): one profile reduces unbinned 4064² and 2×2-binned 2072² raws (imaging scales, overscan fixed)
+- **NOIRLab Astro Data Archive** `fetch_data` hook (funpack + integer-`FILTER` normalization)
+- Astrometry fix: profile `boresight_rotation_angle=180°` (Y4KCam mounted rotated) — median residual 13.5″ → 0.12″
+- Validated end-to-end: unbinned 2007 PG1047 (sub-arcsec astrometry, ~46 mmag photometry) and 2×2-binned 2011 B/V/R/I standard fields (0.578″/px, sub-arcsec V/R/I)
 
 ## [Unreleased] — Extended Objects & Narrowband Filters
 
