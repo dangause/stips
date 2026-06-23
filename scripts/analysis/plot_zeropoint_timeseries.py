@@ -31,8 +31,16 @@ BAND_COLORS = {
     "rp": "#ff7f0e",
     "gp": "#9467bd",
 }
-BAND_LABEL = {"b": "B", "v": "V", "r": "R", "i": "I", "halpha": "Hα",
-              "oiii": "[O III]", "rp": "r'", "gp": "g'"}
+BAND_LABEL = {
+    "b": "B",
+    "v": "V",
+    "r": "R",
+    "i": "I",
+    "halpha": "Hα",
+    "oiii": "[O III]",
+    "rp": "r'",
+    "gp": "g'",
+}
 
 TARGETS_ORDER = ["2023ixf", "2020wnt", "hd189733", "ac_and", "extended_objects"]
 TARGET_TITLES = {

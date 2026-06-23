@@ -47,7 +47,8 @@ bpsUseShared: true
 # Environment variables passed to jobs
 environment: |
   STACK_DIR={stack_dir}
-  OBS_NICKEL={obs_nickel}
+  INSTRUMENT_DIR={instrument_dir}
+  STIPS_DEFAULTS={stips_defaults}
   REPO={repo}
   RAW_PARENT_DIR={raw_parent_dir}
   REFCAT_REPO={refcat_repo}
@@ -61,9 +62,16 @@ preScript: |
   source ${STACK_DIR}/loadLSST.bash
   setup lsst_distrib
 
-  # Setup obs_nickel
-  if [[ -d "${OBS_NICKEL}" ]]; then
-      setup -r ${OBS_NICKEL} obs_nickel 2>/dev/null || true
+  # STIPS framework: obs_stips (LSST glue) + stips (core, src-layout).
+  # The instrument is declarative (loaded by path from INSTRUMENT_DIR).
+  if [[ -d "{obs_stips_dir}" ]]; then
+      setup -r {obs_stips_dir} obs_stips 2>/dev/null || true
+  fi
+  if [[ -d "{stips_src}" ]]; then
+      export PYTHONPATH="{stips_src}:${PYTHONPATH:-}"
+  fi
+  if [[ -n "{obs_data_package}" && -d "{instrument_data_dir}" ]]; then
+      setup -r "{instrument_data_dir}" {obs_data_package} 2>/dev/null || true
   fi
 
 # =============================================================================

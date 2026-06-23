@@ -24,8 +24,8 @@ nickel landolt-validate \
 ```
 
 **Source code:**
-- Calibration metrics: `packages/data_tools/src/obs_nickel_data_tools/pipeline_tools/extract_calib_metrics.py`
-- Landolt validation: `packages/data_tools/src/obs_nickel_data_tools/pipeline_tools/validate_landolt.py`
+- Calibration metrics: `packages/stips/src/stips/pipeline_tools/extract_calib_metrics.py`
+- Landolt validation: `packages/stips/src/stips/pipeline_tools/validate_landolt.py`
 - Batch runner: `scripts/analysis/run_calib_metrics_batch.py`
 
 **Reference catalog:** The Monster (local, 2025-02-19 build)
@@ -60,8 +60,8 @@ narrowband filters on emission nebulae and galaxies.
 | Dataset Type | Dimensions | Content |
 |---|---|---|
 | `preliminary_visit_summary` | (instrument, visit) | Per-detector summary statistics from `calibrateImage`: WCS residuals, PhotoCalib zero point, PSF model parameters, sky background. One row per detector per visit. |
-| `calibrateImage_metadata_metrics` | (instrument, visit, detector) | Task-level match counts and PSF statistics from `analysis_tools` visit-quality pipeline (`nickel-visit-quality-detector.yaml`). Present for all 1,457 visits; surfaced in the [Visit Quality](#visit-quality) section. |
-| `single_visit_star_ref_match_{astrom,photom}_metrics` | (instrument, visit, detector) | Per-visit aggregated residuals from matching `single_visit_star` catalog against the reference catalog. Requires `nickel-analysis-visit-single-visit.yaml`. Not run for this extraction. |
+| `calibrateImage_metadata_metrics` | (instrument, visit, detector) | Task-level match counts and PSF statistics from `analysis_tools` visit-quality pipeline (`visit-quality-detector.yaml`). Present for all 1,457 visits; surfaced in the [Visit Quality](#visit-quality) section. |
+| `single_visit_star_ref_match_{astrom,photom}_metrics` | (instrument, visit, detector) | Per-visit aggregated residuals from matching `single_visit_star` catalog against the reference catalog. Requires `analysis-visit-single-visit.yaml`. Not run for this extraction. |
 
 ## Astrometric Calibration
 
@@ -332,7 +332,7 @@ Published magnitudes for 10 Tier 1 standard stars are stored in `scripts/config/
 
 ## Known Limitations
 
-1. **Per-source astrometric/photometric residuals not available.** The `single_visit_star_ref_match_{astrom,photom}_metrics` datasets (aggregated RMS, bias, and scatter from per-source catalog-to-refcat matching) require running `nickel-analysis-visit-single-visit.yaml`. These would provide more detailed characterization (e.g., astrometric residual vs. magnitude, per-band photometric color terms derived directly from per-source matching). The `calibrateImage_metadata_metrics` is already in the dataset and is summarized above in [Visit Quality](#visit-quality).
+1. **Per-source astrometric/photometric residuals not available.** The `single_visit_star_ref_match_{astrom,photom}_metrics` datasets (aggregated RMS, bias, and scatter from per-source catalog-to-refcat matching) require running `analysis-visit-single-visit.yaml`. These would provide more detailed characterization (e.g., astrometric residual vs. magnitude, per-band photometric color terms derived directly from per-source matching). The `calibrateImage_metadata_metrics` is already in the dataset and is summarized above in [Visit Quality](#visit-quality).
 
 3. **Degenerate WCS fraction (5.6%).** These visits pass the pipeline but have unreliable astrometric solutions. They are automatically filtered from coadd construction but are included in per-visit DIA. Their forced photometry products should be treated with caution.
 

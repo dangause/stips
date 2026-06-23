@@ -18,7 +18,7 @@ set +a
 source "$(dirname "$0")/../utilities/logging.sh"
 
 ########## ENVIRONMENT VARS ##########
-INSTRUMENT="lsst.obs.nickel.Nickel"
+INSTRUMENT="lsst.obs.stips.active.Instrument"
 TS="$(date -u +%Y%m%dT%H%M%SZ)"
 
 # Setup logging (creates LOG_DIR and LOG_FILE)
@@ -44,11 +44,23 @@ else
   exit 1
 fi
 setup lsst_distrib
-setup -r "$OBS_NICKEL" obs_nickel || true
-OBS_NICKEL_DATA="${OBS_NICKEL_DATA:-$(dirname "$OBS_NICKEL")/obs_nickel_data}"
+# STIPS framework: the instrument is declarative (loaded by path from
+# INSTRUMENT_DIR); LSST machinery lives in obs_stips. Set it up from the repo
+# packages/ dir (this script lives at scripts/pipeline/, so ../../packages).
+REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+OBS_STIPS_DIR="${OBS_STIPS_DIR:-$REPO_ROOT/packages/obs_stips}"
+if [ -d "$OBS_STIPS_DIR" ]; then
+  setup -r "$OBS_STIPS_DIR" obs_stips 2>/dev/null || true
+fi
+OBS_NICKEL_DATA="${OBS_NICKEL_DATA:-$REPO_ROOT/packages/obs_nickel_data}"
 if [ -d "$OBS_NICKEL_DATA" ]; then
   setup -r "$OBS_NICKEL_DATA" obs_nickel_data || true
 fi
+# Re-sourcing loadLSST above can reset PYTHONPATH, dropping the src-layout
+# `stips` core package (NOT an EUPS product) that lsst.obs.stips.active imports
+# when register-instrument re-instantiates the instrument. Put it back, plus
+# obs_stips/python as belt-and-suspenders.
+export PYTHONPATH="$REPO_ROOT/packages/stips/src:$OBS_STIPS_DIR/python:${PYTHONPATH:-}"
 
 ########## REPO ##########
 log_section "Butler Repository Setup"
@@ -167,23 +179,34 @@ fi
 
 ########## SKYMAP: register + alias to a stable chain ##########
 log_section "SkyMap Registration"
-SKYMAP_CFG="$OBS_NICKEL/configs/makeSkyMap.py"
-log_info "Registering SkyMap (config: ${SKYMAP_CFG})"
+# SkyMap config now ships with the framework reference configs (the obs-package
+# collapse + generic-pipelines move relocated configs to instrument_defaults/).
+# The skymap NAME and chain COLLECTION are profile-driven (exported by
+# core/stack.py as SKYMAP_NAME / SKYMAP_COLLECTION); the shared config supplies
+# only the geometry. Fall back to the Nickel reference names for a direct
+# invocation without those exports.
+# SKYMAP_CFG is exported by core/stack.py via instrument-dir-first resolution
+# (a fork's own configs/makeSkyMap.py shadows the framework geometry). Fall back
+# to the framework reference config for a direct invocation without that export.
+SKYMAP_CFG="${SKYMAP_CFG:-${STIPS_DEFAULTS:-$REPO_ROOT/packages/obs_stips/instrument_defaults}/configs/makeSkyMap.py}"
+SKYMAP_NAME="${SKYMAP_NAME:-nickelRings-v1}"
+SKYMAP_COLLECTION="${SKYMAP_COLLECTION:-skymaps/nickelRings}"
+log_info "Registering SkyMap '${SKYMAP_NAME}' (config: ${SKYMAP_CFG})"
 SKYMAP_LOG="${LOG_DIR}/register_skymap_${TS}.log"
-if ! butler register-skymap "$REPO" -C "$SKYMAP_CFG" > "$SKYMAP_LOG" 2>&1; then
+if ! butler register-skymap "$REPO" -C "$SKYMAP_CFG" -c "name=${SKYMAP_NAME}" > "$SKYMAP_LOG" 2>&1; then
   log_warn "register-skymap reported non-zero status; see ${SKYMAP_LOG}"
 else
   log_info "register-skymap output captured in ${SKYMAP_LOG}"
 fi
 
 # In 11.0.0 weekly the default RUN is literally 'skymaps'.
-log_info "Creating SkyMap chain: skymaps/nickelRings -> skymaps"
-butler collection-chain "$REPO" skymaps/nickelRings skymaps --mode redefine \
-  || butler collection-chain "$REPO" skymaps/nickelRings skymaps
+log_info "Creating SkyMap chain: ${SKYMAP_COLLECTION} -> skymaps"
+butler collection-chain "$REPO" "$SKYMAP_COLLECTION" skymaps --mode redefine \
+  || butler collection-chain "$REPO" "$SKYMAP_COLLECTION" skymaps
 
 # (Optional) sanity print
 log_info "Verifying SkyMap datasets:"
-butler query-datasets "$REPO" skyMap --collections skymaps/nickelRings | sed -n '1,50p'
+butler query-datasets "$REPO" skyMap --collections "$SKYMAP_COLLECTION" | sed -n '1,50p'
 
 log_section "Bootstrap Complete"
 print_log_summary

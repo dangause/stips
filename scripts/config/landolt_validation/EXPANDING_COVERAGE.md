@@ -121,7 +121,7 @@ fits.
 
 ## Why the object filter fix matters
 
-`packages/data_tools/src/obs_nickel_data_tools/core/science.py` now special-
+`packages/stips/src/stips/core/science.py` now special-
 cases `object='landolt_validation'` and reads `landolt_catalog.csv` directly
 to build an `exposure.target_name IN (...)` clause. Without this, the
 pipeline would also process the non-Landolt science targets observed those

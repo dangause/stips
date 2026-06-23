@@ -11,7 +11,8 @@
 #   {band}                - Filter band (r, B, V, etc.)
 #   {template_collection} - Template collection to use
 #   {repo}                - Butler repository path
-#   {obs_nickel}          - Path to obs_nickel package
+#   {instrument_dir}      - Path to the declarative instrument package
+#   {stips_defaults}      - Path to framework reference pipelines/configs
 
 # Inherit site-specific settings
 includeConfigs:
@@ -37,7 +38,7 @@ payload:
 # =============================================================================
 # Pipeline Definition
 # =============================================================================
-pipelineYaml: "{obs_nickel}/pipelines/DIA.yaml#dia-full"
+pipelineYaml: "{stips_defaults}/pipelines/DIA.yaml#dia-full"
 
 # =============================================================================
 # Resource Configuration (DIA is memory-intensive)

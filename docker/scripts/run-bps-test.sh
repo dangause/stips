@@ -3,8 +3,8 @@
 #
 # Runs inside the 'login' container. Verifies:
 #   1. LSST stack is available
-#   2. obs_nickel is setup
-#   3. nickel CLI works
+#   2. obs_stips is setup (instrument loaded by path from INSTRUMENT_DIR)
+#   3. stips CLI works
 #   4. BPS submit to Slurm works (basic connectivity)
 #
 # Usage:
@@ -61,15 +61,19 @@ check "bps command available" which bps
 echo
 
 # -------------------------------------------------------------------
-# 3. obs_nickel
+# 3. obs_stips + nickel instrument
 # -------------------------------------------------------------------
-echo "[3/5] obs_nickel"
-OBS_NICKEL_DIR="${OBS_NICKEL:-/opt/nps/packages/obs_nickel}"
-if [[ -d "$OBS_NICKEL_DIR" ]]; then
-    setup -r "$OBS_NICKEL_DIR" obs_nickel 2>/dev/null || true
+echo "[3/5] obs_stips + nickel instrument"
+OBS_STIPS_DIR="${OBS_STIPS:-/opt/nps/packages/obs_stips}"
+INSTRUMENT_DIR="${INSTRUMENT_DIR:-/opt/nps/instruments/nickel}"
+STIPS_DEFAULTS="${STIPS_DEFAULTS:-/opt/nps/packages/obs_stips/instrument_defaults}"
+if [[ -d "$OBS_STIPS_DIR" ]]; then
+    setup -r "$OBS_STIPS_DIR" obs_stips 2>/dev/null || true
 fi
-check "obs_nickel package exists" test -d "$OBS_NICKEL_DIR"
-check "import lsst.obs.nickel" python -c "import lsst.obs.nickel"
+check "obs_stips package exists" test -d "$OBS_STIPS_DIR"
+check "nickel instrument dir exists" test -d "$INSTRUMENT_DIR"
+check "stips_defaults dir exists" test -d "$STIPS_DEFAULTS"
+check "import lsst.obs.stips" python -c "import lsst.obs.stips"
 
 echo
 
@@ -84,14 +88,14 @@ check "partition 'normal' exists" sinfo -p normal
 echo
 
 # -------------------------------------------------------------------
-# 5. nickel CLI (if data_tools installed)
+# 5. stips CLI (if stips installed)
 # -------------------------------------------------------------------
-echo "[5/5] nickel CLI"
-DATA_TOOLS_DIR="${NPS_ROOT:-/opt/nps}/packages/data_tools"
-if [[ -d "$DATA_TOOLS_DIR" ]] && ! command -v nickel &>/dev/null; then
-    pip install -e "$DATA_TOOLS_DIR" 2>/dev/null || true
+echo "[5/5] stips CLI"
+STIPS_DIR="${NPS_ROOT:-/opt/nps}/packages/stips"
+if [[ -d "$STIPS_DIR" ]] && ! command -v stips &>/dev/null; then
+    pip install -e "$STIPS_DIR" 2>/dev/null || true
 fi
-check "nickel --help" nickel --help
+check "stips --help" stips --help
 
 echo
 echo "============================================"

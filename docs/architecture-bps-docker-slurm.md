@@ -120,7 +120,8 @@ The `LocalExecutor` simply wraps `pipetask run` in a shell that sources the LSST
 ```bash
 source /opt/lsst/software/stack/loadLSST.bash
 setup lsst_distrib
-setup -r /opt/nps/packages/obs_nickel obs_nickel
+setup -r /opt/nps/packages/obs_stips obs_stips
+export INSTRUMENT_DIR=/opt/nps/instruments/nickel
 pipetask run -b /data/repo -g /path/to/qgraph.qg -j 4
 ```
 
@@ -205,7 +206,8 @@ This split is critical: quantum graph *generation* (planning what to do) must ha
 │      a. Shell setup (commandPrefix):                    │
 │         source loadLSST.bash                            │
 │         setup lsst_distrib                              │
-│         setup obs_nickel                                │
+│         setup -r .../obs_stips obs_stips                │
+│         export INSTRUMENT_DIR=.../instruments/nickel    │
 │         export REPO=/data/repo ...                      │
 │                                                         │
 │      b. Execute:                                        │
@@ -291,9 +293,9 @@ parsl:
   commandPrefix: |
     source /opt/lsst/software/stack/loadLSST.bash
     setup lsst_distrib
-    setup -r /opt/nps/packages/obs_nickel obs_nickel 2>/dev/null || true
+    setup -r /opt/nps/packages/obs_stips obs_stips 2>/dev/null || true
     export REPO=/data/repo
-    export OBS_NICKEL=/opt/nps/packages/obs_nickel
+    export INSTRUMENT_DIR=/opt/nps/instruments/nickel
     ...
 ```
 
@@ -316,7 +318,7 @@ Each pipeline type defines its inputs, outputs, and data queries:
 
 **science.yaml**:
 ```yaml
-pipelineYaml: "{obs_nickel}/pipelines/DRP.yaml#calibrateImage"
+pipelineYaml: "{instrument_dir}/pipelines/DRP.yaml#calibrateImage"
 inputCollections: "Nickel/raw/{night}/*,Nickel/calib/current,refcats"
 outputRun: "Nickel/runs/{night}/processCcd/{timestamp}/run"
 dataQuery: "instrument='Nickel' AND exposure.observation_type='science'"
@@ -329,7 +331,7 @@ qgraphFile: "{qgraph_file}"
 outputRun: "{output_run}"    # Preserves collection names from qgraph
 ```
 
-Variables like `{night}`, `{repo}`, `{obs_nickel}` are substituted at submission time by `render_bps_config()`.
+Variables like `{night}`, `{repo}`, `{instrument_dir}` (and `{obs_stips_dir}`) are substituted at submission time by `render_bps_config()`.
 
 
 ## The Code: Key Modules
@@ -370,7 +372,8 @@ def render_bps_config(bps_cfg, config, output_dir) -> Path:
     variables = {
         "repo": str(config.repo),
         "night": bps_cfg.night,
-        "obs_nickel": str(config.obs_nickel),
+        "instrument_dir": str(config.instrument_dir),
+        "obs_stips_dir": str(config.obs_stips_dir),
         "computeSite": bps_cfg.site,
         # ... etc
     }
@@ -494,9 +497,10 @@ docker exec nps-hpc sinfo
 docker exec -it nps-hpc bash -c '
   source /opt/lsst/software/stack/loadLSST.bash
   setup lsst_distrib
-  setup -r /opt/nps/packages/obs_nickel obs_nickel 2>/dev/null || true
-  export PYTHONPATH=/opt/nps/packages/data_tools/src:${PYTHONPATH:-}
-  python -m obs_nickel_data_tools.cli run \
+  setup -r /opt/nps/packages/obs_stips obs_stips 2>/dev/null || true
+  export INSTRUMENT_DIR=/opt/nps/instruments/nickel
+  export PYTHONPATH=/opt/nps/packages/stips/src:${PYTHONPATH:-}
+  python -m stips.cli run \
     /opt/nps/scripts/config/2023ixf/pipeline_docker_bps_test.yaml
 '
 
@@ -605,7 +609,7 @@ docker/
 └── scripts/
     └── run-bps-test.sh          # Cluster readiness smoke test
 
-packages/data_tools/src/obs_nickel_data_tools/core/
+packages/stips/src/stips/core/
 ├── executor.py                  # LocalExecutor + BPSExecutor
 ├── bps.py                       # BPSConfig, render, submit, status, cancel
 ├── stack.py                     # LSST stack activation, pipetask/butler wrappers

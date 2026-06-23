@@ -61,6 +61,13 @@ logs
 !packages/testdata/data/
 !packages/testdata/data/**
 
+# Allow tracked test fixtures (the bare `data` rule above would hide these)
+!packages/obs_stips/tests/data/
+!packages/obs_stips/tests/data/**
+# ...but keep build artifacts under it ignored (the `**` negation re-included them)
+packages/obs_stips/tests/data/**/__pycache__/
+packages/obs_stips/tests/data/**/*.pyc
+
 # Defect visualization outputs
 packages/defects/defects_tools/defects/defects_*/
 **/defects/defects/
@@ -82,12 +89,25 @@ packages/refcats/upstream/
 # Project docs (auto-generated)
 CLAUDE.md
 
+# Claude Code / superpowers session state
+.claude/
+.superpowers/
+
 # Superpowers skill workflow artifacts (plans/specs from /brainstorm + /write-plan)
 docs/superpowers/
 
 # Git worktrees
 .worktrees/
 
-# Poster/paper analysis outputs (override generic *.png/*.csv ignore)
-!analysis/**/*.png
-!analysis/**/*.csv
+# Local analysis outputs (CSVs, PNGs, scratch scripts; kept out of main)
+/analysis/
+
+# Poster work (kept locally only, not in main)
+posters/
+
+# Internal design / planning docs (not user-facing)
+docs/diagrams/
+docs/plans/
+docs/aas246-iposter-*.md
+docs/logging-improvements.md
+docs/methods-handout.*

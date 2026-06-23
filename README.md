@@ -1,8 +1,17 @@
-# Nickel Processing Suite
+# STIPS — The Small Telescope Image Processing Suite
 
-Gen3 LSST Science Pipelines integration for the **Nickel 1-meter telescope** at Lick Observatory.
+[![CI](https://github.com/dangause/stips/actions/workflows/ci.yml/badge.svg)](https://github.com/dangause/stips/actions/workflows/ci.yml)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](pyproject.toml)
 
-A complete, production-ready monorepo providing telescope configuration, data pipelines, and analysis tools for automated astronomical survey processing.
+**STIPS** brings the [LSST Science Pipelines](https://pipelines.lsst.io/) to 1-meter class telescopes. It wraps the Rubin/LSST reduction stack with the per-telescope plumbing — instrument package, prefab YAML pipelines, and a unified CLI — needed to run survey-grade calibration, difference imaging, forced photometry, and lightcurve extraction on small-telescope data, without requiring deep LSST middleware knowledge.
+
+**Supported instruments:**
+
+- ✅ **Nickel 1-m** at Lick Observatory — reference implementation, used in active SN, exoplanet, and variable-star follow-up
+- ➕ **Other 1-m single-CCD telescopes** — supported by forking STIPS and adding an instrument profile (a thin `obs_<instrument>` package). The framework core and science pipelines work unchanged. See the [forking guide](docs/forking-stips.md).
+
+> The CLI is `stips`. The reference instrument is selected at runtime via the `INSTRUMENT_PACKAGE` environment variable, which defaults to `lsst.obs.nickel`.
 
 > Tested with LSST Science Pipelines `v30.0.3` and `v11.0.0`
 
@@ -13,7 +22,7 @@ A complete, production-ready monorepo providing telescope configuration, data pi
 - [Quick Start](#quick-start)
 - [Features](#features)
 - [Monorepo Structure](#monorepo-structure)
-- [The nickel CLI](#the-nickel-cli)
+- [The stips CLI](#the-stips-cli)
 - [Installation](#installation)
 - [Configuration](#configuration)
 - [Running Pipelines](#running-pipelines)
@@ -30,30 +39,32 @@ A complete, production-ready monorepo providing telescope configuration, data pi
 ## Quick Start
 
 ```bash
-# 1. Install all packages
+# 1. Install all packages (stips + obs_stips + obs_nickel)
 uv sync --group dev
 
-# 2. Run a full pipeline from YAML config (self-contained)
-nickel run scripts/config/2023ixf/pipeline_ps1_template.yaml
+# 2. Run a full pipeline from a YAML config (self-contained)
+stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml run
 
-# 3. Or use individual commands with profiles
-nickel -p 2023ixf calibs 20230519        # Run calibrations
-nickel -p 2023ixf science 20230519       # Process science frames
-nickel -p 2023ixf dia 20230519 --auto    # Difference imaging
+# 3. Or use individual commands — the same -c YAML supplies the config
+stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml calibs 20230519   # Calibrations
+stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml science 20230519  # Science frames
+stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml dia 20230519 --auto  # Difference imaging
 ```
+
+> The reference instrument defaults to Nickel (`INSTRUMENT_PACKAGE=lsst.obs.nickel`); `uv sync` installs the `obs_*` packages the CLI imports at runtime.
 
 ### Docker Quick Start
 
 ```bash
 # Run with Docker
-docker-compose run --rm nps nickel calibs 20230519
+docker-compose run --rm nps stips calibs 20230519
 
 # Or build and run directly
 docker build -t nps:latest -f docker/Dockerfile .
 docker run -v /path/to/repo:/data/repo \
            -v /path/to/raw:/data/raw \
            -v /path/to/refcats:/data/refcats \
-           nps:latest nickel env
+           nps:latest stips env
 ```
 
 ---
@@ -75,7 +86,7 @@ docker run -v /path/to/repo:/data/repo \
 - **Forced photometry**: measurements at arbitrary RA/Dec
 - **Light curve extraction**: multi-band light curves from DIA or forced photometry
 
-### Unified CLI (`nickel`)
+### Unified CLI (`stips`)
 - **Profile-based configuration** for multi-repository workflows
 - **YAML-driven pipeline orchestration** with automatic bootstrap
 - **BPS integration** for HPC cluster execution (Slurm, HTCondor)
@@ -91,11 +102,12 @@ docker run -v /path/to/repo:/data/repo \
 ## Monorepo Structure
 
 ```
-nickel_processing_suite/
+stips/
 ├── packages/
-│   ├── obs_nickel/           # LSST instrument package
+│   ├── stips/                # Framework core + CLI (the `stips` command) + pipeline tools
+│   ├── obs_stips/            # Instrument-agnostic LSST glue (lsst.obs.stips) + shared tasks
+│   ├── obs_nickel/           # Reference instrument profile (lsst.obs.nickel)
 │   ├── obs_nickel_data/      # Curated calibrations (defects)
-│   ├── data_tools/           # Python CLI and pipeline tools
 │   ├── defects/              # Defect mask generation
 │   ├── refcats/              # Reference catalog scripts
 │   ├── colorterms/           # Color term fitting
@@ -121,58 +133,56 @@ nickel_processing_suite/
 
 ---
 
-## The `nickel` CLI
+## The `stips` CLI
 
-The unified command-line interface for all pipeline operations.
+The unified command-line interface for all pipeline operations. Supporting console scripts are installed under the `stips-*` prefix (e.g. `stips-dia-lightcurve`, `stips-eda-butler`).
 
 ### Commands Reference
 
+All commands take the group-level config via `stips -c <config.yaml> <command> ...`
+(the `-c` YAML's `env:` block supplies the configuration).
+
 | Command | Description |
 |---------|-------------|
-| `nickel env` | Show configuration and validate paths |
-| `nickel bootstrap [CONFIG.yaml]` | Initialize Butler repository |
-| `nickel download NIGHT` | Fetch data from Lick archive |
-| `nickel calibs NIGHT` | Run nightly calibrations (bias, flat, defects) |
-| `nickel science NIGHT` | Process science frames (ISR, WCS, photometry) |
-| `nickel dia NIGHT` | Run difference imaging analysis |
-| `nickel ps1-template` | Download and ingest PS1 template |
-| `nickel fphot NIGHT` | Run forced photometry at RA/Dec |
-| `nickel lightcurve` | Extract light curve from sources |
-| `nickel clean CONFIG.yaml` | Remove processing outputs for re-runs |
-| `nickel run CONFIG.yaml` | Run full pipeline from YAML config |
-| `nickel dashboard` | Launch browser-based pipeline monitoring |
-| `nickel bps submit` | Submit pipeline to BPS cluster |
-| `nickel bps status` | Check BPS run status |
-| `nickel bps cancel` | Cancel BPS run |
-| `nickel bps list` | List recent BPS runs |
+| `stips env` | Show configuration and validate paths |
+| `stips bootstrap` | Initialize Butler repository |
+| `stips download NIGHT` | Fetch data from Lick archive |
+| `stips calibs NIGHT` | Run nightly calibrations (bias, flat, defects) |
+| `stips science NIGHT` | Process science frames (ISR, WCS, photometry) |
+| `stips dia NIGHT` | Run difference imaging analysis |
+| `stips ps1-template` | Download and ingest PS1 template |
+| `stips fphot NIGHT` | Run forced photometry at RA/Dec |
+| `stips lightcurve` | Extract light curve from sources |
+| `stips clean` | Remove processing outputs for re-runs |
+| `stips run` | Run full pipeline from the `-c` YAML config |
+| `stips dashboard` | Launch browser-based pipeline monitoring (needs the `stips[dashboard]` extra) |
+| `stips bps submit` | Submit pipeline to BPS cluster |
+| `stips bps status` | Check BPS run status |
+| `stips bps cancel` | Cancel BPS run |
+| `stips bps list` | List recent BPS runs |
 
-### Profile-Based Configuration
+### Multi-Target Workflows
 
-Work with multiple Butler repositories using profiles:
+The recommended path for multi-target work is per-target YAML configs (in `scripts/config/<target>/`). Each YAML is self-contained — including the environment paths in an `env:` block — so switching targets is one command:
 
 ```bash
-# Create profile-specific env files
-cp .env.example .env.2023ixf  # For SN 2023ixf campaign
-cp .env.example .env.2020wnt  # For SN 2020wnt campaign
-
-# Use profiles with any command
-nickel -p 2023ixf calibs 20230519
-nickel -p 2020wnt dia 20201207 --auto
-
-# Profiles look for .env.{profile} or .env.{profile}.ps1
+stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml run
+stips -c scripts/config/2020wnt/pipeline_ps1_template.yaml run
 ```
+
+The group-level `-c/--config` YAML is the sole config source. Its `env:` block supplies `REPO`/`STACK_DIR`/`INSTRUMENT_DIR`/`RAW_PARENT_DIR`; the same file's pipeline sections drive `stips run`. (`.env` files and `-p <profile>` are no longer supported.)
 
 ### Transient Analysis Workflow
 
 ```bash
 # 1. Ingest PS1 template for r-band
-nickel ps1-template --ra 210.91 --dec 54.32 --band r
+stips ps1-template --ra 210.91 --dec 54.32 --band r
 
 # 2. Run forced photometry on difference images
-nickel fphot 20230519 --ra 210.91 --dec 54.32
+stips fphot 20230519 --ra 210.91 --dec 54.32
 
 # 3. Extract light curve
-nickel lightcurve --ra 210.91 --dec 54.32 \
+stips lightcurve --ra 210.91 --dec 54.32 \
     --collections "Nickel/runs/20230519/forcedPhotRaDec/*/run" \
     --dataset-type forced_phot_diffim_radec \
     --name "SN 2023ixf"
@@ -194,7 +204,9 @@ nickel lightcurve --ra 210.91 --dec 54.32 \
 ```bash
 uv sync --group dev
 ```
-Installs all workspace packages plus code quality tools (ruff, pyright, pre-commit).
+Installs all workspace packages (including `stips`, `obs_stips`, and `obs_nickel`) plus code quality tools (ruff, pyright, pre-commit). The CLI imports the instrument profile at runtime, so the `obs_*` packages must be installed alongside `stips` — `uv sync` handles this.
+
+A fork installs its own `obs_<instrument>` package here and sets `INSTRUMENT_PACKAGE` to point the CLI at it (default: `lsst.obs.nickel`).
 
 #### Full Development Setup
 ```bash
@@ -209,8 +221,8 @@ Installs everything including Jupyter notebooks and analysis libraries.
 make test
 
 # Test CLI tools
-nickel --help
-nickel env
+stips --help
+stips env
 ```
 
 ---
@@ -226,7 +238,7 @@ Self-contained YAML files with inline environment:
 env:
   REPO: "/path/to/butler/repo"
   STACK_DIR: "/path/to/lsst_stack"
-  OBS_NICKEL: "/path/to/nickel_processing_suite/packages/obs_nickel"
+  INSTRUMENT_DIR: "/path/to/stips/packages/obs_nickel"
   RAW_PARENT_DIR: "/path/to/raw/data"
   REFCAT_REPO: "/path/to/refcats"
 
@@ -273,17 +285,20 @@ lightcurve:
   explosion_mjd: 60082.75
 ```
 
-### Environment File Configuration
+### Config File `env:` Block
 
-For single-repository setups or profiles:
+Configuration lives in the `env:` block of the YAML you pass with `-c/--config`
+(the same file that drives `stips run`). It is the sole config source:
 
-```bash
-# .env or .env.{profile}
-REPO=/path/to/butler/repo
-STACK_DIR=/path/to/lsst_stack
-OBS_NICKEL=/path/to/obs_nickel
-RAW_PARENT_DIR=/path/to/raw/data
-REFCAT_REPO=/path/to/refcats
+```yaml
+# scripts/config/<target>/pipeline_ps1_template.yaml
+env:
+  REPO: /path/to/butler/repo
+  STACK_DIR: /path/to/lsst_stack
+  INSTRUMENT_DIR: /path/to/obs_nickel
+  RAW_PARENT_DIR: /path/to/raw/data
+  REFCAT_REPO: /path/to/refcats
+  CP_PIPE_DIR: "${STACK_DIR}/cp_pipe"   # ${VAR} expands within the env: block
 ```
 
 ### Required Variables
@@ -292,7 +307,7 @@ REFCAT_REPO=/path/to/refcats
 |----------|-------------|
 | `REPO` | Path to Butler repository |
 | `STACK_DIR` | Path to LSST stack installation |
-| `OBS_NICKEL` | Path to obs_nickel package |
+| `INSTRUMENT_DIR` | Path to the active instrument package (e.g. obs_nickel) |
 | `RAW_PARENT_DIR` | Parent directory for raw data |
 
 ### Optional Variables
@@ -309,14 +324,11 @@ REFCAT_REPO=/path/to/refcats
 
 ### Step 0: Bootstrap (Automatic)
 
-The `nickel run` command automatically bootstraps the repository if needed. For manual bootstrap:
+The `stips run` command automatically bootstraps the repository if needed. For manual bootstrap:
 
 ```bash
-# From YAML config (recommended - self-contained)
-nickel bootstrap scripts/config/2023ixf/pipeline_ps1_template.yaml
-
-# With profile
-nickel -p 2023ixf bootstrap
+# Config comes from the group -c YAML (self-contained)
+stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml bootstrap
 
 # The bootstrap step:
 # - Creates Butler repository
@@ -328,55 +340,55 @@ nickel -p 2023ixf bootstrap
 ### Step 1: Download Data (Optional)
 
 ```bash
-nickel download 20230519
+stips download 20230519
 ```
 
 ### Step 2: Calibrations
 
 ```bash
-nickel calibs 20230519
-nickel calibs 20230519 --jobs 8  # More parallel jobs
+stips calibs 20230519
+stips calibs 20230519 --jobs 8  # More parallel jobs
 ```
 
 ### Step 3: Science Processing
 
 ```bash
-nickel science 20230519
-nickel science 20230519 --object 2023ixf --skip-coadds
-nickel science 20230519 --bad 12345,12346  # Exclude bad exposures
+stips science 20230519
+stips science 20230519 --object 2023ixf --skip-coadds
+stips science 20230519 --bad 12345,12346  # Exclude bad exposures
 ```
 
 ### Step 4: Difference Imaging
 
 ```bash
-nickel dia 20230519 --auto                    # Auto-discover template
-nickel dia 20230519 --template templates/ps1/r  # Specific template
-nickel dia 20230519 --auto --prefer-ps1 --band r  # Prefer PS1 template
+stips dia 20230519 --auto                    # Auto-discover template
+stips dia 20230519 --template templates/ps1/r  # Specific template
+stips dia 20230519 --auto --prefer-ps1 --band r  # Prefer PS1 template
 ```
 
 ### Step 5: Forced Photometry
 
 ```bash
-nickel fphot 20230519 --ra 210.91 --dec 54.32
-nickel fphot 20230519 --ra 210.91 --dec 54.32 --band r --image-type both
+stips fphot 20230519 --ra 210.91 --dec 54.32
+stips fphot 20230519 --ra 210.91 --dec 54.32 --band r --image-type both
 ```
 
 ### Step 6: Light Curve Extraction
 
 ```bash
 # From DIA sources
-nickel lightcurve --ra 210.91 --dec 54.32 \
+stips lightcurve --ra 210.91 --dec 54.32 \
     --collections "Nickel/runs/*/diff/*/run" \
     --name "SN 2023ixf"
 
 # From forced photometry (more reliable)
-nickel lightcurve --ra 210.91 --dec 54.32 \
+stips lightcurve --ra 210.91 --dec 54.32 \
     --collections "Nickel/runs/*/forcedPhotRaDec/*/run" \
     --dataset-type forced_phot_diffim_radec \
     --name "SN 2023ixf"
 
 # With display options (absolute magnitude, days since explosion)
-nickel lightcurve --ra 210.91 --dec 54.32 \
+stips lightcurve --ra 210.91 --dec 54.32 \
     --collections "Nickel/runs/*/forcedPhotRaDec/*/run" \
     --dataset-type forced_phot_diffim_radec \
     --name "SN 2023ixf" \
@@ -392,9 +404,9 @@ nickel lightcurve --ra 210.91 --dec 54.32 \
 Run complete workflows from a single configuration file:
 
 ```bash
-nickel run scripts/config/2023ixf/pipeline_ps1_template.yaml
-nickel run scripts/config/2023ixf/pipeline_nickel_template.yaml
-nickel run pipeline.yaml --dry-run  # Preview without executing
+stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml run
+stips -c scripts/config/2023ixf/pipeline_nickel_template.yaml run
+stips -c pipeline.yaml run --dry-run  # Preview without executing
 ```
 
 ### Template Types
@@ -463,7 +475,7 @@ docker-compose up -d
 REPO=/path/to/repo RAW_PARENT_DIR=/path/to/raw docker-compose up -d
 
 # Run a command
-docker-compose run --rm nps nickel calibs 20230519
+docker-compose run --rm nps stips calibs 20230519
 
 # Interactive shell
 docker-compose run --rm nps bash
@@ -496,7 +508,7 @@ singularity build nps.sif docker-daemon://nps:latest
 singularity run -B /scratch/repo:/data/repo \
                 -B /archive/raw:/data/raw \
                 -B /common/refcats:/data/refcats \
-                nps.sif nickel calibs 20230519
+                nps.sif stips calibs 20230519
 ```
 
 ---
@@ -517,28 +529,28 @@ BPS (Batch Processing Service) enables large-scale parallel processing on HPC cl
 
 ```bash
 # Submit to Slurm
-nickel bps submit calibs 20230519 --site slurm
-nickel bps submit science 20230519 --site slurm
-nickel bps submit dia 20230519 --site slurm --band r
+stips bps submit calibs 20230519 --site slurm
+stips bps submit science 20230519 --site slurm
+stips bps submit dia 20230519 --site slurm --band r
 
 # Submit with project/account
-nickel bps submit science 20230519 --site slurm --project myallocation
+stips bps submit science 20230519 --site slurm --project myallocation
 
 # Dry run (show what would be submitted)
-nickel bps submit calibs 20230519 --site local --dry-run
+stips bps submit calibs 20230519 --site local --dry-run
 ```
 
 ### Managing Runs
 
 ```bash
 # Check status
-nickel bps status RUN_ID
+stips bps status RUN_ID
 
 # List recent runs
-nickel bps list
+stips bps list
 
 # Cancel a run
-nickel bps cancel RUN_ID
+stips bps cancel RUN_ID
 ```
 
 ### BPS Configuration
@@ -678,13 +690,13 @@ Ensure `STACK_DIR` points to a valid LSST installation:
 ls $STACK_DIR/loadLSST.bash  # Should exist
 ```
 
-### "Command not found: nickel"
+### "Command not found: stips"
 
-Install the data_tools package:
+Install the stips package:
 ```bash
 uv sync --group dev
 # or
-pip install -e packages/data_tools
+pip install -e packages/stips -e packages/obs_stips -e packages/obs_nickel
 ```
 
 ### Pipeline fails with import errors
@@ -697,10 +709,10 @@ setup lsst_distrib
 
 ### Bootstrap fails to find script
 
-Run from the nickel_processing_suite directory:
+Run from the repository root directory:
 ```bash
-cd /path/to/nickel_processing_suite
-nickel bootstrap scripts/config/2023ixf/pipeline_ps1_template.yaml
+cd /path/to/stips
+stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml bootstrap
 ```
 
 ### Forced photometry finds no processCcd collection

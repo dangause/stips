@@ -3,7 +3,6 @@ ENV_FILE ?= .env
 EXTRA_ENV ?=
 PYTHON ?= python
 PIP ?= $(PYTHON) -m pip
-PACKAGES := packages/obs_nickel packages/data_tools packages/defects packages/refcats packages/testdata packages/tuning packages/colorterms
 
 # Multi-repo support:
 # - Switch primary env file:   ENV_FILE=repo2.env make calibs NIGHT=20240625
@@ -20,7 +19,7 @@ if [[ -f "$${PWD}/scripts/utilities/repo_paths.sh" ]]; then \
 	source "$${PWD}/scripts/utilities/repo_paths.sh"; \
 fi; \
 export REPO_ROOT="$${REPO_ROOT:-$${PWD}}"; \
-export OBS_NICKEL="$${OBS_NICKEL:-$${REPO_ROOT}/packages/obs_nickel}"; \
+export INSTRUMENT_DIR="$${INSTRUMENT_DIR:-$${REPO_ROOT}/instruments/nickel}"; \
 export TESTDATA_NICKEL_DIR="$${TESTDATA_NICKEL_DIR:-$${REPO_ROOT}/packages/testdata}"; \
 export REPO="$${REPO:-}"; \
 export LSST_CONDA_ENV_NAME="$${LSST_CONDA_ENV_NAME:-}"
@@ -41,12 +40,13 @@ else \
 fi; \
 setup lsst_distrib; \
 _setup_local() { [[ -d "$$1/ups" ]] && { eups declare -r "$$1" "$$2" -t current 2>/dev/null || true; setup "$$2" 2>/dev/null || setup -r "$$1" "$$2"; }; }; \
-OBS_NICKEL_LOCAL="$${REPO_ROOT}/packages/obs_nickel"; \
+OBS_STIPS_LOCAL="$${REPO_ROOT}/packages/obs_stips"; \
 OBS_NICKEL_DATA_LOCAL="$${REPO_ROOT}/packages/obs_nickel_data"; \
-_setup_local "$$OBS_NICKEL_LOCAL" obs_nickel; \
+_setup_local "$$OBS_STIPS_LOCAL" obs_stips; \
 _setup_local "$$OBS_NICKEL_DATA_LOCAL" obs_nickel_data; \
 _setup_local "$${TESTDATA_NICKEL_DIR}" testdata_nickel; \
-export PYTHONPATH="$${OBS_NICKEL_LOCAL}/python:$${OBS_NICKEL_DATA_LOCAL}/python:$${PYTHONPATH:-}";
+export INSTRUMENT_DIR="$${INSTRUMENT_DIR:-$${REPO_ROOT}/instruments/nickel}"; \
+export PYTHONPATH="$${REPO_ROOT}/packages/stips/src:$${OBS_STIPS_LOCAL}/python:$${OBS_NICKEL_DATA_LOCAL}/python:$${PYTHONPATH:-}";
 endef
 
 # =============================================================================
@@ -70,8 +70,8 @@ bootstrap: ## Bootstrap Butler repo + refcats + skymap
 	$(SHELL) -lc '$(setup_stack) ./scripts/pipeline/00_bootstrap_repo.sh'
 
 # Pipeline operations (calibs, science, DIA, fphot, lightcurve) are handled
-# by the `nickel` CLI. Run `nickel --help` for usage, or use YAML-driven
-# orchestration with `nickel run <config.yaml>`.
+# by the `stips` CLI. Run `stips --help` for usage, or use YAML-driven
+# orchestration with `stips -c <config.yaml> run`.
 
 .PHONY: refcat-cones
 refcat-cones: ## Generate cones.csv + htm7_list.txt via nickel-refcats (pass ARGS="--ras ... --decs ...")
@@ -79,12 +79,12 @@ refcat-cones: ## Generate cones.csv + htm7_list.txt via nickel-refcats (pass ARG
 		PYTHONPATH=$${PYTHONPATH}:$${PWD}/packages/refcats/src python -u -m nickel_refcats cones $(ARGS)'
 
 .PHONY: declare-eups
-declare-eups: ## Declare obs_nickel, obs_nickel_data, and testdata_nickel in the current stack (uses STACK_DIR and env files)
+declare-eups: ## Declare obs_stips, obs_nickel_data, and testdata_nickel in the current stack (uses STACK_DIR and env files)
 	$(SHELL) -lc '$(envsource) \
 	  if [ -f "$${STACK_DIR}/loadLSST.zsh" ]; then source "$${STACK_DIR}/loadLSST.zsh"; \
 	  elif [ -f "$${STACK_DIR}/loadLSST.bash" ]; then source "$${STACK_DIR}/loadLSST.bash"; \
 	  else echo "STACK_DIR loader not found (loadLSST)"; exit 1; fi; \
-	  cd "$(PWD)/packages/obs_nickel" && eups declare obs_nickel git -r . -t current || true; \
+	  cd "$(PWD)/packages/obs_stips" && eups declare obs_stips git -r . -t current || true; \
 	  cd "$(PWD)/packages/obs_nickel_data" && eups declare obs_nickel_data git -r . -t current || true; \
 	  cd "$(PWD)/packages/testdata" && eups declare testdata_nickel git -r . -t current 2>/dev/null || true'
 
@@ -113,7 +113,7 @@ format: ## Ruff format across the workspace
 
 .PHONY: test
 test: ## Run pytest suite (requires stack env)
-	$(SHELL) -lc '$(setup_stack) PYTHONPATH=$${PYTHONPATH}:$${OBS_NICKEL}/python python -m pytest -q'
+	$(SHELL) -lc '$(setup_stack) python -m pytest -q packages/stips/tests packages/obs_stips/tests instruments/nickel/tests'
 
 .PHONY: notebook
 notebook: ## Start Jupyter Lab with LSST stack + UV venv active
@@ -126,8 +126,8 @@ env-info: ## Show which env file(s) will be loaded and key paths
 	$(SHELL) -lc '$(load_envs); \
 		echo "ENV_FILE=$(ENV_FILE)"; \
 		echo "EXTRA_ENV=$(EXTRA_ENV)"; \
-		printf "REPO_ROOT=%s\nSTACK_DIR=%s\nREPO=%s\nOBS_NICKEL=%s\nCP_PIPE_DIR=%s\nLSST_CONDA_ENV_NAME=%s\n" \
-			"$${REPO_ROOT:-<unset>}" "$${STACK_DIR:-<unset>}" "$${REPO:-<unset>}" "$${OBS_NICKEL:-<unset>}" "$${CP_PIPE_DIR:-<unset>}" "$${LSST_CONDA_ENV_NAME:-<unset>}"; \
+		printf "REPO_ROOT=%s\nSTACK_DIR=%s\nREPO=%s\nINSTRUMENT_DIR=%s\nCP_PIPE_DIR=%s\nLSST_CONDA_ENV_NAME=%s\n" \
+			"$${REPO_ROOT:-<unset>}" "$${STACK_DIR:-<unset>}" "$${REPO:-<unset>}" "$${INSTRUMENT_DIR:-<unset>}" "$${CP_PIPE_DIR:-<unset>}" "$${LSST_CONDA_ENV_NAME:-<unset>}"; \
 	'
 
 # =============================================================================
@@ -181,8 +181,8 @@ singularity-build: docker-build ## Build Singularity image from Docker
 
 .PHONY: help
 help: ## Show this help message
-	@echo "Nickel Processing Suite - Available targets:"
+	@echo "STIPS (Small Telescope Image Processing Suite) - Available targets:"
 	@echo ""
-	@echo "  Pipeline operations use the 'nickel' CLI. Run: nickel --help"
+	@echo "  Pipeline operations use the 'stips' CLI. Run: stips --help"
 	@echo ""
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'

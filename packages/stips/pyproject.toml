@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "stips"
+version = "0.1.0"
+description = "STIPS framework core: instrument profiles and hooks"
+requires-python = ">=3.12"
+dependencies = [
+    "astropy",
+    "numpy",
+    "pandas",
+    "pyyaml>=6.0",
+    "rich>=13.0.0",
+    "matplotlib>=3.5.0",
+    "click>=8.0.0",
+]
+
+[project.optional-dependencies]
+dashboard = [
+    "fastapi>=0.104.0",
+    "uvicorn[standard]>=0.24.0",
+    "jinja2>=3.1.0",
+    "sse-starlette>=1.8.0",
+]
+
+[project.scripts]
+# Main CLI
+stips = "stips.cli:main"
+
+# Archive tools
+stips-archive-nights = "stips.pipeline_tools.generate_nights_list:main"
+stips-archive-ingest-ps1 = "stips.pipeline_tools.ingest_ps1_template:main"
+stips-archive-template-meta = "stips.pipeline_tools.template_metadata:main"
+
+# DIA tools
+stips-dia-assess = "stips.pipeline_tools.assess_dia_quality:main"
+stips-dia-lightcurve = "stips.pipeline_tools.extract_lightcurve:main"
+
+# Skymap tools
+stips-skymap-build-config = "stips.skymap.build_discrete_skymap_config:main"
+stips-skymap-make = "stips.skymap.make_skymap_from_datasets:main"
+
+# EDA tools
+stips-eda-butler = "stips.eda.butler_inspect:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
