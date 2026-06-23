@@ -64,7 +64,14 @@ profile = InstrumentProfile(
         "relative_humidity": Field("HUMIDITY", default=0.0),
         "telescope": Field("TELESCOP", default="ct1m"),
     },
-    const_map={"boresight_rotation_angle": 0.0, "boresight_rotation_coord": "sky"},
+    # Y4KCam is mounted 180 deg rotated vs the assumed convention: the FITS
+    # headers carry no field-rotation keyword, and with rotation_angle=0 the
+    # initial sky WCS is 180 deg off, so the matcher cannot seed and astrometry
+    # collapses to 13-46" "fits" on spurious matches. Empirically (initial-WCS
+    # source-vs-refcat alignment sweep), orientation=180 deg is the clear winner
+    # (~10x more sources align), letting the matcher converge. The mount has no
+    # field rotation (equatorial), so this is a constant.
+    const_map={"boresight_rotation_angle": 180.0, "boresight_rotation_coord": "sky"},
     camera="camera/y4kcam.yaml",
     instrument_class="lsst.obs.stips.active.Instrument",
     # The Butler ``day_obs`` dimension is derived by astro_metadata_translator's
