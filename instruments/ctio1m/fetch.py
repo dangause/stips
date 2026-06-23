@@ -207,7 +207,9 @@ def fetch_data(night: str, config, *, overwrite: bool = False) -> str:
     ``"ok"`` | ``"not_found"`` | ``"failed"``.
     """
     env = getattr(config, "env", {}) or {}
-    obstypes = [o for o in env.get("NOIRLAB_OBSTYPES", "").split(",") if o.strip()]
+    obstypes = [
+        o.strip() for o in env.get("NOIRLAB_OBSTYPES", "").split(",") if o.strip()
+    ]
     code = _fetch_night(
         night,
         Path(config.raw_parent_dir),

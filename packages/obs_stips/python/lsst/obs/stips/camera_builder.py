@@ -210,9 +210,10 @@ def build_camera(spec, instrument_name: str):
     detectorConfigList = makeDetectorConfigList(ccdParams)
     focalPlaneParity = cameraParams.get("focalPlaneParity", False)
 
-    amplifierDict = {}
-    for ccdName, ccdValues in ccdParams.items():
-        amplifierDict[ccdName] = makeAmplifierList(ccdValues)
+    amplifierDict = {
+        ccdName: makeAmplifierList(ccdValues)
+        for ccdName, ccdValues in ccdParams.items()
+    }
 
     return makeCameraFromCatalogs(
         cameraName,
