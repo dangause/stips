@@ -28,8 +28,9 @@ name: CTIO1m
 # removes the central overscan cross and closes up the quadrants. See the
 # amplifiers block for the verification.
 #
-# NOTE: per-amp gain/readNoise are still placeholders (not in the header) — a
-# separate amp-step source addressed elsewhere.
+# NOTE: per-amp gains are MEASURED (photon transfer from 34 dome-flat pairs:
+# A00=1.384 A01=1.423 A02=1.435 A03=1.484 e-/ADU; the old 1.4 placeholder was
+# within ~7%). readNoise is still a 7 e- placeholder (not in the header).
 
 # Shared amp keys (gain/readNoise/bboxes/readCorner/flipXY overridden per amp).
 AMP: &AMP
@@ -42,7 +43,7 @@ AMP: &AMP
   rawSerialOverscanBBox: [[2032, 0], [20, 2032]]
   rawParallelPrescanBBox: [[0, 0], [0, 0]]
   rawParallelOverscanBBox: [[0, 2032], [2032, 20]]
-  gain: 1.4                                 # e-/ADU placeholder (ITL/OSU typical)
+  gain: 1.4                                 # e-/ADU (per-amp values set below)
   readNoise: 7.0                            # e- placeholder
   saturation: 65535                         # ADU
   linearityType: PROPORTIONAL
@@ -80,6 +81,7 @@ CCD: &CCD
     # A00 — lower-left quadrant. Readout UR (inner); overscan on top + right.
     A00:
       <<: *AMP
+      gain: 1.384                            # measured (photon transfer, 34 flat pairs)
       readCorner: UR
       ixy: [0, 0]
       rawBBox: [[0, 0], [2052, 2052]]
@@ -90,6 +92,7 @@ CCD: &CCD
     # A01 — lower-right quadrant. Readout UL (inner); overscan on top + left.
     A01:
       <<: *AMP
+      gain: 1.423                            # measured (photon transfer, 34 flat pairs)
       readCorner: UL
       ixy: [1, 0]
       # right half: overscan [2052:2072) then imaging [2072:4104) (two-strip central overscan)
@@ -101,6 +104,7 @@ CCD: &CCD
     # A02 — upper-left quadrant. Readout LR (inner); overscan on bottom + right.
     A02:
       <<: *AMP
+      gain: 1.435                            # measured (photon transfer, 34 flat pairs)
       readCorner: LR
       ixy: [0, 1]
       rawBBox: [[0, 2052], [2052, 2052]]
@@ -111,6 +115,7 @@ CCD: &CCD
     # A03 — upper-right quadrant. Readout LL (inner); overscan on bottom + left.
     A03:
       <<: *AMP
+      gain: 1.484                            # measured (photon transfer, 34 flat pairs)
       readCorner: LL
       ixy: [1, 1]
       # right half (cols), top half (rows): overscan strips [2052:2072), imaging [2072:4104)
