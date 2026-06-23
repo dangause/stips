@@ -21,6 +21,9 @@ is imported lazily inside the hooks.
 import logging
 import re
 
+# Safe to import at module load: fetch.py is stdlib-only at import time
+# (urllib/json); the NOIRLab archive is hit only when fetch_data() runs.
+from fetch import fetch_data as _fetch_data
 from stips import Field, InstrumentProfile, Site, hook
 
 log = logging.getLogger("lsst.obs.stips.ctio1m.profile")
@@ -72,6 +75,8 @@ profile = InstrumentProfile(
     # (~10x more sources align), letting the matcher converge. The mount has no
     # field rotation (equatorial), so this is a constant.
     const_map={"boresight_rotation_angle": 180.0, "boresight_rotation_coord": "sky"},
+    # NOIRLab Astro Data Archive fetch (stips download); see fetch.py.
+    fetch_data=_fetch_data,
     camera="camera/y4kcam.yaml",
     instrument_class="lsst.obs.stips.active.Instrument",
     # The Butler ``day_obs`` dimension is derived by astro_metadata_translator's
