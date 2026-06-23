@@ -80,7 +80,16 @@ class StipsInstrument(Instrument):
                 "INSTRUMENT_DIR must be set to load the camera "
                 "(it points at instruments/<name>/, containing the camera yaml)."
             )
-        return yamlCamera.makeCamera(os.path.join(instrument_dir, cam))
+        camera_file = os.path.join(instrument_dir, cam)
+        # On-chip binning: CCD_BINNING (from the config env: block) scales the
+        # camera geometry to match binned raws. Default 1 == unbinned, which
+        # reproduces yamlCamera.makeCamera exactly.
+        binning = int(os.environ.get("CCD_BINNING", "1"))
+        if binning > 1:
+            from .camera_builder import build_yaml_camera
+
+            return build_yaml_camera(camera_file, binning=binning)
+        return yamlCamera.makeCamera(camera_file)
 
     def register(self, registry, update: bool = False):
         camera = self.getCamera()
