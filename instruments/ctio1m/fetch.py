@@ -23,6 +23,8 @@ from __future__ import annotations
 import datetime as dt
 import json
 import logging
+import shutil
+import subprocess
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -30,6 +32,50 @@ from pathlib import Path
 _DEFAULT_API = "https://astroarchive.noirlab.edu"
 _DEFAULT_INSTRUMENT = "y4kcam"
 _FIND_LIMIT = 5000
+
+
+def _funpack(fz_path: Path) -> Path:
+    """Decompress a tile-compressed ``.fits.fz`` to a single-HDU ``.fits``.
+
+    The NOIRLab archive serves Rice-tiled ``.fits.fz`` where the primary HDU is
+    an empty stub and all image+metadata live in ext1. Ingestion / the metadata
+    translator read the *primary* header, so the raws must be funpacked to the
+    single-HDU layout (image+header in the primary) — the same form the
+    reference 2007 data ships in. Returns the resulting ``.fits`` path (or the
+    input unchanged if it is not a ``.fz`` or funpack is unavailable).
+    """
+    if fz_path.suffix != ".fz":
+        return fz_path
+    out = fz_path.with_suffix("")  # drop ".fz" -> "...fits"
+    if out.exists():
+        fz_path.unlink(missing_ok=True)
+        return out
+    if shutil.which("funpack") is None:
+        logging.warning("funpack not found; leaving %s compressed", fz_path.name)
+        return fz_path
+    # -D deletes the input .fz on success; output is the same name minus .fz.
+    subprocess.run(["funpack", "-D", str(fz_path)], check=True)
+    _normalize_header(out)
+    return out
+
+
+def _normalize_header(fits_path: Path) -> None:
+    """Stringify an integer ``FILTER`` keyword in a raw header.
+
+    NOIRLab Y4KCam frames store ``FILTER`` as the integer filter-wheel slot.
+    LSST's DECam translator, probed by ``determine_translator``, does
+    ``"DECam" in header["FILTER"]`` and raises ``TypeError`` on an int — which
+    aborts metadata extraction before the STIPS translator is tried. The
+    profile keys on ``FILTERID`` (the band name), so making ``FILTER`` a string
+    is harmless and unblocks translation. Lazy-imports astropy (runtime-only).
+    """
+    from astropy.io import fits
+
+    with fits.open(fits_path, mode="update") as hdul:
+        hdr = hdul[0].header
+        if "FILTER" in hdr and isinstance(hdr["FILTER"], int):
+            hdr["FILTER"] = str(hdr["FILTER"])
+            hdul.flush()
 
 
 def _night_to_caldat(night: str) -> str:
@@ -126,11 +172,14 @@ def _fetch_night(
             logging.warning("Skipping row without a filename: %s", row)
             continue
         dest = raw_dir / name
-        if dest.exists() and not overwrite:
+        # A prior run may have already funpacked this to a single-HDU .fits.
+        funpacked = dest.with_suffix("") if dest.suffix == ".fz" else dest
+        if not overwrite and (dest.exists() or funpacked.exists()):
             skipped += 1
             continue
         try:
             _retrieve(api, row["md5sum"], dest)
+            _funpack(dest)  # -> single-HDU .fits (metadata in primary)
             downloaded += 1
         except Exception as err:  # pragma: no cover - network
             errors += 1

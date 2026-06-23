@@ -71,6 +71,12 @@ export RAW_PARENT_DIR="{config.raw_parent_dir}"
         env_exports += f'export CP_PIPE_DIR="{config.cp_pipe_dir}"\n'
     if config.refcat_repo:
         env_exports += f'export REFCAT_REPO="{config.refcat_repo}"\n'
+    # On-chip binning: the camera build (getCamera, run inside the LSST
+    # subprocess) reads CCD_BINNING from the environment, so the config's
+    # env: value must be exported through to the subprocess shell.
+    ccd_binning = (getattr(config, "env", None) or {}).get("CCD_BINNING")
+    if ccd_binning:
+        env_exports += f'export CCD_BINNING="{ccd_binning}"\n'
 
     # Profile-derived skymap identity so the (instrument-neutral) bootstrap
     # script registers/chains the skymap under the active instrument's names

@@ -67,6 +67,25 @@ class TestFindNightFiltering(unittest.TestCase):
         self.assertIn(["proposal", "2007A-0002"], captured["payload"]["search"])
 
 
+class TestFunpack(unittest.TestCase):
+    def test_passthrough_non_fz(self):
+        p = Path("/tmp/x.fits")
+        self.assertEqual(fetch._funpack(p), p)
+
+    def test_skips_when_already_unpacked(self, *_):
+        import tempfile
+
+        d = Path(tempfile.mkdtemp())
+        fz = d / "y.fits.fz"
+        fz.write_bytes(b"")
+        (d / "y.fits").write_bytes(b"")  # already funpacked
+        with mock.patch.object(fetch.subprocess, "run") as run:
+            out = fetch._funpack(fz)
+        run.assert_not_called()  # no funpack call needed
+        self.assertEqual(out, d / "y.fits")
+        self.assertFalse(fz.exists())  # stale .fz removed
+
+
 class TestFetchData(unittest.TestCase):
     def _run(self, code, env=None):
         cfg = _Cfg(env if env is not None else {})
