@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Ingest Pan-STARRS1 (PS1) images as templates for DIA in obs_nickel.
+Ingest Pan-STARRS1 (PS1) images as templates for DIA.
 
 This script downloads PS1 stacked images from the STScI MAST archive,
 converts them to LSST Exposure format with proper WCS and PhotoCalib,
@@ -1128,7 +1128,7 @@ def ingest_exposure_to_butler(
 
     # Get skymap to determine tract/patch.
     # Prefer the active instrument's profile values, allowing env overrides.
-    # Wrapped in try/except so this script stays runnable without the obs package.
+    # Wrapped in try/except so this script stays runnable without a loaded profile.
     try:
         from stips.core.config import load_active_profile
 

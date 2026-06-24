@@ -13,7 +13,7 @@
 env:
   REPO: "/Users/dangause/Developer/lick/data_ctio/e2_bin2_repo"
   STACK_DIR: "/Users/dangause/Developer/lick/lsst/lsst_stack"
-  INSTRUMENT_DIR: "/Users/dangause/Developer/lick/lsst/lsst_stack/stack/nickel_processing_suite/.claude/worktrees/stips-framework-phase1/instruments/ctio1m"
+  INSTRUMENT_DIR: "/Users/dangause/Developer/lick/lsst/lsst_stack/stack/nickel_processing_suite/instruments/ctio1m"
   RAW_PARENT_DIR: "/Users/dangause/Developer/lick/data_ctio"
   REFCAT_REPO: "/Users/dangause/Developer/lick/lsst/lsst_stack/stack/refcats"
   CCD_BINNING: "2"

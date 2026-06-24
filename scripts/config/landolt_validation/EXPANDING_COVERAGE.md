@@ -35,7 +35,8 @@ Raws must already be ingested (the Landolt repo's calibs step does this).
 ```bash
 source /Users/dangause/Developer/lick/lsst/lsst_stack/loadLSST.bash
 setup lsst_distrib
-setup -r packages/obs_nickel obs_nickel
+setup -r packages/obs_stips obs_stips
+export INSTRUMENT_DIR=instruments/nickel
 
 python scripts/utilities/recompute_missing_shards.py \
   --repo /Users/dangause/Developer/lick/lsst/data/nickel/landolt_validation_repo \
@@ -86,7 +87,7 @@ Then re-bootstrap (only the refcat ingestion step matters; calibs and
 science collections are preserved):
 
 ```bash
-nickel run scripts/config/landolt_validation/pipeline_landolt.yaml \
+stips -c scripts/config/landolt_validation/pipeline_landolt.yaml run \
   --skip-calibs --skip-science    # bootstrap only; adjust flags if needed
 ```
 
@@ -108,7 +109,7 @@ remaining gaps.
 ### 6. Re-run pipeline and validation
 
 ```bash
-nickel run scripts/config/landolt_validation/pipeline_landolt.yaml
+stips -c scripts/config/landolt_validation/pipeline_landolt.yaml run
 
 nickel landolt-validate scripts/config/landolt_validation/pipeline_landolt.yaml \
   --catalog scripts/config/landolt_validation/landolt_catalog.csv \

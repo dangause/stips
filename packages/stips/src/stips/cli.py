@@ -1261,7 +1261,7 @@ def run_pipeline(
         env:
           REPO: "/path/to/repo"
           STACK_DIR: "/path/to/stack"
-          INSTRUMENT_DIR: "/path/to/obs_nickel"
+          INSTRUMENT_DIR: "/path/to/instruments/nickel"
           RAW_PARENT_DIR: "/path/to/raw"
         object: "2023ixf"
         ...

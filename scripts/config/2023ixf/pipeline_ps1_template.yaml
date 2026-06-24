@@ -90,7 +90,7 @@ science:
     # - 20240812
     # - 20240816
 
-# Pipeline configuration files (paths relative to obs_nickel/configs/)
+# Pipeline configuration files (resolved from the instrument's configs/, else framework defaults)
 configs:
   science:
     calibrate_image: calibrateImage/tuned_configs/dense_strict.py

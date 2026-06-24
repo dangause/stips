@@ -1,14 +1,14 @@
-# Logging System for `nickel run`
+# Logging System for `stips run`
 
 ## Overview
 
-The `nickel run` command now implements comprehensive logging that captures all pipeline steps in both individual step logs and a unified pipeline log file.
+The `stips run` command implements comprehensive logging that captures all pipeline steps in both individual step logs and a unified pipeline log file.
 
 ## Architecture
 
 ### Log Directory Structure
 
-When you run `nickel run config.yaml`, all logs are stored under `logs/RUN_ID/` in the monorepo root, organized by pipeline step:
+When you run `stips -c config.yaml run`, all logs are stored under `logs/RUN_ID/` in the monorepo root, organized by pipeline step:
 
 ```
 logs/
@@ -125,7 +125,7 @@ All `butler` commands are run with:
 ### Running the Pipeline
 
 ```bash
-nickel run scripts/config/2023ixf/pipeline_ps1_template.yaml
+stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml run
 ```
 
 Output shows log location:

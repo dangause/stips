@@ -247,7 +247,7 @@ def datetime_end(header):
 
 @hook(profile)
 def day_obs(header):
-    """Observing day as YYYYMMDD int (DTCALDAT if present, else datetime_end)."""
+    """UT calendar day as YYYYMMDD int, from datetime_end (NOT DTCALDAT; see _day_obs)."""
     return _day_obs(header)
 
 

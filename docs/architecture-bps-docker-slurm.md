@@ -35,7 +35,7 @@ The BPS (Batch Processing Service) integration distributes the heavy computation
 │  │  │  │         nps-hpc                │◀──┘            │   │
 │  │  │  │    (login / submit node)       │                │   │
 │  │  │  │                                │                │   │
-│  │  │  │  nickel run config.yaml        │                │   │
+│  │  │  │  stips -c config.yaml run      │                │   │
 │  │  │  │    → calibs (LOCAL)            │                │   │
 │  │  │  │    → bps submit (science)      │                │   │
 │  │  │  │    → bps submit (DIA)          │                │   │
@@ -63,7 +63,7 @@ The Docker Slurm cluster runs six containers (defined in `docker/docker-compose.
 | **slurmctld** | Slurm Controller | The "brain" — schedules jobs, manages the queue, allocates nodes |
 | **c1** | Compute Node 1 | Runs `slurmd` daemon; executes assigned `pipetask run-qbb` jobs |
 | **c2** | Compute Node 2 | Same as c1; provides parallelism |
-| **nps-hpc** | Login/Submit Node | Where you run `nickel run`; submits BPS jobs to Slurm |
+| **nps-hpc** | Login/Submit Node | Where you run `stips ... run`; submits BPS jobs to Slurm |
 
 All containers share the same Docker network and mount the same data volumes, so they all see the same `/data/repo`, `/data/raw`, and `/data/refcats` directories.
 
@@ -82,10 +82,10 @@ All Slurm containers need to trust each other. They use **Munge** — a shared-k
 
 ## The Execution Model: Two Paths
 
-The pipeline orchestrator (`nickel run`) processes data through stages: calibs → science → DIA → fphot → lightcurve. Each stage calls `pipetask` commands. The key architectural choice is **how** those commands execute:
+The pipeline orchestrator (`stips ... run`) processes data through stages: calibs → science → DIA → fphot → lightcurve. Each stage calls `pipetask` commands. The key architectural choice is **how** those commands execute:
 
 ```
-                  nickel run config.yaml
+                  stips -c config.yaml run
                          │
               ┌──────────┴──────────┐
               │    options:          │

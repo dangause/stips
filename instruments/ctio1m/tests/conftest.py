@@ -37,7 +37,10 @@ def load_ctio1m_profile():
     p = INSTRUMENT_DIR_PATH / "profile.py"
     import sys
 
-    sys.path.insert(0, str(p.parent))  # so co-located hooks resolve
+    if str(p.parent) not in sys.path:
+        sys.path.append(
+            str(p.parent)
+        )  # so co-located hooks resolve (append: don't shadow stdlib)
     spec = importlib.util.spec_from_file_location("ctio1m_profile", p)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)

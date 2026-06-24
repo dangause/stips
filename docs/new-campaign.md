@@ -185,8 +185,8 @@ configs:
 
 ```bash
 # Download each night
-stips download 20230519
-stips download 20230521
+stips -c scripts/config/my_target/pipeline.yaml download 20230519
+stips -c scripts/config/my_target/pipeline.yaml download 20230521
 # ... etc
 ```
 
@@ -214,7 +214,7 @@ Each night should have:
 ### Dry Run First
 
 ```bash
-stips run scripts/config/my_target/pipeline.yaml --dry-run
+stips -c scripts/config/my_target/pipeline.yaml run --dry-run
 ```
 
 This shows what would be executed without running anything.
@@ -222,7 +222,7 @@ This shows what would be executed without running anything.
 ### Full Run
 
 ```bash
-stips run scripts/config/my_target/pipeline.yaml
+stips -c scripts/config/my_target/pipeline.yaml run
 ```
 
 ### Monitor Progress
@@ -230,7 +230,7 @@ stips run scripts/config/my_target/pipeline.yaml
 The pipeline outputs progress to stdout. For long runs, consider:
 
 ```bash
-stips run scripts/config/my_target/pipeline.yaml 2>&1 | tee pipeline.log
+stips -c scripts/config/my_target/pipeline.yaml run 2>&1 | tee pipeline.log
 ```
 
 ## Step 6: Check Results
@@ -391,7 +391,8 @@ This is caused by exposures with incorrect coordinates in their FITS headers (th
 If running `stips science` standalone, pass `--ra` and `--dec`:
 
 ```bash
-stips science 20230519 --object 2023ixf --ra 210.91 --dec 54.32
+stips -c scripts/config/my_target/pipeline.yaml science 20230519 \
+    --object 2023ixf --ra 210.910750 --dec 54.311694
 ```
 
 ### Astrometry failures

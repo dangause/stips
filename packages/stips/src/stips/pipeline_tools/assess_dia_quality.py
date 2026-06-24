@@ -39,7 +39,7 @@ from stips.core.config import load_active_profile
 def _resolve_instrument(instrument):
     """Resolve the instrument name from a CLI arg or the active profile.
 
-    Stays robust if the obs package is not importable (falls back to "Nickel").
+    Stays robust if INSTRUMENT_DIR/profile.py is unavailable (falls back to "Nickel").
     """
     if instrument:
         return instrument

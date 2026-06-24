@@ -40,7 +40,7 @@ uv sync --all-groups
 
 ```bash
 # Check CLI is available
-nickel --help
+stips --help
 
 # Check LSST stack is accessible
 source /path/to/lsst_stack/loadLSST.bash
@@ -56,10 +56,10 @@ The fastest way to run NPS is using a YAML configuration file.
 
 ```bash
 # Run the SN 2023ixf pipeline (edit paths first!)
-stips run scripts/config/2023ixf/pipeline_ps1_template.yaml --dry-run
+stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml run --dry-run
 
 # If the dry run looks good, run for real
-stips run scripts/config/2023ixf/pipeline_ps1_template.yaml
+stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml run
 ```
 
 ### Option B: Create a Minimal Config
@@ -111,12 +111,12 @@ lightcurve:
 Then run:
 
 ```bash
-stips run my_pipeline.yaml
+stips -c my_pipeline.yaml run
 ```
 
 ## Understanding What Happens
 
-When you run `stips run pipeline.yaml`, NPS automatically:
+When you run `stips -c pipeline.yaml run`, NPS automatically:
 
 1. **Bootstraps** the Butler repository (if it doesn't exist)
 2. **Ingests PS1 templates** for the specified bands
@@ -136,7 +136,7 @@ If you prefer more control, run each step individually:
 stips env
 
 # 2. Bootstrap the repository
-stips bootstrap my_pipeline.yaml
+stips -c my_pipeline.yaml bootstrap
 
 # 3. Process calibrations for a night
 stips calibs 20240101
@@ -200,7 +200,7 @@ Run from the nickel_processing_suite directory:
 
 ```bash
 cd /path/to/nickel_processing_suite
-stips bootstrap my_pipeline.yaml
+stips -c my_pipeline.yaml bootstrap
 ```
 
 ### "FileNotFoundError: astrometry_ref_cat" during science processing

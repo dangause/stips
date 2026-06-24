@@ -21,6 +21,32 @@ from lsst.obs.base.yamlCamera import (
 __all__ = ["build_camera", "build_yaml_camera"]
 
 
+def _make_camera(cameraParams: dict):
+    """Run the body of ``lsst.obs.base.yamlCamera.makeCamera`` on a params dict.
+
+    ``cameraParams["transforms"]`` is mutated (``.pop`` of ``nativeSys``), so
+    callers must pass a dict they own.
+    """
+    plateScale = geom.Angle(cameraParams["plateScale"], geom.arcseconds)
+    nativeSys = cameraGeom.CameraSys(cameraParams["transforms"].pop("nativeSys"))
+    transforms = makeTransformDict(nativeSys, cameraParams["transforms"], plateScale)
+    ccdParams = cameraParams["CCDs"]
+    detectorConfigList = makeDetectorConfigList(ccdParams)
+    focalPlaneParity = cameraParams.get("focalPlaneParity", False)
+    amplifierDict = {
+        ccdName: makeAmplifierList(ccdValues)
+        for ccdName, ccdValues in ccdParams.items()
+    }
+    return makeCameraFromCatalogs(
+        cameraParams["name"],
+        detectorConfigList,
+        nativeSys,
+        transforms,
+        amplifierDict,
+        focalPlaneParity=focalPlaneParity,
+    )
+
+
 # ---------------------------------------------------------------------------
 # On-chip binning support (CCD_BINNING env knob).
 #
@@ -118,25 +144,7 @@ def build_yaml_camera(camera_file: str, binning: int = 1):
         cameraParams = yaml.safe_load(fd)
     if binning and binning > 1:
         cameraParams = _binned_camera_params(cameraParams, binning)
-
-    plateScale = geom.Angle(cameraParams["plateScale"], geom.arcseconds)
-    nativeSys = cameraGeom.CameraSys(cameraParams["transforms"].pop("nativeSys"))
-    transforms = makeTransformDict(nativeSys, cameraParams["transforms"], plateScale)
-    ccdParams = cameraParams["CCDs"]
-    detectorConfigList = makeDetectorConfigList(ccdParams)
-    focalPlaneParity = cameraParams.get("focalPlaneParity", False)
-    amplifierDict = {
-        ccdName: makeAmplifierList(ccdValues)
-        for ccdName, ccdValues in ccdParams.items()
-    }
-    return makeCameraFromCatalogs(
-        cameraParams["name"],
-        detectorConfigList,
-        nativeSys,
-        transforms,
-        amplifierDict,
-        focalPlaneParity=focalPlaneParity,
-    )
+    return _make_camera(cameraParams)
 
 
 def _camera_params(spec, instrument_name):
@@ -194,32 +202,6 @@ def _camera_params(spec, instrument_name):
 def build_camera(spec, instrument_name: str):
     """Return an lsst.afw.cameraGeom.Camera built from `spec`.
 
-    Mirrors the body of lsst.obs.base.yamlCamera.makeCamera, sourcing
-    ``cameraParams`` from a freshly built dict (``.pop`` below mutates, so a
-    fresh dict is built per call).
+    ``_camera_params`` builds a fresh dict per call (``_make_camera`` mutates it).
     """
-    cameraParams = _camera_params(spec, instrument_name)
-
-    cameraName = cameraParams["name"]
-
-    plateScale = geom.Angle(cameraParams["plateScale"], geom.arcseconds)
-    nativeSys = cameraGeom.CameraSys(cameraParams["transforms"].pop("nativeSys"))
-    transforms = makeTransformDict(nativeSys, cameraParams["transforms"], plateScale)
-
-    ccdParams = cameraParams["CCDs"]
-    detectorConfigList = makeDetectorConfigList(ccdParams)
-    focalPlaneParity = cameraParams.get("focalPlaneParity", False)
-
-    amplifierDict = {
-        ccdName: makeAmplifierList(ccdValues)
-        for ccdName, ccdValues in ccdParams.items()
-    }
-
-    return makeCameraFromCatalogs(
-        cameraName,
-        detectorConfigList,
-        nativeSys,
-        transforms,
-        amplifierDict,
-        focalPlaneParity=focalPlaneParity,
-    )
+    return _make_camera(_camera_params(spec, instrument_name))
