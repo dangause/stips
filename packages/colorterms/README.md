@@ -5,7 +5,7 @@ Color-term fitting utilities for Nickel BVRI photometry against the Monster refe
 - **Synthetic fitting** (`nickel_colorterm_fitter.py`): integrates stellar SED templates through Nickel and Monster filter passbands, then fits a cubic spline to the resulting color-color relation. Useful when no on-sky photometry is yet available and when the goal is a smooth, physically-motivated transformation.
 - **Empirical fitting** (`empirical_colorterm_fitter.py`): fits a color term directly from matched Nickel-vs-Monster catalogs read via the LSST Butler. Useful when on-sky measurements exist and capture instrumental effects the synthetic approach cannot.
 
-The output is then converted to the LSST stack's `Colorterm` configuration format with `convert_to_lsst_colorterms.py` and dropped into `packages/obs_nickel/configs/colorterms.py`.
+The output is then converted to the LSST stack's `Colorterm` configuration format with `convert_to_lsst_colorterms.py` and dropped into `packages/obs_stips/instrument_defaults/configs/colorterms.py`.
 
 ## Layout
 
@@ -82,7 +82,7 @@ python convert_to_lsst_colorterms.py \
     --output colorterms_monster.py
 ```
 
-The output is a drop-in replacement for the `*monster*` block in `packages/obs_nickel/configs/colorterms.py`. The conversion approximates each spline with a low-order polynomial (`c0 + c1·color + c2·color²`), since the LSST stack's `Colorterm` class does not support arbitrary splines.
+The output is a drop-in replacement for the `*monster*` block in `packages/obs_stips/instrument_defaults/configs/colorterms.py`. The conversion approximates each spline with a low-order polynomial (`c0 + c1·color + c2·color²`), since the LSST stack's `Colorterm` class does not support arbitrary splines.
 
 ## Output files
 

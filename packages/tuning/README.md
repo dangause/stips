@@ -15,7 +15,7 @@ to optimize performance for Nickel telescope data.
 ## Usage
 
 These tools are used during pipeline development to optimize configuration parameters
-found in `packages/obs_nickel/configs/calibrateImage/tuned_configs/`.
+found in `packages/obs_stips/instrument_defaults/configs/calibrateImage/tuned_configs/`.
 
 **Note**: This package is NOT required for running the standard Nickel pipelines.
 It's only needed if you're re-tuning the calibration parameters.

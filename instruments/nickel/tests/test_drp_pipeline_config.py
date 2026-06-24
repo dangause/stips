@@ -1,0 +1,34 @@
+from pathlib import Path
+
+import pytest
+
+# instruments/nickel/tests/test_drp_pipeline_config.py -> parents[3] == repo root.
+# Derive the framework-defaults DRP.yaml relative to this file so the test does
+# not depend on the caller exporting an env var (only run_with_stack does that),
+# matching the file-relative idiom in conftest.py.
+DRP_YAML_PATH = (
+    Path(__file__).resolve().parents[3]
+    / "packages"
+    / "obs_stips"
+    / "instrument_defaults"
+    / "pipelines"
+    / "DRP.yaml"
+)
+
+
+def test_select_template_coadd_qmax_lt_one(monkeypatch) -> None:
+    """Ensure DRP coadd quantile config remains valid for LSST RangeField."""
+    lsst_pipe_base = pytest.importorskip("lsst.pipe.base")
+    pipeline_cls = lsst_pipe_base.Pipeline
+
+    if not DRP_YAML_PATH.exists():
+        pytest.skip(f"framework DRP.yaml not found at {DRP_YAML_PATH}")
+    # DRP.yaml imports sub-pipelines via $STIPS_DEFAULTS; run_with_stack exports
+    # it at runtime, so set it file-relative here to keep this test self-contained.
+    monkeypatch.setenv("STIPS_DEFAULTS", str(DRP_YAML_PATH.parents[1]))
+    pipeline = pipeline_cls.fromFile(f"{DRP_YAML_PATH}#coadds-only")
+    graph = pipeline.to_graph()
+
+    assert "selectTemplateCoaddVisits" in graph.tasks
+    qmax = graph.tasks["selectTemplateCoaddVisits"].config.qMax
+    assert qmax < 1.0

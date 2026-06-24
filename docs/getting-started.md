@@ -40,7 +40,7 @@ uv sync --all-groups
 
 ```bash
 # Check CLI is available
-nickel --help
+stips --help
 
 # Check LSST stack is accessible
 source /path/to/lsst_stack/loadLSST.bash
@@ -56,10 +56,10 @@ The fastest way to run NPS is using a YAML configuration file.
 
 ```bash
 # Run the SN 2023ixf pipeline (edit paths first!)
-nickel run scripts/config/2023ixf/pipeline_ps1_template.yaml --dry-run
+stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml run --dry-run
 
 # If the dry run looks good, run for real
-nickel run scripts/config/2023ixf/pipeline_ps1_template.yaml
+stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml run
 ```
 
 ### Option B: Create a Minimal Config
@@ -71,7 +71,7 @@ Create a file `my_pipeline.yaml`:
 env:
   REPO: "/path/to/my/butler_repo"
   STACK_DIR: "/path/to/lsst_stack"
-  OBS_NICKEL: "/path/to/nickel_processing_suite/packages/obs_nickel"
+  INSTRUMENT_DIR: "/path/to/nickel_processing_suite/instruments/nickel"
   RAW_PARENT_DIR: "/path/to/raw/data"
   REFCAT_REPO: "/path/to/refcats"
 
@@ -111,12 +111,12 @@ lightcurve:
 Then run:
 
 ```bash
-nickel run my_pipeline.yaml
+stips -c my_pipeline.yaml run
 ```
 
 ## Understanding What Happens
 
-When you run `nickel run pipeline.yaml`, NPS automatically:
+When you run `stips -c pipeline.yaml run`, NPS automatically:
 
 1. **Bootstraps** the Butler repository (if it doesn't exist)
 2. **Ingests PS1 templates** for the specified bands
@@ -133,28 +133,28 @@ If you prefer more control, run each step individually:
 
 ```bash
 # 1. Check your configuration
-nickel env
+stips env
 
 # 2. Bootstrap the repository
-nickel bootstrap my_pipeline.yaml
+stips -c my_pipeline.yaml bootstrap
 
 # 3. Process calibrations for a night
-nickel calibs 20240101
+stips calibs 20240101
 
 # 4. Process science frames (--ra/--dec enables coordinate validation)
-nickel science 20240101 --object my_target --ra 123.456 --dec 45.678
+stips science 20240101 --object my_target --ra 123.456 --dec 45.678
 
 # 5. Ingest PS1 template
-nickel ps1-template --ra 123.456 --dec 45.678 --band r
+stips ps1-template --ra 123.456 --dec 45.678 --band r
 
 # 6. Run difference imaging
-nickel dia 20240101 --auto --band r
+stips dia 20240101 --auto --band r
 
 # 7. Run forced photometry
-nickel fphot 20240101 --ra 123.456 --dec 45.678
+stips fphot 20240101 --ra 123.456 --dec 45.678
 
 # 8. Extract light curve
-nickel lightcurve --ra 123.456 --dec 45.678 \
+stips lightcurve --ra 123.456 --dec 45.678 \
     --collections "Nickel/runs/*/forcedPhotRaDec/*/run" \
     --dataset-type forced_phot_diffim_radec \
     --name "My Target" \
@@ -200,24 +200,21 @@ Run from the nickel_processing_suite directory:
 
 ```bash
 cd /path/to/nickel_processing_suite
-nickel bootstrap my_pipeline.yaml
+stips -c my_pipeline.yaml bootstrap
 ```
 
 ### "FileNotFoundError: astrometry_ref_cat" during science processing
 
-This usually means some exposures have incorrect coordinates in their FITS headers (a known Nickel telescope issue where the DEC keyword gets stuck). When using `nickel run` with a pipeline YAML, coordinate validation is automatic. For standalone commands, pass `--ra` and `--dec` to enable it:
+This usually means some exposures have incorrect coordinates in their FITS headers (a known Nickel telescope issue where the DEC keyword gets stuck). When using `stips run` with a pipeline YAML, coordinate validation is automatic. For standalone commands, pass `--ra` and `--dec` to enable it:
 
 ```bash
-nickel science 20230519 --object 2023ixf --ra 210.91 --dec 54.32
+stips science 20230519 --object 2023ixf --ra 210.91 --dec 54.32
 ```
 
-See [Configuration Guide: Stale DEC Headers](configuration.md#stale-dec-headers) for details.
 
 ## Next Steps
 
-- Read the [Configuration Guide](configuration.md) for detailed config options
 - See [Starting a New Campaign](new-campaign.md) for new transient targets
-- Check the [CLI Reference](cli-reference.md) for all available commands
 - Explore [Architecture Overview](architecture.md) to understand how NPS works
 
 ## Getting Help

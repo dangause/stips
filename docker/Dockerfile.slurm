@@ -60,13 +60,14 @@ RUN id slurm 2>/dev/null || useradd -r -s /sbin/nologin slurm && \
 # =============================================================================
 WORKDIR /opt/nps
 
-COPY packages/obs_nickel/ packages/obs_nickel/
+COPY packages/obs_stips/ packages/obs_stips/
+COPY instruments/nickel/ instruments/nickel/
 COPY packages/obs_nickel_data/ packages/obs_nickel_data/
 
 RUN source /opt/lsst/software/stack/loadLSST.bash && \
     setup lsst_distrib && \
-    pip install --no-deps -e packages/obs_nickel && \
-    chmod +x /opt/nps/packages/obs_nickel/pipelines/*.yaml 2>/dev/null || true
+    pip install --no-deps -e packages/obs_stips && \
+    chmod +x /opt/nps/packages/obs_stips/instrument_defaults/pipelines/*.yaml 2>/dev/null || true
 
 # Add LSST conda env to default PATH so Parsl's process_worker_pool.py
 # is available when Slurm jobs start on compute nodes

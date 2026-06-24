@@ -1,0 +1,48 @@
+# CTIO 1.0m / Y4KCam — calibs + science test on the PG1047+003 V-band standard field
+# (2007-03-21). Southern/equatorial, so NO DIA/lightcurve (PS1 doesn't help here).
+#
+# Drive with the PER-STAGE CLI (bootstrap, calibs, science) — NOT `stips run` —
+# so the always-on template step is skipped:
+#   .venv/bin/stips -c scripts/config/ctio1m/pipeline_calibs_science.yaml bootstrap
+#   .venv/bin/stips -c scripts/config/ctio1m/pipeline_calibs_science.yaml calibs 20070321
+#   .venv/bin/stips -c scripts/config/ctio1m/pipeline_calibs_science.yaml science 20070321 \
+#       --object PG1047+003 --ra 162.5375 --dec -0.0217 --skip-coadds
+#
+# --skip-coadds is required: CTIO is calibs + single-visit science only. The
+# coadd step needs a skymap registered under this instrument's name
+# (ctio1mRings-v1); the bootstrap registers one on a fresh repo, but coadds are
+# out of scope for the standard-field reduction.
+env:
+  REPO: "/Users/dangause/Developer/lick/data_ctio/pg1047_repo3"
+  STACK_DIR: "/Users/dangause/Developer/lick/lsst/lsst_stack"
+  INSTRUMENT_DIR: "/Users/dangause/Developer/lick/lsst/lsst_stack/stack/nickel_processing_suite/instruments/ctio1m"
+  RAW_PARENT_DIR: "/Users/dangause/Developer/lick/data_ctio"
+  REFCAT_REPO: "/Users/dangause/Developer/lick/lsst/lsst_stack/stack/refcats"
+
+object: "PG1047+003"
+ra: 162.5375
+dec: -0.0217
+
+bands: ["v"]
+
+# template: present for run-config schema validity only; the per-stage commands above
+# never execute the template step.
+template:
+  type: ps1
+  size: 0.3
+
+science:
+  nights:
+    - 20070321
+
+options:
+  jobs: 4
+  skip_calibs: false
+  skip_science: false
+  skip_dia: true
+  forced_phot: false
+  continue_on_error: true
+  use_fallbacks: true
+
+lightcurve:
+  enabled: false

@@ -3,7 +3,7 @@
 #
 # This script:
 # 1. Sources the LSST stack
-# 2. Sets up obs_nickel and obs_nickel_data
+# 2. Sets up obs_stips and obs_nickel_data (instrument is declarative, by path)
 # 3. Loads environment from mounted config if present
 # 4. Executes the provided command
 
@@ -21,10 +21,12 @@ setup lsst_distrib
 # NPS Package Setup
 # =============================================================================
 
-# Setup obs_nickel
-if [[ -d "${OBS_NICKEL}" ]]; then
-    echo "[NPS] Setting up obs_nickel from ${OBS_NICKEL}"
-    setup -r "${OBS_NICKEL}" obs_nickel 2>/dev/null || true
+# Setup obs_stips (generic LSST glue). The nickel instrument is declarative
+# and loaded by path from INSTRUMENT_DIR — no EUPS setup required.
+OBS_STIPS="${OBS_STIPS:-${NPS_ROOT}/packages/obs_stips}"
+if [[ -d "${OBS_STIPS}" ]]; then
+    echo "[NPS] Setting up obs_stips from ${OBS_STIPS}"
+    setup -r "${OBS_STIPS}" obs_stips 2>/dev/null || true
 fi
 
 # Setup obs_nickel_data
@@ -33,13 +35,13 @@ if [[ -d "${OBS_NICKEL_DATA}" ]]; then
     setup -r "${OBS_NICKEL_DATA}" obs_nickel_data 2>/dev/null || true
 fi
 
-# Add data_tools to PYTHONPATH
-DATA_TOOLS_SRC="${NPS_ROOT}/packages/data_tools/src"
-if [[ -d "${DATA_TOOLS_SRC}" ]]; then
-    export PYTHONPATH="${DATA_TOOLS_SRC}:${PYTHONPATH:-}"
+# Add stips to PYTHONPATH
+STIPS_SRC="${NPS_ROOT}/packages/stips/src"
+if [[ -d "${STIPS_SRC}" ]]; then
+    export PYTHONPATH="${STIPS_SRC}:${PYTHONPATH:-}"
 fi
 
-# Ensure conda bin is in PATH (for pip-installed scripts like 'nickel')
+# Ensure conda bin is in PATH (for pip-installed scripts like 'stips')
 if [[ -n "${CONDA_PREFIX}" ]]; then
     export PATH="${CONDA_PREFIX}/bin:${PATH}"
 fi
@@ -90,7 +92,8 @@ echo "[NPS] Environment:"
 echo "  REPO=${REPO}"
 echo "  RAW_PARENT_DIR=${RAW_PARENT_DIR}"
 echo "  REFCAT_REPO=${REFCAT_REPO}"
-echo "  OBS_NICKEL=${OBS_NICKEL}"
+echo "  INSTRUMENT_DIR=${INSTRUMENT_DIR}"
+echo "  STIPS_DEFAULTS=${STIPS_DEFAULTS}"
 
 # Verify critical paths exist (warnings only, don't fail)
 if [[ ! -d "${REPO}" ]]; then
@@ -114,7 +117,7 @@ if [[ "${NPS_DASHBOARD}" == "true" ]]; then
     echo "[NPS] Starting dashboard on port ${NPS_DASHBOARD_PORT} (logs: ${NPS_LOGS_DIR})"
     python3 -c "
 import uvicorn
-from obs_nickel_data_tools.dashboard import create_app
+from stips.dashboard import create_app
 from pathlib import Path
 app = create_app(Path('${NPS_LOGS_DIR}'))
 uvicorn.run(app, host='0.0.0.0', port=${NPS_DASHBOARD_PORT}, log_level='warning')

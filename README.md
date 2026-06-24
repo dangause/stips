@@ -1,18 +1,18 @@
 # STIPS — The Small Telescope Image Processing Suite
 
-[![CI](https://github.com/dangause/nickel_processing_suite/actions/workflows/ci.yml/badge.svg)](https://github.com/dangause/nickel_processing_suite/actions/workflows/ci.yml)
+[![CI](https://github.com/dangause/stips/actions/workflows/ci.yml/badge.svg)](https://github.com/dangause/stips/actions/workflows/ci.yml)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](pyproject.toml)
 
-**STIPS** brings the [LSST Science Pipelines](https://pipelines.lsst.io/) to 1-meter class telescopes. It wraps the Rubin/LSST reduction stack with the per-telescope plumbing — instrument package, prefab YAML pipelines, and a unified CLI — needed to run survey-grade calibration, difference imaging, forced photometry, and lightcurve extraction on small-telescope data, without requiring deep LSST middleware knowledge.
+**STIPS** brings the [LSST Science Pipelines](https://pipelines.lsst.io/) to 1-meter class telescopes. It wraps the Rubin/LSST reduction stack with the per-telescope plumbing — a declarative instrument profile, prefab YAML pipelines, and a unified CLI — needed to run survey-grade calibration, difference imaging, forced photometry, and lightcurve extraction on small-telescope data, without requiring deep LSST middleware knowledge.
 
 **Supported instruments:**
 
 - ✅ **Nickel 1-m** at Lick Observatory — reference implementation, used in active SN, exoplanet, and variable-star follow-up
-- 🚧 **CTIO 0.9m** — multi-instrument support in active integration on [`feature/obs-smalltel-phase1`](https://github.com/dangause/nickel_processing_suite/tree/feature/obs-smalltel-phase1) (single-frame ISR validated; full DRP in progress)
-- ➕ **Other 1-m single-CCD telescopes** — bring-up is mostly an instrument-package skeleton; the science pipelines work unchanged
+- ✅ **CTIO 1.0m / Y4KCam** — second instrument; validated end-to-end on archival standard-star data. Exercises the framework's **multi-amplifier camera** support (4-amp, central-cross overscan), **on-chip binning** (unbinned 4064² and 2×2-binned 2072²), **multi-band** B/V/R/I reductions, and a **NOIRLab Astro Data Archive** fetch hook.
+- ➕ **Other 1-m telescopes** — add one by dropping a declarative profile under `instruments/<name>/` (a `profile.py` + camera + hooks, loaded by path — no per-instrument LSST `obs_` package). The framework core and science pipelines work unchanged. See the [forking guide](docs/forking-stips.md).
 
-> Note: the project was previously named *Nickel Processing Suite* and the CLI is still `nickel`; both will be renamed to `stips` in a future cleanup.
+> The CLI is `stips`. The active instrument is a declarative profile under `instruments/<name>/`, selected at runtime via the `INSTRUMENT_DIR` path in your config's `env:` block (the reference profile is `instruments/nickel`).
 
 > Tested with LSST Science Pipelines `v30.0.3` and `v11.0.0`
 
@@ -23,7 +23,7 @@
 - [Quick Start](#quick-start)
 - [Features](#features)
 - [Monorepo Structure](#monorepo-structure)
-- [The nickel CLI](#the-nickel-cli)
+- [The stips CLI](#the-stips-cli)
 - [Installation](#installation)
 - [Configuration](#configuration)
 - [Running Pipelines](#running-pipelines)
@@ -40,42 +40,43 @@
 ## Quick Start
 
 ```bash
-# 1. Install all packages
+# 1. Install the framework (stips + obs_stips); instruments load by path
 uv sync --group dev
 
-# 2. Run a full pipeline from YAML config (self-contained)
-nickel run scripts/config/2023ixf/pipeline_ps1_template.yaml
+# 2. Run a full pipeline from a YAML config (self-contained)
+stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml run
 
-# 3. Or use individual commands with profiles
-nickel -p 2023ixf calibs 20230519        # Run calibrations
-nickel -p 2023ixf science 20230519       # Process science frames
-nickel -p 2023ixf dia 20230519 --auto    # Difference imaging
+# 3. Or use individual commands — the same -c YAML supplies the config
+stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml calibs 20230519   # Calibrations
+stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml science 20230519  # Science frames
+stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml dia 20230519 --auto  # Difference imaging
 ```
+
+> The active instrument is whatever `INSTRUMENT_DIR` in the config's `env:` block points at (`instruments/nickel` here). `uv sync` installs the framework packages (`stips`, `obs_stips`); the instrument profile is loaded from its directory at runtime — there is no per-instrument package to install.
 
 ### Docker Quick Start
 
 ```bash
 # Run with Docker
-docker-compose run --rm nps nickel calibs 20230519
+docker-compose run --rm nps stips calibs 20230519
 
 # Or build and run directly
 docker build -t nps:latest -f docker/Dockerfile .
 docker run -v /path/to/repo:/data/repo \
            -v /path/to/raw:/data/raw \
            -v /path/to/refcats:/data/refcats \
-           nps:latest nickel env
+           nps:latest stips env
 ```
 
 ---
 
 ## Features
 
-### Core Instrument Package (`obs_nickel`)
-- Single-detector camera model (1024x1024 CCD)
-- FITS metadata translator (`NickelTranslator`)
-- Raw data formatter (`NickelRawFormatter`)
-- Filter definitions: Johnson/Bessell **B, V**; Cousins **R, I**
-- Optimized pipeline configurations for Nickel data
+### Declarative instrument profiles (`instruments/<name>/`)
+- An instrument is a directory — a `profile.py` (camera, site, filters, header translation, ISR overrides, data-fetch hook), an optional camera YAML, and tuned configs — **loaded by path** via `INSTRUMENT_DIR`. No per-instrument LSST `obs_` package or EUPS product.
+- `obs_stips` synthesizes the LSST `Instrument`, translator, and raw formatter from the profile at runtime.
+- **Cameras**: in-memory `CameraSpec` (single-amp) or a full multi-amp camera YAML; **on-chip binning** scales the geometry from a `CCD_BINNING` knob.
+- Ships two instruments: **Nickel** (reference, single-CCD, B/V/R/I) and **CTIO 1.0m / Y4KCam** (4-amp, binned/unbinned, B/V/R/I).
 
 ### Complete Processing Pipelines
 - **Calibration pipeline**: bias, flats, curated defect masks
@@ -85,8 +86,8 @@ docker run -v /path/to/repo:/data/repo \
 - **Forced photometry**: measurements at arbitrary RA/Dec
 - **Light curve extraction**: multi-band light curves from DIA or forced photometry
 
-### Unified CLI (`nickel`)
-- **Profile-based configuration** for multi-repository workflows
+### Unified CLI (`stips`)
+- **Single-YAML configuration** (`-c <config.yaml>`) — the sole config source per run
 - **YAML-driven pipeline orchestration** with automatic bootstrap
 - **BPS integration** for HPC cluster execution (Slurm, HTCondor)
 - **Processing logs** for tracking fallback configs and failures
@@ -101,18 +102,24 @@ docker run -v /path/to/repo:/data/repo \
 ## Monorepo Structure
 
 ```
-nickel_processing_suite/
+stips/
 ├── packages/
-│   ├── obs_nickel/           # LSST instrument package
-│   ├── obs_nickel_data/      # Curated calibrations (defects)
-│   ├── data_tools/           # Python CLI and pipeline tools
+│   ├── stips/                # Framework core + CLI (the `stips` command) + pipeline tools
+│   ├── obs_stips/            # Instrument-neutral LSST glue (lsst.obs.stips): translator base,
+│   │                         #   camera builder, the `active` Instrument/translator synthesizer,
+│   │                         #   shared tasks, and reference pipelines/configs (instrument_defaults/)
+│   ├── obs_nickel_data/      # Curated Nickel calibrations (defects)
+│   ├── lick_searchable_archive/  # Lick archive client (Nickel data fetch)
 │   ├── defects/              # Defect mask generation
-│   ├── refcats/              # Reference catalog scripts
+│   ├── refcats/              # Reference catalog tooling (MONSTER shard dump/ingest)
 │   ├── colorterms/           # Color term fitting
 │   ├── testdata/             # Test fixtures and data
 │   └── tuning/               # Pipeline tuning utilities
+├── instruments/              # Declarative instrument profiles (loaded by INSTRUMENT_DIR)
+│   ├── nickel/               # Reference profile (profile.py, camera, fetch.py, tests)
+│   └── ctio1m/               # CTIO 1.0m / Y4KCam (4-amp camera, NOIRLab fetch, tests)
 ├── scripts/
-│   ├── config/               # Per-target YAML configs (2023ixf, 2020wnt)
+│   ├── config/               # Per-target YAML configs (2023ixf, 2020wnt, ctio1m, ...)
 │   ├── pipeline/             # Bootstrap script
 │   └── utilities/            # Helper scripts
 ├── docs/                     # User guides, architecture docs, diagrams
@@ -131,53 +138,56 @@ nickel_processing_suite/
 
 ---
 
-## The `nickel` CLI
+## The `stips` CLI
 
-The unified command-line interface for all pipeline operations.
+The unified command-line interface for all pipeline operations. Supporting console scripts are installed under the `stips-*` prefix (e.g. `stips-dia-lightcurve`, `stips-eda-butler`).
 
 ### Commands Reference
 
+All commands take the group-level config via `stips -c <config.yaml> <command> ...`
+(the `-c` YAML's `env:` block supplies the configuration).
+
 | Command | Description |
 |---------|-------------|
-| `nickel env` | Show configuration and validate paths |
-| `nickel bootstrap [CONFIG.yaml]` | Initialize Butler repository |
-| `nickel download NIGHT` | Fetch data from Lick archive |
-| `nickel calibs NIGHT` | Run nightly calibrations (bias, flat, defects) |
-| `nickel science NIGHT` | Process science frames (ISR, WCS, photometry) |
-| `nickel dia NIGHT` | Run difference imaging analysis |
-| `nickel ps1-template` | Download and ingest PS1 template |
-| `nickel fphot NIGHT` | Run forced photometry at RA/Dec |
-| `nickel lightcurve` | Extract light curve from sources |
-| `nickel clean CONFIG.yaml` | Remove processing outputs for re-runs |
-| `nickel run CONFIG.yaml` | Run full pipeline from YAML config |
-| `nickel dashboard` | Launch browser-based pipeline monitoring |
-| `nickel bps submit` | Submit pipeline to BPS cluster |
-| `nickel bps status` | Check BPS run status |
-| `nickel bps cancel` | Cancel BPS run |
-| `nickel bps list` | List recent BPS runs |
+| `stips env` | Show configuration and validate paths |
+| `stips bootstrap` | Initialize Butler repository |
+| `stips download NIGHT` | Fetch raw data via the instrument's `fetch_data` hook (Nickel → Lick archive; CTIO → NOIRLab Astro Data Archive) |
+| `stips calibs NIGHT` | Run nightly calibrations (bias, flat, defects) |
+| `stips science NIGHT` | Process science frames (ISR, WCS, photometry) |
+| `stips dia NIGHT` | Run difference imaging analysis |
+| `stips ps1-template` | Download and ingest PS1 template |
+| `stips fphot NIGHT` | Run forced photometry at RA/Dec |
+| `stips lightcurve` | Extract light curve from sources |
+| `stips clean` | Remove processing outputs for re-runs |
+| `stips run` | Run full pipeline from the `-c` YAML config |
+| `stips dashboard` | Launch browser-based pipeline monitoring (needs the `stips[dashboard]` extra) |
+| `stips bps submit` | Submit pipeline to BPS cluster |
+| `stips bps status` | Check BPS run status |
+| `stips bps cancel` | Cancel BPS run |
+| `stips bps list` | List recent BPS runs |
 
 ### Multi-Target Workflows
 
 The recommended path for multi-target work is per-target YAML configs (in `scripts/config/<target>/`). Each YAML is self-contained — including the environment paths in an `env:` block — so switching targets is one command:
 
 ```bash
-nickel run scripts/config/2023ixf/pipeline_ps1_template.yaml
-nickel run scripts/config/2020wnt/pipeline_ps1_template.yaml
+stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml run
+stips -c scripts/config/2020wnt/pipeline_ps1_template.yaml run
 ```
 
-Profile-based `.env` files (`nickel -p <profile> <command>`) are also supported as a legacy workflow.
+The group-level `-c/--config` YAML is the sole config source. Its `env:` block supplies `REPO`/`STACK_DIR`/`INSTRUMENT_DIR`/`RAW_PARENT_DIR`; the same file's pipeline sections drive `stips run`. (`.env` files and `-p <profile>` are no longer supported.)
 
 ### Transient Analysis Workflow
 
 ```bash
 # 1. Ingest PS1 template for r-band
-nickel ps1-template --ra 210.91 --dec 54.32 --band r
+stips ps1-template --ra 210.91 --dec 54.32 --band r
 
 # 2. Run forced photometry on difference images
-nickel fphot 20230519 --ra 210.91 --dec 54.32
+stips fphot 20230519 --ra 210.91 --dec 54.32
 
 # 3. Extract light curve
-nickel lightcurve --ra 210.91 --dec 54.32 \
+stips lightcurve --ra 210.91 --dec 54.32 \
     --collections "Nickel/runs/20230519/forcedPhotRaDec/*/run" \
     --dataset-type forced_phot_diffim_radec \
     --name "SN 2023ixf"
@@ -199,7 +209,9 @@ nickel lightcurve --ra 210.91 --dec 54.32 \
 ```bash
 uv sync --group dev
 ```
-Installs all workspace packages plus code quality tools (ruff, pyright, pre-commit).
+Installs the framework workspace packages (`stips`, `obs_stips`, and support packages) plus code quality tools (ruff, pyright, pre-commit). Instrument profiles under `instruments/` are loaded by path at runtime (via `INSTRUMENT_DIR`), so there is no per-instrument package to install.
+
+A fork adds its own profile directory under `instruments/<name>/` and points `INSTRUMENT_DIR` at it — no new `obs_` package required. See the [forking guide](docs/forking-stips.md).
 
 #### Full Development Setup
 ```bash
@@ -214,8 +226,8 @@ Installs everything including Jupyter notebooks and analysis libraries.
 make test
 
 # Test CLI tools
-nickel --help
-nickel env
+stips --help
+stips env
 ```
 
 ---
@@ -231,7 +243,7 @@ Self-contained YAML files with inline environment:
 env:
   REPO: "/path/to/butler/repo"
   STACK_DIR: "/path/to/lsst_stack"
-  OBS_NICKEL: "/path/to/nickel_processing_suite/packages/obs_nickel"
+  INSTRUMENT_DIR: "/path/to/stips/instruments/nickel"
   RAW_PARENT_DIR: "/path/to/raw/data"
   REFCAT_REPO: "/path/to/refcats"
 
@@ -278,17 +290,21 @@ lightcurve:
   explosion_mjd: 60082.75
 ```
 
-### Environment File Configuration
+### Config File `env:` Block
 
-For single-repository setups or profiles:
+Configuration lives in the `env:` block of the YAML you pass with `-c/--config`
+(the same file that drives `stips run`). It is the sole config source:
 
-```bash
-# .env or .env.{profile}
-REPO=/path/to/butler/repo
-STACK_DIR=/path/to/lsst_stack
-OBS_NICKEL=/path/to/obs_nickel
-RAW_PARENT_DIR=/path/to/raw/data
-REFCAT_REPO=/path/to/refcats
+```yaml
+# scripts/config/<target>/pipeline_ps1_template.yaml
+env:
+  REPO: /path/to/butler/repo
+  STACK_DIR: /path/to/lsst_stack
+  INSTRUMENT_DIR: /path/to/stips/instruments/nickel   # the declarative instrument dir
+  RAW_PARENT_DIR: /path/to/raw/data
+  REFCAT_REPO: /path/to/refcats
+  CP_PIPE_DIR: "${STACK_DIR}/cp_pipe"   # ${VAR} expands within the env: block
+  # CCD_BINNING: 2   # optional; scale the camera for 2x2-binned raws (default 1)
 ```
 
 ### Required Variables
@@ -297,7 +313,7 @@ REFCAT_REPO=/path/to/refcats
 |----------|-------------|
 | `REPO` | Path to Butler repository |
 | `STACK_DIR` | Path to LSST stack installation |
-| `OBS_NICKEL` | Path to obs_nickel package |
+| `INSTRUMENT_DIR` | Path to the active declarative instrument profile dir (e.g. `instruments/nickel`, `instruments/ctio1m`) |
 | `RAW_PARENT_DIR` | Parent directory for raw data |
 
 ### Optional Variables
@@ -306,7 +322,9 @@ REFCAT_REPO=/path/to/refcats
 |----------|-------------|
 | `REFCAT_REPO` | Path to reference catalog repository |
 | `CP_PIPE_DIR` | Path to cp_pipe (auto-discovered if not set) |
-| `LICK_ARCHIVE_DIR` | Path to lick_searchable_archive client |
+| `CCD_BINNING` | On-chip binning factor; scales the camera geometry (default 1 = unbinned) |
+| `LICK_ARCHIVE_DIR` | Path to the Lick archive client (Nickel `download`) |
+| `NOIRLAB_PROPOSAL` | Optional proposal-id filter for the CTIO NOIRLab `download` |
 
 ---
 
@@ -314,14 +332,11 @@ REFCAT_REPO=/path/to/refcats
 
 ### Step 0: Bootstrap (Automatic)
 
-The `nickel run` command automatically bootstraps the repository if needed. For manual bootstrap:
+The `stips run` command automatically bootstraps the repository if needed. For manual bootstrap:
 
 ```bash
-# From YAML config (recommended - self-contained)
-nickel bootstrap scripts/config/2023ixf/pipeline_ps1_template.yaml
-
-# With profile
-nickel -p 2023ixf bootstrap
+# Config comes from the group -c YAML (self-contained)
+stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml bootstrap
 
 # The bootstrap step:
 # - Creates Butler repository
@@ -333,55 +348,55 @@ nickel -p 2023ixf bootstrap
 ### Step 1: Download Data (Optional)
 
 ```bash
-nickel download 20230519
+stips download 20230519
 ```
 
 ### Step 2: Calibrations
 
 ```bash
-nickel calibs 20230519
-nickel calibs 20230519 --jobs 8  # More parallel jobs
+stips calibs 20230519
+stips calibs 20230519 --jobs 8  # More parallel jobs
 ```
 
 ### Step 3: Science Processing
 
 ```bash
-nickel science 20230519
-nickel science 20230519 --object 2023ixf --skip-coadds
-nickel science 20230519 --bad 12345,12346  # Exclude bad exposures
+stips science 20230519
+stips science 20230519 --object 2023ixf --skip-coadds
+stips science 20230519 --bad 12345,12346  # Exclude bad exposures
 ```
 
 ### Step 4: Difference Imaging
 
 ```bash
-nickel dia 20230519 --auto                    # Auto-discover template
-nickel dia 20230519 --template templates/ps1/r  # Specific template
-nickel dia 20230519 --auto --prefer-ps1 --band r  # Prefer PS1 template
+stips dia 20230519 --auto                    # Auto-discover template
+stips dia 20230519 --template templates/ps1/r  # Specific template
+stips dia 20230519 --auto --prefer-ps1 --band r  # Prefer PS1 template
 ```
 
 ### Step 5: Forced Photometry
 
 ```bash
-nickel fphot 20230519 --ra 210.91 --dec 54.32
-nickel fphot 20230519 --ra 210.91 --dec 54.32 --band r --image-type both
+stips fphot 20230519 --ra 210.91 --dec 54.32
+stips fphot 20230519 --ra 210.91 --dec 54.32 --band r --image-type both
 ```
 
 ### Step 6: Light Curve Extraction
 
 ```bash
 # From DIA sources
-nickel lightcurve --ra 210.91 --dec 54.32 \
+stips lightcurve --ra 210.91 --dec 54.32 \
     --collections "Nickel/runs/*/diff/*/run" \
     --name "SN 2023ixf"
 
 # From forced photometry (more reliable)
-nickel lightcurve --ra 210.91 --dec 54.32 \
+stips lightcurve --ra 210.91 --dec 54.32 \
     --collections "Nickel/runs/*/forcedPhotRaDec/*/run" \
     --dataset-type forced_phot_diffim_radec \
     --name "SN 2023ixf"
 
 # With display options (absolute magnitude, days since explosion)
-nickel lightcurve --ra 210.91 --dec 54.32 \
+stips lightcurve --ra 210.91 --dec 54.32 \
     --collections "Nickel/runs/*/forcedPhotRaDec/*/run" \
     --dataset-type forced_phot_diffim_radec \
     --name "SN 2023ixf" \
@@ -397,9 +412,9 @@ nickel lightcurve --ra 210.91 --dec 54.32 \
 Run complete workflows from a single configuration file:
 
 ```bash
-nickel run scripts/config/2023ixf/pipeline_ps1_template.yaml
-nickel run scripts/config/2023ixf/pipeline_nickel_template.yaml
-nickel run pipeline.yaml --dry-run  # Preview without executing
+stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml run
+stips -c scripts/config/2023ixf/pipeline_nickel_template.yaml run
+stips -c pipeline.yaml run --dry-run  # Preview without executing
 ```
 
 ### Template Types
@@ -468,7 +483,7 @@ docker-compose up -d
 REPO=/path/to/repo RAW_PARENT_DIR=/path/to/raw docker-compose up -d
 
 # Run a command
-docker-compose run --rm nps nickel calibs 20230519
+docker-compose run --rm nps stips calibs 20230519
 
 # Interactive shell
 docker-compose run --rm nps bash
@@ -501,7 +516,7 @@ singularity build nps.sif docker-daemon://nps:latest
 singularity run -B /scratch/repo:/data/repo \
                 -B /archive/raw:/data/raw \
                 -B /common/refcats:/data/refcats \
-                nps.sif nickel calibs 20230519
+                nps.sif stips calibs 20230519
 ```
 
 ---
@@ -522,28 +537,28 @@ BPS (Batch Processing Service) enables large-scale parallel processing on HPC cl
 
 ```bash
 # Submit to Slurm
-nickel bps submit calibs 20230519 --site slurm
-nickel bps submit science 20230519 --site slurm
-nickel bps submit dia 20230519 --site slurm --band r
+stips bps submit calibs 20230519 --site slurm
+stips bps submit science 20230519 --site slurm
+stips bps submit dia 20230519 --site slurm --band r
 
 # Submit with project/account
-nickel bps submit science 20230519 --site slurm --project myallocation
+stips bps submit science 20230519 --site slurm --project myallocation
 
 # Dry run (show what would be submitted)
-nickel bps submit calibs 20230519 --site local --dry-run
+stips bps submit calibs 20230519 --site local --dry-run
 ```
 
 ### Managing Runs
 
 ```bash
 # Check status
-nickel bps status RUN_ID
+stips bps status RUN_ID
 
 # List recent runs
-nickel bps list
+stips bps list
 
 # Cancel a run
-nickel bps cancel RUN_ID
+stips bps cancel RUN_ID
 ```
 
 ### BPS Configuration
@@ -582,16 +597,25 @@ pipetask:
 
 ## Camera Specification
 
-- **Detector**: Single CCD (detector ID: 0)
-- **Format**: 1024x1024 imaging area + 32 column overscan
-- **Raw frame size**: 1056x1024 pixels
-- **Amplifier**: Single readout (A00)
-- **Pixel scale**: 0.37"/pixel
-- **Field of view**: ~6.3' x 6.3'
-- **Gain**: ~1.8 e-/ADU
-- **Read noise**: ~7 e-
+Each instrument declares its camera in its profile — either an in-memory
+`CameraSpec` (single-amplifier) or a full multi-amp camera YAML. On-chip
+binning is applied at build time from `CCD_BINNING` (imaging pixels scale by the
+factor; overscan strips stay fixed), so the same profile reduces binned and
+unbinned raws.
+
+| | **Nickel 1-m** | **CTIO 1.0m / Y4KCam** |
+|---|---|---|
+| Detector | single CCD | single CCD |
+| Amplifiers | 1 (`A00`) | **4** (central-cross overscan) |
+| Imaging area | 1024×1024 | 4064×4064 (unbinned) · 2032×2032 (2×2 binned) |
+| Pixel scale | 0.37″/pix | 0.289″/pix (0.578″ binned 2×2) |
+| Camera source | `CameraSpec` | `camera/y4kcam.yaml` |
+| Data fetch | Lick archive | NOIRLab Astro Data Archive |
 
 ### Filters
+
+Both instruments use Johnson/Bessell **B, V** and Cousins **R, I** (CTIO also
+defines **U**):
 
 | Physical Filter | Band | System | Central λ |
 |----------------|------|--------|-----------|
@@ -659,7 +683,8 @@ pre-commit run --all-files
 make test
 
 # Individual test modules
-pytest packages/obs_nickel/tests/ -v
+pytest packages/obs_stips/tests/ -v          # framework glue + camera builder
+pytest instruments/ctio1m/tests/ -v          # an instrument profile (translator, camera, fetch)
 ```
 
 ### Interactive Development
@@ -683,13 +708,13 @@ Ensure `STACK_DIR` points to a valid LSST installation:
 ls $STACK_DIR/loadLSST.bash  # Should exist
 ```
 
-### "Command not found: nickel"
+### "Command not found: stips"
 
-Install the data_tools package:
+Install the stips package:
 ```bash
 uv sync --group dev
 # or
-pip install -e packages/data_tools
+pip install -e packages/stips -e packages/obs_stips
 ```
 
 ### Pipeline fails with import errors
@@ -702,10 +727,10 @@ setup lsst_distrib
 
 ### Bootstrap fails to find script
 
-Run from the nickel_processing_suite directory:
+Run from the repository root directory:
 ```bash
-cd /path/to/nickel_processing_suite
-nickel bootstrap scripts/config/2023ixf/pipeline_ps1_template.yaml
+cd /path/to/stips
+stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml bootstrap
 ```
 
 ### Forced photometry finds no processCcd collection

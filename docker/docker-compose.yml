@@ -11,10 +11,10 @@
 #   # Dashboard is now live at http://localhost:8080
 #
 #   # Run a pipeline (dashboard shows live progress)
-#   docker exec nps-processing nps-exec nickel run /opt/nps/scripts/config/2023ixf/pipeline_docker_test.yaml
+#   docker exec nps-processing nps-exec stips run /opt/nps/scripts/config/2023ixf/pipeline_docker_test.yaml
 #
 #   # Or run individual commands
-#   docker exec nps-processing nps-exec nickel calibs 20230519
+#   docker exec nps-processing nps-exec stips calibs 20230519
 #
 #   # Interactive shell (with LSST stack activated)
 #   docker exec -it nps-processing nps-exec bash
@@ -56,8 +56,9 @@ services:
 
       # Optional: Mount source for development
       # Uncomment to enable live code reloading
-      # - ../packages/data_tools/src:/opt/nps/packages/data_tools/src:ro
-      # - ../packages/obs_nickel:/opt/nps/packages/obs_nickel:ro
+      # - ../packages/stips/src:/opt/nps/packages/stips/src:ro
+      # - ../packages/obs_stips:/opt/nps/packages/obs_stips:ro
+      # - ../instruments/nickel:/opt/nps/instruments/nickel:ro
 
     ports:
       - "${NPS_DASHBOARD_PORT:-8080}:8080"
@@ -67,7 +68,8 @@ services:
       - REPO=/data/repo
       - RAW_PARENT_DIR=/data/raw
       - REFCAT_REPO=/data/refcats
-      - OBS_NICKEL=/opt/nps/packages/obs_nickel
+      - INSTRUMENT_DIR=/opt/nps/instruments/nickel
+      - STIPS_DEFAULTS=/opt/nps/packages/obs_stips/instrument_defaults
       - KMP_AFFINITY=disabled
 
       # Optional: Profile to load from /config/.env.{profile}
@@ -89,7 +91,7 @@ services:
 
     # Health check
     healthcheck:
-      test: ["CMD", "bash", "-c", "source /opt/lsst/software/stack/loadLSST.bash && setup lsst_distrib && nickel --help > /dev/null"]
+      test: ["CMD", "bash", "-c", "source /opt/lsst/software/stack/loadLSST.bash && setup lsst_distrib && stips --help > /dev/null"]
       interval: 60s
       timeout: 30s
       retries: 3

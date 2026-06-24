@@ -27,7 +27,7 @@
 env:
   REPO: "/path/to/butler/repo"
   STACK_DIR: "/path/to/lsst_stack"
-  OBS_NICKEL: "/path/to/nickel_processing_suite/packages/obs_nickel"
+  INSTRUMENT_DIR: "/path/to/nickel_processing_suite/instruments/nickel"
   RAW_PARENT_DIR: "/path/to/raw/data"
   REFCAT_REPO: "/path/to/refcats"
 
@@ -62,7 +62,7 @@ science:
     - 20230715
     - 20230720
 
-# Pipeline configuration files (paths relative to obs_nickel/configs/)
+# Pipeline configuration files (resolved from the instrument's configs/, else framework defaults)
 configs:
   science:
     calibrate_image: calibrateImage/tuned_configs/dense_strict.py

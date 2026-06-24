@@ -1,0 +1,43 @@
+# CTIO 1.0m / Y4KCam — 2x2-BINNED multi-band trial on the E2 standard field
+# (2011-11-13, proposal 2011B-0360). Exercises the CCD_BINNING=2 camera path
+# (2072x2072 binned geometry) and multi-band (B/V/R/I) reduction.
+#
+# Binned data needs its own repo: the camera is registered once at bootstrap
+# with CCD_BINNING=2, so it cannot share the unbinned 2007 repo.
+#
+# Per-stage CLI (NOT `stips run` — no templates):
+#   .venv/bin/stips -c scripts/config/ctio1m/pipeline_bin2_e2.yaml bootstrap
+#   .venv/bin/stips -c scripts/config/ctio1m/pipeline_bin2_e2.yaml download 20111113
+#   .venv/bin/stips -c scripts/config/ctio1m/pipeline_bin2_e2.yaml calibs 20111113
+#   .venv/bin/stips -c scripts/config/ctio1m/pipeline_bin2_e2.yaml science 20111113 --skip-coadds
+env:
+  REPO: "/Users/dangause/Developer/lick/data_ctio/e2_bin2_repo"
+  STACK_DIR: "/Users/dangause/Developer/lick/lsst/lsst_stack"
+  INSTRUMENT_DIR: "/Users/dangause/Developer/lick/lsst/lsst_stack/stack/nickel_processing_suite/instruments/ctio1m"
+  RAW_PARENT_DIR: "/Users/dangause/Developer/lick/data_ctio"
+  REFCAT_REPO: "/Users/dangause/Developer/lick/lsst/lsst_stack/stack/refcats"
+  CCD_BINNING: "2"
+  NOIRLAB_PROPOSAL: "2011B-0360"
+
+object: "E2"
+bands: ["b", "v", "r", "i"]
+
+template:
+  type: ps1
+  size: 0.3
+
+science:
+  nights:
+    - 20111113
+
+options:
+  jobs: 4
+  skip_calibs: false
+  skip_science: false
+  skip_dia: true
+  forced_phot: false
+  continue_on_error: true
+  use_fallbacks: true
+
+lightcurve:
+  enabled: false

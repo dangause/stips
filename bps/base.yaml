@@ -7,7 +7,12 @@
 #   {repo}              - Butler repository path
 #   {night}             - Observing night (YYYYMMDD)
 #   {timestamp}         - Run timestamp
-#   {obs_nickel}        - Path to obs_nickel package
+#   {instrument_dir}    - Path to the declarative instrument package
+#   {stips_defaults}    - Path to framework reference pipelines/configs
+#   {obs_stips_dir}     - Path to obs_stips (LSST glue) package
+#   {stips_src}         - Path to stips src-layout (src/)
+#   {obs_data_package}  - Instrument data package product name (may be empty)
+#   {instrument_data_dir} - Path to the instrument data package (may be empty)
 #   {cp_pipe_dir}       - Path to cp_pipe package
 #   {operator}          - Username for output collection
 #   {project}           - Project name for accounting
@@ -68,15 +73,21 @@ preScript: |
   source {stack_dir}/loadLSST.bash
   setup lsst_distrib
 
-  # Setup NPS packages
-  if [[ -d "{obs_nickel}" ]]; then
-      setup -r {obs_nickel} obs_nickel 2>/dev/null || true
+  # STIPS framework: obs_stips (LSST glue) + stips (core, src-layout).
+  # The instrument is declarative (loaded by path from INSTRUMENT_DIR) — no
+  # per-instrument EUPS product to set up.
+  export INSTRUMENT_DIR="{instrument_dir}"
+  export STIPS_DEFAULTS="{stips_defaults}"
+  if [[ -d "{obs_stips_dir}" ]]; then
+      setup -r {obs_stips_dir} obs_stips 2>/dev/null || true
+  fi
+  if [[ -d "{stips_src}" ]]; then
+      export PYTHONPATH="{stips_src}:${PYTHONPATH:-}"
   fi
 
-  # Setup obs_nickel_data if available
-  OBS_NICKEL_DATA="{obs_nickel}/../obs_nickel_data"
-  if [[ -d "$OBS_NICKEL_DATA" ]]; then
-      setup -r "$OBS_NICKEL_DATA" obs_nickel_data 2>/dev/null || true
+  # Instrument data package (defects/crosstalk), if the profile declares one
+  if [[ -n "{obs_data_package}" && -d "{instrument_data_dir}" ]]; then
+      setup -r "{instrument_data_dir}" {obs_data_package} 2>/dev/null || true
   fi
 
 # =============================================================================

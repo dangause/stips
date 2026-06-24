@@ -8,8 +8,6 @@ Welcome to the NPS documentation. This guide will help you understand, set up, a
 |--------------|-----------|
 | Get started quickly | [Getting Started](getting-started.md) |
 | Set up a new transient campaign | [New Campaign Guide](new-campaign.md) |
-| Look up a CLI command | [CLI Reference](cli-reference.md) |
-| Configure pipeline options | [Configuration Guide](configuration.md) |
 | Understand how NPS works | [Architecture Overview](architecture.md) |
 
 ## Documentation Map
@@ -19,8 +17,6 @@ docs/
 ├── README.md              ← You are here
 ├── getting-started.md     # Installation & first pipeline
 ├── new-campaign.md        # Setting up new transient targets
-├── cli-reference.md       # Complete command reference
-├── configuration.md       # YAML & environment options
 ├── architecture.md        # System design & internals
 ├── architecture-bps-docker-slurm.md  # BPS/Docker/Slurm deployment
 ├── science-configs.md     # CalibrateImage tuning & fallbacks
@@ -53,24 +49,6 @@ docs/
 - Creating configuration files
 - Choosing template strategy
 - Running and validating
-
-### [CLI Reference](cli-reference.md)
-
-**Complete command documentation.**
-
-- All `nickel` commands and options
-- Examples for each command
-- BPS commands for HPC
-- Environment variables
-
-### [Configuration Guide](configuration.md)
-
-**Deep dive into configuration options.**
-
-- YAML pipeline configuration
-- Environment variables
-- Profile-based workflows
-- Pipeline tuning options
 
 ### [Architecture Overview](architecture.md)
 
@@ -122,31 +100,31 @@ The `diagrams/` directory contains Mermaid diagrams that can be rendered in:
 uv sync --group dev
 
 # Run complete pipeline
-nickel run scripts/config/2023ixf/pipeline_ps1_template.yaml
+stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml run
 ```
 
 ### Step-by-Step
 
 ```bash
-nickel bootstrap config.yaml     # Initialize repo
-nickel calibs 20230519           # Build calibrations
-nickel science 20230519          # Process science
-nickel dia 20230519 --auto       # Difference imaging
-nickel fphot 20230519 --ra R --dec D  # Forced photometry
-nickel lightcurve --collections ...   # Extract light curve
+stips -c config.yaml bootstrap        # Initialize repo
+stips -c config.yaml calibs 20230519  # Build calibrations
+stips -c config.yaml science 20230519 # Process science
+stips -c config.yaml dia 20230519 --auto       # Difference imaging
+stips -c config.yaml fphot 20230519 --ra R --dec D  # Forced photometry
+stips -c config.yaml lightcurve --collections ...   # Extract light curve
 ```
 
 ### With Docker
 
 ```bash
-docker-compose run --rm nps nickel run config.yaml
+docker-compose run --rm nps stips -c config.yaml run
 ```
 
 ### On HPC
 
 ```bash
-nickel bps submit science 20230519 --site slurm
-nickel bps status RUN_ID
+stips -c config.yaml bps submit science 20230519 --site slurm
+stips -c config.yaml bps status RUN_ID
 ```
 
 ## Getting Help

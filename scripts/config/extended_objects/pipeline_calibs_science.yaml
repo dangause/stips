@@ -25,7 +25,7 @@
 env:
   REPO: "/Users/dangause/Developer/lick/lsst/data/nickel/extended_objects_repo"
   STACK_DIR: "/Users/dangause/Developer/lick/lsst/lsst_stack"
-  OBS_NICKEL: "/Users/dangause/Developer/lick/lsst/lsst_stack/stack/nickel_processing_suite/packages/obs_nickel"
+  INSTRUMENT_DIR: "/Users/dangause/Developer/lick/lsst/lsst_stack/stack/nickel_processing_suite/instruments/nickel"
   RAW_PARENT_DIR: "/Users/dangause/Developer/lick/data"
   REFCAT_REPO: "/Users/dangause/Developer/lick/lsst/lsst_stack/stack/refcats"
   CP_PIPE_DIR: "${STACK_DIR}/cp_pipe"
@@ -62,7 +62,7 @@ science:
     - 20251026   # NGC 1084 only (2 science frames) — weather-truncated
     - 20251027   # Comets Lemmon & Swan, PNe, clusters, galaxies — narrowband
 
-# Pipeline configuration files (paths relative to obs_nickel/configs/)
+# Pipeline configuration files (resolved from the instrument's configs/, else framework defaults)
 configs:
   science:
     calibrate_image: calibrateImage/tuned_configs/dense_strict.py
