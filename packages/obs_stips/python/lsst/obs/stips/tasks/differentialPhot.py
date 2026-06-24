@@ -427,7 +427,7 @@ if _HAS_LSST:
         )
         matchRadius = pexConfig.Field(
             dtype=float,
-            # Nickel's 10" value is set in the fork config tree (Phase 2);
+            # Nickel raises this to 10" in its instrument config;
             # 2.0 is the LSST-neutral default.
             default=2.0,
             doc="Match radius (arcsec) for associating the target with a "

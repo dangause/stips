@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import subprocess
-import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -89,7 +88,7 @@ eups list -d cp_pipe 2>/dev/null | head -1 | awk '{{print $1}}'
             path = Path(result.stdout.strip())
             if path.exists():
                 return path
-    except (subprocess.TimeoutExpired, Exception):
+    except Exception:
         pass
 
     return None
@@ -157,17 +156,13 @@ class Config:
         p = self.instrument_dir / kind / name
         return p if p.exists() else self._defaults_root / kind / name
 
-    @property
-    def obs_nickel(self) -> Path:
-        """Deprecated alias for instrument_dir (kept one release; read-only)."""
-        return self.instrument_dir
-
     def require_profile(self) -> "InstrumentProfile":
         """Return the active instrument profile, or raise an actionable error.
 
-        Use this from commands that genuinely need the profile. If the obs
-        package was not importable at config-load time, ``profile`` is None and
-        this surfaces a clear, fixable error instead of an opaque AttributeError.
+        Use this from commands that genuinely need the profile. If
+        INSTRUMENT_DIR/profile.py was absent at config-load time, ``profile`` is
+        None and this surfaces a clear, fixable error instead of an opaque
+        AttributeError.
         """
         if self.profile is None:
             raise RuntimeError(
@@ -266,17 +261,7 @@ def load(
     required = ["REPO", "STACK_DIR", "RAW_PARENT_DIR"]
     missing = [k for k in required if not merged.get(k)]
 
-    # Resolve the instrument directory: INSTRUMENT_DIR is the documented key;
-    # OBS_NICKEL is a deprecated alias (warn). A missing one is reported as
-    # INSTRUMENT_DIR via the standard missing-key error below.
     instrument_dir_val = merged.get("INSTRUMENT_DIR")
-    if not instrument_dir_val and merged.get("OBS_NICKEL"):
-        warnings.warn(
-            "OBS_NICKEL is deprecated; rename it to INSTRUMENT_DIR in the config env: block.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        instrument_dir_val = merged["OBS_NICKEL"]
     if not instrument_dir_val:
         missing.append("INSTRUMENT_DIR")
 
@@ -316,8 +301,8 @@ def load(
     if candidate.is_file():
         profile = load_active_profile(Path(instrument_dir_val).expanduser())
 
-    # instrument_dir_val resolved above (INSTRUMENT_DIR, or deprecated
-    # OBS_NICKEL alias). The missing-check has already guaranteed it is set.
+    # instrument_dir_val resolved above (INSTRUMENT_DIR); the missing-check has
+    # already guaranteed it is set.
     instrument_dir = Path(instrument_dir_val).expanduser()
 
     return Config(

@@ -72,7 +72,7 @@ class TestFunpack(unittest.TestCase):
         p = Path("/tmp/x.fits")
         self.assertEqual(fetch._funpack(p), p)
 
-    def test_skips_when_already_unpacked(self, *_):
+    def test_skips_when_already_unpacked(self):
         import tempfile
 
         d = Path(tempfile.mkdtemp())

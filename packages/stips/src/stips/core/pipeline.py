@@ -168,7 +168,7 @@ def find_bad_coord_exposures(
     *,
     object_filter: str | None = None,
     tolerance_deg: float = 5.0,
-    instrument_name: str = "Nickel",
+    instrument_name: str,
 ) -> list[int]:
     """Find exposures with coordinates far from the expected target.
 
@@ -188,7 +188,7 @@ def find_bad_coord_exposures(
         object_filter: Optional object name to restrict query
         tolerance_deg: Max offset in degrees before flagging (default: 5.0)
         instrument_name: Butler instrument name for the query
-            (default: "Nickel", back-compat)
+            (the active profile's name)
 
     Returns:
         Sorted list of exposure IDs with bad coordinates

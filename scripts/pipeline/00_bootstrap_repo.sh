@@ -179,15 +179,11 @@ fi
 
 ########## SKYMAP: register + alias to a stable chain ##########
 log_section "SkyMap Registration"
-# SkyMap config now ships with the framework reference configs (the obs-package
-# collapse + generic-pipelines move relocated configs to instrument_defaults/).
-# The skymap NAME and chain COLLECTION are profile-driven (exported by
-# core/stack.py as SKYMAP_NAME / SKYMAP_COLLECTION); the shared config supplies
-# only the geometry. Fall back to the Nickel reference names for a direct
-# invocation without those exports.
-# SKYMAP_CFG is exported by core/stack.py via instrument-dir-first resolution
-# (a fork's own configs/makeSkyMap.py shadows the framework geometry). Fall back
-# to the framework reference config for a direct invocation without that export.
+# SKYMAP_CFG (geometry), SKYMAP_NAME, and SKYMAP_COLLECTION are exported by
+# core/stack.py from the active profile, with SKYMAP_CFG resolved instrument-dir
+# first (a fork's own configs/makeSkyMap.py shadows the framework geometry under
+# obs_stips/instrument_defaults/). The fallbacks below cover a direct invocation
+# without those exports (Nickel reference values).
 SKYMAP_CFG="${SKYMAP_CFG:-${STIPS_DEFAULTS:-$REPO_ROOT/packages/obs_stips/instrument_defaults}/configs/makeSkyMap.py}"
 SKYMAP_NAME="${SKYMAP_NAME:-nickelRings-v1}"
 SKYMAP_COLLECTION="${SKYMAP_COLLECTION:-skymaps/nickelRings}"

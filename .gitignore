@@ -108,6 +108,7 @@ posters/
 # Internal design / planning docs (not user-facing)
 docs/diagrams/
 docs/plans/
+docs/superpowers/
 docs/aas246-iposter-*.md
 docs/logging-improvements.md
 docs/methods-handout.*

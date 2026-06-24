@@ -1,6 +1,6 @@
 """Nickel 1-meter telescope profile (Lick Observatory).
 
-Copy this file, rename, and edit for your telescope."""
+Copy this directory and edit profile.py + camera/ for your telescope."""
 
 import logging
 
@@ -19,9 +19,9 @@ profile = InstrumentProfile(
     # for Nickel. They are informational and serve as the documented fallback
     # for forks whose astropy lacks an of_site entry for this observatory.
     site=Site(
-        latitude=37.3414,
-        longitude=-121.6429,
-        elevation=1283.0,
+        latitude=37.343333,
+        longitude=-121.636667,
+        elevation=1290.0,
         name="Lick Observatory",
     ),
     # physical_filter -> band

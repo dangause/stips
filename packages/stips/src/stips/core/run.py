@@ -9,7 +9,7 @@ Example YAML format:
     env:
       REPO: "/path/to/butler/repo"
       STACK_DIR: "/path/to/lsst_stack"
-      INSTRUMENT_DIR: "/path/to/obs_nickel"
+      INSTRUMENT_DIR: "/path/to/instruments/nickel"
       RAW_PARENT_DIR: "/path/to/raw/data"
 
     object: "SN2023ixf"   # Must match target_name in FITS (case-insensitive partial match)

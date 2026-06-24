@@ -43,10 +43,10 @@
 #
 
 # Default log root (can be overridden by setting LOG_ROOT before sourcing)
-# Resolve repo root and OBS_NICKEL package path.
+# Resolve REPO_ROOT.
 # shellcheck source=/dev/null
 source "$(dirname "${BASH_SOURCE[0]}")/repo_paths.sh"
-# Logs go in repo root, not in the package.
+# Logs go in repo root.
 : "${LOG_ROOT:=${REPO_ROOT}/logs}"
 
 # Current run ID (shared across all scripts in a single pipeline execution)

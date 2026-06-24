@@ -2,23 +2,21 @@
 
 ## Reproduction
 
-All metrics were extracted from Butler repositories using the `nickel calib-metrics` command, which queries `preliminary_visit_summary` datasets produced by the LSST Science Pipelines' `calibrateImage` task. Landolt photometric validation uses `nickel landolt-validate`.
+All metrics were extracted from Butler repositories using the `stips calib-metrics` command, which queries `preliminary_visit_summary` datasets produced by the LSST Science Pipelines' `calibrateImage` task. Landolt photometric validation uses `stips landolt-validate`.
 
 ```bash
 # Single-target extraction
-nickel calib-metrics \
-    scripts/config/2023ixf/pipeline_ps1_template.yaml \
+stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml calib-metrics \
     -o calib_metrics_2023ixf_all.csv
 
 # Multi-target batch (5 repos, combined CSV)
 python scripts/analysis/run_calib_metrics_batch.py
 
 # Landolt pipeline (build dedicated repo, ~4 nights)
-nickel run scripts/config/landolt_validation/pipeline_landolt.yaml
+stips -c scripts/config/landolt_validation/pipeline_landolt.yaml run
 
 # Landolt photometric validation
-nickel landolt-validate \
-    scripts/config/landolt_validation/pipeline_landolt.yaml \
+stips -c scripts/config/landolt_validation/pipeline_landolt.yaml landolt-validate \
     --catalog scripts/config/landolt_validation/landolt_catalog.csv \
     -o analysis/landolt_validation.csv
 ```
@@ -40,7 +38,7 @@ the Landolt sample is described separately in [Landolt Photometric Validation](#
 | Property | Value |
 |----------|-------|
 | Instrument | Nickel Direct Imaging Camera, Lick Observatory 1-m |
-| Detector | Single 2048×2048 Loral CCD (1 detector, ID 0) |
+| Detector | Single 1024×1024 Loral CCD (1 detector, ID 0) |
 | Plate scale | 0.37 arcsec/pixel |
 | Field of view | ~6.3 arcmin |
 | Total processed visits | 1,457 |

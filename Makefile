@@ -45,7 +45,6 @@ OBS_NICKEL_DATA_LOCAL="$${REPO_ROOT}/packages/obs_nickel_data"; \
 _setup_local "$$OBS_STIPS_LOCAL" obs_stips; \
 _setup_local "$$OBS_NICKEL_DATA_LOCAL" obs_nickel_data; \
 _setup_local "$${TESTDATA_NICKEL_DIR}" testdata_nickel; \
-export INSTRUMENT_DIR="$${INSTRUMENT_DIR:-$${REPO_ROOT}/instruments/nickel}"; \
 export PYTHONPATH="$${REPO_ROOT}/packages/stips/src:$${OBS_STIPS_LOCAL}/python:$${OBS_NICKEL_DATA_LOCAL}/python:$${PYTHONPATH:-}";
 endef
 

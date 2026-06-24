@@ -88,16 +88,6 @@ class TestYamlConfig(unittest.TestCase):
         )
         c = cfg.load(p)
         self.assertEqual(str(c.instrument_dir), "/tmp/instr")
-        self.assertEqual(str(c.obs_nickel), "/tmp/instr")  # deprecated read-only alias
-
-    def test_obs_nickel_key_is_deprecated_alias(self):
-        p = _write_yaml(
-            "env:\n  REPO: /tmp/repo\n  STACK_DIR: /tmp/stack\n"
-            "  OBS_NICKEL: /tmp/obs\n  RAW_PARENT_DIR: /tmp/raw\n"
-        )
-        with self.assertWarns(DeprecationWarning):
-            c = cfg.load(p)
-        self.assertEqual(str(c.instrument_dir), "/tmp/obs")
 
     def test_missing_instrument_dir_errors(self):
         p = _write_yaml(

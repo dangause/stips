@@ -2,7 +2,7 @@
 
 This module handles initializing a new Butler repository with:
 - Creating the Butler repo directory
-- Registering the Nickel instrument
+- Registering the active instrument
 - Ingesting reference catalogs (MONSTER)
 - Registering the SkyMap
 """
@@ -81,14 +81,11 @@ def find_bootstrap_script(config: Config) -> Path | None:
         Path to bootstrap script if found, None otherwise
     """
     script_candidates = [
-        # From obs_nickel in monorepo
+        # Current working directory (repo root)
+        Path.cwd() / "scripts/pipeline/00_bootstrap_repo.sh",
+        # instrument_dir is instruments/<name>/; parent.parent is the repo root
         config.instrument_dir.parent.parent / "scripts/pipeline/00_bootstrap_repo.sh",
-        config.instrument_dir / "../../scripts/pipeline/00_bootstrap_repo.sh",
     ]
-
-    # Also check current working directory
-    cwd = Path.cwd()
-    script_candidates.insert(0, cwd / "scripts/pipeline/00_bootstrap_repo.sh")
 
     for candidate in script_candidates:
         resolved = candidate.resolve()

@@ -12,10 +12,10 @@ A telescope is defined entirely by the files in this directory:
 |-------------------|---------------------------------------------------------------|
 | `profile.py`      | `InstrumentProfile` (name, site, filters, header translation hooks, `instrument_class`, `obs_data_package`) — loaded **by path** |
 | `camera/`         | Camera geometry yaml (loaded from `INSTRUMENT_DIR`)            |
-| `configs/`        | Tuned pipeline-task config overrides                          |
-| `pipelines/`      | Pipeline YAMLs (reference tasks via FQN + `$INSTRUMENT_DIR/...`) |
 | `fetch.py`        | Optional Lick-archive data-fetch hook (referenced by the profile) |
+| `template_metadata.json` | PS1 template metadata for this instrument              |
 | `tests/`          | Reference-instrument tests, run against the generic machinery |
+| `configs/`, `pipelines/` | *Optional.* Tuned config / pipeline overrides. Absent here — Nickel inherits the framework defaults from `obs_stips/instrument_defaults/`; a fork drops a same-named file to override one |
 
 ## Using it
 

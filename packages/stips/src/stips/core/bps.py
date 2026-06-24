@@ -137,7 +137,7 @@ def find_bps_config(pipeline: str, config: Config) -> Path:
     Raises:
         FileNotFoundError: If config file doesn't exist
     """
-    # Look in the bps/pipelines directory relative to obs_nickel
+    # Repo-root bps/pipelines directory (instrument_dir is instruments/<name>/)
     bps_dir = config.instrument_dir.parent.parent / "bps" / "pipelines"
     config_file = bps_dir / f"{pipeline}.yaml"
 

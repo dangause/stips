@@ -16,13 +16,16 @@ DRP_YAML_PATH = (
 )
 
 
-def test_select_template_coadd_qmax_lt_one() -> None:
+def test_select_template_coadd_qmax_lt_one(monkeypatch) -> None:
     """Ensure DRP coadd quantile config remains valid for LSST RangeField."""
     lsst_pipe_base = pytest.importorskip("lsst.pipe.base")
     pipeline_cls = lsst_pipe_base.Pipeline
 
     if not DRP_YAML_PATH.exists():
         pytest.skip(f"framework DRP.yaml not found at {DRP_YAML_PATH}")
+    # DRP.yaml imports sub-pipelines via $STIPS_DEFAULTS; run_with_stack exports
+    # it at runtime, so set it file-relative here to keep this test self-contained.
+    monkeypatch.setenv("STIPS_DEFAULTS", str(DRP_YAML_PATH.parents[1]))
     pipeline = pipeline_cls.fromFile(f"{DRP_YAML_PATH}#coadds-only")
     graph = pipeline.to_graph()
 

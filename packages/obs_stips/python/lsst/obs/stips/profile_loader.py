@@ -1,9 +1,9 @@
 """Stack-side profile loader: load instruments/<name>/profile.py by PATH.
 
-Used by the synthesis submodule (active.py, a later task) at LSST-stack import
-time, where the `stips` package may not be importable. Mirrors
-stips.core.config's by-path load; keep the two in sync (a golden test in a later
-task guards it). Stdlib-only imports so it works in the bare stack env.
+Used by the synthesis submodule (active.py) at LSST-stack import time, where the
+`stips` package may not be importable. Mirrors stips.core.config's by-path load;
+keep the two in sync (test_dehardcode_parity.py guards parity). Stdlib-only
+imports so it works in the bare stack env.
 """
 
 from __future__ import annotations

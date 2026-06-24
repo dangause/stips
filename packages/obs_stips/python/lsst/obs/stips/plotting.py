@@ -1,4 +1,4 @@
-"""Publication-quality plotting utilities for Nickel telescope lightcurves.
+"""Publication-quality plotting utilities for lightcurves.
 
 This module provides shared styling constants and helper functions used by
 all lightcurve plotting code (PipelineTasks and CLI tools) to produce
@@ -15,7 +15,7 @@ Usage in PipelineTasks (restores rcParams after)::
         fig, ax = plt.subplots(figsize=FIGURE_SIZE)
         plot_lightcurve_band(ax, mjd, mag, mag_err, "r", count=len(mjd))
         format_lightcurve_axes(ax)
-        set_title(ax, "SN 2023ixf")
+        set_title(ax, "Target")
         fig.tight_layout()
 
 Usage in CLI scripts::

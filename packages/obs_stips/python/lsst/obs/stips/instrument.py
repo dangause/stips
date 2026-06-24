@@ -34,9 +34,6 @@ class StipsInstrument(Instrument):
     translatorClass = None
     rawFormatterClass = StipsRawFormatter
 
-    # cache for the parsed camera
-    _camera = None
-
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
         profile = cls.__dict__.get("profile")
@@ -58,9 +55,6 @@ class StipsInstrument(Instrument):
             for physical_filter, band in profile.filters.items()
         ]
         return FilterDefinitionCollection(*defs)
-
-    def __init__(self, collection_prefix: str | None = None):
-        super().__init__(collection_prefix=collection_prefix)
 
     @classmethod
     def getName(cls):
