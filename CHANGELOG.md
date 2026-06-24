@@ -2,7 +2,7 @@
 
 All notable changes to STIPS (the Small Telescope Image Processing Suite) are documented here.
 
-## [Unreleased] — STIPS multi-instrument framework + CTIO 1.0m
+## [Unreleased]
 
 ### Framework refactor (instrument-neutral)
 - Renamed the suite to **STIPS**; split into `stips` (CLI + core) and `obs_stips` (generic LSST glue)
@@ -18,7 +18,7 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
 - Astrometry fix: profile `boresight_rotation_angle=180°` (Y4KCam mounted rotated) — median residual 13.5″ → 0.12″
 - Validated end-to-end: unbinned 2007 PG1047 (sub-arcsec astrometry, ~46 mmag photometry) and 2×2-binned 2011 B/V/R/I standard fields (0.578″/px, sub-arcsec V/R/I)
 
-## [Unreleased] — Extended Objects & Narrowband Filters
+### Extended Objects & Narrowband Filters
 
 - Per-filter narrowband isolation for Halpha, [OIII], g', r' filters
 - Per-band-group processing (broadband and narrowband processed separately)
