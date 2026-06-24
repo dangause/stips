@@ -4,6 +4,8 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
 
 ## [Unreleased]
 
+## [1.0.0] — 2026-06-24
+
 ### Framework refactor (instrument-neutral)
 - Renamed the suite to **STIPS**; split into `stips` (CLI + core) and `obs_stips` (generic LSST glue)
 - **Declarative instrument profiles** under `instruments/<name>/` (`profile.py` + camera + hooks), loaded by path via `INSTRUMENT_DIR` — no per-instrument `obs_` package or EUPS product
