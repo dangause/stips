@@ -8,7 +8,9 @@ Renderers are pluggable; RUNS.md is one view of runs.json.
 from __future__ import annotations
 
 import json
+import subprocess
 from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 
 
@@ -84,3 +86,66 @@ def record_from_log_file(log_path: Path, repo: Path) -> RunRecord:
         started_at=data.get("started_at"),
         ended_at=data.get("ended_at"),
     )
+
+
+_STAMP = "%Y%m%dT%H%M%SZ"
+
+
+def duration_from_stamps(start: str | None, end: str | None) -> int | None:
+    if not start or not end:
+        return None
+    try:
+        t0 = datetime.strptime(start, _STAMP)
+        t1 = datetime.strptime(end, _STAMP)
+    except ValueError:
+        return None
+    secs = int((t1 - t0).total_seconds())
+    return (
+        secs if secs > 0 else None
+    )  # 0/negative => unknown (these pipelines never run in <1s)
+
+
+def build_rerun_recipe(
+    instrument: str, step: str, night: str, config: str | None, sha: str | None
+) -> str:
+    cfg = f" --config {config}" if config else ""
+    at = f"  # stips @ {sha}" if sha else ""
+    return f"stips {step} {night}{cfg}{at}  (instrument={instrument})"
+
+
+def repo_size_bytes(repo: Path) -> int | None:
+    try:
+        out = subprocess.run(
+            ["du", "-sk", str(repo)], capture_output=True, text=True, timeout=600
+        )
+        if out.returncode == 0:
+            return int(out.stdout.split()[0]) * 1024
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return None
+    return None
+
+
+def git_sha_before(repo_root: Path, timestamp_end: str | None) -> str | None:
+    """stips git SHA at-or-before run time; None if before first commit / on error."""
+    if not timestamp_end:
+        return None
+    try:
+        when = datetime.strptime(timestamp_end, _STAMP).replace(tzinfo=timezone.utc)
+        out = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(repo_root),
+                "rev-list",
+                "-1",
+                f"--before={when.isoformat()}",
+                "HEAD",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        sha = out.stdout.strip()
+        return sha[:10] or None
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return None

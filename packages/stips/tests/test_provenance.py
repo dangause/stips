@@ -69,3 +69,25 @@ def test_record_from_log_file(tmp_path):
     assert rec.night == "20230815"
     assert rec.final_status == "partial"
     assert rec.timestamp_end == "20260313T185937Z"
+
+
+def test_rerun_recipe_and_duration():
+    from stips.core.provenance import build_rerun_recipe, duration_from_stamps
+
+    rec_recipe = build_rerun_recipe(
+        instrument="nickel",
+        step="science",
+        night="20230815",
+        config="dense_strict.py",
+        sha="abc1234",
+    )
+    assert "nickel" in rec_recipe and "science" in rec_recipe
+    assert (
+        "20230815" in rec_recipe
+        and "dense_strict.py" in rec_recipe
+        and "abc1234" in rec_recipe
+    )
+
+    # duration from matching UTC stamps
+    assert duration_from_stamps("20260313T185500Z", "20260313T185937Z") == 277
+    assert duration_from_stamps(None, "20260313T185937Z") is None
