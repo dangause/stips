@@ -24,6 +24,9 @@ COLS_SQL = """
   g.parallax, g.parallax_error,
   g.pmra, g.pmra_error, g.pmdec, g.pmdec_error,
   g.ref_epoch,
+  g.ra_dec_corr, g.ra_parallax_corr, g.ra_pmra_corr, g.ra_pmdec_corr,
+  g.dec_parallax_corr, g.dec_pmra_corr, g.dec_pmdec_corr,
+  g.parallax_pmra_corr, g.parallax_pmdec_corr, g.pmra_pmdec_corr,
   g.phot_g_mean_flux,  g.phot_bp_mean_flux,  g.phot_rp_mean_flux,
   g.phot_g_mean_flux_over_error, g.phot_bp_mean_flux_over_error, g.phot_rp_mean_flux_over_error,
   g.phot_g_mean_mag,   g.phot_bp_mean_mag,   g.phot_rp_mean_mag
