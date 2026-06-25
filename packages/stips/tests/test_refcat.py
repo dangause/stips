@@ -1,6 +1,79 @@
 from unittest import mock
 
-from stips.core.refcat import RefcatResult, present_trixels
+from stips.core.refcat import RefcatResult, ensure_refcats, present_trixels
+
+
+def _patch_all(monkeypatch, present_gaia, present_ps1):
+    import stips.core.refcat as rc
+
+    monkeypatch.setattr(rc, "cones_to_htm", lambda cones, depth=7: [100, 101, 102])
+    monkeypatch.setattr(
+        rc,
+        "present_trixels",
+        lambda config, dataset_type: (
+            present_gaia if dataset_type == "gaia_dr3" else present_ps1
+        ),
+    )
+    calls = {"gaia": 0, "ps1": 0, "convert": 0, "ingest": []}
+    monkeypatch.setattr(
+        rc,
+        "fetch_gaia_cone",
+        lambda *a, **k: calls.__setitem__("gaia", calls["gaia"] + 1) or "/tmp/g.csv",
+    )
+    monkeypatch.setattr(
+        rc,
+        "fetch_ps1_cone",
+        lambda *a, **k: calls.__setitem__("ps1", calls["ps1"] + 1) or "/tmp/p.csv",
+    )
+    monkeypatch.setattr(
+        rc,
+        "convert_catalog",
+        lambda *a, **k: calls.__setitem__("convert", calls["convert"] + 1)
+        or "/tmp/map.ecsv",
+    )
+    monkeypatch.setattr(
+        rc,
+        "_ingest_refcat",
+        lambda **k: calls["ingest"].append(k["name"]) or f"refcats/{k['name']}",
+    )
+    return calls
+
+
+def test_ensure_refcats_noop_when_fully_covered(monkeypatch):
+    calls = _patch_all(
+        monkeypatch, present_gaia={100, 101, 102}, present_ps1={100, 101, 102}
+    )
+    r = ensure_refcats(config=mock.Mock(), ra=210.9, dec=54.3)
+    assert r.gaia_status == "covered" and r.ps1_status == "covered"
+    assert calls["gaia"] == 0 and calls["ps1"] == 0 and calls["ingest"] == []
+
+
+def test_ensure_refcats_fetches_when_missing(monkeypatch):
+    calls = _patch_all(monkeypatch, present_gaia=set(), present_ps1=set())
+    r = ensure_refcats(config=mock.Mock(), ra=210.9, dec=54.3)
+    assert r.gaia_status == "fetched" and r.ps1_status == "fetched"
+    assert calls["gaia"] == 1 and calls["ps1"] == 1
+    assert set(calls["ingest"]) == {"gaia_dr3", "panstarrs1_dr2"}
+
+
+def test_ensure_refcats_skips_ps1_in_south(monkeypatch):
+    import stips.core.refcat as rc
+
+    _patch_all(monkeypatch, present_gaia=set(), present_ps1=set())
+
+    def boom(*a, **k):
+        raise rc.PS1FootprintError("south")
+
+    monkeypatch.setattr(rc, "fetch_ps1_cone", boom)
+    r = ensure_refcats(config=mock.Mock(), ra=50.0, dec=-45.0)
+    assert r.gaia_status == "fetched"
+    assert r.ps1_status == "skipped"
+
+
+def test_ensure_refcats_monster_mode_is_noop(monkeypatch):
+    calls = _patch_all(monkeypatch, present_gaia=set(), present_ps1=set())
+    ensure_refcats(config=mock.Mock(), ra=210.9, dec=54.3, mode="monster")
+    assert calls["gaia"] == 0 and calls["ps1"] == 0 and calls["convert"] == 0
 
 
 def test_present_trixels_parses_butler_ids():
