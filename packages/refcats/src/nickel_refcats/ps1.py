@@ -54,6 +54,13 @@ _SENTINEL_COLUMNS = [
     c for c in PS1_COLUMNS if c.endswith("Mag") or c.endswith("MagErr")
 ]
 
+#: PSF-mag bands a usable photometric reference MUST have. These are the bands
+#: the Nickel photometry + color terms consume (g for B/V, r/i for R/I). Most
+#: PS1 mean-catalog objects (galaxies/faint) lack a clean PSF magnitude; keeping
+#: them makes convertReferenceCatalog read the empty CSV field as 0.0 -> mag-0
+#: (hugely bright) garbage references that wreck the photometric zeropoint fit.
+REQUIRED_PSF_MAG_BANDS = ["gMeanPSFMag", "rMeanPSFMag", "iMeanPSFMag"]
+
 
 class PS1FootprintError(Exception):
     """Raised when a target is outside the PS1 (Dec > -30) footprint."""
@@ -106,6 +113,13 @@ def fetch_ps1_cone(
     present = [c for c in _SENTINEL_COLUMNS if c in df.columns]
     if present:
         df[present] = df[present].replace(-999.0, np.nan)
+
+    # Keep only objects with a valid PSF magnitude in every band photometry uses.
+    # Drops galaxies/faint objects lacking PSF mags whose empty fields would
+    # otherwise be read back as mag-0 garbage references by convertReferenceCatalog.
+    req = [c for c in REQUIRED_PSF_MAG_BANDS if c in df.columns]
+    if req:
+        df = df.dropna(subset=req)
 
     out_csv = Path(out_csv)
     out_csv.parent.mkdir(parents=True, exist_ok=True)
