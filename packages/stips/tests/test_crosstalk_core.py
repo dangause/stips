@@ -104,5 +104,79 @@ class TestMeasureArgs(unittest.TestCase):
         self.assertIn("--register-dataset-types", args)
 
 
+class _FakeProc:
+    def __init__(self, stdout):
+        self.stdout = stdout
+
+
+class _FakeProfile:
+    name = "CTIO1m"
+    collection_prefix = "CTIO1m"
+    instrument_class = "lsst.obs.stips.active.Instrument"
+
+
+class _FakeConfig:
+    def __init__(self, repo):
+        self.repo = repo
+
+
+class TestResolveRawRuns(unittest.TestCase):
+    """The measurement path must reuse an existing raw collection (re-ingesting
+    skips already-registered exposures, leaving an empty RUN)."""
+
+    def test_reuses_existing_raw_collection_without_ingesting(self):
+        import stips.core.crosstalk as mod
+
+        calls = []
+        orig_query = mod.run_butler_query
+        orig_butler = mod.run_butler
+        orig_get_raw = mod.get_raw_dir
+        try:
+            mod.run_butler_query = lambda args, config, **k: _FakeProc(
+                "Name\n----\nCTIO1m/raw/20070321/ts1\n"
+            )
+            mod.run_butler = lambda args, config, **k: calls.append(args[0])
+            mod.get_raw_dir = lambda config, night: (_ for _ in ()).throw(
+                AssertionError("should not touch raw dir when collection exists")
+            )
+            runs = mod._resolve_raw_runs(
+                ["20070321"], _FakeConfig("/repo"), _FakeProfile()
+            )
+        finally:
+            mod.run_butler_query = orig_query
+            mod.run_butler = orig_butler
+            mod.get_raw_dir = orig_get_raw
+
+        self.assertEqual(runs, ["CTIO1m/raw/20070321/ts1"])
+        self.assertNotIn("ingest-raws", calls)  # no ingest when raws already present
+
+    def test_ingests_when_no_collection_exists(self):
+        import stips.core.crosstalk as mod
+
+        calls = []
+        orig_query = mod.run_butler_query
+        orig_butler = mod.run_butler
+        orig_get_raw = mod.get_raw_dir
+
+        class _ExistingDir:
+            def exists(self):
+                return True
+
+        try:
+            mod.run_butler_query = lambda args, config, **k: _FakeProc("")  # none found
+            mod.run_butler = lambda args, config, **k: calls.append(args[0])
+            mod.get_raw_dir = lambda config, night: _ExistingDir()
+            runs = mod._resolve_raw_runs(
+                ["20070321"], _FakeConfig("/repo"), _FakeProfile()
+            )
+        finally:
+            mod.run_butler_query = orig_query
+            mod.run_butler = orig_butler
+            mod.get_raw_dir = orig_get_raw
+
+        self.assertEqual(len(runs), 1)
+        self.assertIn("ingest-raws", calls)
+
+
 if __name__ == "__main__":
     unittest.main()

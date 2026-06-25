@@ -26,8 +26,18 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from stips.collections import CollectionNames
-from stips.core.pipeline import get_raw_dir, isr_config_args, validate_night
-from stips.core.stack import run_butler, run_butler_python_json, run_with_stack
+from stips.core.pipeline import (
+    get_raw_dir,
+    isr_config_args,
+    parse_butler_query_output,
+    validate_night,
+)
+from stips.core.stack import (
+    run_butler,
+    run_butler_python_json,
+    run_butler_query,
+    run_with_stack,
+)
 
 if TYPE_CHECKING:
     from stips.core.config import Config
@@ -280,9 +290,11 @@ def measure_crosstalk(
         return CrosstalkResult(False, "", [], error="CP_PIPE_DIR not configured")
     pipeline = str(Path(config.cp_pipe_dir) / CP_CROSSTALK_PIPELINE)
 
-    raw_runs = _ingest_nights(nights, config, prof, log_file=log_file)
+    raw_runs = _resolve_raw_runs(nights, config, prof, log_file=log_file)
     if not raw_runs:
-        return CrosstalkResult(False, "", [], error="no raws ingested for measurement")
+        return CrosstalkResult(
+            False, "", [], error="no raw collections found/ingested for measurement"
+        )
 
     inputs = ",".join([cols.calib_chain, *raw_runs])
     qgraph = config.repo / "qgraphs" / f"cpCrosstalk_{cols.run_ts}.qg"
@@ -341,22 +353,44 @@ def measure_crosstalk(
     return CrosstalkResult(True, cols.crosstalk_calib, [], export_path=export_path)
 
 
-def _ingest_nights(nights, config, prof, *, log_file=None) -> list[str]:
-    """Ingest raws for each night into fresh RUN collections; return their names."""
+def _resolve_raw_runs(nights, config, prof, *, log_file=None) -> list[str]:
+    """Return a raw RUN collection per night, reusing existing ones or ingesting.
+
+    Crosstalk is normally measured after calibs/science, so the night's raws are
+    usually already ingested — reuse the existing ``{prefix}/raw/{night}/*``
+    collection (same discovery the science/dia paths use) rather than re-ingesting
+    (``ingest-raws`` skips already-registered exposures, leaving an empty new RUN).
+    Only ingest when no raw collection exists yet.
+    """
     repo = str(config.repo)
     raw_runs: list[str] = []
-    run_butler(
-        ["register-instrument", repo, prof.instrument_class],
-        config,
-        check=False,
-        log_file=log_file,
-    )
+    did_ingest = False
     for night in nights:
+        existing = parse_butler_query_output(
+            run_butler_query(
+                ["query-collections", repo, f"{prof.collection_prefix}/raw/{night}/*"],
+                config,
+                check=False,
+            ).stdout,
+            prefix_filter=f"{prof.collection_prefix}/",
+        )
+        if existing:
+            raw_runs.append(existing[0])
+            continue
+
         raw_dir = get_raw_dir(config, night)
         if not raw_dir.exists():
-            log.warning("No raw dir for %s (%s); skipping", night, raw_dir)
+            log.warning(
+                "No raw collection or raw dir for %s (%s); skipping", night, raw_dir
+            )
             continue
         cols = CollectionNames(night, prefix=prof.collection_prefix)
+        run_butler(
+            ["register-instrument", repo, prof.instrument_class],
+            config,
+            check=False,
+            log_file=log_file,
+        )
         run_butler(
             [
                 "ingest-raws",
@@ -368,11 +402,12 @@ def _ingest_nights(nights, config, prof, *, log_file=None) -> list[str]:
                 cols.raw_run,
             ],
             config,
-            check=False,  # may already be ingested
+            check=False,
             log_file=log_file,
         )
         raw_runs.append(cols.raw_run)
-    if raw_runs:
+        did_ingest = True
+    if did_ingest:
         run_butler(
             ["define-visits", repo, prof.name], config, check=False, log_file=log_file
         )

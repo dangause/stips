@@ -75,6 +75,9 @@ and exports it to `REPO/crosstalk/<instrument>_crosstalk.ecsv` for inspection
 (use `--export-dir` to change the location). Run it once, typically right after
 your first `stips calibs`.
 
+It reuses the night's already-ingested raw collection
+(`{prefix}/raw/{night}/*`) when present, and only ingests if none exists.
+
 Requirements and tips:
 - **Bias calibs must exist first** — the measurement ISR applies bias. Run
   `stips calibs <night>` before measuring.
