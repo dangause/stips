@@ -665,11 +665,12 @@ def _run_ps1_templates(
     config: Config,
     result: RunResult,
     dry_run: bool,
+    bands: list[str] | None = None,
 ) -> None:
-    """Ingest PS1 templates for each band."""
+    """Ingest PS1 templates for each band (defaults to all configured bands)."""
     from stips.core import ps1_template
 
-    for band in run_cfg.bands:
+    for band in bands if bands is not None else run_cfg.bands:
         if band not in ("r", "i"):
             log.warning(f"PS1 templates not available for band {band}, skipping")
             continue
@@ -706,12 +707,15 @@ def _run_coadd_templates(
     result: RunResult,
     science_cfg: "ScienceConfig",
     dry_run: bool,
+    bands: list[str] | None = None,
 ) -> RunResult | None:
     """Build coadd templates: process template nights, then coadd per band.
 
+    ``bands`` restricts which bands get coadded (defaults to all configured).
     Returns a RunResult early-exit if continue_on_error is False and a step fails,
     or None to continue normally.
     """
+    coadd_bands = bands if bands is not None else run_cfg.bands
     from stips.core import calibs, coadd, science
 
     if not run_cfg.template_nights:
@@ -795,7 +799,7 @@ def _run_coadd_templates(
     elif force_rebuild_templates:
         log.info("rebuild_templates=true — forcing template rebuild")
 
-    for band in run_cfg.bands:
+    for band in coadd_bands:
         log.info(f"Building coadd template for {band}-band...")
 
         if not dry_run:
@@ -828,6 +832,38 @@ def _run_coadd_templates(
             )
             result.template_collections[band] = f"templates/deep/tract0/{band}"
 
+    return None
+
+
+def _run_auto_templates(
+    run_cfg: RunConfig,
+    config: Config,
+    result: RunResult,
+    science_cfg: "ScienceConfig",
+    dry_run: bool,
+) -> RunResult | None:
+    """Auto template strategy: PS1 for r/i, Nickel coadd for b/v.
+
+    Returns a RunResult early-exit on coadd failure (when continue_on_error is
+    False), else None.
+    """
+    ri = [b for b in run_cfg.bands if b in ("r", "i")]
+    bv = [b for b in run_cfg.bands if b not in ("r", "i")]
+    if ri:
+        _run_ps1_templates(run_cfg, config, result, dry_run, bands=ri)
+    if bv:
+        if not run_cfg.template_nights:
+            log.warning(
+                "Auto templates: bands %s need coadd templates but no "
+                "template.nights configured — skipping their templates.",
+                ", ".join(bv),
+            )
+        else:
+            early_exit = _run_coadd_templates(
+                run_cfg, config, result, science_cfg, dry_run, bands=bv
+            )
+            if early_exit is not None:
+                return early_exit
     return None
 
 
@@ -1932,6 +1968,12 @@ def run(
         early_exit = _run_coadd_templates(run_cfg, config, result, science_cfg, dry_run)
         if early_exit is not None:
             log.error(f"Coadd template build failed: {early_exit.error}")
+            return early_exit
+        _log_template_summary(run_cfg, result)
+    elif run_cfg.template_type == "auto":
+        early_exit = _run_auto_templates(run_cfg, config, result, science_cfg, dry_run)
+        if early_exit is not None:
+            log.error(f"Auto template build failed: {early_exit.error}")
             return early_exit
         _log_template_summary(run_cfg, result)
 
