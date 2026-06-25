@@ -208,18 +208,28 @@ def build_and_certify_crosstalk(
 
     detectors = _parse_worker_detectors(worker.stdout)
 
-    run_butler(
-        certify_args(repo, cols.crosstalk_gen, cols.crosstalk_calib),
-        config,
-        check=False,  # tolerate already-certified on re-run
-        log_file=log_file,
-    )
+    _certify_crosstalk(config, cols.crosstalk_gen, cols, log_file=log_file)
     log.info(
         "Certified declarative crosstalk calib for %d detector(s) into %s",
         len(detectors),
         cols.crosstalk_calib,
     )
     return CrosstalkResult(True, cols.crosstalk_calib, detectors)
+
+
+def _certify_crosstalk(config, source_run, cols, *, log_file=None) -> None:
+    """Certify the ``crosstalk`` dataset from ``source_run`` into the calib chain.
+
+    Shared by the declarative and measurement paths so the dataset name and
+    validity window stay in lockstep. ``check=False`` tolerates re-certification on
+    a re-run.
+    """
+    run_butler(
+        certify_args(str(config.repo), source_run, cols.crosstalk_calib),
+        config,
+        check=False,
+        log_file=log_file,
+    )
 
 
 def _parse_worker_detectors(stdout: str | None) -> list[int]:
@@ -314,13 +324,9 @@ def measure_crosstalk(
             False, "", [], error=f"measurement pipeline exit {result.returncode}"
         )
 
-    # The solve output lands in the gen RUN; certify from there.
-    run_butler(
-        certify_args(repo, f"{cols.crosstalk_gen}/run", cols.crosstalk_calib),
-        config,
-        check=False,
-        log_file=log_file,
-    )
+    # The solve output lands in the gen RUN; certify from there, then ensure the
+    # crosstalk calib is in the curated chain ISR reads.
+    _certify_crosstalk(config, f"{cols.crosstalk_gen}/run", cols, log_file=log_file)
     run_butler(
         chain_prepend_args(repo, cols.curated_chain, cols.crosstalk_calib),
         config,
@@ -381,9 +387,7 @@ def _export_matrix(config, prof, calib_collection, export_dir, *, log_file=None)
     the written path, or None on failure.
     """
     if export_dir is None:
-        instrument_dir = config.package_dir if hasattr(config, "package_dir") else None
-        base = Path(instrument_dir) if instrument_dir else config.repo
-        export_dir = Path(base) / "crosstalk"
+        export_dir = config.repo / "crosstalk"
     export_dir = Path(export_dir)
     export_dir.mkdir(parents=True, exist_ok=True)
     out_path = export_dir / f"{prof.name}_crosstalk.ecsv"

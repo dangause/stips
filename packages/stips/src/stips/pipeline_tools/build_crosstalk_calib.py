@@ -58,7 +58,6 @@ def build_for_camera(butler, instrument, coeffs, units, run):
     Imports of lsst.* happen in the caller's process (stack env). ``coeffs`` is a
     list-of-lists; ``butler`` is a writeable Butler.
     """
-    import numpy as np
     from lsst.daf.butler import DatasetType
     from lsst.obs.base import Instrument
 
@@ -88,7 +87,7 @@ def build_for_camera(butler, instrument, coeffs, units, run):
         )
         detectors.append(detector.getId())
 
-    return {"detectors": detectors, "n_amp": len(np.array(coeffs)), "run": run}
+    return {"detectors": detectors, "n_amp": len(coeffs), "run": run}
 
 
 def main(argv=None):
