@@ -48,17 +48,10 @@ BATCH_SIZE_DEFAULT = 200  # cones per TAP upload batch
 SLEEP_BETWEEN_DEFAULT = 2.0  # seconds between TAP jobs
 MAX_RETRIES_DEFAULT = 4
 
-# Columns required by convertReferenceCatalog ConvertGaiaManager + some extras
-COLS_SQL = """
-  g.source_id,
-  g.ra, g.dec, g.ra_error, g.dec_error,
-  g.parallax, g.parallax_error,
-  g.pmra, g.pmra_error, g.pmdec, g.pmdec_error,
-  g.ref_epoch,
-  g.phot_g_mean_flux,  g.phot_bp_mean_flux,  g.phot_rp_mean_flux,
-  g.phot_g_mean_flux_over_error, g.phot_bp_mean_flux_over_error, g.phot_rp_mean_flux_over_error,
-  g.phot_g_mean_mag,   g.phot_bp_mean_mag,   g.phot_rp_mean_mag
-""".strip()
+# Columns required by convertReferenceCatalog ConvertGaiaManager + some extras.
+# Single source of truth lives in the importable library module.
+from nickel_refcats.gaia import COLS_SQL  # noqa: E402
+
 # ----------------------------------
 
 

@@ -84,6 +84,11 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
+# Staging default: "monster" preserves legacy behavior until Gaia/PS1 is
+# validated (see docs/refcat-validation-runbook.md). Single source of truth for
+# both the RunConfig field default and the from_yaml fallback.
+DEFAULT_REFCAT_MODE = "monster"
+
 
 def _generate_run_id() -> str:
     """Generate a unique run ID for unified logging across Python and shell."""
@@ -364,7 +369,7 @@ class RunConfig:
     # (no on-demand fetch; science uses the MONSTER refcat baked into DRP.yaml).
     # Opt into the new path with `refcat: {mode: gaia_ps1}`. After validation on
     # real data, flip this default to "gaia_ps1" (see docs/refcat-validation-runbook).
-    refcat_mode: str = "monster"  # "monster" | "gaia_ps1"
+    refcat_mode: str = DEFAULT_REFCAT_MODE  # "monster" | "gaia_ps1"
     refcat_radius_deg: float = 0.3  # cone radius for on-demand fetch
     refcat_gaia_quality: dict | None = None  # optional Gaia quality cuts
 
@@ -432,7 +437,7 @@ class RunConfig:
         # Extract refcat config (on-demand Gaia/PS1; absent section => defaults).
         # Staging default "monster" keeps behavior unchanged until validated.
         refcat = data.get("refcat", {})
-        refcat_mode = refcat.get("mode", "monster")
+        refcat_mode = refcat.get("mode", DEFAULT_REFCAT_MODE)
         refcat_radius_deg = float(refcat.get("radius_deg", 0.3))
         refcat_gaia_quality = refcat.get("gaia_quality")
 
