@@ -3,9 +3,10 @@ from unittest import mock
 from stips.core.refcat import RefcatResult, ensure_refcats, present_trixels
 
 
-def _patch_all(monkeypatch, present_gaia, present_ps1):
+def _patch_all(monkeypatch, present_gaia, present_ps1, requested=None):
     import stips.core.refcat as rc
 
+    requested = requested or {}
     monkeypatch.setattr(rc, "cones_to_htm", lambda cones, depth=7: [100, 101, 102])
     monkeypatch.setattr(
         rc,
@@ -14,6 +15,9 @@ def _patch_all(monkeypatch, present_gaia, present_ps1):
             present_gaia if dataset_type == "gaia_dr3" else present_ps1
         ),
     )
+    # Manifest helpers touch the filesystem; stub them (config is a Mock here).
+    monkeypatch.setattr(rc, "_load_requested", lambda config: dict(requested))
+    monkeypatch.setattr(rc, "_record_requested", lambda config, name, trixels: None)
     calls = {"gaia": 0, "ps1": 0, "convert": 0, "ingest": []}
     monkeypatch.setattr(
         rc,
@@ -76,6 +80,20 @@ def test_ensure_refcats_monster_mode_is_noop(monkeypatch):
     assert calls["gaia"] == 0 and calls["ps1"] == 0 and calls["convert"] == 0
 
 
+def test_ensure_refcats_empty_trixels_covered_via_manifest(monkeypatch):
+    # PS1 has shards for only 2 of 3 needed trixels (101 is legitimately empty),
+    # but all 3 were previously requested -> must be treated as covered, no re-fetch.
+    calls = _patch_all(
+        monkeypatch,
+        present_gaia={100, 101, 102},
+        present_ps1={100, 102},
+        requested={"panstarrs1_dr2": {100, 101, 102}},
+    )
+    r = ensure_refcats(config=mock.Mock(), ra=210.9, dec=54.3)
+    assert r.ps1_status == "covered"
+    assert calls["ps1"] == 0 and "panstarrs1_dr2" not in calls["ingest"]
+
+
 def test_present_trixels_parses_butler_ids():
     with mock.patch("stips.core.refcat._query_present_htm7", return_value={100, 101}):
         got = present_trixels(config=mock.Mock(), dataset_type="gaia_dr3")
@@ -105,10 +123,15 @@ def test_ingest_refcat_runs_register_ingest_chain():
         side_effect=lambda args, config, **k: calls.append(args),
     ):
         run_collection = refcat._ingest_refcat(
-            config=mock.Mock(), name="gaia_dr3", ecsv_map="/tmp/filename_to_htm.ecsv"
+            config=mock.Mock(),
+            name="gaia_dr3",
+            ecsv_map="/tmp/filename_to_htm.ecsv",
+            stamp="20260625T000000Z",
         )
     joined = " ".join(" ".join(c) for c in calls)
     assert "register-dataset-type" in joined
     assert "ingest-files" in joined
     assert "collection-chain" in joined
-    assert run_collection == "refcats/gaia_dr3"
+    # Timestamped RUN collection so re-fetches never collide on existing shards.
+    assert run_collection == "refcats/gaia_dr3/20260625T000000Z"
+    assert "refcats/gaia_dr3/20260625T000000Z" in joined

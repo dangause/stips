@@ -12,6 +12,7 @@ No ``lsst.*`` import happens at module load — stack access is confined to
 from __future__ import annotations
 
 import datetime as dt
+import json
 import logging
 import re
 from dataclasses import dataclass, field
@@ -96,16 +97,19 @@ def present_trixels(config: "Config", dataset_type: str) -> set[int]:
     return _query_present_htm7(config, dataset_type)
 
 
-def _ingest_refcat(*, config: "Config", name: str, ecsv_map: str) -> str:
+def _ingest_refcat(*, config: "Config", name: str, ecsv_map: str, stamp: str) -> str:
     """Register, ingest, and chain a converted refcat into ``refcats``.
 
-    Mirrors the MONSTER bootstrap ingest (00_bootstrap_repo.sh): the three steps
-    are idempotent so re-running over an already-present catalog is safe.
+    Ingests into a TIMESTAMPED RUN collection (``refcats/<name>/<stamp>``) and
+    extends the unified ``refcats`` chain with it. Using a fresh RUN per fetch
+    means a re-fetch never collides with already-ingested shards (a fixed RUN
+    would raise ConflictingDefinitionError); the CHAINED parent de-duplicates via
+    find-first, so the newest run's shards win.
 
-    Returns the per-catalog RUN collection name (``refcats/<name>``).
+    Returns the timestamped RUN collection name.
     """
     repo = str(config.repo)
-    run_collection = f"refcats/{name}"
+    run_collection = f"refcats/{name}/{stamp}"
 
     # 1) Register the dataset type (tolerate "already exists").
     run_butler(
@@ -113,7 +117,7 @@ def _ingest_refcat(*, config: "Config", name: str, ecsv_map: str) -> str:
         config,
         check=False,
     )
-    # 2) Ingest the sharded FITS in place (direct mode), referencing the map.
+    # 2) Ingest the sharded FITS in place (direct mode) into the timestamped RUN.
     run_butler(
         ["ingest-files", "-t", "direct", repo, name, run_collection, ecsv_map],
         config,
@@ -126,6 +130,39 @@ def _ingest_refcat(*, config: "Config", name: str, ecsv_map: str) -> str:
         check=True,
     )
     return run_collection
+
+
+def _requested_path(config: "Config") -> Path:
+    """Sidecar manifest of HTM7 trixels ever requested per catalog (per repo)."""
+    return Path(str(config.repo)) / "refcats_requested.json"
+
+
+def _load_requested(config: "Config") -> dict[str, set[int]]:
+    """Load the per-repo requested-trixels manifest (empty on any error)."""
+    try:
+        raw = json.loads(_requested_path(config).read_text())
+        return {k: {int(x) for x in v} for k, v in raw.items()}
+    except Exception:  # noqa: BLE001 - missing/unreadable manifest => nothing recorded
+        return {}
+
+
+def _record_requested(config: "Config", name: str, trixels: set[int]) -> None:
+    """Union ``trixels`` into the manifest for ``name`` (best-effort).
+
+    Records every trixel we asked the survey for, even ones that turned out to
+    contain no usable sources (so no shard was ingested). Coverage then treats
+    those legitimately-empty trixels as covered instead of re-fetching forever.
+    """
+    try:
+        current = _load_requested(config)
+        current.setdefault(name, set()).update(int(t) for t in trixels)
+        path = _requested_path(config)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            json.dumps({k: sorted(v) for k, v in current.items()}, indent=2)
+        )
+    except Exception as exc:  # noqa: BLE001 - manifest is an optimization, not critical
+        log.debug("Could not record requested trixels for %s: %s", name, exc)
 
 
 def _convert_config_path(config_name: str) -> Path:
@@ -157,8 +194,11 @@ def _ensure_one(
 
     Returns ``"covered"`` (already present) or ``"fetched"`` (newly ingested).
     """
-    present = present_trixels(config, name)
-    if not force and not missing_trixels(needed, present):
+    # A needed trixel is satisfied if it has an ingested shard OR we already
+    # requested it (it may legitimately contain no usable sources, so it never
+    # gets a shard — without this it would be re-fetched on every run).
+    covered = present_trixels(config, name) | _load_requested(config).get(name, set())
+    if not force and not missing_trixels(needed, covered):
         return "covered"
 
     out_dir = _refcat_out_dir(config, name, stamp)
@@ -167,7 +207,11 @@ def _ensure_one(
     ecsv = convert_catalog(
         name, out_csv, _convert_config_path(convert_config), out_dir, force=force
     )
-    collection = _ingest_refcat(config=config, name=name, ecsv_map=str(ecsv))
+    collection = _ingest_refcat(
+        config=config, name=name, ecsv_map=str(ecsv), stamp=stamp
+    )
+    # Record every requested trixel (including empty ones) so re-runs are no-ops.
+    _record_requested(config, name, needed)
     result.collections.append(collection)
     return "fetched"
 
