@@ -59,8 +59,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20201207 --config dense_strict.py  # stips @ bd69650, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 49345331200,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -96,8 +96,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20201219 --config dense_strict.py  # stips @ bd69650, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 49345331200,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -133,8 +133,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20210218 --config dense_strict.py  # stips @ bd69650, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 49345331200,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -197,8 +197,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20210228 --config dense_strict.py  # stips @ bd69650, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 49345331200,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -234,8 +234,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20210306 --config dense_strict.py  # stips @ bd69650, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 49345331200,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -271,8 +271,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20210321 --config dense_strict.py  # stips @ bd69650, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 49345331200,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -335,8 +335,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20210324 --config dense_strict.py  # stips @ bd69650, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 49345331200,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -372,8 +372,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20210706 --config dense_strict.py  # stips @ bd69650, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 49345331200,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -409,8 +409,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20210712 --config dense_strict.py  # stips @ bd69650, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 49345331200,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -446,8 +446,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20210715 --config dense_strict.py  # stips @ bd69650, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 49345331200,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -483,8 +483,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20210721 --config dense_strict.py  # stips @ bd69650, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 49345331200,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -547,8 +547,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20210724 --config dense_strict.py  # stips @ bd69650, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 49345331200,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -584,8 +584,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20210810 --config dense_strict.py  # stips @ bd69650, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 49345331200,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -621,8 +621,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20210825 --config dense_strict.py  # stips @ bd69650, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 49345331200,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -685,8 +685,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20210904 --config dense_strict.py  # stips @ bd69650, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 49345331200,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -749,8 +749,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20210906 --config dense_strict.py  # stips @ bd69650, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 49345331200,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -786,8 +786,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20210916 --config dense_strict.py  # stips @ bd69650, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 49345331200,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -823,8 +823,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20210923 --config dense_strict.py  # stips @ bd69650, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 49345331200,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -860,8 +860,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20210926 --config dense_strict.py  # stips @ bd69650, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 49345331200,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -897,8 +897,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20210930 --config dense_strict.py  # stips @ bd69650, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 49345331200,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -934,8 +934,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20211004 --config dense_strict.py  # stips @ bd69650, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 49345331200,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -971,8 +971,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20211009 --config dense_strict.py  # stips @ bd69650, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 49345331200,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -1008,8 +1008,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20211013 --config dense_strict.py  # stips @ bd69650, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 49345331200,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -1045,8 +1045,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20211018 --config dense_strict.py  # stips @ bd69650, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 49345331200,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -1082,8 +1082,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20211027 --config dense_strict.py  # stips @ bd69650, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 49345331200,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -1119,8 +1119,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20211030 --config dense_strict.py  # stips @ bd69650, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 49345331200,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -1156,8 +1156,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20211111 --config dense_strict.py  # stips @ bd69650, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 49345331200,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -1193,8 +1193,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20211113 --config dense_strict.py  # stips @ bd69650, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 49345331200,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -1230,8 +1230,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20211121 --config dense_strict.py  # stips @ bd69650, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 49345331200,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -1267,8 +1267,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20211125 --config dense_strict.py  # stips @ bd69650, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 49345331200,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -1304,8 +1304,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20211129 --config dense_strict.py  # stips @ bd69650, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 49345331200,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -1341,8 +1341,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20211201 --config dense_strict.py  # stips @ bd69650, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 49345331200,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -1378,8 +1378,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20211217 --config dense_strict.py  # stips @ bd69650, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 49345331200,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -1415,8 +1415,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20220105 --config dense_strict.py  # stips @ bd69650, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 49345331200,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -1452,8 +1452,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20220108 --config dense_strict.py  # stips @ bd69650, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 49345331200,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -1489,8 +1489,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20220110 --config dense_strict.py  # stips @ bd69650, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 49345331200,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -1526,8 +1526,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20220118 --config dense_strict.py  # stips @ bd69650, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 49345331200,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -1563,8 +1563,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20220124 --config dense_strict.py  # stips @ bd69650, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 49345331200,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -1600,8 +1600,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20220126 --config dense_strict.py  # stips @ bd69650, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 49345331200,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -1637,8 +1637,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20220208 --config dense_strict.py  # stips @ bd69650, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 49345331200,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -1674,8 +1674,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20220212 --config dense_strict.py  # stips @ bd69650, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 49345331200,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -1729,8 +1729,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20201207 --config dense_strict.py  # stips @ 0f7ec0e, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 59561283584,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -1766,8 +1766,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20201219 --config dense_strict.py  # stips @ 0f7ec0e, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 59561283584,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -1803,8 +1803,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20210218 --config dense_strict.py  # stips @ 0f7ec0e, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 59561283584,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -1858,8 +1858,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20210228 --config dense_strict.py  # stips @ 0f7ec0e, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 59561283584,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -1895,8 +1895,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20210306 --config dense_strict.py  # stips @ 0f7ec0e, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 59561283584,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -1932,8 +1932,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20210321 --config dense_strict.py  # stips @ 0f7ec0e, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 59561283584,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -1987,8 +1987,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20210324 --config dense_strict.py  # stips @ 0f7ec0e, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 59561283584,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -2024,8 +2024,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20210706 --config dense_strict.py  # stips @ 0f7ec0e, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 59561283584,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -2061,8 +2061,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20210712 --config dense_strict.py  # stips @ 0f7ec0e, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 59561283584,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -2098,8 +2098,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20210715 --config dense_strict.py  # stips @ 0f7ec0e, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 59561283584,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -2135,8 +2135,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20210721 --config dense_strict.py  # stips @ 0f7ec0e, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 59561283584,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -2190,8 +2190,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20210724 --config dense_strict.py  # stips @ 0f7ec0e, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 59561283584,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -2227,8 +2227,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20210810 --config dense_strict.py  # stips @ 0f7ec0e, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 59561283584,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -2264,8 +2264,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20210825 --config dense_strict.py  # stips @ 0f7ec0e, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 59561283584,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -2319,8 +2319,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20210904 --config dense_strict.py  # stips @ 0f7ec0e, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 59561283584,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -2374,8 +2374,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20210906 --config dense_strict.py  # stips @ 0f7ec0e, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 59561283584,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -2411,8 +2411,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20210916 --config dense_strict.py  # stips @ 0f7ec0e, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 59561283584,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -2448,8 +2448,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20210923 --config dense_strict.py  # stips @ 0f7ec0e, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 59561283584,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -2485,8 +2485,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20210926 --config dense_strict.py  # stips @ 0f7ec0e, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 59561283584,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -2522,8 +2522,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20210930 --config dense_strict.py  # stips @ 0f7ec0e, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 59561283584,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -2559,8 +2559,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20211004 --config dense_strict.py  # stips @ 0f7ec0e, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 59561283584,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -2596,8 +2596,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20211009 --config dense_strict.py  # stips @ 0f7ec0e, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 59561283584,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -2633,8 +2633,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20211013 --config dense_strict.py  # stips @ 0f7ec0e, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 59561283584,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -2670,8 +2670,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20211018 --config dense_strict.py  # stips @ 0f7ec0e, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 59561283584,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -2707,8 +2707,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20211027 --config dense_strict.py  # stips @ 0f7ec0e, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 59561283584,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -2744,8 +2744,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20211030 --config dense_strict.py  # stips @ 0f7ec0e, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 59561283584,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -2781,8 +2781,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20211111 --config dense_strict.py  # stips @ 0f7ec0e, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 59561283584,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -2818,8 +2818,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20211113 --config dense_strict.py  # stips @ 0f7ec0e, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 59561283584,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -2855,8 +2855,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20211121 --config dense_strict.py  # stips @ 0f7ec0e, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 59561283584,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -2892,8 +2892,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20211125 --config dense_strict.py  # stips @ 0f7ec0e, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 59561283584,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -2929,8 +2929,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20211129 --config dense_strict.py  # stips @ 0f7ec0e, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 59561283584,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -2966,8 +2966,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20211201 --config dense_strict.py  # stips @ 0f7ec0e, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 59561283584,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -3021,8 +3021,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20211217 --config dense_strict.py  # stips @ 0f7ec0e, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 59561283584,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -3516,8 +3516,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20230519 --config dense_strict.py  # stips @ 4051619, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 64442707968,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -3580,8 +3580,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20230521 --config dense_strict.py  # stips @ 4051619, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 64442707968,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -3644,8 +3644,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20230523 --config dense_strict.py  # stips @ 4051619, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 64442707968,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -3708,8 +3708,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20230527 --config dense_strict.py  # stips @ 4051619, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 64442707968,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -3772,8 +3772,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20230531 --config dense_strict.py  # stips @ 4051619, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 64442707968,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -3836,8 +3836,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20230602 --config dense_strict.py  # stips @ 4051619, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 64442707968,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -3900,8 +3900,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20230608 --config dense_strict.py  # stips @ 4051619, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 64442707968,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -3964,8 +3964,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20230611 --config dense_strict.py  # stips @ 4051619, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 64442707968,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -4028,8 +4028,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20230616 --config dense_strict.py  # stips @ 4051619, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 64442707968,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -4092,8 +4092,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20230618 --config dense_strict.py  # stips @ 4051619, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 64442707968,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -4156,8 +4156,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20230625 --config dense_strict.py  # stips @ 4051619, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 64442707968,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -4220,8 +4220,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20230629 --config dense_strict.py  # stips @ 4051619, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 64442707968,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -4284,8 +4284,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20230703 --config dense_strict.py  # stips @ 4051619, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 64442707968,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -4348,8 +4348,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20230706 --config dense_strict.py  # stips @ 4051619, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 64442707968,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -4412,8 +4412,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20230709 --config dense_strict.py  # stips @ 4051619, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 64442707968,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -4476,8 +4476,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20230714 --config dense_strict.py  # stips @ 4051619, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 64442707968,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -4540,8 +4540,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20230728 --config dense_strict.py  # stips @ bd69650, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 64442707968,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -4604,8 +4604,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20230801 --config dense_strict.py  # stips @ bd69650, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 64442707968,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -4668,8 +4668,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20230817 --config dense_strict.py  # stips @ bd69650, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 64442707968,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -4732,8 +4732,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20230905 --config dense_strict.py  # stips @ bd69650, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 64442707968,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -4796,8 +4796,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20230910 --config dense_strict.py  # stips @ bd69650, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 64442707968,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -6162,8 +6162,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20230519 --config dense_strict.py  # stips @ 0946fcb, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 38096691200,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -6208,8 +6208,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20230521 --config dense_strict.py  # stips @ 0946fcb, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 38096691200,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -6272,8 +6272,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20230523 --config dense_strict.py  # stips @ 0946fcb, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 38096691200,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -6336,8 +6336,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20230527 --config dense_strict.py  # stips @ 0946fcb, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 38096691200,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -6400,8 +6400,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20230531 --config dense_strict.py  # stips @ 0946fcb, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 38096691200,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -6446,8 +6446,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20230602 --config dense_strict.py  # stips @ 0946fcb, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 38096691200,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -6492,8 +6492,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20230608 --config dense_strict.py  # stips @ 0946fcb, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 38096691200,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -6556,8 +6556,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20230611 --config dense_strict.py  # stips @ 0946fcb, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 38096691200,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -6620,8 +6620,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20230616 --config dense_strict.py  # stips @ 0946fcb, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 38096691200,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -6684,8 +6684,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20230618 --config dense_strict.py  # stips @ 0946fcb, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 38096691200,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -6748,8 +6748,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20230625 --config dense_strict.py  # stips @ 0946fcb, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 38096691200,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -6794,8 +6794,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20230629 --config dense_strict.py  # stips @ 0946fcb, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 38096691200,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -6840,8 +6840,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20230703 --config dense_strict.py  # stips @ 0946fcb, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 38096691200,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -6886,8 +6886,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20230706 --config dense_strict.py  # stips @ 0946fcb, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 38096691200,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -6950,8 +6950,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20230709 --config dense_strict.py  # stips @ 0946fcb, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 38096691200,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -6996,8 +6996,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20230714 --config dense_strict.py  # stips @ 0946fcb, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 38096691200,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -7060,8 +7060,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20230728 --config dense_strict.py  # stips @ 0946fcb, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 38096691200,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -7106,8 +7106,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20230801 --config dense_strict.py  # stips @ 0946fcb, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 38096691200,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -7170,8 +7170,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20230817 --config dense_strict.py  # stips @ 0946fcb, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 38096691200,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -7234,8 +7234,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20230905 --config dense_strict.py  # stips @ 0946fcb, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 38096691200,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -7298,8 +7298,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20230910 --config dense_strict.py  # stips @ 0946fcb, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 38096691200,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -7335,8 +7335,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20230519 --config dense_strict.py  # stips @ 0946fcb, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 8131493888,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -7372,8 +7372,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20230521 --config dense_strict.py  # stips @ 0946fcb, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 8131493888,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -7409,8 +7409,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20230523 --config dense_strict.py  # stips @ 0946fcb, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 8131493888,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -7446,8 +7446,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20230527 --config dense_strict.py  # stips @ 0946fcb, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 8131493888,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -7483,8 +7483,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20230531 --config dense_strict.py  # stips @ 0946fcb, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 8131493888,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -7547,8 +7547,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20230519 --config dense_strict.py  # stips @ 0946fcb, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 7812042752,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -7593,8 +7593,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20230521 --config dense_strict.py  # stips @ 0946fcb, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 7812042752,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -7630,8 +7630,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20230523 --config dense_strict.py  # stips @ 0946fcb, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 7812042752,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -7694,8 +7694,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20230905 --config dense_strict.py  # stips @ 0946fcb, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 7812042752,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -7758,8 +7758,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20230910 --config dense_strict.py  # stips @ 0946fcb, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 7812042752,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -7813,8 +7813,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20240905 --config dense_strict.py  # stips @ 0f7ec0e, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 15526825984,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -7859,8 +7859,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20240906 --config dense_strict.py  # stips @ 0f7ec0e, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 15526825984,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -7914,8 +7914,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20241030 --config dense_strict.py  # stips @ 0f7ec0e, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 15526825984,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -7969,8 +7969,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20240906 --config dense_strict.py  # stips @ 0f7ec0e, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 16024813568,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -8024,8 +8024,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20230519 --config dense_strict.py  # stips @ 43cc46c, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 3112124416,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -8079,8 +8079,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20240905 --config dense_strict.py  # stips @ 0f7ec0e, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 14288830464,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -8134,8 +8134,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20241030 --config dense_strict.py  # stips @ 0f7ec0e, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 14288830464,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -8226,8 +8226,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20230815 --config dense_strict.py  # stips @ 0f7ec0e, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 35957551104,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -8281,8 +8281,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20230816 --config dense_strict.py  # stips @ 0f7ec0e, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 35957551104,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -8336,8 +8336,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20231014 --config dense_strict.py  # stips @ 0f7ec0e, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 35957551104,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -8391,8 +8391,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20231015 --config dense_strict.py  # stips @ 0f7ec0e, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 35957551104,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -8446,8 +8446,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20240828 --config dense_strict.py  # stips @ 0f7ec0e, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 35957551104,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -8501,8 +8501,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20240829 --config dense_strict.py  # stips @ 0f7ec0e, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 35957551104,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -8556,8 +8556,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20241025 --config dense_strict.py  # stips @ 0f7ec0e, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 35957551104,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -8611,8 +8611,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20241026 --config dense_strict.py  # stips @ 0f7ec0e, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 35957551104,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -8666,8 +8666,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20250804 --config dense_strict.py  # stips @ 0f7ec0e, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 35957551104,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -8721,8 +8721,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20250807 --config dense_strict.py  # stips @ 0f7ec0e, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 35957551104,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -8776,8 +8776,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20251026 --config dense_strict.py  # stips @ 0f7ec0e, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 35957551104,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -8831,8 +8831,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20251027 --config dense_strict.py  # stips @ 0f7ec0e, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 35957551104,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -8886,8 +8886,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20250802 --config dense_strict.py  # stips @ 0f7ec0e, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 19134898176,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -8981,8 +8981,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20210208 --config 2023ixf_relaxed.py  # stips @ 17a8cc3, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 7430676480,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -9027,8 +9027,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20240624 --config 2023ixf_relaxed.py  # stips @ 17a8cc3, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 7430676480,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -9073,8 +9073,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20240905 --config 2023ixf_relaxed.py  # stips @ 17a8cc3, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 7430676480,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
@@ -9119,8 +9119,8 @@
     "lsst_stack_version_source": "repo-scan",
     "rerun_recipe": "stips science 20240906 --config 2023ixf_relaxed.py  # stips @ 17a8cc3, lsst-scipipe-12.1.0  (instrument=nickel)",
     "repo_size_bytes": 7430676480,
-    "repo_status": "present",
-    "reclaimed_at": null,
+    "repo_status": "deleted",
+    "reclaimed_at": "2026-06-25",
     "notes": null
   },
   {
