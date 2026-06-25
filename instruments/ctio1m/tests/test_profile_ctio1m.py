@@ -26,3 +26,13 @@ def test_filter_aliases_map_raw_filterid():
 def test_camera_is_yaml_path():
     prof = load_ctio1m_profile()
     assert prof.camera == "camera/y4kcam.yaml"
+
+
+def test_crosstalk_placeholder_is_4x4_zero():
+    # Y4KCam is a 4-amp camera; it ships a documented zero placeholder until
+    # real coefficients are measured/known. A zero matrix is a valid no-op.
+    prof = load_ctio1m_profile()
+    assert prof.crosstalk is not None
+    assert prof.crosstalk.n_amp == 4
+    assert prof.crosstalk.coeffs == [[0.0] * 4 for _ in range(4)]
+    assert prof.crosstalk.units == "adu"

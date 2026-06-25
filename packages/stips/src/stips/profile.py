@@ -44,6 +44,46 @@ class CameraSpec:
     saturation: float = 65535.0
 
 
+@dataclass(frozen=True)
+class CrosstalkSpec:
+    """Declarative intra-detector crosstalk coefficients for a multi-amp camera.
+
+    ``coeffs`` is an N×N matrix (N = number of amplifiers) where ``coeffs[i][j]``
+    is the fraction of amplifier ``j``'s signal that appears, spuriously, in
+    amplifier ``i`` — the LSST ``CrosstalkCalib`` convention (amp index ``i``
+    matches ``detector.getAmplifiers()[i]``). The diagonal is zero (an amp does
+    not cross-talk into itself). ``units`` maps to
+    ``CrosstalkCalib.crosstalkRatiosUnits`` ("adu" or "electron").
+
+    This is stack-free and validates only structure (square, zero diagonal, N≥2).
+    The N == camera-amp-count check happens at build time, where the camera is
+    available.
+    """
+
+    coeffs: list[list[float]]
+    units: str = "adu"
+
+    def __post_init__(self) -> None:
+        n = len(self.coeffs)
+        if n < 2:
+            raise ValueError(f"crosstalk needs at least 2 amplifiers, got {n}x{n}")
+        for i, row in enumerate(self.coeffs):
+            if len(row) != n:
+                raise ValueError(
+                    f"crosstalk matrix must be square; row {i} has "
+                    f"{len(row)} entries, expected {n}"
+                )
+            if row[i] != 0.0:
+                raise ValueError(
+                    f"crosstalk diagonal must be zero; coeffs[{i}][{i}]={row[i]}"
+                )
+
+    @property
+    def n_amp(self) -> int:
+        """Number of amplifiers (matrix dimension)."""
+        return len(self.coeffs)
+
+
 @dataclass
 class InstrumentProfile:
     """Everything instrument-specific, in one object.
@@ -84,6 +124,10 @@ class InstrumentProfile:
     # pipelines, e.g. `{"doDefect": False}` (no defect maps) or
     # `{"overscan.doParallelOverscan": True}` (multi-amp parallel overscan).
     isr_overrides: dict[str, Any] = field(default_factory=dict)
+    # Declarative intra-detector crosstalk for multi-amp cameras. When set, STIPS
+    # builds a CrosstalkCalib from this matrix, certifies it into the calib chain,
+    # and enables ISR crosstalk correction. None disables crosstalk entirely.
+    crosstalk: Optional["CrosstalkSpec"] = None
     obs_data_package: Optional[str] = None
     package_dir: Optional[str] = None
     refcat_path: Optional[str] = None

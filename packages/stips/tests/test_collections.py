@@ -17,6 +17,15 @@ class TestCollectionNames(unittest.TestCase):
         self.assertEqual(c.calib_chain, "ctio0m9/calib/current")
         self.assertEqual(c.science_parent, "ctio0m9/runs/20240101/processCcd/tsX")
 
+    def test_crosstalk_collections(self):
+        c = CollectionNames("20230519", "ts1", prefix="CTIO1m")
+        # RUN holding the freshly built/measured calib, before certification.
+        self.assertEqual(c.crosstalk_gen, "CTIO1m/calib/crosstalk/gen/ts1")
+        # CALIBRATION collection the calib is certified into (chained into curated).
+        self.assertEqual(c.crosstalk_calib, "CTIO1m/calib/crosstalk")
+        # The crosstalk calib is reachable via the existing curated chain.
+        self.assertEqual(c.curated_chain, "CTIO1m/calib/curated")
+
     def test_prefix_is_required(self):
         # The transitional prefix="Nickel" default has been removed; prefix is now
         # a required keyword-only arg. Omitting it must raise TypeError.
