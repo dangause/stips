@@ -8,10 +8,14 @@ Renderers are pluggable; RUNS.md is one view of runs.json.
 from __future__ import annotations
 
 import json
+import os
+import re
 import subprocess
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
+
+_LSST_VER = re.compile(r"lsst-scipipe-[0-9][0-9A-Za-z._]*")
 
 
 @dataclass
@@ -33,6 +37,9 @@ class RunRecord:
     duration_s: int | None = None
     duration_approx: bool = False
     stips_git_sha: str | None = None
+    stips_git_describe: str | None = None
+    lsst_stack_version: str | None = None
+    lsst_stack_version_source: str | None = None  # "repo-scan" | "env"
     rerun_recipe: str | None = None
     repo_size_bytes: int | None = None
     repo_status: str = "present"  # present | deleted
@@ -105,12 +112,64 @@ def duration_from_stamps(start: str | None, end: str | None) -> int | None:
     )  # 0/negative => unknown (these pipelines never run in <1s)
 
 
+def lsst_version_from_repo(repo: Path) -> str | None:
+    """Best-effort: grep the repo tree for the lsst-scipipe env marker."""
+    try:
+        out = subprocess.run(
+            ["grep", "-rahom1", "lsst-scipipe-[0-9][0-9.]*", str(repo)],
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        m = _LSST_VER.search(out.stdout or "")
+        return m.group(0) if m else None
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
+def lsst_version_from_env() -> str | None:
+    """Live capture: detect the active lsst-scipipe conda env."""
+    import sys
+
+    for val in (
+        os.environ.get("CONDA_DEFAULT_ENV", ""),
+        os.environ.get("CONDA_PREFIX", ""),
+        sys.prefix,
+    ):
+        m = _LSST_VER.search(val or "")
+        if m:
+            return m.group(0)
+    return None
+
+
+def git_describe(repo_root: Path, sha: str | None) -> str | None:
+    if not sha:
+        return None
+    try:
+        out = subprocess.run(
+            ["git", "-C", str(repo_root), "describe", "--tags", "--always", sha],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        return out.stdout.strip() or None
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
 def build_rerun_recipe(
-    instrument: str, step: str, night: str, config: str | None, sha: str | None
+    instrument: str,
+    step: str,
+    night: str,
+    config: str | None,
+    sha: str | None,
+    git_describe: str | None = None,
+    lsst_version: str | None = None,
 ) -> str:
     cfg = f" --config {config}" if config else ""
-    at = f"  # stips @ {sha}" if sha else ""
-    return f"stips {step} {night}{cfg}{at}  (instrument={instrument})"
+    ver = git_describe or sha or "?"
+    env = f", lsst-scipipe {lsst_version}" if lsst_version else ""
+    return f"stips {step} {night}{cfg}  # stips @ {ver}{env}  (instrument={instrument})"
 
 
 def repo_size_bytes(repo: Path) -> int | None:
@@ -197,8 +256,8 @@ def render_markdown(records: list[RunRecord]) -> str:
         lines += [
             f"## {target}",
             "",
-            "| repo | night | step | status | succ. exp | duration | size | repo | recipe |",
-            "|---|---|---|---|---|---|---|---|---|",
+            "| repo | night | step | status | succ. exp | duration | size | repo | env | recipe |",
+            "|---|---|---|---|---|---|---|---|---|---|",
         ]
         for r in sorted(rows, key=lambda x: (x.night, x.step)):
             dur = (
@@ -206,10 +265,11 @@ def render_markdown(records: list[RunRecord]) -> str:
                 if r.duration_s
                 else "—"
             )
+            env_cell = f"{r.lsst_stack_version or '?'} / {r.stips_git_describe or r.stips_git_sha or '?'}"
             lines.append(
                 f"| {r.repo} | {r.night} | {r.step} | {r.final_status} | "
                 f"{r.successful_exposures} | {dur} | {_human_gb(r.repo_size_bytes)} | "
-                f"{r.repo_status} | `{r.rerun_recipe or ''}` |"
+                f"{r.repo_status} | {env_cell} | `{r.rerun_recipe or ''}` |"
             )
             seen_repo_sizes[r.repo] = r.repo_size_bytes or 0
         lines.append("")
@@ -252,6 +312,7 @@ def sync(
             continue
         repos_seen.append(repo.name)
         size = repo_size_bytes(repo)
+        lsst_ver = lsst_version_from_repo(repo)
         for lp in logs:
             try:
                 rec = record_from_log_file(lp, repo)
@@ -260,12 +321,21 @@ def sync(
                 continue
             rec.repo_size_bytes = size
             rec.stips_git_sha = git_sha_before(repo_root, rec.timestamp_end)
+            rec.stips_git_describe = git_describe(repo_root, rec.stips_git_sha)
+            rec.lsst_stack_version = lsst_ver
+            rec.lsst_stack_version_source = "repo-scan" if lsst_ver else None
             rec.duration_s = duration_from_stamps(rec.started_at, rec.ended_at)
             if rec.duration_s is None:
                 rec.duration_approx = False
             cfg = rec.configs_tried[0]["config"] if rec.configs_tried else None
             rec.rerun_recipe = build_rerun_recipe(
-                rec.instrument, rec.step, rec.night, cfg, rec.stips_git_sha
+                rec.instrument,
+                rec.step,
+                rec.night,
+                cfg,
+                rec.stips_git_sha,
+                git_describe=rec.stips_git_describe,
+                lsst_version=rec.lsst_stack_version,
             )
             incoming.append(rec)
 
@@ -317,10 +387,22 @@ def upsert_from_log(plog, config) -> None:
         rec = record_from_log_file(log_path, repo)
         rec.repo_size_bytes = repo_size_bytes(repo)
         rec.stips_git_sha = git_sha_before(repo_root, rec.timestamp_end)
+        rec.stips_git_describe = git_describe(repo_root, rec.stips_git_sha)
+        _env_ver = lsst_version_from_env()
+        rec.lsst_stack_version = _env_ver or lsst_version_from_repo(repo)
+        rec.lsst_stack_version_source = (
+            "env" if _env_ver else ("repo-scan" if rec.lsst_stack_version else None)
+        )
         rec.duration_s = duration_from_stamps(rec.started_at, rec.ended_at)
         cfg = rec.configs_tried[0]["config"] if rec.configs_tried else None
         rec.rerun_recipe = build_rerun_recipe(
-            rec.instrument, rec.step, rec.night, cfg, rec.stips_git_sha
+            rec.instrument,
+            rec.step,
+            rec.night,
+            cfg,
+            rec.stips_git_sha,
+            git_describe=rec.stips_git_describe,
+            lsst_version=rec.lsst_stack_version,
         )
         save_store(
             out_dir / "runs.json",

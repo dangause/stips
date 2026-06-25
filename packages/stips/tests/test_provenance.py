@@ -88,6 +88,17 @@ def test_rerun_recipe_and_duration():
         and "abc1234" in rec_recipe
     )
 
+    # passing lsst_version embeds it in the recipe
+    recipe_with_env = build_rerun_recipe(
+        instrument="nickel",
+        step="science",
+        night="20230815",
+        config="dense_strict.py",
+        sha="abc1234",
+        lsst_version="lsst-scipipe-12.1.0",
+    )
+    assert "lsst-scipipe-12.1.0" in recipe_with_env
+
     # duration from matching UTC stamps
     assert duration_from_stamps("20260313T185500Z", "20260313T185937Z") == 277
     assert duration_from_stamps(None, "20260313T185937Z") is None
@@ -224,3 +235,66 @@ def test_cli_provenance_sync(tmp_path):
     )
     assert res.exit_code == 0, res.output
     assert (out / "RUNS.md").exists()
+
+
+def test_repro_fields_enriched(tmp_path):
+    """Unit tests for the new environment-reproducibility helpers."""
+    from stips.core.provenance import (
+        RunRecord,
+        build_rerun_recipe,
+        git_describe,
+        lsst_version_from_repo,
+        render_markdown,
+    )
+
+    # git_describe returns None when sha is None — no subprocess needed
+    assert git_describe(tmp_path, None) is None
+
+    # build_rerun_recipe includes lsst version when provided
+    recipe = build_rerun_recipe(
+        instrument="nickel",
+        step="science",
+        night="20230815",
+        config=None,
+        sha="deadbeef12",
+        git_describe="v1.2.3-5-gdeadbeef",
+        lsst_version="lsst-scipipe-12.1.0",
+    )
+    assert "lsst-scipipe-12.1.0" in recipe
+    assert "v1.2.3-5-gdeadbeef" in recipe
+    assert "lsst-scipipe-12.1.0" not in build_rerun_recipe(
+        instrument="nickel", step="science", night="20230815", config=None, sha="abc"
+    )
+
+    # lsst_version_from_repo finds the marker in a file in a tmp dir
+    marker_file = tmp_path / "installed_packages.txt"
+    marker_file.write_text("lsst-scipipe-12.1.0\nsomething-else\n")
+    result = lsst_version_from_repo(tmp_path)
+    assert result == "lsst-scipipe-12.1.0"
+
+    # lsst_version_from_repo returns None for a dir without any marker
+    empty_dir = tmp_path / "empty"
+    empty_dir.mkdir()
+    assert lsst_version_from_repo(empty_dir) is None
+
+    # RunRecord carries the three new fields and round-trips cleanly
+    rec = RunRecord(
+        repo="r1",
+        repo_path="/r1",
+        target="t",
+        instrument="nickel",
+        night="20230815",
+        step="science",
+        final_status="success",
+        stips_git_sha="deadbeef12",
+        stips_git_describe="v1.2.3-5-gdeadbeef",
+        lsst_stack_version="lsst-scipipe-12.1.0",
+        lsst_stack_version_source="repo-scan",
+    )
+    assert RunRecord.from_dict(rec.to_dict()) == rec
+
+    # render_markdown surfaces env column
+    md = render_markdown([rec])
+    assert "env" in md.lower()
+    assert "lsst-scipipe-12.1.0" in md
+    assert "v1.2.3-5-gdeadbeef" in md
