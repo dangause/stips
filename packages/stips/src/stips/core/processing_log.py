@@ -44,6 +44,8 @@ class ProcessingLog:
     output_collection: str | None = None
     total_exposures: int = 0
     successful_exposures: int = 0
+    started_at: str | None = None
+    ended_at: str | None = None
 
     def add_attempt(self, attempt: ConfigAttempt) -> None:
         """Add a config attempt to the log."""
@@ -67,6 +69,7 @@ class ProcessingLog:
             self.final_status = "failed"
 
         self.successful_exposures = total_succeeded
+        self.ended_at = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
     def to_dict(self) -> dict:
         """Convert to dictionary for JSON serialization."""
@@ -79,6 +82,8 @@ class ProcessingLog:
             "output_collection": self.output_collection,
             "total_exposures": self.total_exposures,
             "successful_exposures": self.successful_exposures,
+            "started_at": self.started_at,
+            "ended_at": self.ended_at,
         }
 
     @classmethod
@@ -94,6 +99,8 @@ class ProcessingLog:
             output_collection=data.get("output_collection"),
             total_exposures=data.get("total_exposures", 0),
             successful_exposures=data.get("successful_exposures", 0),
+            started_at=data.get("started_at"),
+            ended_at=data.get("ended_at"),
         )
 
 
@@ -161,6 +168,7 @@ def create_log(night: str, step: str) -> ProcessingLog:
         night=night,
         step=step,
         timestamp=timestamp,
+        started_at=timestamp,
     )
 
 

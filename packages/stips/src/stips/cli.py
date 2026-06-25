@@ -1670,6 +1670,72 @@ def dashboard(
     uvicorn.run(app, host=host, port=port, log_level="warning")
 
 
+# =============================================================================
+# provenance - Aggregate and maintain the run-provenance document
+# =============================================================================
+
+
+@cli.group()
+def provenance():
+    """Aggregate and maintain the run-provenance document."""
+
+
+@provenance.command("sync")
+@click.option(
+    "--roots",
+    multiple=True,
+    type=click.Path(path_type=Path),
+    help="Repo root dir(s). Repeatable. Defaults to known data roots.",
+)
+@click.option(
+    "--out-dir",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Output dir for runs.json + RUNS.md (default: <repo>/provenance).",
+)
+@click.option(
+    "--repo-root",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="stips repo root for git-sha lookup (default: inferred).",
+)
+@click.option("--dry-run", is_flag=True, help="Report without writing.")
+def provenance_sync(roots, out_dir, repo_root, dry_run):
+    from stips.core import provenance as prov
+
+    repo_root = repo_root or Path(__file__).resolve().parents[4]
+    out_dir = out_dir or (repo_root / "provenance")
+    roots = list(roots) or prov.default_roots()
+    summary = prov.sync(
+        roots=roots, out_dir=out_dir, repo_root=repo_root, dry_run=dry_run
+    )
+    click.echo(
+        f"records: {summary['records']}  repos: {len(summary['repos'])}  "
+        f"total_after: {summary['total_records_after']}"
+    )
+    if summary["empty_or_unparseable"]:
+        click.echo(
+            "NEEDS REVIEW (no/!parseable processing_log): "
+            + ", ".join(summary["empty_or_unparseable"])
+        )
+
+
+@provenance.command("mark-deleted")
+@click.argument("repos", nargs=-1, required=True)
+@click.option("--out-dir", type=click.Path(path_type=Path), default=None)
+def provenance_mark_deleted(repos, out_dir):
+    from datetime import datetime, timezone
+
+    from stips.core import provenance as prov
+
+    repo_root = Path(__file__).resolve().parents[4]
+    out_dir = out_dir or (repo_root / "provenance")
+    n = prov.mark_deleted(
+        list(repos), out_dir, datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    )
+    click.echo(f"marked {n} record(s) deleted")
+
+
 def main() -> None:
     """Entry point for the CLI."""
     cli()
