@@ -297,6 +297,16 @@ def mark_deleted(repos: list[str], out_dir: Path, reclaimed_at: str) -> int:
     return n
 
 
+def default_roots() -> list[Path]:
+    import os
+
+    env = os.environ.get("STIPS_DATA_ROOTS")
+    if env:
+        return [Path(p) for p in env.split(os.pathsep) if p]
+    base = Path.home() / "Developer" / "lick"
+    return [base / "lsst" / "data" / "nickel", base / "data_ctio"]
+
+
 def upsert_from_log(plog, config) -> None:
     """Live hook: upsert a single just-finished run. Never raises."""
     try:

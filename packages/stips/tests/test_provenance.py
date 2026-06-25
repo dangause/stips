@@ -189,3 +189,38 @@ def test_sync_end_to_end(tmp_path):
     assert (out_dir / "runs.json").exists()
     assert (out_dir / "RUNS.md").exists()
     assert load_store(out_dir / "runs.json")[0].target == "alpha"
+
+
+def test_cli_provenance_sync(tmp_path):
+    from click.testing import CliRunner
+    from stips.cli import cli
+
+    root = tmp_path / "nickel"
+    pl = root / "a_repo" / "processing_log"
+    pl.mkdir(parents=True)
+    (pl / "20230815_science.json").write_text(
+        json.dumps(
+            {
+                "night": "20230815",
+                "step": "science",
+                "timestamp": "T",
+                "final_status": "success",
+            }
+        )
+    )
+    out = tmp_path / "provenance"
+    res = CliRunner().invoke(
+        cli,
+        [
+            "provenance",
+            "sync",
+            "--roots",
+            str(root),
+            "--out-dir",
+            str(out),
+            "--repo-root",
+            str(tmp_path),
+        ],
+    )
+    assert res.exit_code == 0, res.output
+    assert (out / "RUNS.md").exists()
