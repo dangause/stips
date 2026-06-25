@@ -257,6 +257,71 @@ def calibs(ctx: click.Context, night: str, jobs: int) -> None:
 
 
 # =============================================================================
+# measure-crosstalk - Measure crosstalk coefficients from exposures
+# =============================================================================
+
+
+@cli.command("measure-crosstalk")
+@click.argument("nights", nargs=-1, required=True)
+@click.option("-j", "--jobs", default=4, help="Parallel jobs (default: 4)")
+@click.option(
+    "--export-dir",
+    type=click.Path(),
+    help="Directory to export the measured matrix ECSV (default: REPO/crosstalk)",
+)
+@click.pass_context
+def measure_crosstalk(
+    ctx: click.Context, nights: tuple[str, ...], jobs: int, export_dir: str | None
+) -> None:
+    """Measure intra-detector crosstalk from exposures (cp_pipe MeasureCrosstalk).
+
+    Runs the cp_pipe crosstalk pipeline over the NIGHTS' science frames to derive
+    the coefficient matrix, certifies it into the calib chain (so ISR applies it),
+    and exports the matrix for inspection. Run this once when you have no known
+    coefficients. Requires bias calibs to be built first (the measurement ISR
+    applies bias), and works best with frames containing bright sources spanning
+    amplifier boundaries.
+
+    NIGHTS are observing dates in YYYYMMDD format.
+
+    \b
+    Example:
+        stips -p ctio1m measure-crosstalk 20070321 20070322
+    """
+    from pathlib import Path
+
+    config = _load_config(ctx)
+
+    prof = config.require_profile()
+    if prof.crosstalk is None:
+        _print_error(
+            f"{prof.name} declares no crosstalk in its profile; nothing to measure. "
+            "Add a CrosstalkSpec (even a placeholder) to enable crosstalk."
+        )
+        sys.exit(1)
+
+    _print_info(f"Measuring crosstalk for {prof.name} from nights: {', '.join(nights)}")
+
+    from stips.core import crosstalk as crosstalk_module
+
+    result = crosstalk_module.measure_crosstalk(
+        list(nights),
+        config,
+        jobs=jobs,
+        export_dir=Path(export_dir) if export_dir else None,
+    )
+
+    if result.success:
+        _print_success("\n✓ Crosstalk measured and certified")
+        click.echo(f"  Calib collection: {result.calib_collection}")
+        if result.export_path:
+            click.echo(f"  Matrix exported:  {result.export_path}")
+    else:
+        _print_error(f"Crosstalk measurement failed: {result.error}")
+        sys.exit(1)
+
+
+# =============================================================================
 # science - Science processing
 # =============================================================================
 

@@ -4,6 +4,20 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
 
 ## [Unreleased]
 
+### Crosstalk for multi-amplifier instruments
+- **Declarative crosstalk**: instrument profiles can carry a `CrosstalkSpec`
+  (N×N coefficient matrix + units). STIPS builds a `CrosstalkCalib`, certifies it
+  into `{prefix}/calib/crosstalk` (chained into the curated calib chain), and
+  auto-enables ISR `doCrosstalk` — no forked pipelines.
+- **Measurement** (`stips measure-crosstalk <nights…>`): derives coefficients from
+  exposures via cp_pipe's `cpCrosstalk` pipeline (reusing the profile's
+  `isr_overrides` on the measurement ISR), certifies the result, and exports the
+  matrix (ECSV) for inspection. Run once when no coefficients are known.
+- **CTIO1m / Y4KCam** ships a documented 4×4 **zero placeholder** (a no-op that
+  exercises the full build→certify→ISR path); real values drop in by editing the
+  matrix or running `measure-crosstalk`.
+- See `docs/crosstalk.md`.
+
 ## [1.0.0] — 2026-06-24
 
 ### Framework refactor (instrument-neutral)

@@ -26,6 +26,32 @@ import sys
 log = logging.getLogger("stips.build_crosstalk_calib")
 
 
+def make_crosstalk_calib(detector, coeffs, units="adu"):
+    """Build one ``CrosstalkCalib`` for ``detector`` from an N×N coefficient matrix.
+
+    Validates that the matrix dimension equals the detector's amplifier count, sets
+    the units, and stamps metadata. No Butler involved — this is the unit-testable
+    core (the stack-gated test calls it against the real Y4KCam detector).
+    """
+    import numpy as np
+    from lsst.ip.isr import CrosstalkCalib
+
+    matrix = np.array(coeffs, dtype=float)
+    n_amp = len(detector)
+    if matrix.shape != (n_amp, n_amp):
+        raise ValueError(
+            f"crosstalk matrix is {matrix.shape[0]}x{matrix.shape[1]} but "
+            f"detector {detector.getName()!r} (id={detector.getId()}) has "
+            f"{n_amp} amplifiers; the matrix dimension must equal the amp count"
+        )
+    calib = CrosstalkCalib(nAmp=n_amp).fromDetector(
+        detector, coeffVector=matrix.reshape(-1)
+    )
+    calib.crosstalkRatiosUnits = units
+    calib.updateMetadata(setDate=True)
+    return calib
+
+
 def build_for_camera(butler, instrument, coeffs, units, run):
     """Build + put a CrosstalkCalib per detector. Returns the result dict.
 
@@ -34,10 +60,8 @@ def build_for_camera(butler, instrument, coeffs, units, run):
     """
     import numpy as np
     from lsst.daf.butler import DatasetType
-    from lsst.ip.isr import CrosstalkCalib
     from lsst.obs.base import Instrument
 
-    matrix = np.array(coeffs, dtype=float)
     instr = Instrument.fromName(instrument, butler.registry)
     camera = instr.getCamera()
 
@@ -54,18 +78,7 @@ def build_for_camera(butler, instrument, coeffs, units, run):
 
     detectors = []
     for detector in camera:
-        n_amp = len(detector)
-        if matrix.shape != (n_amp, n_amp):
-            raise ValueError(
-                f"crosstalk matrix is {matrix.shape[0]}x{matrix.shape[1]} but "
-                f"detector {detector.getName()!r} (id={detector.getId()}) has "
-                f"{n_amp} amplifiers; the matrix dimension must equal the amp count"
-            )
-        calib = CrosstalkCalib(nAmp=n_amp).fromDetector(
-            detector, coeffVector=matrix.reshape(-1)
-        )
-        calib.crosstalkRatiosUnits = units
-        calib.updateMetadata(setDate=True)
+        calib = make_crosstalk_calib(detector, coeffs, units)
         butler.put(
             calib,
             "crosstalk",
@@ -75,7 +88,7 @@ def build_for_camera(butler, instrument, coeffs, units, run):
         )
         detectors.append(detector.getId())
 
-    return {"detectors": detectors, "n_amp": int(matrix.shape[0]), "run": run}
+    return {"detectors": detectors, "n_amp": len(np.array(coeffs)), "run": run}
 
 
 def main(argv=None):
