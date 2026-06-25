@@ -2,7 +2,7 @@
 from lsst.pipe.tasks.colorterms import Colorterm, ColortermDict
 
 config.data = {
-    "panstarrs1*": ColortermDict(
+    "ps1*": ColortermDict(
         data={
             "B": Colorterm(
                 primary="gMeanPSFMag",
