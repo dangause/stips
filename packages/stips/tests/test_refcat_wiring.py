@@ -31,3 +31,37 @@ def test_refcat_section_parsed(tmp_path):
     )
     assert cfg.refcat_mode == "monster"
     assert cfg.refcat_radius_deg == 0.5
+
+
+def test_run_refcat_step_calls_ensure(monkeypatch):
+    from unittest import mock
+
+    import stips.core.run as run
+    from stips.core.refcat import RefcatResult
+
+    seen = {}
+
+    def fake_ensure(config, ra, dec, **k):
+        seen.update(ra=ra, dec=dec, **k)
+        return RefcatResult(mode=k.get("mode", "gaia_ps1"))
+
+    monkeypatch.setattr(run, "ensure_refcats", fake_ensure)
+    cfg = run.RunConfig(
+        object_name="x", ra=210.9, dec=54.3, bands=["r"], refcat_radius_deg=0.4
+    )
+    run._run_refcat_step(cfg, config=mock.Mock(), result=mock.Mock(), dry_run=False)
+    assert seen["ra"] == 210.9
+    assert seen["mode"] == "gaia_ps1"
+    assert seen["radius_deg"] == 0.4
+
+
+def test_run_refcat_step_dry_run_skips(monkeypatch):
+    from unittest import mock
+
+    import stips.core.run as run
+
+    called = []
+    monkeypatch.setattr(run, "ensure_refcats", lambda *a, **k: called.append(1))
+    cfg = run.RunConfig(object_name="x", ra=210.9, dec=54.3, bands=["r"])
+    run._run_refcat_step(cfg, config=mock.Mock(), result=mock.Mock(), dry_run=True)
+    assert called == []

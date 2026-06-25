@@ -75,6 +75,8 @@ from typing import TYPE_CHECKING
 
 import yaml
 
+from stips.core.refcat import ensure_refcats
+
 if TYPE_CHECKING:
     from stips.core.config import Config
     from stips.core.lightcurve import LightcurveConfig
@@ -192,6 +194,7 @@ def _split_step_logs(run_log_dir: Path) -> None:
                                   exp86203012.log
     """
     step_dirs = [
+        "refcat",
         "calibs",
         "science",
         "dia",
@@ -1778,6 +1781,41 @@ def _discover_dia_collections(
     return verified
 
 
+def _run_refcat_step(run_cfg, config, result, dry_run):
+    """Ensure Gaia/PS1 refcats cover the target before science/templates.
+
+    On-demand and idempotent: a no-op when coverage already exists or when
+    ``refcat_mode == "monster"``. Requires a target RA/Dec.
+    """
+    if run_cfg.ra is None or run_cfg.dec is None:
+        return None
+    if dry_run:
+        log.info(
+            "[DRY RUN] Would ensure refcats (mode=%s, radius=%.3f deg)",
+            run_cfg.refcat_mode,
+            run_cfg.refcat_radius_deg,
+        )
+        return None
+
+    refcat_result = ensure_refcats(
+        config,
+        run_cfg.ra,
+        run_cfg.dec,
+        radius_deg=run_cfg.refcat_radius_deg,
+        mode=run_cfg.refcat_mode,
+        gaia_quality=run_cfg.refcat_gaia_quality,
+    )
+    log.info(
+        "Refcat (%s): gaia=%s, ps1=%s",
+        refcat_result.mode,
+        refcat_result.gaia_status,
+        refcat_result.ps1_status,
+    )
+    if refcat_result.error:
+        log.warning("Refcat issues: %s", refcat_result.error)
+    return refcat_result
+
+
 def run(
     config_file: Path,
     config: Config,
@@ -1875,6 +1913,10 @@ def run(
 
     if dry_run:
         log.info("[DRY RUN] Commands would be executed:")
+
+    # Step 0b: Ensure reference catalogs (on-demand Gaia/PS1; no RSP/MONSTER).
+    # Runs before templates because coadd templates also consume refcats.
+    _run_refcat_step(run_cfg, config, result, dry_run)
 
     # Step 1: Templates per band
     if run_cfg.template_type == "ps1":
