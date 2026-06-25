@@ -168,7 +168,7 @@ def build_rerun_recipe(
 ) -> str:
     cfg = f" --config {config}" if config else ""
     ver = git_describe or sha or "?"
-    env = f", lsst-scipipe {lsst_version}" if lsst_version else ""
+    env = f", {lsst_version}" if lsst_version else ""
     return f"stips {step} {night}{cfg}  # stips @ {ver}{env}  (instrument={instrument})"
 
 
