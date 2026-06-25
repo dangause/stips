@@ -429,9 +429,10 @@ class RunConfig:
         # Convert template nights to strings (YAML parses 20230519 as int)
         template_nights = [str(n) for n in template.get("nights", [])]
 
-        # Extract refcat config (on-demand Gaia/PS1; absent section => defaults)
+        # Extract refcat config (on-demand Gaia/PS1; absent section => defaults).
+        # Staging default "monster" keeps behavior unchanged until validated.
         refcat = data.get("refcat", {})
-        refcat_mode = refcat.get("mode", "gaia_ps1")
+        refcat_mode = refcat.get("mode", "monster")
         refcat_radius_deg = float(refcat.get("radius_deg", 0.3))
         refcat_gaia_quality = refcat.get("gaia_quality")
 
