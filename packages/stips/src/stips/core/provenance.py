@@ -230,3 +230,96 @@ def render_markdown(records: list[RunRecord]) -> str:
         "",
     ]
     return "\n".join(lines)
+
+
+def _iter_repos(roots: list[Path]):
+    for root in roots:
+        if not root.exists():
+            continue
+        for plog_dir in sorted(root.glob("*/processing_log")):
+            yield plog_dir.parent
+
+
+def sync(
+    roots: list[Path], out_dir: Path, repo_root: Path, dry_run: bool = False
+) -> dict:
+    incoming: list[RunRecord] = []
+    repos_seen, empty_repos = [], []
+    for repo in _iter_repos(roots):
+        logs = sorted((repo / "processing_log").glob("*.json"))
+        if not logs:
+            empty_repos.append(repo.name)
+            continue
+        repos_seen.append(repo.name)
+        size = repo_size_bytes(repo)
+        for lp in logs:
+            try:
+                rec = record_from_log_file(lp, repo)
+            except (json.JSONDecodeError, KeyError):
+                empty_repos.append(f"{repo.name}/{lp.name} (unparseable)")
+                continue
+            rec.repo_size_bytes = size
+            rec.stips_git_sha = git_sha_before(repo_root, rec.timestamp_end)
+            rec.duration_s = duration_from_stamps(rec.started_at, rec.ended_at)
+            if rec.duration_s is None:
+                rec.duration_approx = False
+            cfg = rec.configs_tried[0]["config"] if rec.configs_tried else None
+            rec.rerun_recipe = build_rerun_recipe(
+                rec.instrument, rec.step, rec.night, cfg, rec.stips_git_sha
+            )
+            incoming.append(rec)
+
+    store = out_dir / "runs.json"
+    merged = upsert_records(load_store(store), incoming)
+    if not dry_run:
+        save_store(store, merged)
+        (out_dir / "RUNS.md").write_text(render_markdown(merged))
+    return {
+        "records": len(incoming),
+        "repos": sorted(set(repos_seen)),
+        "empty_or_unparseable": sorted(set(empty_repos)),
+        "total_records_after": len(merged),
+    }
+
+
+def mark_deleted(repos: list[str], out_dir: Path, reclaimed_at: str) -> int:
+    store = out_dir / "runs.json"
+    records = load_store(store)
+    targets = set(repos)
+    n = 0
+    for r in records:
+        if r.repo in targets and r.repo_status != "deleted":
+            r.repo_status = "deleted"
+            r.reclaimed_at = reclaimed_at
+            n += 1
+    save_store(store, records)
+    (out_dir / "RUNS.md").write_text(render_markdown(records))
+    return n
+
+
+def upsert_from_log(plog, config) -> None:
+    """Live hook: upsert a single just-finished run. Never raises."""
+    try:
+        repo = Path(config.repo)
+        repo_root = Path(__file__).resolve().parents[5]
+        out_dir = repo_root / "provenance"
+        log_path = repo / "processing_log" / f"{plog.night}_{plog.step}.json"
+        rec = record_from_log_file(log_path, repo)
+        rec.repo_size_bytes = repo_size_bytes(repo)
+        rec.stips_git_sha = git_sha_before(repo_root, rec.timestamp_end)
+        rec.duration_s = duration_from_stamps(rec.started_at, rec.ended_at)
+        cfg = rec.configs_tried[0]["config"] if rec.configs_tried else None
+        rec.rerun_recipe = build_rerun_recipe(
+            rec.instrument, rec.step, rec.night, cfg, rec.stips_git_sha
+        )
+        save_store(
+            out_dir / "runs.json",
+            upsert_records(load_store(out_dir / "runs.json"), [rec]),
+        )
+        (out_dir / "RUNS.md").write_text(
+            render_markdown(load_store(out_dir / "runs.json"))
+        )
+    except Exception:  # noqa: BLE001 — provenance must never break a pipeline run
+        import logging
+
+        logging.getLogger(__name__).warning("provenance upsert failed", exc_info=True)

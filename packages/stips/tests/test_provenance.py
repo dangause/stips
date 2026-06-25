@@ -163,3 +163,29 @@ def test_render_markdown_groups_and_totals():
         "| night | step | status |" in md.replace("  ", " ").lower()
         or "night" in md.lower()
     )
+
+
+def test_sync_end_to_end(tmp_path):
+    from stips.core.provenance import load_store, sync
+
+    root = tmp_path / "nickel"
+    repo = root / "alpha_repo" / "processing_log"
+    repo.mkdir(parents=True)
+    (repo / "20230815_science.json").write_text(
+        json.dumps(
+            {
+                "night": "20230815",
+                "step": "science",
+                "timestamp": "20260313T185937Z",
+                "final_status": "success",
+                "successful_exposures": 10,
+                "configs_tried": [{"config": "dense_strict.py", "is_fallback": False}],
+            }
+        )
+    )
+    out_dir = tmp_path / "provenance"
+    summary = sync(roots=[root], out_dir=out_dir, repo_root=tmp_path, dry_run=False)
+    assert summary["records"] == 1
+    assert (out_dir / "runs.json").exists()
+    assert (out_dir / "RUNS.md").exists()
+    assert load_store(out_dir / "runs.json")[0].target == "alpha"
