@@ -19,6 +19,9 @@ config.connections.astrometry_ref_cat = "gaia_dr3"
 # MONSTER filterMap baked into DRP.yaml.
 config.astrometry_ref_loader.anyFilterMapsToThis = "phot_g_mean"
 config.astrometry_ref_loader.filterMap = {}
+# The tuned configs (best_calib_t071.py) set the astrometric mag-limit flux field
+# to the MONSTER column; point it at the Gaia G flux so the selector finds it.
+config.astrometry.referenceSelector.magLimit.fluxField = "phot_g_mean_flux"
 
 # ---- Photometry: PS1 DR2 (per-band flux + color terms) ----
 config.connections.photometry_ref_cat = "panstarrs1_dr2"
