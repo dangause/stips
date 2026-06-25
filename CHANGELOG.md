@@ -13,9 +13,9 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
   exposures via cp_pipe's `cpCrosstalk` pipeline (reusing the profile's
   `isr_overrides` on the measurement ISR), certifies the result, and exports the
   matrix (ECSV) for inspection. Run once when no coefficients are known.
-- **CTIO1m / Y4KCam** ships a documented 4×4 **zero placeholder** (a no-op that
-  exercises the full build→certify→ISR path); real values drop in by editing the
-  matrix or running `measure-crosstalk`.
+- **CTIO1m / Y4KCam** ships a **measured** 4×4 matrix (derived with
+  `measure-crosstalk` on the E2 standard field, night 20111113; ~0.1–0.4%,
+  largest between adjacent quadrants). Re-measure on a denser field to tighten.
 - See `docs/crosstalk.md`.
 
 ## [1.0.0] — 2026-06-24

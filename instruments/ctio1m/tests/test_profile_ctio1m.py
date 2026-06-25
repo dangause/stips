@@ -28,11 +28,18 @@ def test_camera_is_yaml_path():
     assert prof.camera == "camera/y4kcam.yaml"
 
 
-def test_crosstalk_placeholder_is_4x4_zero():
-    # Y4KCam is a 4-amp camera; it ships a documented zero placeholder until
-    # real coefficients are measured/known. A zero matrix is a valid no-op.
+def test_crosstalk_is_measured_4x4():
+    # Y4KCam ships a MEASURED 4x4 crosstalk matrix (E2 field, night 20111113).
+    # Structure: 4 amps, zero diagonal, all off-diagonals populated (non-zero).
     prof = load_ctio1m_profile()
     assert prof.crosstalk is not None
     assert prof.crosstalk.n_amp == 4
-    assert prof.crosstalk.coeffs == [[0.0] * 4 for _ in range(4)]
     assert prof.crosstalk.units == "adu"
+    coeffs = prof.crosstalk.coeffs
+    for i in range(4):
+        assert coeffs[i][i] == 0.0  # diagonal must be zero
+        for j in range(4):
+            if i != j:
+                assert coeffs[i][j] > 0.0  # all off-diagonals measured/populated
+    # Largest measured term is the adjacent A03<-A02 coupling (~4.4e-3).
+    assert coeffs[3][2] == 4.400683e-03

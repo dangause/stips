@@ -53,9 +53,11 @@ profile = InstrumentProfile(
 diagonal is zero. The matrix must be square with dimension equal to the number of
 amplifiers; this is checked at build time against the camera.
 
-A **zero matrix is a valid no-op** placeholder: it exercises the full
-build→certify→ISR path without changing pixels, which is how CTIO1m / Y4KCam ships
-until real coefficients exist.
+A **zero matrix is a valid no-op**: it exercises the full build→certify→ISR path
+without changing pixels — useful as an initial placeholder before real
+coefficients exist. CTIO1m / Y4KCam now ships a **measured** matrix (from
+`measure-crosstalk` on the E2 standard field), replacing its original zero
+placeholder.
 
 The calib is built and certified automatically as part of `stips calibs` /
 `stips run` (inside `write-curated-calibrations`), so no extra step is needed once
