@@ -141,7 +141,7 @@ def _load_requested(config: "Config") -> dict[str, set[int]]:
     """Load the per-repo requested-trixels manifest (empty on any error)."""
     try:
         raw = json.loads(_requested_path(config).read_text())
-        return {k: {int(x) for x in v} for k, v in raw.items()}
+        return {k: set(v) for k, v in raw.items()}
     except Exception:  # noqa: BLE001 - missing/unreadable manifest => nothing recorded
         return {}
 
@@ -155,7 +155,7 @@ def _record_requested(config: "Config", name: str, trixels: set[int]) -> None:
     """
     try:
         current = _load_requested(config)
-        current.setdefault(name, set()).update(int(t) for t in trixels)
+        current.setdefault(name, set()).update(trixels)
         path = _requested_path(config)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(

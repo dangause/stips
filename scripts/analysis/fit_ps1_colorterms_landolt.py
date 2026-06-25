@@ -31,21 +31,10 @@ BANDS = {
 
 
 def _ps1_match(ra, dec):
-    import astropy.units as u
-    from astropy.coordinates import SkyCoord
-    from astroquery.mast import Catalogs
+    # Reuse the single PS1 DR2 mean-object query (same MAST params live in one place).
+    from nickel_refcats.ps1 import _query_ps1_mean
 
-    t = Catalogs.query_region(
-        SkyCoord(ra * u.deg, dec * u.deg),
-        radius=5 * u.arcsec,
-        catalog="Panstarrs",
-        data_release="dr2",
-        table="mean",
-        columns=["raMean", "decMean", "gMeanPSFMag", "rMeanPSFMag", "iMeanPSFMag"],
-    )
-    if len(t) == 0:
-        return None
-    d = t.to_pandas()
+    d = _query_ps1_mean(ra, dec, radius_deg=5.0 / 3600.0)  # 5 arcsec cone
     d = d[(d.gMeanPSFMag > 0) & (d.rMeanPSFMag > 0) & (d.iMeanPSFMag > 0)]
     if len(d) == 0:
         return None
