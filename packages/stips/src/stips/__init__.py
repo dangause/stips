@@ -1,3 +1,17 @@
-from .profile import CameraSpec, Field, InstrumentProfile, Site, hook
+from .profile import (
+    CameraSpec,
+    CrosstalkSpec,
+    Field,
+    InstrumentProfile,
+    Site,
+    hook,
+)
 
-__all__ = ["CameraSpec", "Field", "InstrumentProfile", "Site", "hook"]
+__all__ = [
+    "CameraSpec",
+    "CrosstalkSpec",
+    "Field",
+    "InstrumentProfile",
+    "Site",
+    "hook",
+]
