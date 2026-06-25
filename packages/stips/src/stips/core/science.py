@@ -734,6 +734,9 @@ def run(
     plog.output_collection = primary_run
     plog.finalize()
     processing_log.save_log(plog, config)
+    from stips.core import provenance
+
+    provenance.upsert_from_log(plog, config)  # non-fatal; logs on failure
 
     # Use cumulative counts — cumulative_succeeded tracks unique successes
     # across all configs, and the last attempt's failure count represents
