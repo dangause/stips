@@ -149,3 +149,27 @@ def git_sha_before(repo_root: Path, timestamp_end: str | None) -> str | None:
         return sha[:10] or None
     except (OSError, ValueError, subprocess.SubprocessError):
         return None
+
+
+def load_store(path: Path) -> list[RunRecord]:
+    if not path.exists():
+        return []
+    data = json.loads(path.read_text())
+    return [RunRecord.from_dict(d) for d in data]
+
+
+def upsert_records(
+    existing: list[RunRecord], incoming: list[RunRecord]
+) -> list[RunRecord]:
+    by_key = {r.key(): r for r in existing}
+    for rec in incoming:
+        by_key[rec.key()] = rec  # replace-or-add; never deletes others
+    return sorted(
+        by_key.values(),
+        key=lambda r: (r.target, r.night, r.step, r.timestamp_end or ""),
+    )
+
+
+def save_store(path: Path, records: list[RunRecord]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps([r.to_dict() for r in records], indent=2))

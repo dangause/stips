@@ -91,3 +91,37 @@ def test_rerun_recipe_and_duration():
     # duration from matching UTC stamps
     assert duration_from_stamps("20260313T185500Z", "20260313T185937Z") == 277
     assert duration_from_stamps(None, "20260313T185937Z") is None
+
+
+def test_upsert_is_idempotent_and_never_removes(tmp_path):
+    from stips.core.provenance import RunRecord, load_store, save_store, upsert_records
+
+    store = tmp_path / "runs.json"
+    a = RunRecord(
+        repo="r1",
+        repo_path="/r1",
+        target="t",
+        instrument="nickel",
+        night="20230815",
+        step="science",
+        final_status="success",
+        timestamp_end="T1",
+    )
+    save_store(store, upsert_records(load_store(store), [a]))
+    save_store(store, upsert_records(load_store(store), [a]))  # again
+    recs = load_store(store)
+    assert len(recs) == 1  # idempotent on key()
+
+    # a record already in the store but not in this batch is preserved
+    b = RunRecord(
+        repo="r2",
+        repo_path="/r2",
+        target="t",
+        instrument="nickel",
+        night="20230816",
+        step="science",
+        final_status="success",
+        timestamp_end="T2",
+    )
+    save_store(store, upsert_records(load_store(store), [b]))
+    assert {r.repo for r in load_store(store)} == {"r1", "r2"}
