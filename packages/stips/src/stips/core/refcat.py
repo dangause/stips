@@ -15,7 +15,7 @@ import re
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from stips.core.stack import run_butler_query
+from stips.core.stack import run_butler, run_butler_query
 
 if TYPE_CHECKING:
     from stips.core.config import Config
@@ -59,3 +59,35 @@ def _query_present_htm7(config: "Config", dataset_type: str) -> set[int]:
 def present_trixels(config: "Config", dataset_type: str) -> set[int]:
     """HTM7 trixels already covered for ``dataset_type``."""
     return _query_present_htm7(config, dataset_type)
+
+
+def _ingest_refcat(*, config: "Config", name: str, ecsv_map: str) -> str:
+    """Register, ingest, and chain a converted refcat into ``refcats``.
+
+    Mirrors the MONSTER bootstrap ingest (00_bootstrap_repo.sh): the three steps
+    are idempotent so re-running over an already-present catalog is safe.
+
+    Returns the per-catalog RUN collection name (``refcats/<name>``).
+    """
+    repo = str(config.repo)
+    run_collection = f"refcats/{name}"
+
+    # 1) Register the dataset type (tolerate "already exists").
+    run_butler(
+        ["register-dataset-type", repo, name, "SimpleCatalog", "htm7"],
+        config,
+        check=False,
+    )
+    # 2) Ingest the sharded FITS in place (direct mode), referencing the map.
+    run_butler(
+        ["ingest-files", "-t", "direct", repo, name, run_collection, ecsv_map],
+        config,
+        check=True,
+    )
+    # 3) Extend the unified refcats chain with this RUN collection.
+    run_butler(
+        ["collection-chain", repo, "--mode", "extend", "refcats", run_collection],
+        config,
+        check=True,
+    )
+    return run_collection
