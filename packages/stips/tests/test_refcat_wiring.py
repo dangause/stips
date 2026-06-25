@@ -65,3 +65,27 @@ def test_run_refcat_step_dry_run_skips(monkeypatch):
     cfg = run.RunConfig(object_name="x", ra=210.9, dec=54.3, bands=["r"])
     run._run_refcat_step(cfg, config=mock.Mock(), result=mock.Mock(), dry_run=True)
     assert called == []
+
+
+def test_cli_refcat_fetch_dispatches(monkeypatch):
+    from unittest import mock
+
+    import stips.cli as cli
+    from click.testing import CliRunner
+    from stips.core.refcat import RefcatResult
+
+    captured = {}
+    monkeypatch.setattr(cli, "_load_config", lambda ctx: mock.Mock())
+    monkeypatch.setattr(
+        "stips.core.refcat.ensure_refcats",
+        lambda config, ra, dec, **k: captured.update(ra=ra, dec=dec, **k)
+        or RefcatResult(mode=k.get("mode", "gaia_ps1")),
+    )
+    result = CliRunner().invoke(
+        cli.cli,
+        ["refcat", "fetch", "--ra", "210.91", "--dec", "54.31", "--radius", "0.4"],
+    )
+    assert result.exit_code == 0, result.output
+    assert captured["ra"] == 210.91
+    assert captured["radius_deg"] == 0.4
+    assert captured["mode"] == "gaia_ps1"
