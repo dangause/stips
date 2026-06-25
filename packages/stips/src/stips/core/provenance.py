@@ -173,3 +173,60 @@ def upsert_records(
 def save_store(path: Path, records: list[RunRecord]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps([r.to_dict() for r in records], indent=2))
+
+
+def _human_gb(n: int | None) -> str:
+    return f"{n / 1e9:.1f} GB" if n else "—"
+
+
+def render_markdown(records: list[RunRecord]) -> str:
+    lines = [
+        "# Pipeline Run Provenance",
+        "",
+        "_Generated from `provenance/runs.json` by `stips provenance sync`. "
+        "Do not edit by hand._",
+        "",
+    ]
+    targets: dict[str, list[RunRecord]] = {}
+    for r in records:
+        targets.setdefault(r.target, []).append(r)
+
+    seen_repo_sizes: dict[str, int] = {}
+    for target in sorted(targets):
+        rows = targets[target]
+        lines += [
+            f"## {target}",
+            "",
+            "| repo | night | step | status | succ. exp | duration | size | repo | recipe |",
+            "|---|---|---|---|---|---|---|---|---|",
+        ]
+        for r in sorted(rows, key=lambda x: (x.night, x.step)):
+            dur = (
+                f"{r.duration_s}s{'~' if r.duration_approx else ''}"
+                if r.duration_s
+                else "—"
+            )
+            lines.append(
+                f"| {r.repo} | {r.night} | {r.step} | {r.final_status} | "
+                f"{r.successful_exposures} | {dur} | {_human_gb(r.repo_size_bytes)} | "
+                f"{r.repo_status} | `{r.rerun_recipe or ''}` |"
+            )
+            seen_repo_sizes[r.repo] = r.repo_size_bytes or 0
+        lines.append("")
+
+    total_bytes = sum(seen_repo_sizes.values())
+    present = sum(
+        s
+        for repo, s in seen_repo_sizes.items()
+        if any(r.repo == repo and r.repo_status == "present" for r in records)
+    )
+    lines += [
+        "## Totals",
+        "",
+        f"- Runs recorded: {len(records)}",
+        f"- Repos: {len(seen_repo_sizes)}",
+        f"- On-disk (present repos): {_human_gb(present)}",
+        f"- Tracked total (incl. reclaimed): {_human_gb(total_bytes)}",
+        "",
+    ]
+    return "\n".join(lines)

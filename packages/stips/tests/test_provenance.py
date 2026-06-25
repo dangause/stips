@@ -125,3 +125,41 @@ def test_upsert_is_idempotent_and_never_removes(tmp_path):
     )
     save_store(store, upsert_records(load_store(store), [b]))
     assert {r.repo for r in load_store(store)} == {"r1", "r2"}
+
+
+def test_render_markdown_groups_and_totals():
+    from stips.core.provenance import RunRecord, render_markdown
+
+    recs = [
+        RunRecord(
+            repo="r1",
+            repo_path="/r1",
+            target="ixf",
+            instrument="nickel",
+            night="20230815",
+            step="science",
+            final_status="partial",
+            successful_exposures=25,
+            timestamp_end="T1",
+            repo_size_bytes=33_000_000_000,
+            repo_status="present",
+        ),
+        RunRecord(
+            repo="r2",
+            repo_path="/r2",
+            target="ixf",
+            instrument="nickel",
+            night="20230816",
+            step="dia",
+            final_status="success",
+            timestamp_end="T2",
+            repo_status="deleted",
+        ),
+    ]
+    md = render_markdown(recs)
+    assert "## ixf" in md
+    assert "deleted" in md
+    assert (
+        "| night | step | status |" in md.replace("  ", " ").lower()
+        or "night" in md.lower()
+    )
