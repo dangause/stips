@@ -27,7 +27,7 @@ from typing import TYPE_CHECKING
 
 from stips.collections import CollectionNames
 from stips.core.pipeline import get_raw_dir, isr_config_args, validate_night
-from stips.core.stack import run_butler, run_with_stack
+from stips.core.stack import run_butler, run_butler_python_json, run_with_stack
 
 if TYPE_CHECKING:
     from stips.core.config import Config
@@ -382,9 +382,10 @@ def _ingest_nights(nights, config, prof, *, log_file=None) -> list[str]:
 def _export_matrix(config, prof, calib_collection, export_dir, *, log_file=None):
     """Fetch the certified crosstalk calib and write it as ECSV (best effort).
 
-    Informational only — the export path is NOT a Butler discovery location (the
-    applied calib is always the one certified into ``calib_collection``). Returns
-    the written path, or None on failure.
+    Exports detector 0's calib; the matrix is declared per-camera so all detectors
+    share it. Informational only — the export path is NOT a Butler discovery
+    location (the applied calib is always the one certified into
+    ``calib_collection``). Returns the written path, or None on failure.
     """
     if export_dir is None:
         export_dir = config.repo / "crosstalk"
@@ -393,21 +394,18 @@ def _export_matrix(config, prof, calib_collection, export_dir, *, log_file=None)
     out_path = export_dir / f"{prof.name}_crosstalk.ecsv"
 
     script = (
-        "import sys\n"
+        "import json\n"
         "from lsst.daf.butler import Butler\n"
         f"b = Butler({str(config.repo)!r}, collections=[{calib_collection!r}])\n"
         f"c = b.get('crosstalk', instrument={prof.name!r}, detector=0)\n"
         f"c.writeText({str(out_path)!r})\n"
-        "print('CT_EXPORT_OK')\n"
+        f"print(json.dumps({{'out': {str(out_path)!r}}}))\n"
     )
-    try:
-        res = run_with_stack(
-            ["python", "-c", script], config, capture_output=True, check=False
-        )
-        if res.returncode == 0 and "CT_EXPORT_OK" in (res.stdout or ""):
-            log.info("Exported crosstalk matrix to %s", out_path)
-            return out_path
-        log.warning("Crosstalk export failed: %s", (res.stderr or "").strip()[-1000:])
-    except Exception as e:  # noqa: BLE001
-        log.warning("Crosstalk export error: %s", e)
+    result = run_butler_python_json(script, config)
+    if result and result.get("out"):
+        log.info("Exported crosstalk matrix to %s", out_path)
+        return out_path
+    log.warning(
+        "Crosstalk export failed (calib remains certified in %s)", calib_collection
+    )
     return None
