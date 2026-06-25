@@ -350,11 +350,16 @@ class RunConfig:
     nights: list[str] = field(default_factory=list)
 
     # Template configuration
-    template_type: str = "ps1"  # "ps1" or "coadd"
+    template_type: str = "ps1"  # "ps1" | "coadd" | "auto"
     template_degrade_seeing: float | None = None
     template_size: float = 0.3  # PS1 cutout size in degrees (default: 0.3)
     template_unity_photocalib: bool = False  # Force PhotoCalib=1.0 for PS1 templates
     template_nights: list[str] = field(default_factory=list)
+
+    # Reference catalog configuration (on-demand Gaia/PS1; MONSTER opt-in)
+    refcat_mode: str = "gaia_ps1"  # "gaia_ps1" | "monster"
+    refcat_radius_deg: float = 0.3  # cone radius for on-demand fetch
+    refcat_gaia_quality: dict | None = None  # optional Gaia quality cuts
 
     # Pipeline config files
     science_configs: ScienceConfigs = field(default_factory=ScienceConfigs)
@@ -416,6 +421,12 @@ class RunConfig:
         template_unity_photocalib = template.get("unity_photocalib", False)
         # Convert template nights to strings (YAML parses 20230519 as int)
         template_nights = [str(n) for n in template.get("nights", [])]
+
+        # Extract refcat config (on-demand Gaia/PS1; absent section => defaults)
+        refcat = data.get("refcat", {})
+        refcat_mode = refcat.get("mode", "gaia_ps1")
+        refcat_radius_deg = float(refcat.get("radius_deg", 0.3))
+        refcat_gaia_quality = refcat.get("gaia_quality")
 
         # Extract options
         options = data.get("options", {})
@@ -494,6 +505,9 @@ class RunConfig:
             template_size=template_size,
             template_unity_photocalib=template_unity_photocalib,
             template_nights=template_nights,
+            refcat_mode=refcat_mode,
+            refcat_radius_deg=refcat_radius_deg,
+            refcat_gaia_quality=refcat_gaia_quality,
             science_configs=science_configs,
             dia_configs=dia_configs,
             coadd_configs=coadd_configs,
