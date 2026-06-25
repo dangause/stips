@@ -359,8 +359,12 @@ class RunConfig:
     template_unity_photocalib: bool = False  # Force PhotoCalib=1.0 for PS1 templates
     template_nights: list[str] = field(default_factory=list)
 
-    # Reference catalog configuration (on-demand Gaia/PS1; MONSTER opt-in)
-    refcat_mode: str = "gaia_ps1"  # "gaia_ps1" | "monster"
+    # Reference catalog configuration.
+    # STAGING DEFAULT is "monster" so default runs behave exactly as before
+    # (no on-demand fetch; science uses the MONSTER refcat baked into DRP.yaml).
+    # Opt into the new path with `refcat: {mode: gaia_ps1}`. After validation on
+    # real data, flip this default to "gaia_ps1" (see docs/refcat-validation-runbook).
+    refcat_mode: str = "monster"  # "monster" | "gaia_ps1"
     refcat_radius_deg: float = 0.3  # cone radius for on-demand fetch
     refcat_gaia_quality: dict | None = None  # optional Gaia quality cuts
 

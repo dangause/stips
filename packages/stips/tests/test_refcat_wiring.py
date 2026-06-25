@@ -19,10 +19,16 @@ def _write(tmp_path, extra):
 
 
 def test_refcat_defaults_when_section_absent(tmp_path):
+    # Staging default is "monster" (behavior-preserving) until validated.
     cfg = RunConfig.from_yaml(_write(tmp_path, {}))
-    assert cfg.refcat_mode == "gaia_ps1"
+    assert cfg.refcat_mode == "monster"
     assert cfg.refcat_radius_deg == 0.3
     assert cfg.refcat_gaia_quality is None
+
+
+def test_refcat_gaia_ps1_opt_in(tmp_path):
+    cfg = RunConfig.from_yaml(_write(tmp_path, {"refcat": {"mode": "gaia_ps1"}}))
+    assert cfg.refcat_mode == "gaia_ps1"
 
 
 def test_refcat_section_parsed(tmp_path):
@@ -47,7 +53,12 @@ def test_run_refcat_step_calls_ensure(monkeypatch):
 
     monkeypatch.setattr(run, "ensure_refcats", fake_ensure)
     cfg = run.RunConfig(
-        object_name="x", ra=210.9, dec=54.3, bands=["r"], refcat_radius_deg=0.4
+        object_name="x",
+        ra=210.9,
+        dec=54.3,
+        bands=["r"],
+        refcat_mode="gaia_ps1",
+        refcat_radius_deg=0.4,
     )
     run._run_refcat_step(cfg, config=mock.Mock(), result=mock.Mock(), dry_run=False)
     assert seen["ra"] == 210.9
