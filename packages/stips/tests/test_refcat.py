@@ -88,6 +88,14 @@ def test_refcatresult_defaults():
     assert r.collections == []
 
 
+def test_refcat_overlay_config_by_mode():
+    from stips.core.refcat import refcat_overlay_config
+
+    # Staging: DRP.yaml default is MONSTER, so monster needs no overlay.
+    assert refcat_overlay_config("monster") is None
+    assert refcat_overlay_config("gaia_ps1") == "refcats_gaia_ps1.py"
+
+
 def test_ingest_refcat_runs_register_ingest_chain():
     from stips.core import refcat
 

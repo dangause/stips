@@ -1890,6 +1890,7 @@ def run(
 
     # Build ScienceConfig from YAML paths
     science_cfg = ScienceConfig.default(config)
+    science_cfg.refcat_mode = run_cfg.refcat_mode
     if run_cfg.science_configs.calibrate_image:
         science_cfg.calibrate_image = config.resolve_config(
             run_cfg.science_configs.calibrate_image

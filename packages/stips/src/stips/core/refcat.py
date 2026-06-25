@@ -39,6 +39,22 @@ PS1_DATASET = "panstarrs1_dr2"
 GAIA_CONVERT_CONFIG = "gaia_dr3_config.py"
 PS1_CONVERT_CONFIG = "ps1_config.py"
 
+#: calibrateImage overlay that switches refcats to Gaia/PS1 (opt-in).
+GAIA_PS1_OVERLAY = "refcats_gaia_ps1.py"
+
+
+def refcat_overlay_config(mode: str) -> str | None:
+    """calibrateImage overlay config name for a refcat mode.
+
+    ``None`` means "use the DRP.yaml default" — which is currently MONSTER, so
+    ``mode="monster"`` needs no overlay. ``mode="gaia_ps1"`` applies the Gaia/PS1
+    overlay on top of the tuned config. After the default is flipped to Gaia/PS1,
+    this inverts (monster gets an overlay, gaia_ps1 returns None).
+    """
+    if mode == "gaia_ps1":
+        return GAIA_PS1_OVERLAY
+    return None
+
 
 @dataclass
 class RefcatResult:
