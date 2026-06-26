@@ -8,7 +8,7 @@
 #   4. BPS submit to Slurm works (basic connectivity)
 #
 # Usage:
-#   docker compose -f docker/docker-compose.slurm.yml exec nps /shared/scripts/run-bps-test.sh
+#   docker compose -f docker/docker-compose.slurm.yml exec stips /shared/scripts/run-bps-test.sh
 #
 # Exit codes:
 #   0 = all checks passed
@@ -33,7 +33,7 @@ check() {
 }
 
 echo "============================================"
-echo "NPS BPS Smoke Test"
+echo "STIPS BPS Smoke Test"
 echo "============================================"
 echo
 
@@ -64,9 +64,9 @@ echo
 # 3. obs_stips + nickel instrument
 # -------------------------------------------------------------------
 echo "[3/5] obs_stips + nickel instrument"
-OBS_STIPS_DIR="${OBS_STIPS:-/opt/nps/packages/obs_stips}"
-INSTRUMENT_DIR="${INSTRUMENT_DIR:-/opt/nps/instruments/nickel}"
-STIPS_DEFAULTS="${STIPS_DEFAULTS:-/opt/nps/packages/obs_stips/instrument_defaults}"
+OBS_STIPS_DIR="${OBS_STIPS:-/opt/stips/packages/obs_stips}"
+INSTRUMENT_DIR="${INSTRUMENT_DIR:-/opt/stips/instruments/nickel}"
+STIPS_DEFAULTS="${STIPS_DEFAULTS:-/opt/stips/packages/obs_stips/instrument_defaults}"
 if [[ -d "$OBS_STIPS_DIR" ]]; then
     setup -r "$OBS_STIPS_DIR" obs_stips 2>/dev/null || true
 fi
@@ -91,7 +91,7 @@ echo
 # 5. stips CLI (if stips installed)
 # -------------------------------------------------------------------
 echo "[5/5] stips CLI"
-STIPS_DIR="${NPS_ROOT:-/opt/nps}/packages/stips"
+STIPS_DIR="${STIPS_ROOT:-/opt/stips}/packages/stips"
 if [[ -d "$STIPS_DIR" ]] && ! command -v stips &>/dev/null; then
     pip install -e "$STIPS_DIR" 2>/dev/null || true
 fi

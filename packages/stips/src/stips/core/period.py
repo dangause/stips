@@ -1,7 +1,7 @@
 """Period search and phase folding for variable star lightcurves.
 
 Implements Lomb-Scargle periodogram analysis on lightcurves extracted by
-the Nickel Processing Suite pipeline. Reads CSV output from
+the Small Telescope Image Processing Suite pipeline. Reads CSV output from
 extract_lightcurve.py, performs multi-band period search with per-band
 flux normalization, and produces periodogram + phase-folded plots.
 

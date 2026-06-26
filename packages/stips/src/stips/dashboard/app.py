@@ -1,4 +1,4 @@
-"""FastAPI application for the NPS pipeline dashboard."""
+"""FastAPI application for the STIPS pipeline dashboard."""
 
 from __future__ import annotations
 
@@ -37,7 +37,7 @@ def create_app(logs_dir: Path, instrument_name: str = "Nickel") -> FastAPI:
     Returns:
         Configured FastAPI application.
     """
-    app = FastAPI(title="NPS Dashboard")
+    app = FastAPI(title="STIPS Dashboard")
 
     # Mount static files
     app.mount("/static", StaticFiles(directory=_HERE / "static"), name="static")

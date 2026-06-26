@@ -1,4 +1,4 @@
-"""BPS (Batch Processing Service) integration for Nickel Processing Suite.
+"""BPS (Batch Processing Service) integration for Small Telescope Image Processing Suite.
 
 This module provides functionality for submitting pipelines to HPC clusters
 using LSST's BPS (Batch Processing Service) with Parsl or HTCondor backends.
@@ -65,7 +65,7 @@ class BPSConfig:
     template_collection: str | None = None
     object_filter: str | None = None
     coord_collection: str | None = None
-    operator: str = field(default_factory=lambda: os.environ.get("USER", "nps"))
+    operator: str = field(default_factory=lambda: os.environ.get("USER", "stips"))
     project: str = "nickel"
     dry_run: bool = False
     extra_args: list[str] = field(default_factory=list)

@@ -58,14 +58,14 @@ stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml dia 20230519 --auto  
 
 ```bash
 # Run with Docker
-docker-compose run --rm nps stips calibs 20230519
+docker-compose run --rm stips stips calibs 20230519
 
 # Or build and run directly
-docker build -t nps:latest -f docker/Dockerfile .
+docker build -t stips:latest -f docker/Dockerfile .
 docker run -v /path/to/repo:/data/repo \
            -v /path/to/raw:/data/raw \
            -v /path/to/refcats:/data/refcats \
-           nps:latest stips env
+           stips:latest stips env
 ```
 
 ---
@@ -127,7 +127,7 @@ stips/
 │   ├── Dockerfile            # Standard Docker image
 │   ├── Dockerfile.hpc        # HPC-optimized image
 │   ├── docker-compose.yml    # Local development
-│   └── nps.def               # Singularity definition
+│   └── stips.def               # Singularity definition
 ├── bps/
 │   ├── base.yaml             # Base BPS configuration
 │   ├── sites/                # Site configs (slurm, htcondor, local)
@@ -467,10 +467,10 @@ Pipeline runs create a unified log directory at `logs/{RUN_ID}/` with subdirecto
 
 ```bash
 # Default build (LSST v30_0_3)
-docker build -t nps:latest -f docker/Dockerfile .
+docker build -t stips:latest -f docker/Dockerfile .
 
 # Specific LSST version
-docker build --build-arg LSST_TAG=w_2025_19 -t nps:weekly .
+docker build --build-arg LSST_TAG=w_2025_19 -t stips:weekly .
 ```
 
 ### Running with Docker Compose
@@ -483,17 +483,17 @@ docker-compose up -d
 REPO=/path/to/repo RAW_PARENT_DIR=/path/to/raw docker-compose up -d
 
 # Run a command
-docker-compose run --rm nps stips calibs 20230519
+docker-compose run --rm stips stips calibs 20230519
 
 # Interactive shell
-docker-compose run --rm nps bash
+docker-compose run --rm stips bash
 ```
 
 ### Docker Compose Services
 
 | Service | Description | Profile |
 |---------|-------------|---------|
-| `nps` | Main processing service | default |
+| `stips` | Main processing service | default |
 | `jupyter` | JupyterLab for interactive analysis | `interactive` |
 | `bps-worker` | BPS local worker for testing | `bps` |
 
@@ -510,13 +510,13 @@ For HPC environments requiring Singularity:
 
 ```bash
 # Convert Docker image to Singularity
-singularity build nps.sif docker-daemon://nps:latest
+singularity build stips.sif docker-daemon://stips:latest
 
 # Run with bind mounts
 singularity run -B /scratch/repo:/data/repo \
                 -B /archive/raw:/data/raw \
                 -B /common/refcats:/data/refcats \
-                nps.sif stips calibs 20230519
+                stips.sif stips calibs 20230519
 ```
 
 ---

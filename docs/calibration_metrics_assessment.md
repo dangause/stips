@@ -300,7 +300,7 @@ These slopes are the **Nickel-to-Landolt color terms**: shallow but non-zero (~0
 
 ### MONSTER Refcat Coverage Expansion
 
-The initial run processed only 1 of 4 Tier 1 nights because the local MONSTER refcat lacked HTM7 shards for most Landolt field positions, causing qgraph builds to abort with `FileNotFoundError: Not enough datasets (0) found for ... the_monster_20250219_local`. Recovery used existing nps tooling:
+The initial run processed only 1 of 4 Tier 1 nights because the local MONSTER refcat lacked HTM7 shards for most Landolt field positions, causing qgraph builds to abort with `FileNotFoundError: Not enough datasets (0) found for ... the_monster_20250219_local`. Recovery used existing stips tooling:
 
 1. **`scripts/utilities/recompute_missing_shards.py`** queried the Butler for visit centroids, computed the HTM7 cells overlapping a 6 arcmin radius per visit, and subtracted shards already on disk — yielding 34 missing IDs written to `scripts/config/landolt_validation/monster_plan/missing_htm7_ids.txt`.
 

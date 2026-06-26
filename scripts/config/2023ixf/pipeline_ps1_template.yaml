@@ -22,7 +22,7 @@
 env:
   REPO: "/Users/dangause/Developer/lick/lsst/data/nickel/2023ixf_ps1_022226_repo"
   STACK_DIR: "/Users/dangause/Developer/lick/lsst/lsst_stack"
-  INSTRUMENT_DIR: "/Users/dangause/Developer/lick/lsst/lsst_stack/stack/nickel_processing_suite/instruments/nickel"
+  INSTRUMENT_DIR: "/Users/dangause/Developer/lick/lsst/lsst_stack/stack/stips/instruments/nickel"
   RAW_PARENT_DIR: "/Users/dangause/Developer/lick/data"
   REFCAT_REPO: "/Users/dangause/Developer/lick/lsst/lsst_stack/stack/refcats"
   CP_PIPE_DIR: "${STACK_DIR}/cp_pipe"

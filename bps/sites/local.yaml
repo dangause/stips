@@ -1,4 +1,4 @@
-# Nickel Processing Suite - Local Site Configuration
+# Small Telescope Image Processing Suite - Local Site Configuration
 #
 # BPS configuration for local development and testing.
 # Runs on the local machine using Parsl's ThreadPoolExecutor.
@@ -41,7 +41,7 @@ site:
     mem_per_worker: 4096
 
     # Working directory for Parsl
-    # run_dir: "/tmp/nps-bps"
+    # run_dir: "/tmp/stips-bps"
 
 # =============================================================================
 # Reduced Resources for Local Testing

@@ -1,10 +1,10 @@
-# Slurm Services for NPS Docker Test Cluster
+# Slurm Services for STIPS Docker Test Cluster
 #
-# Built from the same LSST base image as NPS so all containers share
+# Built from the same LSST base image as STIPS so all containers share
 # AlmaLinux 9 + Slurm 22.05 + LSST stack. Compute nodes can run pipetask.
 #
 # Build:
-#   docker build -t nps-slurm:latest -f docker/Dockerfile.slurm .
+#   docker build -t stips-slurm:latest -f docker/Dockerfile.slurm .
 #
 # Run (via docker-compose.slurm.yml):
 #   CMD determines which daemon runs: slurmctld, slurmd, or slurmdbd
@@ -12,7 +12,7 @@
 ARG LSST_TAG=v30_0_3
 FROM ghcr.io/lsst/scipipe:al9-${LSST_TAG}
 
-LABEL org.opencontainers.image.description="NPS Slurm cluster node (AlmaLinux 9 + Slurm 22 + LSST)"
+LABEL org.opencontainers.image.description="STIPS Slurm cluster node (AlmaLinux 9 + Slurm 22 + LSST)"
 
 USER root
 
@@ -56,9 +56,9 @@ RUN id slurm 2>/dev/null || useradd -r -s /sbin/nologin slurm && \
     chown -R slurm:slurm /var/spool/slurm /var/spool/slurmd /var/log/slurm /var/lib/slurmd
 
 # =============================================================================
-# NPS packages (so compute nodes can run pipetask)
+# STIPS packages (so compute nodes can run pipetask)
 # =============================================================================
-WORKDIR /opt/nps
+WORKDIR /opt/stips
 
 COPY packages/obs_stips/ packages/obs_stips/
 COPY instruments/nickel/ instruments/nickel/
@@ -67,7 +67,7 @@ COPY packages/obs_nickel_data/ packages/obs_nickel_data/
 RUN source /opt/lsst/software/stack/loadLSST.bash && \
     setup lsst_distrib && \
     pip install --no-deps -e packages/obs_stips && \
-    chmod +x /opt/nps/packages/obs_stips/instrument_defaults/pipelines/*.yaml 2>/dev/null || true
+    chmod +x /opt/stips/packages/obs_stips/instrument_defaults/pipelines/*.yaml 2>/dev/null || true
 
 # Add LSST conda env to default PATH so Parsl's process_worker_pool.py
 # is available when Slurm jobs start on compute nodes

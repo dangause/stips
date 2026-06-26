@@ -130,11 +130,11 @@ stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml run
 
 Output shows log location:
 ```
-[INFO] Logs: /path/to/nickel_processing_suite/logs/20260211_143022_12345
+[INFO] Logs: /path/to/stips/logs/20260211_143022_12345
 [INFO] Pipeline run for 2023ixf
 ...
 ✓ Pipeline complete
-  Logs: /path/to/nickel_processing_suite/logs/20260211_143022_12345
+  Logs: /path/to/stips/logs/20260211_143022_12345
 ```
 
 ### Inspecting Logs

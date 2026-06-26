@@ -1,4 +1,4 @@
-# Nickel Processing Suite - Docker Compose
+# Small Telescope Image Processing Suite - Docker Compose
 #
 # Local development and testing configuration.
 # Dashboard auto-starts on port 8080 for live pipeline monitoring.
@@ -11,13 +11,13 @@
 #   # Dashboard is now live at http://localhost:8080
 #
 #   # Run a pipeline (dashboard shows live progress)
-#   docker exec nps-processing nps-exec stips run /opt/nps/scripts/config/2023ixf/pipeline_docker_test.yaml
+#   docker exec stips-processing stips-exec stips run /opt/stips/scripts/config/2023ixf/pipeline_docker_test.yaml
 #
 #   # Or run individual commands
-#   docker exec nps-processing nps-exec stips calibs 20230519
+#   docker exec stips-processing stips-exec stips calibs 20230519
 #
 #   # Interactive shell (with LSST stack activated)
-#   docker exec -it nps-processing nps-exec bash
+#   docker exec -it stips-processing stips-exec bash
 #
 #   # Stop
 #   docker compose down
@@ -26,16 +26,16 @@ version: '3.8'
 
 services:
   # =============================================================================
-  # Main NPS Service
+  # Main STIPS Service
   # =============================================================================
-  nps:
+  stips:
     build:
       context: ..
       dockerfile: docker/Dockerfile
       args:
         LSST_TAG: ${LSST_TAG:-v30_0_3}
-    image: nps:${NPS_VERSION:-latest}
-    container_name: nps-processing
+    image: stips:${STIPS_VERSION:-latest}
+    container_name: stips-processing
 
     volumes:
       # Data volumes (read-write) - required for processing
@@ -52,28 +52,28 @@ services:
       - ${OUTPUT_DIR:-./outputs}:/data/outputs
 
       # Quantum graph cache (persisted across runs)
-      - nps-qgraphs:/data/qgraphs
+      - stips-qgraphs:/data/qgraphs
 
       # Optional: Mount source for development
       # Uncomment to enable live code reloading
-      # - ../packages/stips/src:/opt/nps/packages/stips/src:ro
-      # - ../packages/obs_stips:/opt/nps/packages/obs_stips:ro
-      # - ../instruments/nickel:/opt/nps/instruments/nickel:ro
+      # - ../packages/stips/src:/opt/stips/packages/stips/src:ro
+      # - ../packages/obs_stips:/opt/stips/packages/obs_stips:ro
+      # - ../instruments/nickel:/opt/stips/instruments/nickel:ro
 
     ports:
-      - "${NPS_DASHBOARD_PORT:-8080}:8080"
+      - "${STIPS_DASHBOARD_PORT:-8080}:8080"
 
     environment:
       # Core paths (override defaults if mounted elsewhere)
       - REPO=/data/repo
       - RAW_PARENT_DIR=/data/raw
       - REFCAT_REPO=/data/refcats
-      - INSTRUMENT_DIR=/opt/nps/instruments/nickel
-      - STIPS_DEFAULTS=/opt/nps/packages/obs_stips/instrument_defaults
+      - INSTRUMENT_DIR=/opt/stips/instruments/nickel
+      - STIPS_DEFAULTS=/opt/stips/packages/obs_stips/instrument_defaults
       - KMP_AFFINITY=disabled
 
       # Optional: Profile to load from /config/.env.{profile}
-      - NPS_PROFILE=${NPS_PROFILE:-}
+      - STIPS_PROFILE=${STIPS_PROFILE:-}
 
       # LSST stack configuration
       - LSST_CONDA_ENV_NAME=${LSST_CONDA_ENV_NAME:-}
@@ -107,8 +107,8 @@ services:
   # =============================================================================
   jupyter:
     extends:
-      service: nps
-    container_name: nps-jupyter
+      service: stips
+    container_name: stips-jupyter
     ports:
       - "${JUPYTER_PORT:-8888}:8888"
     command: >
@@ -127,8 +127,8 @@ services:
   # =============================================================================
   bps-worker:
     extends:
-      service: nps
-    container_name: nps-bps-worker
+      service: stips
+    container_name: stips-bps-worker
     command: ["bash", "-c", "echo 'BPS worker ready' && sleep infinity"]
     profiles:
       - bps
@@ -138,7 +138,7 @@ services:
 # =============================================================================
 volumes:
   # Persistent cache for quantum graphs
-  nps-qgraphs:
+  stips-qgraphs:
     driver: local
 
 # =============================================================================
@@ -146,4 +146,4 @@ volumes:
 # =============================================================================
 networks:
   default:
-    name: nps-network
+    name: stips-network

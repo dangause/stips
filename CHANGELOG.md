@@ -77,7 +77,7 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
 - `nickel` CLI with 16 commands covering the full pipeline lifecycle
 - Profile-based configuration system for multi-target campaigns
 - CI with LSST Science Pipelines container, pre-commit, and ruff/black
-- Docker images published to GHCR (`nps`, `nps-slurm`, `nps-hpc`)
+- Docker images published to GHCR (`stips`, `stips-slurm`, `stips-hpc`)
 
 ## [0.0.1] — 2025-06-08
 

@@ -2,7 +2,7 @@
 
 ## What Problem Are We Solving?
 
-The Nickel Processing Suite runs astronomical data through the LSST Science Pipelines — a sequence of computationally intensive steps (calibration, astrometry, photometry, image subtraction). A single night of Nickel telescope data has ~20-200 exposures, and a typical campaign has 10-30 nights. Processing all of this serially on one machine is slow.
+The Small Telescope Image Processing Suite runs astronomical data through the LSST Science Pipelines — a sequence of computationally intensive steps (calibration, astrometry, photometry, image subtraction). A single night of Nickel telescope data has ~20-200 exposures, and a typical campaign has 10-30 nights. Processing all of this serially on one machine is slow.
 
 The BPS (Batch Processing Service) integration distributes the heavy computation across multiple machines using **Slurm** (an HPC job scheduler), orchestrated by **Parsl** (a Python parallel execution framework), all running inside **Docker** containers for reproducibility.
 
@@ -25,14 +25,14 @@ The BPS (Batch Processing Service) integration distributes the heavy computation
 │  │  │  │ (compute)   │   │ (compute)   │    │            │   │
 │  │  │  │  slurmd     │   │  slurmd     │    │            │   │
 │  │  │  │  + LSST     │   │  + LSST     │    │            │   │
-│  │  │  │  + NPS      │   │  + NPS      │    │            │   │
+│  │  │  │  + STIPS      │   │  + STIPS      │    │            │   │
 │  │  │  └────────────┘   └────────────┘     │            │   │
 │  │  │       ▲                 ▲             │            │   │
 │  │  │       │    Slurm jobs   │             │            │   │
 │  │  │       └────────┬────────┘             │            │   │
 │  │  │                │                      │            │   │
 │  │  │  ┌─────────────┴──────────────────┐   │            │   │
-│  │  │  │         nps-hpc                │◀──┘            │   │
+│  │  │  │         stips-hpc                │◀──┘            │   │
 │  │  │  │    (login / submit node)       │                │   │
 │  │  │  │                                │                │   │
 │  │  │  │  stips -c config.yaml run      │                │   │
@@ -63,7 +63,7 @@ The Docker Slurm cluster runs six containers (defined in `docker/docker-compose.
 | **slurmctld** | Slurm Controller | The "brain" — schedules jobs, manages the queue, allocates nodes |
 | **c1** | Compute Node 1 | Runs `slurmd` daemon; executes assigned `pipetask run-qbb` jobs |
 | **c2** | Compute Node 2 | Same as c1; provides parallelism |
-| **nps-hpc** | Login/Submit Node | Where you run `stips ... run`; submits BPS jobs to Slurm |
+| **stips-hpc** | Login/Submit Node | Where you run `stips ... run`; submits BPS jobs to Slurm |
 
 All containers share the same Docker network and mount the same data volumes, so they all see the same `/data/repo`, `/data/raw`, and `/data/refcats` directories.
 
@@ -73,7 +73,7 @@ Slurm is designed for multi-machine clusters. Even in Docker, it needs the full 
 - **MySQL + slurmdbd**: Slurm refuses to start without accounting. These provide it.
 - **slurmctld**: The scheduler. It decides which compute node runs which job.
 - **c1, c2**: The workers. In production HPC, these would be physical servers with many cores.
-- **nps-hpc**: The login node. This is where the pipeline orchestrator runs. It submits jobs but doesn't execute them.
+- **stips-hpc**: The login node. This is where the pipeline orchestrator runs. It submits jobs but doesn't execute them.
 
 ### Authentication: Munge
 
@@ -101,7 +101,7 @@ The pipeline orchestrator (`stips ... run`) processes data through stages: calib
      └─────┬─────┘ └────┬────┘  └─────┬─────┘
            │             │             │
     subprocess      bps submit     bps submit
-    on nps-hpc      → Parsl        → Parsl
+    on stips-hpc      → Parsl        → Parsl
                     → Slurm        → Slurm
                     → c1/c2        → c1/c2
 ```
@@ -120,8 +120,8 @@ The `LocalExecutor` simply wraps `pipetask run` in a shell that sources the LSST
 ```bash
 source /opt/lsst/software/stack/loadLSST.bash
 setup lsst_distrib
-setup -r /opt/nps/packages/obs_stips obs_stips
-export INSTRUMENT_DIR=/opt/nps/instruments/nickel
+setup -r /opt/stips/packages/obs_stips obs_stips
+export INSTRUMENT_DIR=/opt/stips/instruments/nickel
 pipetask run -b /data/repo -g /path/to/qgraph.qg -j 4
 ```
 
@@ -139,15 +139,15 @@ pipetask run ...     →  Routed through BPS → Parsl → Slurm
 This split is critical: quantum graph *generation* (planning what to do) must happen locally so the orchestrator can inspect it, check for empty graphs, validate inputs, etc. Only the *execution* (actually running the compute) goes to the cluster.
 
 
-## BPS: The Glue Between NPS and Slurm
+## BPS: The Glue Between STIPS and Slurm
 
-**BPS (Batch Processing Service)** is LSST's abstraction layer for submitting pipetask work to HPC schedulers. NPS doesn't talk to Slurm directly — it talks to BPS, which talks to Parsl, which talks to Slurm.
+**BPS (Batch Processing Service)** is LSST's abstraction layer for submitting pipetask work to HPC schedulers. STIPS doesn't talk to Slurm directly — it talks to BPS, which talks to Parsl, which talks to Slurm.
 
 ### The BPS Submission Flow
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│ NPS Orchestrator (run.py)                               │
+│ STIPS Orchestrator (run.py)                               │
 │                                                         │
 │  1. Build quantum graph (local pipetask qgraph)         │
 │  2. executor.run_pipetask(["run", ...])                 │
@@ -220,13 +220,13 @@ This split is critical: quantum graph *generation* (planning what to do) must ha
        │
        ▼
 ┌─────────────────────────────────────────────────────────┐
-│ Back on nps-hpc                                         │
+│ Back on stips-hpc                                         │
 │                                                         │
 │  17. Parsl detects all tasks complete                    │
 │  18. BPS runs "finalJob" (aggregate-graph):             │
 │      - Ingests quantum execution results into Butler    │
 │  19. bps submit returns (exit code 0 or non-zero)       │
-│  20. NPS orchestrator parses result, continues pipeline  │
+│  20. STIPS orchestrator parses result, continues pipeline  │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -293,9 +293,9 @@ parsl:
   commandPrefix: |
     source /opt/lsst/software/stack/loadLSST.bash
     setup lsst_distrib
-    setup -r /opt/nps/packages/obs_stips obs_stips 2>/dev/null || true
+    setup -r /opt/stips/packages/obs_stips obs_stips 2>/dev/null || true
     export REPO=/data/repo
-    export INSTRUMENT_DIR=/opt/nps/instruments/nickel
+    export INSTRUMENT_DIR=/opt/stips/instruments/nickel
     ...
 ```
 
@@ -427,17 +427,17 @@ All containers mount the same Docker volumes:
 
 ```yaml
 volumes:
-  - nps-repo:/data/repo        # Butler repository (SQLite + FITS)
-  - nps-raw:/data/raw          # Raw telescope data
-  - nps-refcats:/data/refcats  # Reference catalogs
+  - stips-repo:/data/repo        # Butler repository (SQLite + FITS)
+  - stips-raw:/data/raw          # Raw telescope data
+  - stips-refcats:/data/refcats  # Reference catalogs
 ```
 
 This is critical because:
 
-1. **nps-hpc** writes quantum graphs to `/data/repo/qgraphs/`
+1. **stips-hpc** writes quantum graphs to `/data/repo/qgraphs/`
 2. **c1/c2** read those quantum graphs during `run-qbb`
 3. **c1/c2** write output datasets back to `/data/repo/`
-4. **nps-hpc** reads those outputs when checking results
+4. **stips-hpc** reads those outputs when checking results
 
 Without a shared filesystem, BPS would need a separate data transfer mechanism. In a real HPC cluster, this role is filled by NFS or a parallel filesystem like Lustre.
 
@@ -476,17 +476,17 @@ Calibration pipelines are small (17 quanta for bias, 5 for flat). The BPS overhe
 ### Starting the Cluster
 
 ```bash
-cd nickel_processing_suite/.worktrees/bps-full
+cd stips/.worktrees/bps-full
 
 # Build images
-docker build -t nps:latest -f docker/Dockerfile .
-docker build -t nps-slurm:latest -f docker/Dockerfile.slurm .
+docker build -t stips:latest -f docker/Dockerfile .
+docker build -t stips-slurm:latest -f docker/Dockerfile.slurm .
 
 # Start all 6 containers
 docker compose -f docker/docker-compose.slurm.yml up -d
 
 # Verify Slurm is healthy
-docker exec nps-hpc sinfo
+docker exec stips-hpc sinfo
 # Expected: c1 and c2 in "idle" state
 ```
 
@@ -494,18 +494,18 @@ docker exec nps-hpc sinfo
 
 ```bash
 # Interactive (see output in terminal)
-docker exec -it nps-hpc bash -c '
+docker exec -it stips-hpc bash -c '
   source /opt/lsst/software/stack/loadLSST.bash
   setup lsst_distrib
-  setup -r /opt/nps/packages/obs_stips obs_stips 2>/dev/null || true
-  export INSTRUMENT_DIR=/opt/nps/instruments/nickel
-  export PYTHONPATH=/opt/nps/packages/stips/src:${PYTHONPATH:-}
+  setup -r /opt/stips/packages/obs_stips obs_stips 2>/dev/null || true
+  export INSTRUMENT_DIR=/opt/stips/instruments/nickel
+  export PYTHONPATH=/opt/stips/packages/stips/src:${PYTHONPATH:-}
   python -m stips.cli run \
-    /opt/nps/scripts/config/2023ixf/pipeline_docker_bps_test.yaml
+    /opt/stips/scripts/config/2023ixf/pipeline_docker_bps_test.yaml
 '
 
 # Background (detached)
-docker exec -d nps-hpc bash -c '
+docker exec -d stips-hpc bash -c '
   source /opt/lsst/software/stack/loadLSST.bash
   ...same as above...
 ' > /tmp/pipeline.log 2>&1
@@ -515,57 +515,57 @@ docker exec -d nps-hpc bash -c '
 
 ```bash
 # Pipeline orchestrator log
-docker exec nps-hpc tail -f /opt/nps/logs/{RUN_ID}/pipeline.log
+docker exec stips-hpc tail -f /opt/stips/logs/{RUN_ID}/pipeline.log
 
 # Slurm job queue
-docker exec nps-hpc squeue
+docker exec stips-hpc squeue
 
 # What's running on compute nodes
 docker exec c1 ps aux | grep pipetask
 docker exec c2 ps aux | grep pipetask
 
 # BPS submit directories (rendered configs, per-quantum logs)
-docker exec nps-hpc ls /data/repo/bps/submit/
+docker exec stips-hpc ls /data/repo/bps/submit/
 
 # Butler collections (what's been processed)
-docker exec nps-hpc bash -c '
+docker exec stips-hpc bash -c '
   source /opt/lsst/software/stack/loadLSST.bash
   setup lsst_distrib
   butler query-collections /data/repo
 '
 
 # Per-night calibration logs
-docker exec nps-hpc ls /opt/nps/logs/{RUN_ID}/calibs/
+docker exec stips-hpc ls /opt/stips/logs/{RUN_ID}/calibs/
 
 # Per-night science logs (once science starts)
-docker exec nps-hpc ls /opt/nps/logs/{RUN_ID}/science/
+docker exec stips-hpc ls /opt/stips/logs/{RUN_ID}/science/
 ```
 
 ### Troubleshooting
 
 **Slurm nodes stuck in "alloc" after killing jobs:**
 ```bash
-docker exec nps-hpc scontrol update NodeName=c1 State=idle
-docker exec nps-hpc scontrol update NodeName=c2 State=idle
+docker exec stips-hpc scontrol update NodeName=c1 State=idle
+docker exec stips-hpc scontrol update NodeName=c2 State=idle
 ```
 
 **Munge authentication errors:**
 ```bash
 # Check munge is running on all nodes
-docker exec nps-hpc bash -c 'munge -n | unmunge'
+docker exec stips-hpc bash -c 'munge -n | unmunge'
 docker exec c1 bash -c 'munge -n | unmunge'
 ```
 
 **BPS submit fails with FileExistsError:**
 The submit directory already exists from a previous run. Either clean it up or ensure timestamps differ:
 ```bash
-docker exec nps-hpc rm -rf /data/repo/bps/submit/custom_*
+docker exec stips-hpc rm -rf /data/repo/bps/submit/custom_*
 ```
 
 **Clean restart (wipe everything):**
 ```bash
-docker exec nps-hpc rm -rf /data/repo/*
-docker exec nps-hpc rm -rf /data/repo/bps /data/repo/parsl_runinfo
+docker exec stips-hpc rm -rf /data/repo/*
+docker exec stips-hpc rm -rf /data/repo/bps /data/repo/parsl_runinfo
 # Then re-run bootstrap + pipeline
 ```
 
@@ -574,7 +574,7 @@ docker exec nps-hpc rm -rf /data/repo/bps /data/repo/parsl_runinfo
 
 | Aspect | Local (`execution: local`) | BPS (`execution: bps`) |
 |--------|--------------------------|----------------------|
-| Calibrations | subprocess on your machine | subprocess on nps-hpc (same) |
+| Calibrations | subprocess on your machine | subprocess on stips-hpc (same) |
 | Science | subprocess, -j N threads | Distributed across c1, c2 via Slurm |
 | DIA | subprocess, -j N threads | Distributed across c1, c2 via Slurm |
 | Parallelism | Limited by one machine's cores | Scales with compute nodes |
@@ -601,7 +601,7 @@ bps/
     └── htcondor.yaml            # HTCondor cluster
 
 docker/
-├── Dockerfile                   # NPS container (LSST + packages + Slurm client)
+├── Dockerfile                   # STIPS container (LSST + packages + Slurm client)
 ├── Dockerfile.slurm             # Slurm service container (controller + compute)
 ├── docker-compose.yml           # Single-container development
 ├── docker-compose.slurm.yml     # Full 6-container Slurm cluster

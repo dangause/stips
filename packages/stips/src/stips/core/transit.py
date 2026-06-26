@@ -1,7 +1,7 @@
 """Transit search and parameter extraction for exoplanet lightcurves.
 
 Implements Box Least Squares (BLS) periodogram analysis on lightcurves
-extracted by the Nickel Processing Suite pipeline. Reads CSV output from
+extracted by the Small Telescope Image Processing Suite pipeline. Reads CSV output from
 extract_lightcurve.py, performs multi-band transit search with per-band
 baseline normalization, and produces BLS periodogram + phase-folded transit
 plots with model overlay.

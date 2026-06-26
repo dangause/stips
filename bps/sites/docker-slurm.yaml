@@ -1,4 +1,4 @@
-# Nickel Processing Suite - Docker Slurm Site Configuration
+# Small Telescope Image Processing Suite - Docker Slurm Site Configuration
 #
 # BPS configuration for the Docker Compose Slurm test environment.
 # Conservative resources for containerized single-node cluster.
@@ -43,7 +43,7 @@ site:
       #SBATCH --partition=normal
       #SBATCH --export=ALL
 
-    # Parsl run_dir on shared volume (accessible from NPS + compute nodes)
+    # Parsl run_dir on shared volume (accessible from STIPS + compute nodes)
     run_dir: /data/repo/parsl_runinfo
 
     # Command prefix: sourced before each pipetask command on compute nodes.
@@ -54,14 +54,14 @@ site:
       setup lsst_distrib
       # STIPS framework: obs_stips (LSST glue) + stips (core, src-layout).
       # The instrument is declarative (loaded by path from INSTRUMENT_DIR).
-      setup -r /opt/nps/packages/obs_stips obs_stips 2>/dev/null || true
-      export PYTHONPATH=/opt/nps/packages/stips/src:${PYTHONPATH:-}
-      if [[ -d /opt/nps/packages/obs_nickel_data ]]; then
-          setup -r /opt/nps/packages/obs_nickel_data obs_nickel_data 2>/dev/null || true
+      setup -r /opt/stips/packages/obs_stips obs_stips 2>/dev/null || true
+      export PYTHONPATH=/opt/stips/packages/stips/src:${PYTHONPATH:-}
+      if [[ -d /opt/stips/packages/obs_nickel_data ]]; then
+          setup -r /opt/stips/packages/obs_nickel_data obs_nickel_data 2>/dev/null || true
       fi
       export REPO=/data/repo
-      export INSTRUMENT_DIR=/opt/nps/instruments/nickel
-      export STIPS_DEFAULTS=/opt/nps/packages/obs_stips/instrument_defaults
+      export INSTRUMENT_DIR=/opt/stips/instruments/nickel
+      export STIPS_DEFAULTS=/opt/stips/packages/obs_stips/instrument_defaults
       export RAW_PARENT_DIR=/data/raw
       export REFCAT_REPO=/data/refcats
 

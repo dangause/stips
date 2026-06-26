@@ -1,4 +1,4 @@
-"""NPS Pipeline Monitoring Dashboard.
+"""STIPS Pipeline Monitoring Dashboard.
 
 Provides a browser-based dashboard for monitoring pipeline run progress,
 viewing per-night status grids, and tailing live logs.
