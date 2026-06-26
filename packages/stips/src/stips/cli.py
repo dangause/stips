@@ -257,6 +257,71 @@ def calibs(ctx: click.Context, night: str, jobs: int) -> None:
 
 
 # =============================================================================
+# measure-crosstalk - Measure crosstalk coefficients from exposures
+# =============================================================================
+
+
+@cli.command("measure-crosstalk")
+@click.argument("nights", nargs=-1, required=True)
+@click.option("-j", "--jobs", default=4, help="Parallel jobs (default: 4)")
+@click.option(
+    "--export-dir",
+    type=click.Path(),
+    help="Directory to export the measured matrix ECSV (default: REPO/crosstalk)",
+)
+@click.pass_context
+def measure_crosstalk(
+    ctx: click.Context, nights: tuple[str, ...], jobs: int, export_dir: str | None
+) -> None:
+    """Measure intra-detector crosstalk from exposures (cp_pipe MeasureCrosstalk).
+
+    Runs the cp_pipe crosstalk pipeline over the NIGHTS' science frames to derive
+    the coefficient matrix, certifies it into the calib chain (so ISR applies it),
+    and exports the matrix for inspection. Run this once when you have no known
+    coefficients. Requires bias calibs to be built first (the measurement ISR
+    applies bias), and works best with frames containing bright sources spanning
+    amplifier boundaries.
+
+    NIGHTS are observing dates in YYYYMMDD format.
+
+    \b
+    Example:
+        stips -p ctio1m measure-crosstalk 20070321 20070322
+    """
+    from pathlib import Path
+
+    config = _load_config(ctx)
+
+    prof = config.require_profile()
+    if prof.crosstalk is None:
+        _print_error(
+            f"{prof.name} declares no crosstalk in its profile; nothing to measure. "
+            "Add a CrosstalkSpec (even a placeholder) to enable crosstalk."
+        )
+        sys.exit(1)
+
+    _print_info(f"Measuring crosstalk for {prof.name} from nights: {', '.join(nights)}")
+
+    from stips.core import crosstalk as crosstalk_module
+
+    result = crosstalk_module.measure_crosstalk(
+        list(nights),
+        config,
+        jobs=jobs,
+        export_dir=Path(export_dir) if export_dir else None,
+    )
+
+    if result.success:
+        _print_success("\n✓ Crosstalk measured and certified")
+        click.echo(f"  Calib collection: {result.calib_collection}")
+        if result.export_path:
+            click.echo(f"  Matrix exported:  {result.export_path}")
+    else:
+        _print_error(f"Crosstalk measurement failed: {result.error}")
+        sys.exit(1)
+
+
+# =============================================================================
 # science - Science processing
 # =============================================================================
 
@@ -1679,6 +1744,72 @@ def dashboard(
 
     app = create_app(logs_dir, instrument_name=instrument_name)
     uvicorn.run(app, host=host, port=port, log_level="warning")
+
+
+# =============================================================================
+# provenance - Aggregate and maintain the run-provenance document
+# =============================================================================
+
+
+@cli.group()
+def provenance():
+    """Aggregate and maintain the run-provenance document."""
+
+
+@provenance.command("sync")
+@click.option(
+    "--roots",
+    multiple=True,
+    type=click.Path(path_type=Path),
+    help="Repo root dir(s). Repeatable. Defaults to known data roots.",
+)
+@click.option(
+    "--out-dir",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Output dir for runs.json + RUNS.md (default: <repo>/provenance).",
+)
+@click.option(
+    "--repo-root",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="stips repo root for git-sha lookup (default: inferred).",
+)
+@click.option("--dry-run", is_flag=True, help="Report without writing.")
+def provenance_sync(roots, out_dir, repo_root, dry_run):
+    from stips.core import provenance as prov
+
+    repo_root = repo_root or Path(__file__).resolve().parents[4]
+    out_dir = out_dir or (repo_root / "provenance")
+    roots = list(roots) or prov.default_roots()
+    summary = prov.sync(
+        roots=roots, out_dir=out_dir, repo_root=repo_root, dry_run=dry_run
+    )
+    click.echo(
+        f"records: {summary['records']}  repos: {len(summary['repos'])}  "
+        f"total_after: {summary['total_records_after']}"
+    )
+    if summary["empty_or_unparseable"]:
+        click.echo(
+            "NEEDS REVIEW (no/!parseable processing_log): "
+            + ", ".join(summary["empty_or_unparseable"])
+        )
+
+
+@provenance.command("mark-deleted")
+@click.argument("repos", nargs=-1, required=True)
+@click.option("--out-dir", type=click.Path(path_type=Path), default=None)
+def provenance_mark_deleted(repos, out_dir):
+    from datetime import datetime, timezone
+
+    from stips.core import provenance as prov
+
+    repo_root = Path(__file__).resolve().parents[4]
+    out_dir = out_dir or (repo_root / "provenance")
+    n = prov.mark_deleted(
+        list(repos), out_dir, datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    )
+    click.echo(f"marked {n} record(s) deleted")
 
 
 def main() -> None:

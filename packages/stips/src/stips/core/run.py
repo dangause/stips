@@ -905,22 +905,25 @@ def _run_calibs_step(
             log.info(f"  [DRY RUN] calibs.run({night})")
         return None
 
+    # Write curated calibrations (defects + crosstalk) once before per-night
+    # calibs, in both the concurrent and sequential paths. These are repo-level
+    # (timeless, cross-night) products, so building them per night would
+    # redundantly re-run the curated write and the crosstalk build/certify; doing
+    # it once also avoids SQLite write conflicts on the shared curated chain. The
+    # per-night calibs then run with skip_curated=True.
+    first_night = all_nights[0]
+    log.info("Writing curated calibrations (one-time)...")
+    curated_log = _get_step_log_file("calibs", night="curated")
+    try:
+        calibs.write_curated_calibrations(first_night, config, log_file=curated_log)
+    except Exception as e:
+        log.warning(f"Curated calibrations write failed: {e}")
+
     if run_cfg.concurrent_nights > 1:
         log.info(
             f"Concurrent calibs: {len(all_nights)} nights, "
             f"max_workers={run_cfg.concurrent_nights}"
         )
-
-        # Write curated calibrations once before concurrent dispatch.
-        # This avoids SQLite write conflicts when multiple nights try to
-        # write defects/crosstalk to the shared <prefix>/calib/curated chain.
-        first_night = all_nights[0]
-        log.info("Writing curated calibrations (one-time)...")
-        curated_log = _get_step_log_file("calibs", night="curated")
-        try:
-            calibs.write_curated_calibrations(first_night, config, log_file=curated_log)
-        except Exception as e:
-            log.warning(f"Curated calibrations write failed: {e}")
 
         def _calibs_one(night: str) -> bool:
             log.info(f"Running calibrations for {night}...")
@@ -964,6 +967,7 @@ def _run_calibs_step(
                 jobs=run_cfg.jobs,
                 log_file=calib_log,
                 executor=executor,
+                skip_curated=True,
             )
             _maybe_split_log(calib_log)
             if not calib_result.success:

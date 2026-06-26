@@ -94,15 +94,26 @@ def night_to_day_obs(night: str, offset_days: int = 1) -> str:
     return (dt + timedelta(days=offset_days)).strftime("%Y%m%d")
 
 
-def isr_config_args(profile, label: str = "isr") -> list[str]:
+def isr_config_args(
+    profile, label: str = "isr", *, include_crosstalk: bool = True
+) -> list[str]:
     """Build ``pipetask --config`` args from the profile's ``isr_overrides``.
 
     The same overrides are applied to every ISR invocation — calib build
     (``cpBiasIsr``/``cpFlatIsr``) and science (``isr``) — by passing the task
     label, so e.g. parallel-overscan settings stay consistent between the master
     bias/flat and the science frames they correct.
+
+    When the profile declares ``crosstalk``, ``doCrosstalk=True`` is injected for
+    every ISR invocation (so the certified crosstalk calib corrects the master
+    bias/flat and the science frames alike). An explicit ``doCrosstalk`` in
+    ``isr_overrides`` wins and is not duplicated. Pass ``include_crosstalk=False``
+    for the crosstalk *measurement* ISR (``cpCrosstalkIsr``), which must not apply
+    crosstalk while measuring it.
     """
-    overrides = getattr(profile, "isr_overrides", None) or {}
+    overrides = dict(getattr(profile, "isr_overrides", None) or {})
+    if include_crosstalk and getattr(profile, "crosstalk", None) is not None:
+        overrides.setdefault("doCrosstalk", True)
     args: list[str] = []
     for key, value in overrides.items():
         args.extend(["--config", f"{label}:{key}={value}"])

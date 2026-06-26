@@ -49,6 +49,20 @@ class CollectionNames:
         return f"{self.prefix}/calib/curated"
 
     @property
+    def crosstalk_gen(self) -> str:
+        """RUN holding a freshly built/measured CrosstalkCalib (pre-certification)."""
+        return f"{self.prefix}/calib/crosstalk/gen/{self.run_ts}"
+
+    @property
+    def crosstalk_calib(self) -> str:
+        """CALIBRATION collection the crosstalk calib is certified into.
+
+        Chained into ``curated_chain`` so ISR resolves it as the ``crosstalk``
+        prerequisite input. Detector-scoped and timeless, so it carries no night.
+        """
+        return f"{self.prefix}/calib/crosstalk"
+
+    @property
     def calib_out(self) -> str:
         return f"{self.prefix}/calib/{self.night}"
 

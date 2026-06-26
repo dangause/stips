@@ -92,6 +92,28 @@ def write_curated_calibrations(
         )
         run_butler(["define-visits", repo, prof.name], config, log_file=log_file)
 
+    _write_curated_and_chain(night, config, cols, log_file=log_file)
+
+
+def _write_curated_and_chain(
+    night: str,
+    config: Config,
+    cols: CollectionNames,
+    *,
+    log_file: Path | None = None,
+) -> None:
+    """Write curated calibs (defects), build+certify declarative crosstalk, chain.
+
+    The curated chain is redefined to ``[crosstalk_calib, curated_run]`` when the
+    profile declares crosstalk (so ISR resolves the ``crosstalk`` prerequisite),
+    otherwise just ``[curated_run]``. Shared by ``write_curated_calibrations``
+    (orchestrator one-time) and standalone ``run_calibs``.
+    """
+    from stips.core.crosstalk import build_and_certify_crosstalk
+
+    prof = config.require_profile()
+    repo = str(config.repo)
+
     run_butler(
         [
             "write-curated-calibrations",
@@ -104,12 +126,21 @@ def write_curated_calibrations(
         config,
         log_file=log_file,
     )
+
+    curated_children = [cols.curated_run]
+    if prof.crosstalk is not None:
+        ct_result = build_and_certify_crosstalk(night, config, log_file=log_file)
+        if ct_result.success:
+            curated_children = [cols.crosstalk_calib, cols.curated_run]
+        else:
+            log.warning("Crosstalk calib not certified: %s", ct_result.error)
+
     run_butler(
         [
             "collection-chain",
             repo,
             cols.curated_chain,
-            cols.curated_run,
+            *curated_children,
             "--mode",
             "redefine",
         ],
@@ -211,30 +242,7 @@ def run(
 
         # Write curated calibrations (skip if already done by orchestrator)
         if not skip_curated:
-            run_butler(
-                [
-                    "write-curated-calibrations",
-                    repo,
-                    prof.name,
-                    cols.raw_run,
-                    "--collection",
-                    cols.curated_run,
-                ],
-                config,
-                log_file=log_file,
-            )
-            run_butler(
-                [
-                    "collection-chain",
-                    repo,
-                    cols.curated_chain,
-                    cols.curated_run,
-                    "--mode",
-                    "redefine",
-                ],
-                config,
-                log_file=log_file,
-            )
+            _write_curated_and_chain(night, config, cols, log_file=log_file)
 
         # Build bias
         qg_bias = config.repo / "qgraphs" / f"cp_bias_{night}_{cols.run_ts}.qg"
