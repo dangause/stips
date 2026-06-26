@@ -1,6 +1,6 @@
 # Starting a New Observing Campaign
 
-This guide walks you through setting up NPS for a new transient target (supernova, nova, or other variable source).
+This guide walks you through setting up STIPS for a new transient target (supernova, nova, or other variable source).
 
 ## Overview
 
@@ -74,7 +74,7 @@ env:
   STACK_DIR: "/path/to/lsst_stack"
 
   # Declarative instrument directory (instruments/<name>/)
-  INSTRUMENT_DIR: "/path/to/nickel_processing_suite/instruments/nickel"
+  INSTRUMENT_DIR: "/path/to/stips/instruments/nickel"
 
   # Parent directory containing YYYYMMDD/raw/ subdirectories
   RAW_PARENT_DIR: "/path/to/nickel/raw_data"
@@ -324,7 +324,7 @@ configs:
 env:
   REPO: "/data/nickel/2024abc_repo"
   STACK_DIR: "/opt/lsst/stack"
-  INSTRUMENT_DIR: "/home/user/nickel_processing_suite/instruments/nickel"
+  INSTRUMENT_DIR: "/home/user/stips/instruments/nickel"
   RAW_PARENT_DIR: "/data/nickel/raw"
   REFCAT_REPO: "/data/refcats"
 

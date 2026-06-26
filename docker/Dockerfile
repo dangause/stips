@@ -1,15 +1,15 @@
-# Nickel Processing Suite Docker Image
+# Small Telescope Image Processing Suite Docker Image
 # Based on official LSST Science Pipelines
 #
 # Build:
-#   docker build -t nps:latest -f docker/Dockerfile .
-#   docker build --build-arg LSST_TAG=v30_0_3 -t nps:v30 .
+#   docker build -t stips:latest -f docker/Dockerfile .
+#   docker build --build-arg LSST_TAG=v30_0_3 -t stips:v30 .
 #
 # Run:
 #   docker run -v /path/to/repo:/data/repo \
 #              -v /path/to/raw:/data/raw \
 #              -v /path/to/refcats:/data/refcats \
-#              nps:latest stips env
+#              stips:latest stips env
 
 # =============================================================================
 # Base Image: LSST Science Pipelines
@@ -25,18 +25,18 @@ ARG LSST_TAG=v30_0_3
 FROM ghcr.io/lsst/scipipe:al9-${LSST_TAG}
 
 # Set labels
-LABEL org.opencontainers.image.source="https://github.com/lick-observatory/nickel_processing_suite"
-LABEL org.opencontainers.image.description="Nickel Processing Suite for LSST Science Pipelines"
+LABEL org.opencontainers.image.source="https://github.com/dangause/stips"
+LABEL org.opencontainers.image.description="Small Telescope Image Processing Suite for LSST Science Pipelines"
 LABEL org.opencontainers.image.licenses="BSD-3-Clause"
 
 USER root
 
 # =============================================================================
-# Install NPS Packages
+# Install STIPS Packages
 # =============================================================================
 
-# Create NPS directory structure
-WORKDIR /opt/nps
+# Create STIPS directory structure
+WORKDIR /opt/stips
 
 # Copy package source code
 COPY packages/stips/ packages/stips/
@@ -45,8 +45,8 @@ COPY instruments/nickel/ instruments/nickel/
 COPY packages/obs_nickel_data/ packages/obs_nickel_data/
 
 # Copy scripts and BPS configs
-COPY scripts/ /opt/nps/scripts/
-COPY bps/ /opt/nps/bps/
+COPY scripts/ /opt/stips/scripts/
+COPY bps/ /opt/stips/bps/
 
 # Install Slurm client tools, munge, and utilities (for BPS job submission)
 RUN dnf install -y epel-release && \
@@ -62,23 +62,23 @@ COPY docker/slurm/slurm.conf /etc/slurm/slurm.conf
 # skips them to avoid touching LSST-managed packages
 RUN source /opt/lsst/software/stack/loadLSST.bash && \
     setup lsst_distrib && \
-    cd /opt/nps && \
+    cd /opt/stips && \
     pip install --no-deps -e packages/stips && \
     pip install --no-deps -e packages/obs_stips && \
     pip install fastapi "uvicorn[standard]" jinja2 sse-starlette && \
-    chmod +x /opt/nps/scripts/pipeline/*.sh 2>/dev/null || true
+    chmod +x /opt/stips/scripts/pipeline/*.sh 2>/dev/null || true
 
 # Copy entrypoint
-COPY docker/entrypoint.sh /opt/nps/docker/entrypoint.sh
-RUN chmod +x /opt/nps/docker/entrypoint.sh
+COPY docker/entrypoint.sh /opt/stips/docker/entrypoint.sh
+RUN chmod +x /opt/stips/docker/entrypoint.sh
 
-# Create nps-exec helper for `docker exec` commands
+# Create stips-exec helper for `docker exec` commands
 # (docker exec doesn't inherit entrypoint environment)
-RUN printf '#!/bin/bash\nsource /opt/lsst/software/stack/loadLSST.bash\nsetup lsst_distrib\nsetup -r /opt/nps/packages/obs_stips obs_stips 2>/dev/null || true\nif [ -d /opt/nps/packages/obs_nickel_data ]; then\n  setup -r /opt/nps/packages/obs_nickel_data obs_nickel_data 2>/dev/null || true\nfi\nexport REPO=/data/repo RAW_PARENT_DIR=/data/raw REFCAT_REPO=/data/refcats\nexport INSTRUMENT_DIR=/opt/nps/instruments/nickel\nexport STIPS_DEFAULTS=/opt/nps/packages/obs_stips/instrument_defaults\nexport STACK_DIR=/opt/lsst/software/stack\nexport KMP_AFFINITY=disabled\nexport NUMEXPR_MAX_THREADS=1\n# Copy munge key if available\nif [ -f /shared-munge/munge.key ] && [ ! -f /etc/munge/munge.key ]; then\n  cp /shared-munge/munge.key /etc/munge/munge.key\n  chown munge:munge /etc/munge/munge.key\n  chmod 400 /etc/munge/munge.key\nfi\n# Start munge if not running\nif ! pgrep -x munged >/dev/null 2>&1; then\n  runuser -u munge -- munged 2>/dev/null || true\nfi\nexec "$@"\n' > /usr/local/bin/nps-exec && \
-    chmod +x /usr/local/bin/nps-exec
+RUN printf '#!/bin/bash\nsource /opt/lsst/software/stack/loadLSST.bash\nsetup lsst_distrib\nsetup -r /opt/stips/packages/obs_stips obs_stips 2>/dev/null || true\nif [ -d /opt/stips/packages/obs_nickel_data ]; then\n  setup -r /opt/stips/packages/obs_nickel_data obs_nickel_data 2>/dev/null || true\nfi\nexport REPO=/data/repo RAW_PARENT_DIR=/data/raw REFCAT_REPO=/data/refcats\nexport INSTRUMENT_DIR=/opt/stips/instruments/nickel\nexport STIPS_DEFAULTS=/opt/stips/packages/obs_stips/instrument_defaults\nexport STACK_DIR=/opt/lsst/software/stack\nexport KMP_AFFINITY=disabled\nexport NUMEXPR_MAX_THREADS=1\n# Copy munge key if available\nif [ -f /shared-munge/munge.key ] && [ ! -f /etc/munge/munge.key ]; then\n  cp /shared-munge/munge.key /etc/munge/munge.key\n  chown munge:munge /etc/munge/munge.key\n  chmod 400 /etc/munge/munge.key\nfi\n# Start munge if not running\nif ! pgrep -x munged >/dev/null 2>&1; then\n  runuser -u munge -- munged 2>/dev/null || true\nfi\nexec "$@"\n' > /usr/local/bin/stips-exec && \
+    chmod +x /usr/local/bin/stips-exec
 
 # Create data directories (will be mount points)
-RUN mkdir -p /data/repo /data/raw /data/refcats /data/outputs /config /opt/nps/logs
+RUN mkdir -p /data/repo /data/raw /data/refcats /data/outputs /config /opt/stips/logs
 
 # Expose dashboard port
 EXPOSE 8080
@@ -86,10 +86,10 @@ EXPOSE 8080
 # =============================================================================
 # Environment Configuration
 # =============================================================================
-ENV NPS_ROOT=/opt/nps
-ENV INSTRUMENT_DIR=/opt/nps/instruments/nickel
-ENV STIPS_DEFAULTS=/opt/nps/packages/obs_stips/instrument_defaults
-ENV OBS_NICKEL_DATA=/opt/nps/packages/obs_nickel_data
+ENV STIPS_ROOT=/opt/stips
+ENV INSTRUMENT_DIR=/opt/stips/instruments/nickel
+ENV STIPS_DEFAULTS=/opt/stips/packages/obs_stips/instrument_defaults
+ENV OBS_NICKEL_DATA=/opt/stips/packages/obs_nickel_data
 ENV STACK_DIR=/opt/lsst/software/stack
 
 # Default data paths (override with -e or docker-compose)
@@ -107,5 +107,5 @@ HEALTHCHECK --interval=60s --timeout=10s --start-period=5s --retries=3 \
         python -c "import lsst.daf.butler; print('ok')" || exit 1
 
 # Entry point
-ENTRYPOINT ["/opt/nps/docker/entrypoint.sh"]
+ENTRYPOINT ["/opt/stips/docker/entrypoint.sh"]
 CMD ["stips", "--help"]

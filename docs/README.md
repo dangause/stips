@@ -1,6 +1,6 @@
-# Nickel Processing Suite Documentation
+# Small Telescope Image Processing Suite Documentation
 
-Welcome to the NPS documentation. This guide will help you understand, set up, and use NPS for processing Nickel telescope data.
+Welcome to the STIPS documentation. This guide will help you understand, set up, and use STIPS for processing Nickel telescope data.
 
 ## Quick Links
 
@@ -8,7 +8,7 @@ Welcome to the NPS documentation. This guide will help you understand, set up, a
 |--------------|-----------|
 | Get started quickly | [Getting Started](getting-started.md) |
 | Set up a new transient campaign | [New Campaign Guide](new-campaign.md) |
-| Understand how NPS works | [Architecture Overview](architecture.md) |
+| Understand how STIPS works | [Architecture Overview](architecture.md) |
 
 ## Documentation Map
 
@@ -34,7 +34,7 @@ docs/
 
 ### [Getting Started](getting-started.md)
 
-**Start here if you're new to NPS.**
+**Start here if you're new to STIPS.**
 
 - Prerequisites and installation
 - Running your first pipeline
@@ -43,7 +43,7 @@ docs/
 
 ### [New Campaign Guide](new-campaign.md)
 
-**Setting up NPS for a new transient target.**
+**Setting up STIPS for a new transient target.**
 
 - Gathering target information
 - Creating configuration files
@@ -52,7 +52,7 @@ docs/
 
 ### [Architecture Overview](architecture.md)
 
-**Understanding NPS internals.**
+**Understanding STIPS internals.**
 
 - Package structure
 - Data flow
@@ -117,7 +117,7 @@ stips -c config.yaml lightcurve --collections ...   # Extract light curve
 ### With Docker
 
 ```bash
-docker-compose run --rm nps stips -c config.yaml run
+docker-compose run --rm stips stips -c config.yaml run
 ```
 
 ### On HPC

@@ -1,6 +1,6 @@
-# Getting Started with NPS
+# Getting Started with STIPS
 
-This guide walks you through setting up the Nickel Processing Suite and running your first pipeline.
+This guide walks you through setting up the Small Telescope Image Processing Suite and running your first pipeline.
 
 ## Prerequisites
 
@@ -22,8 +22,8 @@ Before you begin, ensure you have:
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/lick-observatory/nickel_processing_suite.git
-cd nickel_processing_suite
+git clone https://github.com/dangause/stips.git
+cd stips
 ```
 
 ### 2. Install Dependencies
@@ -50,7 +50,7 @@ python -c "from lsst.daf.butler import Butler; print('OK')"
 
 ## Quick Start: Your First Pipeline
 
-The fastest way to run NPS is using a YAML configuration file.
+The fastest way to run STIPS is using a YAML configuration file.
 
 ### Option A: Use an Existing Campaign Config
 
@@ -71,7 +71,7 @@ Create a file `my_pipeline.yaml`:
 env:
   REPO: "/path/to/my/butler_repo"
   STACK_DIR: "/path/to/lsst_stack"
-  INSTRUMENT_DIR: "/path/to/nickel_processing_suite/instruments/nickel"
+  INSTRUMENT_DIR: "/path/to/stips/instruments/nickel"
   RAW_PARENT_DIR: "/path/to/raw/data"
   REFCAT_REPO: "/path/to/refcats"
 
@@ -116,7 +116,7 @@ stips -c my_pipeline.yaml run
 
 ## Understanding What Happens
 
-When you run `stips -c pipeline.yaml run`, NPS automatically:
+When you run `stips -c pipeline.yaml run`, STIPS automatically:
 
 1. **Bootstraps** the Butler repository (if it doesn't exist)
 2. **Ingests PS1 templates** for the specified bands
@@ -196,10 +196,10 @@ RAW_PARENT_DIR/
 
 ### "Bootstrap failed"
 
-Run from the nickel_processing_suite directory:
+Run from the stips directory:
 
 ```bash
-cd /path/to/nickel_processing_suite
+cd /path/to/stips
 stips -c my_pipeline.yaml bootstrap
 ```
 
@@ -215,7 +215,7 @@ stips science 20230519 --object 2023ixf --ra 210.91 --dec 54.32
 ## Next Steps
 
 - See [Starting a New Campaign](new-campaign.md) for new transient targets
-- Explore [Architecture Overview](architecture.md) to understand how NPS works
+- Explore [Architecture Overview](architecture.md) to understand how STIPS works
 
 ## Getting Help
 

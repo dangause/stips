@@ -1,4 +1,4 @@
-# Nickel Processing Suite - Custom Pipeline (Pre-built Quantum Graph)
+# Small Telescope Image Processing Suite - Custom Pipeline (Pre-built Quantum Graph)
 #
 # Used by BPSExecutor when submitting a pre-built quantum graph.
 # The qgraph was already built by the stage module (science.py, dia.py),

@@ -6,7 +6,7 @@ env:
   REPO: "/Users/dangause/Developer/lick/lsst/data/nickel/landolt_validation_repo"
   STACK_DIR: "/Users/dangause/Developer/lick/lsst/lsst_stack"
   RAW_PARENT_DIR: "/Users/dangause/Developer/lick/data"
-  INSTRUMENT_DIR: "/Users/dangause/Developer/lick/lsst/lsst_stack/stack/nickel_processing_suite/instruments/nickel"
+  INSTRUMENT_DIR: "/Users/dangause/Developer/lick/lsst/lsst_stack/stack/stips/instruments/nickel"
   REFCAT_REPO: "/Users/dangause/Developer/lick/lsst/lsst_stack/stack/refcats"
 
 object: "landolt_validation"

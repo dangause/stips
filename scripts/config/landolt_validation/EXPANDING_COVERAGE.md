@@ -51,7 +51,7 @@ This writes:
 
 ### 2. Dump shards on RSP
 
-On the RSP, clone the nickel_processing_suite repo (or just push the script +
+On the RSP, clone the stips repo (or just push the script +
 ID file), then:
 
 ```bash

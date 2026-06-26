@@ -98,7 +98,7 @@ if [[ ! -s "$MON_MAP" ]]; then
   log_info "Will build map: $MON_MAP"
   # If dir is read-only, redirect to temp
   if ! touch "$MON_DIR/.write_test" 2>/dev/null; then
-    INGEST_MAP="/tmp/nps_refcat_ecsv/filename_to_htm.ecsv"
+    INGEST_MAP="/tmp/stips_refcat_ecsv/filename_to_htm.ecsv"
     mkdir -p "$(dirname "$INGEST_MAP")"
     log_info "Refcat dir is read-only; writing ECSV to $INGEST_MAP"
   else
@@ -117,7 +117,7 @@ else
       log_warn "ECSV contains stale paths (e.g. $FIRST_PATH); rebuilding for current environment"
       # If original ECSV dir is read-only (mounted volume), write to temp
       if ! touch "$MON_DIR/.write_test" 2>/dev/null; then
-        INGEST_MAP="/tmp/nps_refcat_ecsv/filename_to_htm.ecsv"
+        INGEST_MAP="/tmp/stips_refcat_ecsv/filename_to_htm.ecsv"
         mkdir -p "$(dirname "$INGEST_MAP")"
         log_info "Refcat dir is read-only; writing corrected ECSV to $INGEST_MAP"
       else

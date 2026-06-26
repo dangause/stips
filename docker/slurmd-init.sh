@@ -1,5 +1,5 @@
 #!/bin/bash
-# Compute node init script for NPS Slurm cluster.
+# Compute node init script for STIPS Slurm cluster.
 #
 # Sets up munge key and waits for slurmctld, then hands off to systemd
 # which manages munge + slurmd with proper cgroup v2 scope creation.

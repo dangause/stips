@@ -1,54 +1,54 @@
-# Nickel Processing Suite - Singularity/Apptainer Definition
+# Small Telescope Image Processing Suite - Singularity/Apptainer Definition
 #
 # For HPC environments that require Singularity instead of Docker.
 #
 # Build from Docker image:
 #   # First build Docker image
-#   docker build -t nps:latest -f docker/Dockerfile .
+#   docker build -t stips:latest -f docker/Dockerfile .
 #
 #   # Convert to Singularity (requires docker2singularity or newer Singularity)
-#   singularity build nps.sif docker-daemon://nps:latest
+#   singularity build stips.sif docker-daemon://stips:latest
 #
 # Build directly (if Singularity can access container registry):
-#   singularity build nps.sif docker://ghcr.io/lick-observatory/nps:latest
+#   singularity build stips.sif docker://ghcr.io/lick-observatory/stips:latest
 #
 # Usage:
 #   singularity run -B /path/to/repo:/data/repo \
 #                   -B /path/to/raw:/data/raw \
 #                   -B /path/to/refcats:/data/refcats \
-#                   nps.sif stips calibs 20230519
+#                   stips.sif stips calibs 20230519
 
 Bootstrap: docker
-From: nps:latest
+From: stips:latest
 
 %labels
-    Author Nickel Processing Suite Team
-    Description Nickel Processing Suite for LSST Science Pipelines on HPC
+    Author Small Telescope Image Processing Suite Team
+    Description Small Telescope Image Processing Suite for LSST Science Pipelines on HPC
     Version 1.0.0
-    URL https://github.com/lick-observatory/nickel_processing_suite
+    URL https://github.com/dangause/stips
 
 %help
-    Nickel Processing Suite (NPS) Container
+    Small Telescope Image Processing Suite (STIPS) Container
     ========================================
 
-    This container provides the Nickel Processing Suite for processing
+    This container provides the Small Telescope Image Processing Suite for processing
     data from the Nickel 1-meter telescope using LSST Science Pipelines.
 
     USAGE:
         # Run calibrations
-        singularity run nps.sif stips calibs 20230519
+        singularity run stips.sif stips calibs 20230519
 
         # Run science processing
-        singularity run nps.sif stips science 20230519
+        singularity run stips.sif stips science 20230519
 
         # Run difference imaging
-        singularity run nps.sif stips dia 20230519 --auto --band r
+        singularity run stips.sif stips dia 20230519 --auto --band r
 
         # Interactive shell
-        singularity shell nps.sif
+        singularity shell stips.sif
 
         # Direct pipetask access
-        singularity exec nps.sif pipetask run -b /data/repo ...
+        singularity exec stips.sif pipetask run -b /data/repo ...
 
     REQUIRED BIND MOUNTS:
         -B /path/to/butler/repo:/data/repo      Butler repository
@@ -63,34 +63,34 @@ From: nps:latest
         REPO=/data/repo
         RAW_PARENT_DIR=/data/raw
         REFCAT_REPO=/data/refcats
-        NPS_PROFILE=<profile>                   Load .env.<profile> from /config
+        STIPS_PROFILE=<profile>                   Load .env.<profile> from /config
 
     EXAMPLES:
         # Basic processing
         singularity run -B /scratch/repo:/data/repo \
                         -B /archive/raw:/data/raw \
                         -B /common/refcats:/data/refcats \
-                        nps.sif stips calibs 20230519
+                        stips.sif stips calibs 20230519
 
         # With profile configuration
         singularity run -B /scratch/repo:/data/repo \
                         -B /archive/raw:/data/raw \
                         -B /common/refcats:/data/refcats \
                         -B ./config:/config \
-                        --env NPS_PROFILE=2023ixf \
-                        nps.sif stips dia 20230519 --auto
+                        --env STIPS_PROFILE=2023ixf \
+                        stips.sif stips dia 20230519 --auto
 
         # BPS submission (local testing)
         singularity run -B ... \
-                        nps.sif stips bps submit science 20230519 --site local
+                        stips.sif stips bps submit science 20230519 --site local
 
 %environment
     # Standard environment variables
     export STACK_DIR=/opt/lsst/software/stack
-    export INSTRUMENT_DIR=/opt/nps/instruments/nickel
-    export STIPS_DEFAULTS=/opt/nps/packages/obs_stips/instrument_defaults
-    export OBS_NICKEL_DATA=/opt/nps/packages/obs_nickel_data
-    export NPS_ROOT=/opt/nps
+    export INSTRUMENT_DIR=/opt/stips/instruments/nickel
+    export STIPS_DEFAULTS=/opt/stips/packages/obs_stips/instrument_defaults
+    export OBS_NICKEL_DATA=/opt/stips/packages/obs_nickel_data
+    export STIPS_ROOT=/opt/stips
 
     # Default data paths (can be overridden with --env)
     export REPO=/data/repo
@@ -103,15 +103,15 @@ From: nps:latest
 
 %runscript
     # Execute the entrypoint script with passed arguments
-    exec /opt/nps/docker/entrypoint.sh "$@"
+    exec /opt/stips/docker/entrypoint.sh "$@"
 
 %startscript
     # For Singularity instances
-    exec /opt/nps/docker/entrypoint.sh "$@"
+    exec /opt/stips/docker/entrypoint.sh "$@"
 
 %test
     # Basic sanity checks during build
-    echo "Testing NPS container..."
+    echo "Testing STIPS container..."
 
     # Check that LSST stack is present
     if [ ! -f "${STACK_DIR}/loadLSST.bash" ]; then

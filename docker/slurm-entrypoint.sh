@@ -1,5 +1,5 @@
 #!/bin/bash
-# Slurm service entrypoint for NPS test cluster.
+# Slurm service entrypoint for STIPS test cluster.
 #
 # Starts munge authentication, then runs the requested Slurm daemon.
 # CMD determines which daemon: slurmctld, slurmd, or slurmdbd.

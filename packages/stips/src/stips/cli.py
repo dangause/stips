@@ -1714,7 +1714,7 @@ def dashboard(
         _print_info("Use --logs-dir to specify the logs directory")
         sys.exit(1)
 
-    _print_info("Starting NPS Dashboard...")
+    _print_info("Starting STIPS Dashboard...")
     _print_info(f"  Logs: {logs_dir}")
     _print_info(f"  URL:  http://{host}:{port}")
 
