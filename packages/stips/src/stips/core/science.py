@@ -21,6 +21,7 @@ from stips.core.pipeline import (
     read_log_delta,
     validate_night,
 )
+from stips.core.refcat import refcat_overlay_config
 from stips.core.stack import (
     run_butler,
     run_butler_query,
@@ -69,6 +70,10 @@ class ScienceConfig:
 
     # Fallback configs to try if primary fails
     calibrate_image_fallbacks: list[Path] = field(default_factory=list)
+
+    # Reference-catalog mode; "gaia_ps1" applies the Gaia/PS1 overlay on top of
+    # the tuned calibrateImage config. "monster" uses the DRP.yaml default.
+    refcat_mode: str = "monster"
 
     @classmethod
     def default(cls, config: "Config") -> "ScienceConfig":
@@ -474,6 +479,19 @@ def run(
         )
 
         try:
+            # calibrateImage config-file chain: tuned config, then (optionally)
+            # the Gaia/PS1 refcat overlay, then color terms. Order keeps color
+            # terms last so they see the final photometry_ref_cat.
+            config_file_args = ["--config-file", f"calibrateImage:{tuned_config}"]
+            overlay_name = refcat_overlay_config(science_cfg.refcat_mode)
+            if overlay_name:
+                overlay_path = config.resolve_config(overlay_name)
+                config_file_args += [
+                    "--config-file",
+                    f"calibrateImage:{overlay_path}",
+                ]
+            config_file_args += ["--config-file", f"calibrateImage:{colorterms_config}"]
+
             # Build qgraph arguments
             qgraph_args = [
                 "qgraph",
@@ -489,10 +507,7 @@ def run(
                 output_run,
                 "--save-qgraph",
                 str(qg_science),
-                "--config-file",
-                f"calibrateImage:{tuned_config}",
-                "--config-file",
-                f"calibrateImage:{colorterms_config}",
+                *config_file_args,
                 "-d",
                 data_query,
             ]

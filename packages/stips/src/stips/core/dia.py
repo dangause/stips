@@ -49,21 +49,55 @@ class DIAResult:
     error: str | None = None
 
 
+def _collection_exists(config: Config, name: str) -> bool:
+    """True if a template collection with the exact name exists."""
+    result = run_butler_query(
+        ["query-collections", str(config.repo), name], config, check=False
+    )
+    if result.returncode != 0:
+        return False
+    return name in parse_butler_query_output(result.stdout, prefix_filter="templates/")
+
+
+def _find_coadd_template(config: Config, band: str | None) -> str | None:
+    """First Nickel coadd template collection matching ``band`` (or None)."""
+    result = run_butler_query(
+        ["query-collections", str(config.repo), "templates/deep/*/*"],
+        config,
+        check=False,
+    )
+    if result.returncode != 0:
+        return None
+    candidates = parse_butler_query_output(result.stdout, prefix_filter="templates/")
+    if band:
+        candidates = [c for c in candidates if c.endswith(f"/{band}")]
+    return candidates[0] if candidates else None
+
+
 def find_template(
     config: Config,
     band: str | None = None,
     prefer_ps1: bool = False,
+    strategy: str | None = None,
 ) -> str | None:
     """Auto-discover the best template collection.
 
     Args:
         config: Pipeline configuration
         band: Filter by band (b/v/r/i)
-        prefer_ps1: Prefer PS1 templates over internal
+        prefer_ps1: Prefer PS1 templates over internal (legacy flag)
+        strategy: "auto" picks per band — PS1 for r/i (if ingested), coadd for
+            b/v. None/"ps1"/"coadd" use the legacy preference-based discovery.
 
     Returns:
         Template collection name, or None if not found
     """
+    # Per-band auto: PS1 for r/i when available, Nickel coadd for b/v.
+    if strategy == "auto":
+        if band in ("r", "i") and _collection_exists(config, f"templates/ps1/{band}"):
+            return f"templates/ps1/{band}"
+        return _find_coadd_template(config, band)
+
     repo = str(config.repo)
 
     # Query PS1 and coadd templates with targeted glob patterns

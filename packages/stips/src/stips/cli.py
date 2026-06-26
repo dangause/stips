@@ -1379,6 +1379,82 @@ def run_pipeline(
 
 
 # =============================================================================
+# refcat - On-demand Gaia/PS1 reference catalogs (no RSP/MONSTER)
+# =============================================================================
+
+
+@cli.group()
+@click.pass_context
+def refcat(ctx: click.Context) -> None:
+    """Fetch and inspect Gaia DR3 + PS1 DR2 reference catalogs on demand.
+
+    \b
+    Example:
+        stips -c config.yaml refcat fetch --ra 210.91 --dec 54.31
+        stips -c config.yaml refcat status --ra 210.91 --dec 54.31
+    """
+    pass
+
+
+@refcat.command("fetch")
+@click.option("--ra", type=float, required=True, help="Target RA (degrees)")
+@click.option("--dec", type=float, required=True, help="Target Dec (degrees)")
+@click.option(
+    "--radius", "radius_deg", type=float, default=0.3, help="Cone radius (deg)"
+)
+@click.option(
+    "--mode",
+    default="gaia_ps1",
+    type=click.Choice(["gaia_ps1", "monster"]),
+    help="Refcat mode (default: gaia_ps1)",
+)
+@click.option("--force", is_flag=True, help="Re-fetch even if coverage exists")
+@click.pass_context
+def refcat_fetch(
+    ctx: click.Context,
+    ra: float,
+    dec: float,
+    radius_deg: float,
+    mode: str,
+    force: bool,
+) -> None:
+    """Ensure Gaia/PS1 refcats cover a target cone (fetch+convert+ingest)."""
+    from stips.core import refcat as refcat_mod
+
+    config = _load_config(ctx)
+    result = refcat_mod.ensure_refcats(
+        config, ra, dec, radius_deg=radius_deg, mode=mode, force=force
+    )
+    click.echo(
+        f"Refcat ({result.mode}): gaia={result.gaia_status}, "
+        f"ps1={result.ps1_status}, trixels={result.needed_trixels}"
+    )
+    if result.collections:
+        click.echo("Ingested: " + ", ".join(result.collections))
+    if result.error:
+        click.echo(f"Issues: {result.error}")
+
+
+@refcat.command("status")
+@click.option("--ra", type=float, required=True, help="Target RA (degrees)")
+@click.option("--dec", type=float, required=True, help="Target Dec (degrees)")
+@click.option(
+    "--radius", "radius_deg", type=float, default=0.3, help="Cone radius (deg)"
+)
+@click.pass_context
+def refcat_status(ctx: click.Context, ra: float, dec: float, radius_deg: float) -> None:
+    """Report Gaia/PS1 coverage for a target cone without fetching."""
+    from stips.core import refcat as refcat_mod
+
+    config = _load_config(ctx)
+    needed = set(refcat_mod.cones_to_htm([(ra, dec, radius_deg)], depth=7))
+    for name in (refcat_mod.GAIA_DATASET, refcat_mod.PS1_DATASET):
+        present = refcat_mod.present_trixels(config, name)
+        have = len(needed & present)
+        click.echo(f"{name}: {have}/{len(needed)} trixels present")
+
+
+# =============================================================================
 # bps - Batch Processing Service integration
 # =============================================================================
 

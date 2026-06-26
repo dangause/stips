@@ -41,12 +41,21 @@ dec: 54.311694
 # Bands to process (PS1 templates only support r/i)
 bands: ["r", "i"]
 
+# Reference catalogs (astrometry + photometry).
+# Opt into automated, on-demand Gaia DR3 (astrometry) + PS1 DR2 (photometry) —
+# no RSP / MONSTER. Omitting this block (or mode: monster) keeps the legacy
+# MONSTER path. ensure_refcats fetches exactly the cone it needs, idempotently.
+refcat:
+  mode: gaia_ps1        # gaia_ps1 | monster
+  radius_deg: 0.3       # cone radius (deg) fetched around the target
+
 # Template configuration
 # NOTE: PS1 native seeing is ~1", Nickel typical seeing is 1.5-3".
 # Don't pre-degrade PS1 - let the AL kernel handle PSF matching during subtraction.
 # The subtractImages_ps1.py config uses mode=convolveTemplate to convolve PS1 to match Nickel.
+# type: auto selects PS1 for r/i and Nickel coadd for b/v automatically.
 template:
-  type: ps1
+  type: auto
   size: 0.4            # Cutout size in degrees (24 arcmin; extra margin for pointing drift)
 
 # Science nights - SN observations from discovery through 2024

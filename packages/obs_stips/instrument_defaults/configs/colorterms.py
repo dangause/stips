@@ -2,34 +2,42 @@
 from lsst.pipe.tasks.colorterms import Colorterm, ColortermDict
 
 config.data = {
-    "panstarrs1*": ColortermDict(
+    # PS1 -> Nickel B/V/R/I color terms. Empirically fit against Landolt standard
+    # stars (2026-06-25, 10 stars from scripts/config/landolt_validation), replacing
+    # the original synthetic fit. The synthetic I slope (c1=1.032) was badly wrong;
+    # the Landolt fit (c1=0.352) cut I-band residual RMS 3x (0.22 -> 0.08 mag), and
+    # its zeropoint c0=-0.379 independently matches Tonry+2012 I_C - i_P1 = -0.366.
+    # c0 is absorbed by the per-visit photometric zeropoint in calibrateImage; the
+    # c1 (color) slope is what removes color-dependent systematics. Refit with more
+    # Landolt nights/fields to tighten further.
+    "ps1*": ColortermDict(
         data={
             "B": Colorterm(
                 primary="gMeanPSFMag",
                 secondary="rMeanPSFMag",
-                c0=0.0,
-                c1=0.617608,
+                c0=0.215,
+                c1=0.589,
                 c2=0.0,
             ),
             "V": Colorterm(
                 primary="gMeanPSFMag",
                 secondary="rMeanPSFMag",
-                c0=0.0,
-                c1=-0.428548,
+                c0=-0.011,
+                c1=-0.540,
                 c2=0.0,
             ),
             "R": Colorterm(
                 primary="rMeanPSFMag",
                 secondary="iMeanPSFMag",
-                c0=0.0,
-                c1=-0.129111,
+                c0=-0.180,
+                c1=-0.243,
                 c2=0.0,
             ),
             "I": Colorterm(
                 primary="iMeanPSFMag",
                 secondary="rMeanPSFMag",
-                c0=0.0,
-                c1=1.031936,
+                c0=-0.379,
+                c1=0.352,
                 c2=0.0,
             ),
         }

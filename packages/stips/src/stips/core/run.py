@@ -75,12 +75,19 @@ from typing import TYPE_CHECKING
 
 import yaml
 
+from stips.core.refcat import ensure_refcats
+
 if TYPE_CHECKING:
     from stips.core.config import Config
     from stips.core.lightcurve import LightcurveConfig
     from stips.core.science import ScienceConfig
 
 log = logging.getLogger(__name__)
+
+# Staging default: "monster" preserves legacy behavior until Gaia/PS1 is
+# validated (see docs/refcat-validation-runbook.md). Single source of truth for
+# both the RunConfig field default and the from_yaml fallback.
+DEFAULT_REFCAT_MODE = "monster"
 
 
 def _generate_run_id() -> str:
@@ -192,6 +199,7 @@ def _split_step_logs(run_log_dir: Path) -> None:
                                   exp86203012.log
     """
     step_dirs = [
+        "refcat",
         "calibs",
         "science",
         "dia",
@@ -350,11 +358,20 @@ class RunConfig:
     nights: list[str] = field(default_factory=list)
 
     # Template configuration
-    template_type: str = "ps1"  # "ps1" or "coadd"
+    template_type: str = "ps1"  # "ps1" | "coadd" | "auto"
     template_degrade_seeing: float | None = None
     template_size: float = 0.3  # PS1 cutout size in degrees (default: 0.3)
     template_unity_photocalib: bool = False  # Force PhotoCalib=1.0 for PS1 templates
     template_nights: list[str] = field(default_factory=list)
+
+    # Reference catalog configuration.
+    # STAGING DEFAULT is "monster" so default runs behave exactly as before
+    # (no on-demand fetch; science uses the MONSTER refcat baked into DRP.yaml).
+    # Opt into the new path with `refcat: {mode: gaia_ps1}`. After validation on
+    # real data, flip this default to "gaia_ps1" (see docs/refcat-validation-runbook).
+    refcat_mode: str = DEFAULT_REFCAT_MODE  # "monster" | "gaia_ps1"
+    refcat_radius_deg: float = 0.3  # cone radius for on-demand fetch
+    refcat_gaia_quality: dict | None = None  # optional Gaia quality cuts
 
     # Pipeline config files
     science_configs: ScienceConfigs = field(default_factory=ScienceConfigs)
@@ -416,6 +433,13 @@ class RunConfig:
         template_unity_photocalib = template.get("unity_photocalib", False)
         # Convert template nights to strings (YAML parses 20230519 as int)
         template_nights = [str(n) for n in template.get("nights", [])]
+
+        # Extract refcat config (on-demand Gaia/PS1; absent section => defaults).
+        # Staging default "monster" keeps behavior unchanged until validated.
+        refcat = data.get("refcat", {})
+        refcat_mode = refcat.get("mode", DEFAULT_REFCAT_MODE)
+        refcat_radius_deg = float(refcat.get("radius_deg", 0.3))
+        refcat_gaia_quality = refcat.get("gaia_quality")
 
         # Extract options
         options = data.get("options", {})
@@ -494,6 +518,9 @@ class RunConfig:
             template_size=template_size,
             template_unity_photocalib=template_unity_photocalib,
             template_nights=template_nights,
+            refcat_mode=refcat_mode,
+            refcat_radius_deg=refcat_radius_deg,
+            refcat_gaia_quality=refcat_gaia_quality,
             science_configs=science_configs,
             dia_configs=dia_configs,
             coadd_configs=coadd_configs,
@@ -643,11 +670,12 @@ def _run_ps1_templates(
     config: Config,
     result: RunResult,
     dry_run: bool,
+    bands: list[str] | None = None,
 ) -> None:
-    """Ingest PS1 templates for each band."""
+    """Ingest PS1 templates for each band (defaults to all configured bands)."""
     from stips.core import ps1_template
 
-    for band in run_cfg.bands:
+    for band in bands if bands is not None else run_cfg.bands:
         if band not in ("r", "i"):
             log.warning(f"PS1 templates not available for band {band}, skipping")
             continue
@@ -684,12 +712,15 @@ def _run_coadd_templates(
     result: RunResult,
     science_cfg: "ScienceConfig",
     dry_run: bool,
+    bands: list[str] | None = None,
 ) -> RunResult | None:
     """Build coadd templates: process template nights, then coadd per band.
 
+    ``bands`` restricts which bands get coadded (defaults to all configured).
     Returns a RunResult early-exit if continue_on_error is False and a step fails,
     or None to continue normally.
     """
+    coadd_bands = bands if bands is not None else run_cfg.bands
     from stips.core import calibs, coadd, science
 
     if not run_cfg.template_nights:
@@ -773,7 +804,7 @@ def _run_coadd_templates(
     elif force_rebuild_templates:
         log.info("rebuild_templates=true — forcing template rebuild")
 
-    for band in run_cfg.bands:
+    for band in coadd_bands:
         log.info(f"Building coadd template for {band}-band...")
 
         if not dry_run:
@@ -806,6 +837,38 @@ def _run_coadd_templates(
             )
             result.template_collections[band] = f"templates/deep/tract0/{band}"
 
+    return None
+
+
+def _run_auto_templates(
+    run_cfg: RunConfig,
+    config: Config,
+    result: RunResult,
+    science_cfg: "ScienceConfig",
+    dry_run: bool,
+) -> RunResult | None:
+    """Auto template strategy: PS1 for r/i, Nickel coadd for b/v.
+
+    Returns a RunResult early-exit on coadd failure (when continue_on_error is
+    False), else None.
+    """
+    ri = [b for b in run_cfg.bands if b in ("r", "i")]
+    bv = [b for b in run_cfg.bands if b not in ("r", "i")]
+    if ri:
+        _run_ps1_templates(run_cfg, config, result, dry_run, bands=ri)
+    if bv:
+        if not run_cfg.template_nights:
+            log.warning(
+                "Auto templates: bands %s need coadd templates but no "
+                "template.nights configured — skipping their templates.",
+                ", ".join(bv),
+            )
+        else:
+            early_exit = _run_coadd_templates(
+                run_cfg, config, result, science_cfg, dry_run, bands=bv
+            )
+            if early_exit is not None:
+                return early_exit
     return None
 
 
@@ -1768,6 +1831,41 @@ def _discover_dia_collections(
     return verified
 
 
+def _run_refcat_step(run_cfg, config, result, dry_run):
+    """Ensure Gaia/PS1 refcats cover the target before science/templates.
+
+    On-demand and idempotent: a no-op when coverage already exists or when
+    ``refcat_mode == "monster"``. Requires a target RA/Dec.
+    """
+    if run_cfg.ra is None or run_cfg.dec is None:
+        return None
+    if dry_run:
+        log.info(
+            "[DRY RUN] Would ensure refcats (mode=%s, radius=%.3f deg)",
+            run_cfg.refcat_mode,
+            run_cfg.refcat_radius_deg,
+        )
+        return None
+
+    refcat_result = ensure_refcats(
+        config,
+        run_cfg.ra,
+        run_cfg.dec,
+        radius_deg=run_cfg.refcat_radius_deg,
+        mode=run_cfg.refcat_mode,
+        gaia_quality=run_cfg.refcat_gaia_quality,
+    )
+    log.info(
+        "Refcat (%s): gaia=%s, ps1=%s",
+        refcat_result.mode,
+        refcat_result.gaia_status,
+        refcat_result.ps1_status,
+    )
+    if refcat_result.error:
+        log.warning("Refcat issues: %s", refcat_result.error)
+    return refcat_result
+
+
 def run(
     config_file: Path,
     config: Config,
@@ -1837,6 +1935,7 @@ def run(
 
     # Build ScienceConfig from YAML paths
     science_cfg = ScienceConfig.default(config)
+    science_cfg.refcat_mode = run_cfg.refcat_mode
     if run_cfg.science_configs.calibrate_image:
         science_cfg.calibrate_image = config.resolve_config(
             run_cfg.science_configs.calibrate_image
@@ -1866,6 +1965,10 @@ def run(
     if dry_run:
         log.info("[DRY RUN] Commands would be executed:")
 
+    # Step 0b: Ensure reference catalogs (on-demand Gaia/PS1; no RSP/MONSTER).
+    # Runs before templates because coadd templates also consume refcats.
+    _run_refcat_step(run_cfg, config, result, dry_run)
+
     # Step 1: Templates per band
     if run_cfg.template_type == "ps1":
         _run_ps1_templates(run_cfg, config, result, dry_run)
@@ -1874,6 +1977,12 @@ def run(
         early_exit = _run_coadd_templates(run_cfg, config, result, science_cfg, dry_run)
         if early_exit is not None:
             log.error(f"Coadd template build failed: {early_exit.error}")
+            return early_exit
+        _log_template_summary(run_cfg, result)
+    elif run_cfg.template_type == "auto":
+        early_exit = _run_auto_templates(run_cfg, config, result, science_cfg, dry_run)
+        if early_exit is not None:
+            log.error(f"Auto template build failed: {early_exit.error}")
             return early_exit
         _log_template_summary(run_cfg, result)
 
