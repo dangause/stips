@@ -337,6 +337,8 @@ class CoaddConfigs:
     """Coadd template building configuration paths."""
 
     make_direct_warp: str | None = None
+    select_template_coadd_visits: str | None = None
+    select_deep_coadd_visits: str | None = None
 
 
 @dataclass
@@ -460,6 +462,10 @@ class RunConfig:
         coadd_cfg_data = configs.get("coadd", {})
         coadd_configs = CoaddConfigs(
             make_direct_warp=coadd_cfg_data.get("make_direct_warp"),
+            select_template_coadd_visits=coadd_cfg_data.get(
+                "select_template_coadd_visits"
+            ),
+            select_deep_coadd_visits=coadd_cfg_data.get("select_deep_coadd_visits"),
         )
 
         # Apply pipeline_type defaults
