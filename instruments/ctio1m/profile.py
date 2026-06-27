@@ -131,7 +131,11 @@ profile = InstrumentProfile(
 # see _day_obs); the local night is recovered via night_to_dayobs_offset_days=1.
 # ---------------------------------------------------------------------------
 
-_SEQNUM_RE = re.compile(r"y\d{6}\.(\d+)\.fits", re.IGNORECASE)
+# Y4KCam raw filename: ``y{YYMMDD}.{seqnum}.fits``. YYMMDD is the LOCAL observing
+# night; the seqnum resets each local night. So (local-night, seqnum) is the
+# natural globally-unique exposure key (see _filename_fields / exposure_id) — it
+# must NOT be derived from the UT day, which collides across consecutive nights.
+_FILENAME_RE = re.compile(r"y(\d{6})\.(\d+)\.fits", re.IGNORECASE)
 
 
 def _datetime_begin(header):
@@ -161,22 +165,33 @@ def _datetime_end(header):
     return begin
 
 
-def _seqnum(header):
-    """Parse the exposure sequence number from the filename keyword.
+def _filename_fields(header):
+    """Parse ``(local_night: int YYYYMMDD, seqnum: int)`` from the raw filename.
 
-    The Y4KCam filename pattern is ``yYYMMDD.NNNN.fits`` (NNNN = sequence
-    number); the header may carry it as FILENAME/DTACQNAM/ORIGNAME.
+    The Y4KCam filename ``y{YYMMDD}.{NNNN}.fits`` is carried in
+    FILENAME/DTACQNAM/ORIGNAME. YY is a 20xx year (Y4KCam operated 2003-2013).
+    The local night + per-night seqnum form the natural unique exposure key.
     """
     for key in ("FILENAME", "DTACQNAM", "ORIGNAME"):
         value = header.get(key)
         if not value:
             continue
-        m = _SEQNUM_RE.search(str(value))
+        m = _FILENAME_RE.search(str(value))
         if m:
-            return int(m.group(1))
+            return int("20" + m.group(1)), int(m.group(2))
     raise ValueError(
-        "Could not parse exposure sequence number from FILENAME/DTACQNAM/ORIGNAME"
+        "Could not parse y{YYMMDD}.{seqnum}.fits from FILENAME/DTACQNAM/ORIGNAME"
     )
+
+
+def _seqnum(header):
+    """Exposure sequence number (resets each local night)."""
+    return _filename_fields(header)[1]
+
+
+def _local_night(header):
+    """Local observing-night date as a YYYYMMDD int, parsed from the filename."""
+    return _filename_fields(header)[0]
 
 
 def _day_obs(header):
@@ -190,13 +205,6 @@ def _day_obs(header):
     would disagree with the UT-based convention and break the offset mapping.
     """
     return int(_datetime_end(header).datetime.strftime("%Y%m%d"))
-
-
-# Epoch used for the 31-bit-safe exposure_id (days since 2000-01-01).
-def _epoch0():
-    import astropy.time
-
-    return astropy.time.Time("2000-01-01T00:00:00", scale="utc")
 
 
 # ---------------------------------------------------------------------------
@@ -234,14 +242,22 @@ def observation_type(header):
 def exposure_id(header):
     """Unique exposure/visit ID that fits in 31 bits.
 
-    ID = (days_since_2000 * 10000) + seqnum
+    ID = (days_since_2000 of the LOCAL night) * 10000 + seqnum
 
-    Mirrors the Nickel scheme: a full YYYYMMDD date * 10000 overflows 31 bits,
-    so days-since-2000 (the end-of-exposure UTC day) is used as the date term.
+    The date term is the LOCAL observing night (from the y{YYMMDD} filename), NOT
+    the UT day: a full YYYYMMDD * 10000 overflows 31 bits, so days-since-2000 is
+    used. Keying on the UT day (end-of-exposure) collides across consecutive
+    nights — at CTIO's -70deg longitude a local night straddles UT midnight and
+    the seqnum resets each local night, so the late frames of night N and the
+    early frames of night N+1 share a UT day + reset seqnum and map to the same
+    id (Butler exposure-sync conflict on ingest). (local-night, seqnum) is unique.
+    day_obs stays UT-based (see day_obs) for to_observing_day consistency.
     """
-    seqnum = _seqnum(header)
-    t = _datetime_end(header)
-    days = int((t - _epoch0()).to_value("day"))
+    import datetime as _dt
+
+    night, seqnum = _filename_fields(header)
+    d = _dt.date(night // 10000, (night // 100) % 100, night % 100)
+    days = (d - _dt.date(2000, 1, 1)).days
     exp_id = days * 10000 + seqnum
     if exp_id >= 2**31:
         raise ValueError(f"exposure_id {exp_id} is out of 31-bit range")
@@ -273,8 +289,13 @@ def day_obs(header):
 
 @hook(profile)
 def observation_id(header):
-    """String ID that must be globally unique for the instrument."""
-    return f"{_day_obs(header):08d}_{_seqnum(header)}"
+    """String ID that must be globally unique for the instrument.
+
+    Keyed on the LOCAL night + seqnum (from the filename), NOT the UT day_obs,
+    for the same cross-night collision reason as exposure_id.
+    """
+    night, seqnum = _filename_fields(header)
+    return f"{night:08d}_{seqnum}"
 
 
 @hook(profile)
