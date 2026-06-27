@@ -39,9 +39,13 @@ profile = InstrumentProfile(
         elevation=2200.0,
         name="Cerro Tololo Interamerican Observatory",
     ),
-    # physical_filter -> band
+    # physical_filter -> band. "U+CuSO4" is Y4KCam's near-UV filter (U glass +
+    # CuSO4 red-leak block); it maps to band u. It must be present or bias frames
+    # parked at that wheel slot raise in unknown_filter and fail to ingest (a night
+    # whose biases are all U+CuSO4 then has zero ingestable biases — real: 20100120).
     filters={
         "U": "u",
+        "U+CuSO4": "u",
         "B": "b",
         "V": "v",
         "R": "r",
@@ -50,6 +54,7 @@ profile = InstrumentProfile(
     # raw FITS FILTERID value (upper-cased on lookup) -> physical_filter
     filter_aliases={
         "U": "U",
+        "U+CuSO4": "U+CuSO4",
         "B": "B",
         "V": "V",
         "R": "R",
