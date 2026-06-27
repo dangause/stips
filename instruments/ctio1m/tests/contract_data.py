@@ -42,14 +42,19 @@ SAMPLE_HEADER = {
 SAMPLE_HEADER_SEQ_PLUS_ONE = dict(SAMPLE_HEADER, FILENAME="y110610.0043.fits")
 
 # Sequence number (parsed from FILENAME) encoded in the low 4 digits of
-# exposure_id.
+# exposure_id. The seqnum resets each LOCAL night; (local-night, seqnum) is the
+# unique key -- see the exposure_id hook.
 EXPECTED_SEQ = 42
 
 # Pinned hook outputs for SAMPLE_HEADER (from test_translation.py).
 EXPECTED_TRANSLATION = {
     # OBJECT frames map to the LSST "science" observation_type (not "object").
     "observation_type": "science",
-    # days_since_2000 (end-of-exposure UTC day 4178) * 10000 + seqnum 42.
+    # days_since_2000 of the LOCAL observing night (parsed from FILENAME
+    # y110610 -> 2011-06-10 -> day 4178) * 10000 + seqnum 42. NOTE: for this
+    # sample header the filename night and the UT day coincide, so this literal
+    # is unchanged by the local-night fix; the cross-night collision case is
+    # covered by test_translation.py instead.
     "exposure_id": 4178 * 10000 + 42,
     "visit_id": 4178 * 10000 + 42,
     # UT calendar day (NOT DTCALDAT), from the authoritative MJD-OBS.
