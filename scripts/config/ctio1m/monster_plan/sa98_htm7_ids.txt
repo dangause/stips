@@ -1,6 +1,6 @@
-# SA98 Landolt field (RA 102.9863, Dec -0.3719), 0.6deg cone -> 25 HTM7 (level-7) shards.
-# Computed with lsst.sphgeom HtmPixelization(7).envelope(circle). For the coadd+DIA
-# validation (scripts/config/ctio1m/pipeline_coadd_dia.yaml / pipeline_ps1_dia.yaml).
-# None of these are present in the local the_monster_20250219_afw source dir; dump
-# them from RSP with dump_monster_shards.py (see monster_plan README).
+# SA98 Landolt field -- RA 102.9863 Dec -0.3719 -- 0.6deg cone -> 25 HTM7 (L7) shards.
+# WARNING: dump_monster_shards.py turns every comma into a newline BEFORE it skips
+# '#' lines -- so NO comment line here may contain a comma (it would split into
+# bogus tokens and crash int()). Keep all commas on the id line only.
+# Computed with lsst.sphgeom HtmPixelization(7).envelope(circle); dumped from RSP.
 148034,148035,148040,148041,148042,148043,148044,148045,148046,148047,148048,148084,148085,148086,148087,148088,237953,237954,237956,237957,237958,237959,237960,237966,237967
