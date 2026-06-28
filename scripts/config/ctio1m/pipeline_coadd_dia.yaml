@@ -79,7 +79,8 @@ configs:
     select_template_coadd_visits: coadds/selectTemplateCoaddVisits.py
     select_deep_coadd_visits: coadds/selectDeepCoaddVisits.py
   dia:
-    # Framework defaults (obs_stips/instrument_defaults/configs/dia/).
+    # Y4KCam-tuned (bleed mask + SAT-excluded detection + spatial kernel),
+    # resolved instrument-first from instruments/ctio1m/configs/dia/.
     subtract_images: dia/subtractImages.py
     detect_and_measure: dia/detectAndMeasure.py
 
