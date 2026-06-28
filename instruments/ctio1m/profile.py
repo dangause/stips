@@ -105,7 +105,19 @@ profile = InstrumentProfile(
     #     visible as a top/bottom seam in the assembled image); the parallel pass
     #     tracks it. Must be on for the bias build too, else the master bias keeps
     #     the parallel structure and science would double-subtract it.
-    isr_overrides={"doDefect": False, "overscan.doParallelOverscan": True},
+    #   - growSaturationFootprintSize=8 + doSaturationInterpolation: the camera
+    #     saturation level (65535 ADU) masks only the saturated CORES (~tens of
+    #     px); the default grow of 1 leaves the bleed wings of bright stars
+    #     unmasked, and DIA then detects them as trailed sources (~40% of the
+    #     spurious detections on the dense SA98 standard field). Growing the SAT
+    #     footprint covers the bleed wings so they are excluded from detection.
+    isr_overrides={
+        "doDefect": False,
+        "overscan.doParallelOverscan": True,
+        "doSaturation": True,
+        "growSaturationFootprintSize": 8,
+        "doSaturationInterpolation": True,
+    },
     # Intra-detector crosstalk for the 4-amp Y4KCam. MEASURED with
     # `stips measure-crosstalk` (cp_pipe cpCrosstalk) on the E2 standard field,
     # night 20111113 (2x2-binned, B/V/R/I, 93 science exposures; full 12-element
