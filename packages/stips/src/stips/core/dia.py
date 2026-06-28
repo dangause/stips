@@ -18,6 +18,7 @@ from stips.core.pipeline import (
     parse_quanta_summary,
     validate_night,
 )
+from stips.core import butler_query
 from stips.core.stack import run_butler, run_butler_query
 
 if TYPE_CHECKING:
@@ -303,9 +304,16 @@ def run(
             log_file=log_file,
         )
 
-        # Check for empty quantum graph (no matching data for this night/band)
+        # Check for empty quantum graph (no matching data for this night/band).
+        # Prefer a structural check on the saved qgraph (len(qg) == 0) over
+        # grepping the human-readable "QuantumGraph contains no quanta" log line,
+        # which is not a stable API. Fall back to the stdout grep only if the
+        # structural check could not run (e.g. file missing / older stack).
         combined_qg_output = (qg_result.stdout or "") + (qg_result.stderr or "")
-        if is_empty_qgraph(combined_qg_output):
+        empty_qg = butler_query.quantum_graph_is_empty(config, qg_file)
+        if empty_qg is None:
+            empty_qg = is_empty_qgraph(combined_qg_output)
+        if empty_qg:
             log.warning(
                 f"Empty quantum graph for {night}/{band or 'all'} — "
                 f"no matching science data found for DIA"
@@ -401,44 +409,22 @@ def run(
             log_file=log_file,
         )
 
-        # Count outputs
-        diff_count = 0
-        src_count = 0
-        try:
-            result = run_butler_query(
-                [
-                    "query-datasets",
-                    repo,
-                    "difference_image",
-                    "--collections",
-                    cols.diff_run,
-                    "--where",
-                    f"instrument='{prof.name}' AND day_obs={day_obs}",
-                ],
-                config,
-                check=False,
+        # Count outputs via the Butler Python query API (structured JSON) instead
+        # of parsing query-datasets tabular stdout. A failed query yields None,
+        # which we treat as 0 to preserve the prior best-effort behavior.
+        where = f"instrument='{prof.name}' AND day_obs={day_obs}"
+        diff_count = (
+            butler_query.count_datasets(
+                config, "difference_image", cols.diff_run, where=where
             )
-            diff_count = len(parse_butler_query_output(result.stdout))
-        except Exception:
-            pass
-
-        try:
-            result = run_butler_query(
-                [
-                    "query-datasets",
-                    repo,
-                    "dia_source_unfiltered",
-                    "--collections",
-                    cols.diff_run,
-                    "--where",
-                    f"instrument='{prof.name}' AND day_obs={day_obs}",
-                ],
-                config,
-                check=False,
+            or 0
+        )
+        src_count = (
+            butler_query.count_datasets(
+                config, "dia_source_unfiltered", cols.diff_run, where=where
             )
-            src_count = len(parse_butler_query_output(result.stdout))
-        except Exception:
-            pass
+            or 0
+        )
 
         # If pipeline "succeeded" but produced no difference images, report failure.
         # This commonly happens when rewarpTemplate finds no template overlap for
