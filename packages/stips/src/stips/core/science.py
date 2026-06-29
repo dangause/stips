@@ -500,9 +500,6 @@ def run(
             # pipeline; the same overrides feed the calib-build ISR (calibs.py).
             qgraph_args.extend(isr_config_args(prof))
 
-            if executor.needs_datastore_records:
-                qgraph_args.append("--qgraph-datastore-records")
-
             # For fallback attempts, build a qgraph that excludes quanta
             # whose outputs already exist in any prior successful RUN.
             # --skip-existing-in filters at graph-build time based on _metadata
@@ -830,12 +827,7 @@ def run(
                     str(qg_coadd),
                     "-d",
                     f"instrument='{prof.name}' AND skymap='{prof.skymap_name}'",
-                ]
-                + (
-                    ["--qgraph-datastore-records"]
-                    if executor.needs_datastore_records
-                    else []
-                ),
+                ],
                 config,
                 log_file=log_file,
             )

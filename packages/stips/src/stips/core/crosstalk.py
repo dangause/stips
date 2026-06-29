@@ -315,7 +315,6 @@ def measure_crosstalk(
                 where=f"instrument='{prof.name}' AND "
                 f"exposure.observation_type='science'",
                 isr_args=isr_args,
-                datastore_records=executor.needs_datastore_records,
             ),
             config,
             log_file=log_file,

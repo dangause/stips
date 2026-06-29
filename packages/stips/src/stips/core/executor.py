@@ -53,6 +53,24 @@ class PipetaskExecutor(Protocol):
     ) -> subprocess.CompletedProcess: ...
 
 
+def _with_datastore_records(args: list[str], needs_records: bool) -> list[str]:
+    """Append --qgraph-datastore-records to a `qgraph` command when required.
+
+    Whether a qgraph needs embedded datastore records is an execution-backend
+    concern (BPS run-qbb needs them; local pipetask run resolves from the
+    Butler), so the executor owns the flag rather than every stage module. No-op
+    for non-qgraph commands, when not required, or if already present.
+    """
+    if (
+        needs_records
+        and args
+        and args[0] == "qgraph"
+        and "--qgraph-datastore-records" not in args
+    ):
+        return [*args, "--qgraph-datastore-records"]
+    return args
+
+
 class LocalExecutor:
     """Execute pipetask commands via direct subprocess (current behavior).
 
@@ -70,6 +88,7 @@ class LocalExecutor:
         config: Config,
         **kwargs,
     ) -> subprocess.CompletedProcess:
+        args = _with_datastore_records(args, self.needs_datastore_records)
         # Strip kwargs only used by BPSExecutor (e.g. output_run)
         filtered = {k: v for k, v in kwargs.items() if k in self._PASSTHROUGH_KWARGS}
         return run_pipetask(args, config, **filtered)
@@ -249,6 +268,7 @@ class BPSExecutor:
         config: Config,
         **kwargs,
     ) -> subprocess.CompletedProcess:
+        args = _with_datastore_records(args, self.needs_datastore_records)
         subcommand = args[0] if args else ""
 
         if subcommand == "qgraph":

@@ -272,9 +272,6 @@ def run(
             data_query,
         ]
 
-        if executor.needs_datastore_records:
-            qgraph_args.append("--qgraph-datastore-records")
-
         if subtract_config.exists():
             qgraph_args.extend(["--config-file", f"subtractImages:{subtract_config}"])
         if detect_config.exists():
