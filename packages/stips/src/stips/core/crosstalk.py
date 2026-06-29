@@ -26,16 +26,15 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from stips.collections import CollectionNames
+from stips.core import butler_query
 from stips.core.pipeline import (
     get_raw_dir,
     isr_config_args,
-    parse_butler_query_output,
     validate_night,
 )
 from stips.core.stack import (
     run_butler,
     run_butler_python_json,
-    run_butler_query,
     run_with_stack,
 )
 
@@ -366,13 +365,13 @@ def _resolve_raw_runs(nights, config, prof, *, log_file=None) -> list[str]:
     raw_runs: list[str] = []
     did_ingest = False
     for night in nights:
-        existing = parse_butler_query_output(
-            run_butler_query(
-                ["query-collections", repo, f"{prof.collection_prefix}/raw/{night}/*"],
+        existing = (
+            butler_query.list_collections(
                 config,
-                check=False,
-            ).stdout,
-            prefix_filter=f"{prof.collection_prefix}/",
+                f"{prof.collection_prefix}/raw/{night}/*",
+                prefix=f"{prof.collection_prefix}/",
+            )
+            or []
         )
         if existing:
             raw_runs.append(existing[0])

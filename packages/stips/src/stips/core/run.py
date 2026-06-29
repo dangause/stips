@@ -1558,8 +1558,8 @@ def _run_differential_phot_step(
     calibrateImage star catalogs, selects comparison stars, and computes
     differential flux ratios.
     """
-    from stips.core.pipeline import parse_butler_query_output
-    from stips.core.stack import run_butler_query, run_pipetask
+    from stips.core import butler_query
+    from stips.core.stack import run_pipetask
 
     prof = config.require_profile()
     repo = str(config.repo)
@@ -1567,29 +1567,21 @@ def _run_differential_phot_step(
     # Discover science collection via Butler (consistent with fphot.py pattern)
     science_coll = None
     for night in all_nights:
-        qresult = run_butler_query(
-            [
-                "query-collections",
-                repo,
-                f"{prof.collection_prefix}/runs/{night}/processCcd/*",
-            ],
+        colls = butler_query.list_collections(
             config,
-            check=False,
+            f"{prof.collection_prefix}/runs/{night}/processCcd/*",
+            prefix=f"{prof.collection_prefix}/",
         )
-        if qresult.returncode == 0:
-            colls = parse_butler_query_output(
-                qresult.stdout, prefix_filter=f"{prof.collection_prefix}/"
-            )
-            if colls:
-                # Prefer CHAINED parents over individual RUNs
-                chained = [
-                    c for c in colls if not c.endswith(("/run",)) and "/run_fb" not in c
-                ]
-                if chained:
-                    science_coll = sorted(chained)[-1]
-                else:
-                    science_coll = sorted(colls)[-1]
-                break
+        if colls:
+            # Prefer CHAINED parents over individual RUNs
+            chained = [
+                c for c in colls if not c.endswith(("/run",)) and "/run_fb" not in c
+            ]
+            if chained:
+                science_coll = sorted(chained)[-1]
+            else:
+                science_coll = sorted(colls)[-1]
+            break
 
     if not science_coll:
         log.warning("No science collection found, skipping differential photometry")
@@ -1668,8 +1660,7 @@ def _discover_fphot_collections(
     dry_run: bool,
 ) -> list[str]:
     """Gather forced photometry collections for lightcurve extraction."""
-    from stips.core.pipeline import parse_butler_query_output
-    from stips.core.stack import run_butler_query
+    from stips.core import butler_query
 
     prof = config.require_profile()
     fphot_colls: list[str] = []
@@ -1689,23 +1680,15 @@ def _discover_fphot_collections(
         for night in all_nights:
             for fphot_suffix in fphot_suffixes:
                 try:
-                    check_result = run_butler_query(
-                        [
-                            "query-collections",
-                            str(config.repo),
+                    fphot_colls.extend(
+                        butler_query.list_collections(
+                            config,
                             f"{prof.collection_prefix}/runs/{night}"
                             f"/forcedPhotRaDec/*/{fphot_suffix}*",
-                        ],
-                        config,
-                        check=False,
-                    )
-                    if check_result.returncode == 0:
-                        fphot_colls.extend(
-                            parse_butler_query_output(
-                                check_result.stdout,
-                                prefix_filter=f"{prof.collection_prefix}/runs/",
-                            )
+                            prefix=f"{prof.collection_prefix}/runs/",
                         )
+                        or []
+                    )
                 except Exception as e:
                     log.debug(
                         f"Failed to discover fphot collections for {night}/{fphot_suffix}: {e}"
@@ -1727,8 +1710,7 @@ def _discover_dia_collections(
     dry_run: bool,
 ) -> list[str]:
     """Gather DIA diff collections for lightcurve extraction."""
-    from stips.core.pipeline import parse_butler_query_output
-    from stips.core.stack import run_butler_query
+    from stips.core import butler_query
 
     prof = config.require_profile()
     verified: list[str] = []
@@ -1744,22 +1726,14 @@ def _discover_dia_collections(
 
         if not dry_run:
             try:
-                check_result = run_butler_query(
-                    [
-                        "query-collections",
-                        str(config.repo),
+                verified.extend(
+                    butler_query.list_collections(
+                        config,
                         f"{prof.collection_prefix}/runs/{night}/diff/*/run",
-                    ],
-                    config,
-                    check=False,
-                )
-                if check_result.returncode == 0:
-                    verified.extend(
-                        parse_butler_query_output(
-                            check_result.stdout,
-                            prefix_filter=f"{prof.collection_prefix}/runs/",
-                        )
+                        prefix=f"{prof.collection_prefix}/runs/",
                     )
+                    or []
+                )
             except Exception:
                 log.debug(f"Could not verify diff collection for {night}")
         else:

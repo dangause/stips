@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from stips.core import butler_query
 from stips.core.pipeline import (
     REFCATS_CHAIN,
     CollectionNames,
@@ -16,14 +17,12 @@ from stips.core.pipeline import (
     isr_config_args,
     night_to_day_obs,
     parse_bad_exposures,
-    parse_butler_query_output,
     parse_quanta_summary,
     read_log_delta,
     validate_night,
 )
 from stips.core.stack import (
     run_butler,
-    run_butler_query,
 )
 
 if TYPE_CHECKING:
@@ -266,13 +265,11 @@ def run(
 
     # Find the raw collection for this night (targeted query)
     try:
-        result = run_butler_query(
-            ["query-collections", repo, f"{cols.prefix}/raw/{night}/*"],
-            config,
-            check=False,
-        )
-        raw_collections = parse_butler_query_output(
-            result.stdout, prefix_filter=f"{cols.prefix}/"
+        raw_collections = (
+            butler_query.list_collections(
+                config, f"{cols.prefix}/raw/{night}/*", prefix=f"{cols.prefix}/"
+            )
+            or []
         )
         raw_run = raw_collections[0] if raw_collections else None
         if not raw_run:
@@ -770,12 +767,7 @@ def run(
         # (no outputs written = no RUN collection created).
         verified_runs: list[str] = []
         for run_name in successful_runs:
-            result = run_butler_query(
-                ["query-collections", repo, run_name],
-                config,
-                check=False,
-            )
-            if result.returncode == 0 and run_name in (result.stdout or ""):
+            if butler_query.collection_exists(config, run_name):
                 verified_runs.append(run_name)
             else:
                 log.warning(

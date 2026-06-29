@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from stips.core import butler_query
 from stips.core.pipeline import (
     REFCATS_CHAIN,
     CollectionNames,
@@ -14,12 +15,10 @@ from stips.core.pipeline import (
     is_empty_qgraph,
     night_to_day_obs,
     parse_bad_exposures,
-    parse_butler_query_output,
     parse_quanta_summary,
     validate_night,
 )
-from stips.core import butler_query
-from stips.core.stack import run_butler, run_butler_query
+from stips.core.stack import run_butler
 
 if TYPE_CHECKING:
     from stips.core.config import Config
@@ -65,21 +64,12 @@ def find_template(
     Returns:
         Template collection name, or None if not found
     """
-    repo = str(config.repo)
-
     # Query PS1 and coadd templates with targeted glob patterns
     candidates = []
     for pattern in ["templates/ps1/*", "templates/deep/*/*"]:
-        try:
-            result = run_butler_query(
-                ["query-collections", repo, pattern], config, check=False
-            )
-            if result.returncode == 0:
-                candidates.extend(
-                    parse_butler_query_output(result.stdout, prefix_filter="templates/")
-                )
-        except Exception as e:
-            log.debug(f"Failed to query template pattern {pattern}: {e}")
+        candidates.extend(
+            butler_query.list_collections(config, pattern, prefix="templates/") or []
+        )
 
     if not candidates:
         return None
@@ -168,17 +158,13 @@ def run(
     # Prefer the CHAINED parent over individual RUN collections, since the
     # CHAINED parent includes results from both primary and fallback configs.
     try:
-        result = run_butler_query(
-            [
-                "query-collections",
-                repo,
+        sci_collections = (
+            butler_query.list_collections(
+                config,
                 f"{prof.collection_prefix}/runs/{night}/processCcd/*",
-            ],
-            config,
-            check=False,
-        )
-        sci_collections = parse_butler_query_output(
-            result.stdout, prefix_filter=f"{prof.collection_prefix}/"
+                prefix=f"{prof.collection_prefix}/",
+            )
+            or []
         )
         # Prefer CHAINED parents (no /run or /run_fb suffix) over individual RUNs.
         # Join ALL CHAINED parents so DIA sees science outputs from every
@@ -253,13 +239,13 @@ def run(
 
         # Find raw collection (optional for DIA, targeted query)
         raw_run = ""
-        raw_result = run_butler_query(
-            ["query-collections", repo, f"{prof.collection_prefix}/raw/{night}/*"],
-            config,
-            check=False,
-        )
-        raw_collections = parse_butler_query_output(
-            raw_result.stdout, prefix_filter=f"{prof.collection_prefix}/"
+        raw_collections = (
+            butler_query.list_collections(
+                config,
+                f"{prof.collection_prefix}/raw/{night}/*",
+                prefix=f"{prof.collection_prefix}/",
+            )
+            or []
         )
         if raw_collections:
             raw_run = raw_collections[0]
@@ -379,14 +365,7 @@ def run(
         # Verify the RUN collection exists before chaining.
         # BPS may report success even when all quanta failed, leaving
         # no RUN collection in the Butler.
-        verify_result = run_butler_query(
-            ["query-collections", repo, cols.diff_run],
-            config,
-            check=False,
-        )
-        if verify_result.returncode != 0 or cols.diff_run not in (
-            verify_result.stdout or ""
-        ):
+        if not butler_query.collection_exists(config, cols.diff_run):
             return DIAResult(
                 success=False,
                 night=night,
