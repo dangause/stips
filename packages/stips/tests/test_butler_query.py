@@ -146,6 +146,46 @@ class TestCollections:
         ):
             assert butler_query.collection_exists(_cfg(), "x") is False
 
+    def test_list_collection_types(self):
+        from stips.core import butler_query
+
+        ret = {"collections": {"a/run": "RUN", "a": "CHAINED"}}
+        with patch.object(butler_query, "run_butler_python_json", return_value=ret):
+            out = butler_query.list_collection_types(_cfg(), "a*")
+        assert out == {"a/run": "RUN", "a": "CHAINED"}
+
+    def test_list_collection_types_none_on_failure(self):
+        from stips.core import butler_query
+
+        with patch.object(butler_query, "run_butler_python_json", return_value=None):
+            assert butler_query.list_collection_types(_cfg(), "a*") is None
+
+    def test_collection_has_datasets(self):
+        from stips.core import butler_query
+
+        with patch.object(
+            butler_query, "run_butler_python_json", return_value={"has_datasets": True}
+        ):
+            assert butler_query.collection_has_datasets(_cfg(), "x") is True
+        with patch.object(
+            butler_query, "run_butler_python_json", return_value={"has_datasets": False}
+        ):
+            assert butler_query.collection_has_datasets(_cfg(), "x") is False
+        # failed query -> False (no exception)
+        with patch.object(butler_query, "run_butler_python_json", return_value=None):
+            assert butler_query.collection_has_datasets(_cfg(), "x") is False
+
+    def test_script_builders_valid(self):
+        import ast
+
+        from stips.core import butler_query
+
+        ast.parse(butler_query._build_collection_types_script("/repo", "a*"))
+        s = butler_query._build_collection_has_datasets_script("/repo", "a/run")
+        ast.parse(s)
+        assert "query_info" in butler_query._build_collection_types_script("/repo", "a*")
+        assert "include_summary=True" in s
+
 
 class TestQuantumGraph:
     def test_is_empty_true_false_none(self):

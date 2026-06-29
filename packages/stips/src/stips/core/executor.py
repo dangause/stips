@@ -15,8 +15,8 @@ import subprocess
 import time
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
-from stips.core import bps, bps_report
-from stips.core.stack import run_butler_query, run_pipetask
+from stips.core import bps, bps_report, butler_query
+from stips.core.stack import run_pipetask
 
 if TYPE_CHECKING:
 
@@ -166,48 +166,13 @@ def _check_output_collection(output_run: str, config: Config) -> bool:
     """Check if a Butler output_run collection has actual datasets.
 
     BPS infrastructure may create an empty RUN collection before quanta
-    execute, so checking collection existence alone is insufficient.
-    We query for datasets to confirm quanta actually produced output.
+    execute, so checking collection existence alone is insufficient. The
+    collection's dataset-type summary is non-empty only when quanta produced
+    output, so it answers exists-and-non-empty in one structured query.
     """
     if not output_run:
         return False
-    try:
-        # First check the collection exists at all
-        result = run_butler_query(
-            ["query-collections", str(config.repo), output_run],
-            config,
-            check=False,
-        )
-        if result.returncode != 0 or output_run not in (result.stdout or ""):
-            return False
-
-        # Then verify it contains actual datasets (not just an empty shell)
-        ds_result = run_butler_query(
-            [
-                "query-datasets",
-                str(config.repo),
-                "--collections",
-                output_run,
-                "--limit",
-                "1",
-            ],
-            config,
-            check=False,
-        )
-        # If query-datasets returns any output lines beyond the header,
-        # the collection has real data
-        if ds_result.returncode != 0:
-            return False
-        lines = [
-            ln
-            for ln in (ds_result.stdout or "").splitlines()
-            if ln.strip()
-            and not ln.strip().startswith("type")
-            and not ln.strip().startswith("----")
-        ]
-        return len(lines) > 0
-    except Exception:
-        return False
+    return butler_query.collection_has_datasets(config, output_run)
 
 
 def _translate_bps_to_completed_process(

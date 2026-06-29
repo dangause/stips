@@ -14,7 +14,8 @@ import logging
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from stips.core.stack import run_butler, run_butler_query
+from stips.core import butler_query
+from stips.core.stack import run_butler
 
 if TYPE_CHECKING:
     from stips.core.config import Config
@@ -102,36 +103,18 @@ def _query_collections(
     Uses run_butler_query() (not run_butler()) to keep stdout clean
     of LSST log messages that would corrupt the table parsing.
     """
-    repo = str(config.repo)
     prefix = config.require_profile().collection_prefix
     collections: dict[str, str] = {}
 
     for pattern in patterns:
         try:
-            result = run_butler_query(
-                ["query-collections", repo, pattern],
-                config,
-                check=False,
-            )
-            if result.returncode == 0:
-                for line in result.stdout.strip().splitlines():
-                    line = line.strip()
-                    if not line:
-                        continue
-                    # Skip table formatting (header, separator lines)
-                    if line.startswith("-") or line.startswith("="):
-                        continue
-                    if line.lower().startswith("name"):
-                        continue
-                    parts = line.split()
-                    if len(parts) < 2:
-                        continue
-                    col = parts[0]
-                    col_type = parts[-1]  # Type is the last column
-                    # Never touch preserved collections
-                    if _is_preserved(col, prefix):
-                        continue
-                    collections[col] = col_type
+            for col, col_type in (
+                butler_query.list_collection_types(config, pattern) or {}
+            ).items():
+                # Never touch preserved collections
+                if _is_preserved(col, prefix):
+                    continue
+                collections[col] = col_type
         except Exception as e:
             log.debug(f"Error querying pattern {pattern}: {e}")
 

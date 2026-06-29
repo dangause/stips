@@ -115,6 +115,52 @@ print(json.dumps({{"collections": sorted(names)}}))
 """
 
 
+def _build_collection_types_script(repo: str, pattern: str) -> str:
+    """Build a snippet printing ``{"collections": {name: TYPE}}`` for a glob.
+
+    Uses ``butler.collections.query_info`` (v28+) so the collection *type*
+    (RUN/CHAINED/CALIBRATION/...) comes from a typed ``CollectionInfo`` rather
+    than the last whitespace column of the CLI table.
+    """
+    return f"""
+import json
+from lsst.daf.butler import Butler
+
+butler = Butler.from_config({repo!r}, writeable=False)
+pattern = {pattern!r}
+try:
+    infos = butler.collections.query_info(pattern)
+    out = {{ci.name: ci.type.name for ci in infos}}
+except AttributeError:
+    # v27 fallback
+    names = list(butler.registry.queryCollections(pattern))
+    out = {{n: butler.registry.getCollectionType(n).name for n in names}}
+print(json.dumps({{"collections": out}}))
+"""
+
+
+def _build_collection_has_datasets_script(repo: str, name: str) -> str:
+    """Build a snippet printing ``{"has_datasets": bool}`` for one collection.
+
+    True iff the collection exists *and* its dataset-type summary is non-empty.
+    A missing collection or an empty RUN both read as False — exactly the
+    "does this RUN actually contain output?" check BPS needs (an empty RUN
+    shell created before quanta run has no dataset types).
+    """
+    return f"""
+import json
+from lsst.daf.butler import Butler
+
+butler = Butler.from_config({repo!r}, writeable=False)
+try:
+    info = butler.collections.get_info({name!r}, include_summary=True)
+    has = bool(getattr(info, "dataset_types", None))
+except Exception:
+    has = False
+print(json.dumps({{"has_datasets": has}}))
+"""
+
+
 def _build_qg_count_script(qg_path: str) -> str:
     """Build an in-stack snippet that prints ``{"count": N}`` for a saved qgraph.
 
@@ -204,6 +250,34 @@ def collection_exists(config: "Config", name: str) -> bool:
     """
     names = list_collections(config, name)
     return bool(names) and name in names
+
+
+def list_collection_types(
+    config: "Config", pattern: str
+) -> dict[str, str] | None:
+    """Map matching collection names to their type (RUN/CHAINED/CALIBRATION/...).
+
+    Returns ``None`` if the in-stack query failed. Replaces parsing the type out
+    of the last whitespace column of ``butler query-collections`` output.
+    """
+    script = _build_collection_types_script(str(config.repo), pattern)
+    result = run_butler_python_json(script, config)
+    if isinstance(result, dict) and isinstance(result.get("collections"), dict):
+        return {str(k): str(v) for k, v in result["collections"].items()}
+    return None
+
+
+def collection_has_datasets(config: "Config", name: str) -> bool:
+    """Return True iff ``name`` exists *and* holds at least one dataset.
+
+    Uses the collection's dataset-type summary, so an empty RUN shell (created by
+    BPS before quanta run) reads as False. A failed query reads as False.
+    """
+    script = _build_collection_has_datasets_script(str(config.repo), name)
+    result = run_butler_python_json(script, config)
+    if isinstance(result, dict) and "has_datasets" in result:
+        return bool(result["has_datasets"])
+    return False
 
 
 def quantum_graph_quanta_count(config: "Config", qg_path: "Path | str") -> int | None:
