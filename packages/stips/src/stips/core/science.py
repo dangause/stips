@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from stips.core import butler_query
+from stips.core import butler_query, quanta_report
 from stips.core.pipeline import (
     REFCATS_CHAIN,
     CollectionNames,
@@ -521,6 +521,7 @@ def run(
             executor.run_pipetask(qgraph_args, config, log_file=log_file)
 
             # Build run arguments
+            summary_file = qg_science.with_suffix(".summary.json")
             run_args = [
                 "run",
                 "-b",
@@ -532,6 +533,7 @@ def run(
                 "-j",
                 str(jobs),
                 "--register-dataset-types",
+                *quanta_report.summary_run_args(summary_file),
             ]
 
             # Fallback qgraphs are already reduced to unresolved quanta via
@@ -553,17 +555,23 @@ def run(
                 output_run=output_run,
             )
 
-            # Parse actual quanta counts from output (or log file if --no-log-tty)
+            # Parse actual quanta counts. Prefer the structured --summary JSON;
+            # fall back to the stdout/log regex when it is absent (e.g. the BPS
+            # executor path, which does not run `pipetask run`).
             combined_output = (result.stdout or "") + "\n" + (result.stderr or "")
             if not combined_output.strip():
                 combined_output = read_log_delta(
                     log_file, log_start_pos=log_start_pos, max_chars=8000
                 )
-            quanta_ok, quanta_fail = parse_quanta_summary(
-                combined_output,
-                log_file,
-                log_start_pos=log_start_pos,
-            )
+            counts = quanta_report.parse_summary_file(summary_file)
+            if counts is not None:
+                quanta_ok, quanta_fail = counts
+            else:
+                quanta_ok, quanta_fail = parse_quanta_summary(
+                    combined_output,
+                    log_file,
+                    log_start_pos=log_start_pos,
+                )
 
             if result.returncode == 0:
                 # Full success with this config.

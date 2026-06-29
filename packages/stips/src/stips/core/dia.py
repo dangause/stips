@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from stips.core import butler_query
+from stips.core import butler_query, quanta_report
 from stips.core.pipeline import (
     REFCATS_CHAIN,
     CollectionNames,
@@ -322,7 +322,9 @@ def run(
                 error=f"QGraph build failed: {qg_result.stderr or qg_result.stdout}",
             )
 
-        # Run DIA
+        # Run DIA. --summary writes a machine-readable quanta report (preferred
+        # over the stdout "Executed N quanta..." regex; see below).
+        summary_file = qg_file.with_suffix(".summary.json")
         dia_result = executor.run_pipetask(
             [
                 "run",
@@ -335,6 +337,7 @@ def run(
                 "-j",
                 str(jobs),
                 "--register-dataset-types",
+                *quanta_report.summary_run_args(summary_file),
             ],
             config,
             capture_output=True,
@@ -343,9 +346,15 @@ def run(
             output_run=cols.diff_run,
         )
 
-        # Parse quanta counts to handle partial success
+        # Parse quanta counts to handle partial success. Prefer the structured
+        # --summary JSON; fall back to the stdout/log regex when it is absent
+        # (e.g. the BPS executor path, which does not run `pipetask run`).
         combined_output = (dia_result.stdout or "") + (dia_result.stderr or "")
-        quanta_ok, quanta_fail = parse_quanta_summary(combined_output, log_file)
+        counts = quanta_report.parse_summary_file(summary_file)
+        if counts is not None:
+            quanta_ok, quanta_fail = counts
+        else:
+            quanta_ok, quanta_fail = parse_quanta_summary(combined_output, log_file)
 
         if dia_result.returncode != 0 and quanta_ok == 0:
             return DIAResult(
