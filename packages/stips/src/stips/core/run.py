@@ -909,11 +909,20 @@ def _run_dia_step(
                 result.error = f"DIA failed for {failed_pairs[0]}"
                 return result
     else:
-        # Sequential: per-band early-exit on the first failure.
+        # Sequential: per-band. A missing template is skipped gracefully (it
+        # never triggers the continue_on_error abort) — only a real dia.run
+        # failure does, matching the pre-refactor behavior. (The concurrent
+        # path above treats both as a night failure, as it did before.)
         for night in all_nights:
             if _skip(night):
                 continue
             for band in list(run_cfg.bands):
+                if result.template_collections.get(band) is None:
+                    log.warning(
+                        f"Skipping DIA for {night}/{band} (no template available)"
+                    )
+                    result.failed_dia.append(f"{night}/{band}")
+                    continue
                 if not _dia_one_band(night, band):
                     result.failed_dia.append(f"{night}/{band}")
                     if not run_cfg.continue_on_error:

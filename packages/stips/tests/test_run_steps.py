@@ -116,6 +116,21 @@ class TestRunCalibsStep:
         assert r is None
         assert res.failed_calibs == ["20240102"]
 
+    def test_concurrent_early_exit_not_continue(self):
+        res = _result()
+
+        def fake(night, *a, **k):
+            return _calib(night != "20240101", error="boom")
+
+        with patch("stips.core.calibs.run", side_effect=fake):
+            r = self._call(
+                ["20240101", "20240102"],
+                _run_cfg(concurrent_nights=2, continue_on_error=False),
+                res,
+            )
+        assert r is res
+        assert res.success is False
+
 
 def _sci(success, fallback_used=False, config_used=None, error=None):
     return SimpleNamespace(
@@ -208,6 +223,21 @@ class TestRunScienceStep:
         assert res.failed_science == []
         assert mrun.call_count == 2
 
+    def test_concurrent_early_exit_not_continue(self):
+        res = _result()
+
+        def fake(night, *a, **k):
+            return _sci(night != "20240101", error="x")
+
+        with patch("stips.core.science.run", side_effect=fake):
+            r = self._call(
+                ["20240101", "20240102"],
+                _run_cfg(concurrent_nights=2, continue_on_error=False),
+                res,
+            )
+        assert r is res
+        assert res.success is False
+
 
 def _dia(success, error=None):
     return SimpleNamespace(success=success, error=error)
@@ -281,6 +311,29 @@ class TestRunDiaStep:
         assert res.success is False
         assert calls == [("20240101", "v")]  # stops at first band failure
 
+    def test_sequential_missing_template_does_not_early_exit(self):
+        # A missing template is a graceful skip — it must NOT trigger the
+        # continue_on_error abort (only a real dia.run failure does), and a
+        # later band that HAS a template must still run. Regression guard.
+        res = _result()
+        ran = []
+
+        def fake(night, *a, band=None, **k):
+            ran.append(band)
+            return _dia(True)
+
+        with patch("stips.core.dia.run", side_effect=fake):
+            # 'b' (no template) precedes 'r' (has template); not continue_on_error
+            r = self._call(
+                ["20240101"],
+                _run_cfg(bands=["b", "r"], continue_on_error=False),
+                res,
+                templates=("r",),
+            )
+        assert r is None  # no early exit despite the missing-template band
+        assert res.failed_dia == ["20240101/b"]
+        assert ran == ["r"]  # the templated band still ran
+
     def test_concurrent_collects_failures(self):
         res = _result()
 
@@ -295,6 +348,20 @@ class TestRunDiaStep:
             )
         assert r is None
         assert sorted(res.failed_dia) == ["20240101/r", "20240102/r"]
+
+    def test_concurrent_missing_template_early_exit(self):
+        # Concurrent path DID and still DOES abort on a night with any failure
+        # (incl. missing template) when continue_on_error is False — preserved.
+        res = _result()
+        with patch("stips.core.dia.run", return_value=_dia(True)):
+            r = self._call(
+                ["20240101"],
+                _run_cfg(bands=["b"], concurrent_nights=2, continue_on_error=False),
+                res,
+                templates=(),  # no template for 'b'
+            )
+        assert r is res
+        assert res.success is False
 
 
 def _fp(success, colls=(), error=None):
