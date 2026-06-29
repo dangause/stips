@@ -15,7 +15,7 @@ import subprocess
 import time
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
-from stips.core import bps
+from stips.core import bps, bps_report
 from stips.core.stack import run_butler_query, run_pipetask
 
 if TYPE_CHECKING:
@@ -378,9 +378,13 @@ class BPSExecutor:
         start = time.monotonic()
 
         while time.monotonic() - start < self.timeout:
-            status_result = bps.status(run_id, config)
-            raw_output = status_result.get("output", "")
-            parsed_status = _parse_bps_report(raw_output)
+            # Prefer the structured ctrl_bps Python API (state/counts keyed by
+            # the WmsStates enum, immune to bps-report table formatting). Fall
+            # back to parsing `bps report` stdout if it is unavailable.
+            parsed_status = bps_report.summary_for_run(run_id, config)
+            if parsed_status is None:
+                raw_output = bps.status(run_id, config).get("output", "")
+                parsed_status = _parse_bps_report(raw_output)
             state = parsed_status["state"]
 
             if state in ("SUCCEEDED", "FAILED", "DELETED"):

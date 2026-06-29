@@ -273,6 +273,25 @@ def render_bps_config(
     return output_file
 
 
+def _extract_run_id(stdout: str) -> str | None:
+    """Extract the BPS run id from ``bps submit`` stdout.
+
+    The v30 submit banner prints ``Run Id: <id>`` followed by ``Run Name: <name>``
+    (``ctrl_bps.drivers.submit_driver``). Match the id line case-insensitively
+    (older builds used ``Run ID:``) while explicitly excluding the ``Run Name:``
+    line, instead of the previous case-sensitive ``"Run ID:"`` check that no
+    longer matches and silently lost the id on current stacks.
+    """
+    for line in stdout.splitlines():
+        stripped = line.strip()
+        low = stripped.lower()
+        if low.startswith("run id") and not low.startswith("run name"):
+            parts = stripped.split(":", 1)
+            if len(parts) > 1 and parts[1].strip():
+                return parts[1].strip()
+    return None
+
+
 def submit(
     bps_cfg: BPSConfig,
     config: Config,
@@ -328,15 +347,7 @@ def submit(
         )
 
         # Parse output for run ID
-        run_id = None
-        if result.stdout:
-            # Look for run ID in output (format varies by WMS)
-            for line in result.stdout.splitlines():
-                if "Run ID:" in line or "run_id:" in line:
-                    parts = line.split(":", 1)
-                    if len(parts) > 1:
-                        run_id = parts[1].strip()
-                        break
+        run_id = _extract_run_id(result.stdout or "")
 
         success = result.returncode == 0
 
