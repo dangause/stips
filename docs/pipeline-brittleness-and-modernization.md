@@ -22,12 +22,22 @@ collection-type listing + `executor._check_output_collection` (via `list_collect
 `pipetask run --summary` JSON in `dia.py`/`science.py`. ✅ B3/B4 — `stips.core.bps_report` replaced
 `_parse_bps_report` column parsing with the `WmsStates`/`retrieve_report` API, and fixed the v30-broken run_id
 scrape. ✅ Removed vestigial `_get_bands_for_night`. Every migration keeps the old parser as a guarded
-fallback, so nothing regresses. **Deferred (deliberate):** the `run.py` god-module split + triplicated
-`_run_*_step` collapse (O1/O2) and the `needs_datastore_records` executor de-leak (O5) — pure code-quality
-refactors of working but *untested* orchestration/executor code; with no step-level test coverage and no way
-to run a full pipeline in dev, the regression risk outweighs the cosmetic gain. The `pipetask report
---force-v2` provenance option (B6+) is additive only — the DIA diff-detection it would harden is already
-structured via `butler_query.count_datasets`.
+fallback, so nothing regresses.
+
+**Overengineering refactors — done & validated:** O2 (collapsed the triplicated `_run_*_step` bodies into one
+shared per-item closure, −200 lines, 23 characterization tests), O1-logging (extracted the run-logging
+machinery into `run_logging.py`, −227 lines), O5 (`needs_datastore_records` moved into the executor — stage
+modules no longer reference it), O6 (removed vestigial `_get_bands_for_night`). All verified end-to-end on the
+live v30 stack via real `stips run` (Calibs/Science/DIA/Fphot 1/1) plus the new test suites.
+
+**Validation:** the whole migration was exercised against real CTIO1m pipeline runs — a full `stips science`
+(quanta_report parser matched real (221,5)/(0,5) summaries), a full coadd→DIA→forced-photometry `stips run`,
+and `stips clean`/`dia`/dry-runs — not just unit tests. Full unit suite: 251 passed.
+
+**Remaining (optional, low-value):** further `run.py` file-splitting (config dataclasses / orchestrator into
+their own modules) — diminishing-returns reorganization tightly coupled to the orchestrator. The `pipetask
+report --force-v2` provenance option is additive only (DIA diff-detection is already structured via
+`butler_query.count_datasets`).
 
 ---
 
