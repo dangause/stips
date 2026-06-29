@@ -625,19 +625,6 @@ def _split_band_groups(bands: list[str]) -> list[list[str]]:
     return groups or [bands]
 
 
-def _get_bands_for_night(
-    night: str,
-    run_cfg: RunConfig,
-) -> list[str]:
-    """Get the bands to process for a specific night.
-
-    Returns all top-level bands. Per-band availability is handled
-    gracefully by the pipeline (empty quantum graphs, no matching
-    exposures, etc.).
-    """
-    return list(run_cfg.bands)
-
-
 def _run_ps1_templates(
     run_cfg: RunConfig,
     config: Config,
@@ -726,7 +713,7 @@ def _run_coadd_templates(
     template_science_ran = False
     if not run_cfg.skip_science:
         for night in run_cfg.template_nights:
-            bands_for_night = _get_bands_for_night(night, run_cfg)
+            bands_for_night = list(run_cfg.bands)
             if not bands_for_night:
                 log.info(
                     f"Skipping template-night science for {night} "
@@ -940,7 +927,7 @@ def _run_science_step(
                 log.info(f"Skipping science for {night} (calibrations failed)")
                 result.failed_science.append(night)
                 continue
-            bands_for_night = _get_bands_for_night(night, run_cfg)
+            bands_for_night = list(run_cfg.bands)
             if not bands_for_night:
                 log.info(f"Skipping science for {night} (no bands configured)")
                 continue
@@ -958,7 +945,7 @@ def _run_science_step(
                 log.info(f"Skipping science for {night} (calibrations failed)")
                 result.failed_science.append(night)
                 continue
-            bands_for_night = _get_bands_for_night(night, run_cfg)
+            bands_for_night = list(run_cfg.bands)
             if not bands_for_night:
                 log.info(f"Skipping science for {night} (no bands configured)")
                 continue
@@ -976,7 +963,7 @@ def _run_science_step(
             (e.g. missing OIII flat) doesn't block broadband processing.
             The night is "failed" only if ALL groups fail.
             """
-            bands = _get_bands_for_night(night, run_cfg)
+            bands = list(run_cfg.bands)
             band_groups = _split_band_groups(bands)
             any_success = False
             last_fallback_used = False
@@ -1038,7 +1025,7 @@ def _run_science_step(
                 result.failed_science.append(night)
                 continue
 
-            bands_for_night = _get_bands_for_night(night, run_cfg)
+            bands_for_night = list(run_cfg.bands)
             if not bands_for_night:
                 log.info(f"Skipping science for {night} (no bands configured)")
                 continue
@@ -1109,11 +1096,11 @@ def _run_dia_step(
         for night in all_nights:
             if night in result.failed_science:
                 log.info(f"Skipping DIA for {night} (science processing failed)")
-                bands_for_night = _get_bands_for_night(night, run_cfg)
+                bands_for_night = list(run_cfg.bands)
                 for band in bands_for_night:
                     result.failed_dia.append(f"{night}/{band}")
                 continue
-            bands_for_night = _get_bands_for_night(night, run_cfg)
+            bands_for_night = list(run_cfg.bands)
             if not bands_for_night:
                 log.info(f"Skipping DIA for {night} (no bands configured)")
                 continue
@@ -1136,11 +1123,11 @@ def _run_dia_step(
         for night in all_nights:
             if night in result.failed_science:
                 log.info(f"Skipping DIA for {night} (science processing failed)")
-                bands_for_night = _get_bands_for_night(night, run_cfg)
+                bands_for_night = list(run_cfg.bands)
                 for band in bands_for_night:
                     result.failed_dia.append(f"{night}/{band}")
                 continue
-            bands_for_night = _get_bands_for_night(night, run_cfg)
+            bands_for_night = list(run_cfg.bands)
             if not bands_for_night:
                 log.info(f"Skipping DIA for {night} (no bands configured)")
                 continue
@@ -1154,7 +1141,7 @@ def _run_dia_step(
         def _dia_one(night: str) -> list[str]:
             """Process all bands for one night. Returns list of failed night/band keys."""
             failed: list[str] = []
-            bands = _get_bands_for_night(night, run_cfg)
+            bands = list(run_cfg.bands)
             for band in bands:
                 template_coll = result.template_collections.get(band)
                 if template_coll is None:
@@ -1196,7 +1183,7 @@ def _run_dia_step(
             failed_pairs = outcomes.get(night)
             if failed_pairs is None:
                 # Thread raised an exception — mark all bands failed
-                bands = _get_bands_for_night(night, run_cfg)
+                bands = list(run_cfg.bands)
                 for band in bands:
                     result.failed_dia.append(f"{night}/{band}")
             elif failed_pairs:
@@ -1208,7 +1195,7 @@ def _run_dia_step(
                     failed_pairs
                     if failed_pairs
                     else (
-                        [f"{night}/{b}" for b in _get_bands_for_night(night, run_cfg)]
+                        [f"{night}/{b}" for b in list(run_cfg.bands)]
                         if failed_pairs is None
                         else []
                     )
@@ -1221,12 +1208,12 @@ def _run_dia_step(
         for night in all_nights:
             if night in result.failed_science:
                 log.info(f"Skipping DIA for {night} (science processing failed)")
-                bands_for_night = _get_bands_for_night(night, run_cfg)
+                bands_for_night = list(run_cfg.bands)
                 for band in bands_for_night:
                     result.failed_dia.append(f"{night}/{band}")
                 continue
 
-            bands_for_night = _get_bands_for_night(night, run_cfg)
+            bands_for_night = list(run_cfg.bands)
             if not bands_for_night:
                 log.info(f"Skipping DIA for {night} (no bands configured)")
                 continue
@@ -1285,7 +1272,7 @@ def _run_fphot_step(
 
     if dry_run:
         for night in all_nights:
-            bands_for_night = _get_bands_for_night(night, run_cfg)
+            bands_for_night = list(run_cfg.bands)
             successful_bands = [
                 b for b in bands_for_night if f"{night}/{b}" not in failed_dia_set
             ]
@@ -1307,7 +1294,7 @@ def _run_fphot_step(
         # Pre-filter: skip nights with all DIA bands failed
         eligible_nights: list[str] = []
         for night in all_nights:
-            bands_for_night = _get_bands_for_night(night, run_cfg)
+            bands_for_night = list(run_cfg.bands)
             successful_bands = [
                 b for b in bands_for_night if f"{night}/{b}" not in failed_dia_set
             ]
@@ -1331,7 +1318,7 @@ def _run_fphot_step(
 
             Returns (output_collections, had_failure).
             """
-            bands = _get_bands_for_night(night, run_cfg)
+            bands = list(run_cfg.bands)
             ok_bands = [b for b in bands if f"{night}/{b}" not in failed_dia_set]
             colls: list[str] = []
             had_failure = False
@@ -1379,7 +1366,7 @@ def _run_fphot_step(
                     result.failed_fphot.append(night)
     else:
         for night in all_nights:
-            bands_for_night = _get_bands_for_night(night, run_cfg)
+            bands_for_night = list(run_cfg.bands)
             successful_bands = [
                 b for b in bands_for_night if f"{night}/{b}" not in failed_dia_set
             ]
@@ -1717,7 +1704,7 @@ def _discover_dia_collections(
     failed_night_bands = set(result.failed_dia)
 
     for night in all_nights:
-        bands_for_night = _get_bands_for_night(night, run_cfg)
+        bands_for_night = list(run_cfg.bands)
         has_success = any(
             f"{night}/{b}" not in failed_night_bands for b in bands_for_night
         )
@@ -1941,7 +1928,7 @@ def run(
         successful_dia_pairs = sum(
             1
             for night in all_nights
-            for b in _get_bands_for_night(night, run_cfg)
+            for b in list(run_cfg.bands)
             if f"{night}/{b}" not in set(result.failed_dia)
         )
         successful_fphot = total_nights - len(result.failed_fphot)
@@ -1991,7 +1978,7 @@ def run(
     n_science_ok = total_nights - len(result.failed_science)
     n_fphot_ok = total_nights - len(result.failed_fphot)
     total_dia_pairs = sum(
-        len(_get_bands_for_night(night, run_cfg)) for night in all_nights
+        len(list(run_cfg.bands)) for night in all_nights
     )
     n_dia_ok = total_dia_pairs - len(result.failed_dia)
     info_parts = [
