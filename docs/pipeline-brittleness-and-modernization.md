@@ -5,11 +5,22 @@ robustness against LSST stack upgrades. Findings are backed by a multi-agent cod
 LSST documentation research; every proposed replacement API was independently fact-checked against
 Rubin source and `pipelines.lsst.io`.*
 
-**Installed stack (gating fact):** `lsst-scipipe-12.1.0` (rubin-env 12.1, ~**v29**-era, mid-2025).
-This matters because the very APIs we want to adopt are **mid-migration between v27→v28→v29→v30**.
-Several recommended imports moved namespaces in v30, so on your v29 stack they import from
-`lsst.ctrl.mpexec`, not `lsst.pipe.base`. Confirm exactly on the processing host with
-`python -c "import lsst.daf.butler.version as v; print(v.__version__)"` before adopting.
+**Installed stack (gating fact):** **v30** — confirmed empirically (the conda env name
+`lsst-scipipe-12.1.0` / rubin-env 12.1 is *not* the pipelines release number; importing `Report` /
+`SeparablePipelineExecutor` from `lsst.ctrl.mpexec` emits "deprecated since v30, removed after v30"
+FutureWarnings, and the canonical home is now `lsst.pipe.base.*`). This matters because the very APIs we
+want to adopt were **mid-migration across v27→v28→v29→v30**: on v30 the executors / quantum-report classes
+live under `lsst.pipe.base.*` (the `lsst.ctrl.mpexec` paths are deprecated shims that still work but warn).
+Re-confirm on the processing host with `python -c "import lsst.daf.butler.version as v; print(v.__version__)"`
+if it differs from this dev box.
+
+**Implementation status (branch `feature/butler-query-api-migration`):** ✅ Phase-1 Butler-query migration
+done — `stips.core.butler_query` replaced all `parse_butler_query_output`/`butler_query_has_results` call
+sites (B5/B6 collection/dataset/existence queries) and the qgraph emptiness check (B2). ✅ B1 done —
+`stips.core.quanta_report` replaced the `parse_quanta_summary` regex via `pipetask run --summary` JSON in
+`dia.py`/`science.py`. ⏳ In progress: B3/B4 BPS-report parsing (`_parse_bps_report` columns + run_id scrape).
+Remaining: `clean.py`, `executor.py:_check_output_collection`, the `run.py` decomposition, and the
+`pipetask report --force-v2` provenance option.
 
 ---
 
@@ -107,7 +118,7 @@ verified replacement.
   - **Caveat:** wrap in `try/except MissingDatasetTypeError` for never-registered types on a fresh repo
     (`explain=False` suppresses the *empty* exception but **not** the missing-type one).
   - **v27 floor:** these don't exist before v28 — on v27 fall back to `butler.registry.queryDatasets`.
-    You're on v29, so you're clear; gate it anyway.
+    You're on v30, so you're clear; gate it anyway (the `butler_query` snippets already do, for portability).
 
 ### B6 — DIA `diff_count==0` cascade needs 3 post-hoc butler queries  🔴 HIGH
 - **Where:** `dia.py:371-463` — can't trust exit code *or* quanta summary, so it re-queries collections + 2 dataset types and treats `diff_count==0` as "template didn't overlap".
@@ -257,9 +268,12 @@ Because the APIs themselves migrate between releases, **confine every `import ls
 
 ---
 
-## Appendix — Version-gating cheat-sheet (your v29 stack vs v30+)
+## Appendix — Version-gating cheat-sheet (v27–v29 vs v30 — **your stack is v30**)
 
-| API | v29 (your stack) import | v30+ import | Stability |
+On the installed v30 stack, prefer the **v30+ column** (right). The v27–v29 column is kept for the processing
+host / other deployments; on v30 those `lsst.ctrl.mpexec` paths still import but emit removal-after-v30 warnings.
+
+| API | v27–v29 import | v30+ import (**your stack**) | Stability |
 |-----|------------------------|-------------|-----------|
 | `Butler.query_datasets`, `butler.collections.query`, `Butler.from_config` | `lsst.daf.butler` | same | ✅ stable v28+ (absent v27) |
 | `QuantumGraph.loadUri`, `len(qg)`, `get_task_quanta(label)` | `lsst.pipe.base` | same | ✅ stable (TaskDef accessors churning) |
