@@ -31,7 +31,7 @@ in-stack snippet fails to run, so callers can distinguish "query failed" from
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Sequence
+from typing import TYPE_CHECKING, Any, Sequence
 
 from stips.core.stack import run_butler_python_json
 
@@ -46,6 +46,15 @@ def _as_collection_list(collections: str | Sequence[str]) -> list[str]:
     if isinstance(collections, str):
         return [collections]
     return list(collections)
+
+
+def _field(result: Any, key: str) -> Any | None:
+    """Pull ``key`` out of a snippet's JSON-dict result, or ``None``.
+
+    Returns ``None`` when the snippet failed (``result`` is not a dict) or the
+    key is absent — the single shape every public helper below keys off.
+    """
+    return result.get(key) if isinstance(result, dict) else None
 
 
 # --------------------------------------------------------------------------- #
@@ -195,10 +204,8 @@ def count_datasets(
     script = _build_count_script(
         str(config.repo), dataset_type, _as_collection_list(collections), where, None
     )
-    result = run_butler_python_json(script, config)
-    if isinstance(result, dict) and "count" in result:
-        return int(result["count"])
-    return None
+    count = _field(run_butler_python_json(script, config), "count")
+    return int(count) if count is not None else None
 
 
 def has_datasets(
@@ -216,10 +223,8 @@ def has_datasets(
     script = _build_count_script(
         str(config.repo), dataset_type, _as_collection_list(collections), where, 1
     )
-    result = run_butler_python_json(script, config)
-    if isinstance(result, dict) and "count" in result:
-        return int(result["count"]) > 0
-    return False
+    count = _field(run_butler_python_json(script, config), "count")
+    return count is not None and int(count) > 0
 
 
 def list_collections(
@@ -234,13 +239,13 @@ def list_collections(
     Replaces ``parse_butler_query_output(result.stdout, prefix_filter=...)``.
     """
     script = _build_list_collections_script(str(config.repo), pattern)
-    result = run_butler_python_json(script, config)
-    if isinstance(result, dict) and "collections" in result:
-        names = [str(n) for n in result["collections"]]
-        if prefix is not None:
-            names = [n for n in names if n.startswith(prefix)]
-        return names
-    return None
+    raw = _field(run_butler_python_json(script, config), "collections")
+    if raw is None:
+        return None
+    names = [str(n) for n in raw]
+    if prefix is not None:
+        names = [n for n in names if n.startswith(prefix)]
+    return names
 
 
 def collection_exists(config: "Config", name: str) -> bool:
@@ -261,10 +266,10 @@ def list_collection_types(
     of the last whitespace column of ``butler query-collections`` output.
     """
     script = _build_collection_types_script(str(config.repo), pattern)
-    result = run_butler_python_json(script, config)
-    if isinstance(result, dict) and isinstance(result.get("collections"), dict):
-        return {str(k): str(v) for k, v in result["collections"].items()}
-    return None
+    cols = _field(run_butler_python_json(script, config), "collections")
+    if not isinstance(cols, dict):
+        return None
+    return {str(k): str(v) for k, v in cols.items()}
 
 
 def collection_has_datasets(config: "Config", name: str) -> bool:
@@ -274,19 +279,14 @@ def collection_has_datasets(config: "Config", name: str) -> bool:
     BPS before quanta run) reads as False. A failed query reads as False.
     """
     script = _build_collection_has_datasets_script(str(config.repo), name)
-    result = run_butler_python_json(script, config)
-    if isinstance(result, dict) and "has_datasets" in result:
-        return bool(result["has_datasets"])
-    return False
+    return bool(_field(run_butler_python_json(script, config), "has_datasets"))
 
 
 def quantum_graph_quanta_count(config: "Config", qg_path: "Path | str") -> int | None:
     """Return the number of quanta in a saved ``.qgraph`` file, or ``None`` on failure."""
     script = _build_qg_count_script(str(qg_path))
-    result = run_butler_python_json(script, config)
-    if isinstance(result, dict) and "count" in result:
-        return int(result["count"])
-    return None
+    count = _field(run_butler_python_json(script, config), "count")
+    return int(count) if count is not None else None
 
 
 def quantum_graph_is_empty(config: "Config", qg_path: "Path | str") -> bool | None:
