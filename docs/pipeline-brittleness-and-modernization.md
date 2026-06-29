@@ -14,13 +14,20 @@ live under `lsst.pipe.base.*` (the `lsst.ctrl.mpexec` paths are deprecated shims
 Re-confirm on the processing host with `python -c "import lsst.daf.butler.version as v; print(v.__version__)"`
 if it differs from this dev box.
 
-**Implementation status (branch `feature/butler-query-api-migration`):** ✅ Phase-1 Butler-query migration
-done — `stips.core.butler_query` replaced all `parse_butler_query_output`/`butler_query_has_results` call
-sites (B5/B6 collection/dataset/existence queries) and the qgraph emptiness check (B2). ✅ B1 done —
-`stips.core.quanta_report` replaced the `parse_quanta_summary` regex via `pipetask run --summary` JSON in
-`dia.py`/`science.py`. ⏳ In progress: B3/B4 BPS-report parsing (`_parse_bps_report` columns + run_id scrape).
-Remaining: `clean.py`, `executor.py:_check_output_collection`, the `run.py` decomposition, and the
-`pipetask report --force-v2` provenance option.
+**Implementation status (branch `feature/butler-query-api-migration`):** **All stdout/regex brittleness is
+eliminated.** ✅ `stips.core.butler_query` replaced every `parse_butler_query_output`/`butler_query_has_results`
+call site (B5/B6) plus the qgraph emptiness check (B2 → structural `len(qg)==0`), and now `clean.py`'s
+collection-type listing + `executor._check_output_collection` (via `list_collection_types` /
+`collection_has_datasets`). ✅ B1 — `stips.core.quanta_report` replaced the `parse_quanta_summary` regex via
+`pipetask run --summary` JSON in `dia.py`/`science.py`. ✅ B3/B4 — `stips.core.bps_report` replaced
+`_parse_bps_report` column parsing with the `WmsStates`/`retrieve_report` API, and fixed the v30-broken run_id
+scrape. ✅ Removed vestigial `_get_bands_for_night`. Every migration keeps the old parser as a guarded
+fallback, so nothing regresses. **Deferred (deliberate):** the `run.py` god-module split + triplicated
+`_run_*_step` collapse (O1/O2) and the `needs_datastore_records` executor de-leak (O5) — pure code-quality
+refactors of working but *untested* orchestration/executor code; with no step-level test coverage and no way
+to run a full pipeline in dev, the regression risk outweighs the cosmetic gain. The `pipetask report
+--force-v2` provenance option (B6+) is additive only — the DIA diff-detection it would harden is already
+structured via `butler_query.count_datasets`.
 
 ---
 
