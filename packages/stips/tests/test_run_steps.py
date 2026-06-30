@@ -49,7 +49,9 @@ class TestRunCalibsStep:
     def test_dry_run_does_not_invoke_calibs(self):
 
         with patch("stips.core.calibs.run") as mrun:
-            r = self._call(["20240101", "20240102"], _run_cfg(), _result(), dry_run=True)
+            r = self._call(
+                ["20240101", "20240102"], _run_cfg(), _result(), dry_run=True
+            )
         assert r is None
         mrun.assert_not_called()
 
@@ -68,7 +70,9 @@ class TestRunCalibsStep:
             return _calib(night != "20240101", error="boom")
 
         with patch("stips.core.calibs.run", side_effect=fake) as mrun:
-            r = self._call(["20240101", "20240102"], _run_cfg(continue_on_error=True), res)
+            r = self._call(
+                ["20240101", "20240102"], _run_cfg(continue_on_error=True), res
+            )
         assert r is None
         assert res.failed_calibs == ["20240101"]
         assert mrun.call_count == 2  # both nights run
@@ -94,9 +98,7 @@ class TestRunCalibsStep:
     def test_concurrent_all_succeed(self):
         res = _result()
         with patch("stips.core.calibs.run", return_value=_calib(True)) as mrun:
-            r = self._call(
-                ["20240101", "20240102"], _run_cfg(concurrent_nights=2), res
-            )
+            r = self._call(["20240101", "20240102"], _run_cfg(concurrent_nights=2), res)
         assert r is None
         assert res.failed_calibs == []
         assert mrun.call_count == 2
@@ -150,7 +152,12 @@ class TestRunScienceStep:
             patch.object(runmod, "_maybe_split_log"),
         ):
             return runmod._run_science_step(
-                nights, run_cfg, MagicMock(), result, MagicMock(), dry_run,
+                nights,
+                run_cfg,
+                MagicMock(),
+                result,
+                MagicMock(),
+                dry_run,
                 executor=MagicMock(),
             )
 
@@ -216,9 +223,7 @@ class TestRunScienceStep:
     def test_concurrent_success(self):
         res = _result()
         with patch("stips.core.science.run", return_value=_sci(True)) as mrun:
-            r = self._call(
-                ["20240101", "20240102"], _run_cfg(concurrent_nights=2), res
-            )
+            r = self._call(["20240101", "20240102"], _run_cfg(concurrent_nights=2), res)
         assert r is None
         assert res.failed_science == []
         assert mrun.call_count == 2
@@ -270,7 +275,9 @@ class TestRunDiaStep:
         res = _result()
         with patch("stips.core.dia.run", return_value=_dia(True)) as mrun:
             # only 'v' has a template; 'r' does not
-            r = self._call(["20240101"], _run_cfg(bands=["v", "r"]), res, templates=("v",))
+            r = self._call(
+                ["20240101"], _run_cfg(bands=["v", "r"]), res, templates=("v",)
+            )
         assert r is None
         assert res.failed_dia == ["20240101/r"]
         assert mrun.call_count == 1  # only v ran
@@ -365,9 +372,7 @@ class TestRunDiaStep:
 
 
 def _fp(success, colls=(), error=None):
-    return SimpleNamespace(
-        success=success, output_collections=list(colls), error=error
-    )
+    return SimpleNamespace(success=success, output_collections=list(colls), error=error)
 
 
 class TestRunFphotStep:

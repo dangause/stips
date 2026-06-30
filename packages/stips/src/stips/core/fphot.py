@@ -130,9 +130,7 @@ def run(
     )
     if colls:
         # Prefer CHAINED parents over individual RUNs
-        chained = [
-            c for c in colls if not c.endswith(("/run",)) and "/run_fb" not in c
-        ]
+        chained = [c for c in colls if not c.endswith(("/run",)) and "/run_fb" not in c]
         if chained:
             processccd_coll = sorted(chained)[-1]
         else:

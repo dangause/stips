@@ -19,7 +19,10 @@ def test_summary_run_args():
     from stips.core import quanta_report
 
     assert quanta_report.summary_run_args("/x/s.json") == ["--summary", "/x/s.json"]
-    assert quanta_report.summary_run_args(Path("/x/s.json")) == ["--summary", "/x/s.json"]
+    assert quanta_report.summary_run_args(Path("/x/s.json")) == [
+        "--summary",
+        "/x/s.json",
+    ]
 
 
 def test_counts_success_and_failure(tmp_path):

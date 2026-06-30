@@ -257,9 +257,7 @@ def collection_exists(config: "Config", name: str) -> bool:
     return bool(names) and name in names
 
 
-def list_collection_types(
-    config: "Config", pattern: str
-) -> dict[str, str] | None:
+def list_collection_types(config: "Config", pattern: str) -> dict[str, str] | None:
     """Map matching collection names to their type (RUN/CHAINED/CALIBRATION/...).
 
     Returns ``None`` if the in-stack query failed. Replaces parsing the type out

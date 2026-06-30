@@ -68,9 +68,7 @@ def test_split_single_log_noop_for_single_exposure(tmp_path):
     from stips.core import run_logging
 
     log_file = tmp_path / "one.log"
-    log_file.write_text(
-        "(isr:{instrument: 'CTIO1m', exposure: 111})\nx\n"
-    )
+    log_file.write_text("(isr:{instrument: 'CTIO1m', exposure: 111})\nx\n")
     run_logging._split_single_log(log_file)
     # only one exposure -> no split directory created
     assert not (tmp_path / "one").exists()

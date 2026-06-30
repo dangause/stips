@@ -1603,9 +1603,7 @@ def run(
     n_calibs_ok = total_nights - len(result.failed_calibs)
     n_science_ok = total_nights - len(result.failed_science)
     n_fphot_ok = total_nights - len(result.failed_fphot)
-    total_dia_pairs = sum(
-        len(list(run_cfg.bands)) for night in all_nights
-    )
+    total_dia_pairs = sum(len(list(run_cfg.bands)) for night in all_nights)
     n_dia_ok = total_dia_pairs - len(result.failed_dia)
     info_parts = [
         f"Calibs: {n_calibs_ok}/{total_nights}",

@@ -51,7 +51,9 @@ def test_select_diff_collection_prefers_matching_band(fphot_module, monkeypatch)
             collection == i_run and "band='i'" in where
         )
 
-    monkeypatch.setattr(fphot_module.butler_query, "list_collections", fake_list_collections)
+    monkeypatch.setattr(
+        fphot_module.butler_query, "list_collections", fake_list_collections
+    )
     monkeypatch.setattr(fphot_module.butler_query, "has_datasets", fake_has_datasets)
 
     selected, candidates = fphot_module._select_diff_collection(
@@ -76,7 +78,9 @@ def test_select_diff_collection_uses_latest_when_band_unspecified(
         # Both runs have data when no band constraint is applied.
         return True
 
-    monkeypatch.setattr(fphot_module.butler_query, "list_collections", fake_list_collections)
+    monkeypatch.setattr(
+        fphot_module.butler_query, "list_collections", fake_list_collections
+    )
     monkeypatch.setattr(fphot_module.butler_query, "has_datasets", fake_has_datasets)
 
     selected, candidates = fphot_module._select_diff_collection(

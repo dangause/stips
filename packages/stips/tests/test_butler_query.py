@@ -71,7 +71,9 @@ class TestCountAndExistence:
     def test_count_datasets_returns_int(self):
         from stips.core import butler_query
 
-        with patch.object(butler_query, "run_butler_python_json", return_value={"count": 7}):
+        with patch.object(
+            butler_query, "run_butler_python_json", return_value={"count": 7}
+        ):
             assert butler_query.count_datasets(_cfg(), "dt", "coll") == 7
 
     def test_count_datasets_none_on_failure(self):
@@ -87,7 +89,10 @@ class TestCountAndExistence:
             butler_query, "run_butler_python_json", return_value={"count": 0}
         ) as m:
             butler_query.count_datasets(
-                _cfg("/myrepo"), "difference_image", "Nickel/diff/run", where="day_obs=42"
+                _cfg("/myrepo"),
+                "difference_image",
+                "Nickel/diff/run",
+                where="day_obs=42",
             )
         script = m.call_args[0][0]
         assert "/myrepo" in script
@@ -98,9 +103,13 @@ class TestCountAndExistence:
     def test_has_datasets_true_false(self):
         from stips.core import butler_query
 
-        with patch.object(butler_query, "run_butler_python_json", return_value={"count": 1}):
+        with patch.object(
+            butler_query, "run_butler_python_json", return_value={"count": 1}
+        ):
             assert butler_query.has_datasets(_cfg(), "dt", "coll") is True
-        with patch.object(butler_query, "run_butler_python_json", return_value={"count": 0}):
+        with patch.object(
+            butler_query, "run_butler_python_json", return_value={"count": 0}
+        ):
             assert butler_query.has_datasets(_cfg(), "dt", "coll") is False
 
     def test_has_datasets_uses_limit_1(self):
@@ -138,7 +147,9 @@ class TestCollections:
         from stips.core import butler_query
 
         with patch.object(
-            butler_query, "run_butler_python_json", return_value={"collections": ["x", "y"]}
+            butler_query,
+            "run_butler_python_json",
+            return_value={"collections": ["x", "y"]},
         ):
             assert butler_query.collection_exists(_cfg(), "x") is True
         with patch.object(
@@ -183,7 +194,9 @@ class TestCollections:
         ast.parse(butler_query._build_collection_types_script("/repo", "a*"))
         s = butler_query._build_collection_has_datasets_script("/repo", "a/run")
         ast.parse(s)
-        assert "query_info" in butler_query._build_collection_types_script("/repo", "a*")
+        assert "query_info" in butler_query._build_collection_types_script(
+            "/repo", "a*"
+        )
         assert "include_summary=True" in s
 
 
@@ -191,9 +204,13 @@ class TestQuantumGraph:
     def test_is_empty_true_false_none(self):
         from stips.core import butler_query
 
-        with patch.object(butler_query, "run_butler_python_json", return_value={"count": 0}):
+        with patch.object(
+            butler_query, "run_butler_python_json", return_value={"count": 0}
+        ):
             assert butler_query.quantum_graph_is_empty(_cfg(), "/x.qg") is True
-        with patch.object(butler_query, "run_butler_python_json", return_value={"count": 3}):
+        with patch.object(
+            butler_query, "run_butler_python_json", return_value={"count": 3}
+        ):
             assert butler_query.quantum_graph_is_empty(_cfg(), "/x.qg") is False
         with patch.object(butler_query, "run_butler_python_json", return_value=None):
             assert butler_query.quantum_graph_is_empty(_cfg(), "/x.qg") is None
@@ -201,5 +218,7 @@ class TestQuantumGraph:
     def test_quanta_count(self):
         from stips.core import butler_query
 
-        with patch.object(butler_query, "run_butler_python_json", return_value={"count": 12}):
+        with patch.object(
+            butler_query, "run_butler_python_json", return_value={"count": 12}
+        ):
             assert butler_query.quantum_graph_quanta_count(_cfg(), "/x.qg") == 12
