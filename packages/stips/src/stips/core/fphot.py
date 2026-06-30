@@ -32,7 +32,6 @@ class ForcedPhotResult:
 
 
 def _collection_has_difference_images(
-    repo: str,
     collection: str,
     config: Config,
     *,
@@ -50,7 +49,6 @@ def _collection_has_difference_images(
 
 
 def _select_diff_collection(
-    repo: str,
     night: str,
     config: Config,
     *,
@@ -68,7 +66,7 @@ def _select_diff_collection(
         reverse=True,
     )
     for coll in candidates:
-        if _collection_has_difference_images(repo, coll, config, band=band):
+        if _collection_has_difference_images(coll, config, band=band):
             return coll, candidates
     return None, candidates
 
@@ -217,7 +215,7 @@ def run(
         if image_type in ("diffim", "both"):
             # Select a diff collection that actually contains the requested band.
             diff_coll, diff_candidates = _select_diff_collection(
-                repo, night, config, band=band
+                night, config, band=band
             )
 
             if not diff_coll:

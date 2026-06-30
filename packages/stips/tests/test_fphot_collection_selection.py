@@ -37,7 +37,6 @@ def _nickel_config() -> SimpleNamespace:
 
 
 def test_select_diff_collection_prefers_matching_band(fphot_module, monkeypatch):
-    repo = "/fake/repo"
     night = "20230519"
     r_run = f"Nickel/runs/{night}/diff/20260218T175707Z/run"
     i_run = f"Nickel/runs/{night}/diff/20260218T175815Z/run"
@@ -57,7 +56,7 @@ def test_select_diff_collection_prefers_matching_band(fphot_module, monkeypatch)
     monkeypatch.setattr(fphot_module.butler_query, "has_datasets", fake_has_datasets)
 
     selected, candidates = fphot_module._select_diff_collection(
-        repo, night, config=_nickel_config(), band="r"
+        night, config=_nickel_config(), band="r"
     )
     assert candidates == [i_run, r_run]
     assert selected == r_run
@@ -66,7 +65,6 @@ def test_select_diff_collection_prefers_matching_band(fphot_module, monkeypatch)
 def test_select_diff_collection_uses_latest_when_band_unspecified(
     fphot_module, monkeypatch
 ):
-    repo = "/fake/repo"
     night = "20230519"
     r_run = f"Nickel/runs/{night}/diff/20260218T175707Z/run"
     i_run = f"Nickel/runs/{night}/diff/20260218T175815Z/run"
@@ -84,7 +82,7 @@ def test_select_diff_collection_uses_latest_when_band_unspecified(
     monkeypatch.setattr(fphot_module.butler_query, "has_datasets", fake_has_datasets)
 
     selected, candidates = fphot_module._select_diff_collection(
-        repo, night, config=_nickel_config(), band=None
+        night, config=_nickel_config(), band=None
     )
     assert candidates == [i_run, r_run]
     assert selected == i_run

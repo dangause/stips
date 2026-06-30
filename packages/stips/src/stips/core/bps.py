@@ -273,22 +273,29 @@ def render_bps_config(
     return output_file
 
 
+#: Matches ``Run Id``/``Run ID``/``run_id`` followed by ``: <value>`` anywhere in
+#: a line (tolerating a leading log prefix); the ``Run Name`` line is excluded by
+#: the caller.
+_RUN_ID_RE = re.compile(r"\brun[ _]?id\s*:\s*(\S+)", re.IGNORECASE)
+
+
 def _extract_run_id(stdout: str) -> str | None:
     """Extract the BPS run id from ``bps submit`` stdout.
 
     The v30 submit banner prints ``Run Id: <id>`` followed by ``Run Name: <name>``
-    (``ctrl_bps.drivers.submit_driver``). Match the id line case-insensitively
-    (older builds used ``Run ID:``) while explicitly excluding the ``Run Name:``
-    line, instead of the previous case-sensitive ``"Run ID:"`` check that no
-    longer matches and silently lost the id on current stacks.
+    (``ctrl_bps.drivers.submit_driver``). Match ``Run Id``/``Run ID``/``run_id``
+    case-insensitively (and tolerate a leading log/timestamp prefix) while
+    explicitly excluding the ``Run Name:`` line — a superset of the original
+    ``"Run ID:" in line or "run_id:" in line`` substring check, which the prior
+    ``startswith("run id")`` fix had inadvertently narrowed (it dropped the
+    ``run_id:`` underscore variant and any prefixed line).
     """
     for line in stdout.splitlines():
-        stripped = line.strip()
-        low = stripped.lower()
-        if low.startswith("run id") and not low.startswith("run name"):
-            parts = stripped.split(":", 1)
-            if len(parts) > 1 and parts[1].strip():
-                return parts[1].strip()
+        if "run name" in line.lower():
+            continue
+        match = _RUN_ID_RE.search(line)
+        if match:
+            return match.group(1).strip()
     return None
 
 

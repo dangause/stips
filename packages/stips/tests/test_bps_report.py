@@ -86,6 +86,18 @@ class TestExtractRunId:
 
         assert bps._extract_run_id("Run ID: abc123\n") == "abc123"
 
+    def test_underscore_variant(self):
+        from stips.core import bps
+
+        # the original substring check matched "run_id:"; keep that working
+        assert bps._extract_run_id("run_id: u-42\n") == "u-42"
+
+    def test_tolerates_log_prefix(self):
+        from stips.core import bps
+
+        out = "lsst.ctrl.bps INFO: Run Id: 99.0\nRun Name: x\n"
+        assert bps._extract_run_id(out) == "99.0"
+
     def test_missing_returns_none(self):
         from stips.core import bps
 

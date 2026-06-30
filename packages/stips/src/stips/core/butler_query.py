@@ -98,9 +98,13 @@ try:
             explain=False,
         )
     except (AttributeError, TypeError, ValueError):
-        # v27 fallback: no butler.query_datasets / no limit kwarg
-        refs = list(butler.registry.queryDatasets(
-            dataset_type, collections=collections, where=where))
+        # v27 fallback: registry.queryDatasets has no limit kwarg, so apply the
+        # cap manually — otherwise an existence check (limit=1) full-scans.
+        import itertools
+        _q = butler.registry.queryDatasets(
+            dataset_type, collections=collections, where=where)
+        _lim = {limit!r}
+        refs = list(_q if _lim is None else itertools.islice(_q, _lim))
     print(json.dumps({{"count": len(list(refs))}}))
 except MissingDatasetTypeError:
     print(json.dumps({{"count": 0}}))
