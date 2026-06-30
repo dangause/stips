@@ -21,16 +21,19 @@ the corresponding snippet builder in the module named in each assertion.
 
 from __future__ import annotations
 
+import importlib
 import warnings
 
 import pytest
 
-# Skip the whole module unless the stack is importable (no-op off-stack).
+# A stack contract test (convention: marked integration), and a hard no-op
+# off-stack so the venv suite skips it cleanly.
+pytestmark = pytest.mark.integration
 pytest.importorskip("lsst.daf.butler", reason="LSST stack not set up")
 
 
-def _import_no_future_warning(import_fn, who: str):
-    """Run an import/use under FutureWarning-as-error and surface the offender.
+def _import_no_future_warning(module: str, attr: str, who: str):
+    """Import ``module.attr`` under FutureWarning-as-error; surface the offender.
 
     Catches the deprecation BEFORE the symbol is removed, with a message that
     names the STIPS module whose snippet must move.
@@ -38,7 +41,7 @@ def _import_no_future_warning(import_fn, who: str):
     with warnings.catch_warnings():
         warnings.simplefilter("error", FutureWarning)
         try:
-            return import_fn()
+            return getattr(importlib.import_module(module), attr)
         except FutureWarning as exc:  # pragma: no cover - only on a deprecating stack
             pytest.fail(
                 f"{who}: the LSST API STIPS relies on emits a FutureWarning "
@@ -55,8 +58,7 @@ class TestButlerQueryContract:
         # Construction seam (core/butler_query builds Butler.from_config).
         assert hasattr(Butler, "from_config")
         # v28+ query surface the count/existence/list helpers call.
-        for method in ("query_datasets",):
-            assert hasattr(Butler, method), f"Butler.{method} missing"
+        assert hasattr(Butler, "query_datasets"), "Butler.query_datasets missing"
 
     def test_collections_accessor_methods(self):
         # query / query_info / get_info are used for list/types/has-datasets.
@@ -77,19 +79,16 @@ class TestButlerQueryContract:
     def test_missing_dataset_type_error_importable(self):
         # count snippets catch MissingDatasetTypeError to map to count 0.
         _import_no_future_warning(
-            lambda: __import__(
-                "lsst.daf.butler", fromlist=["MissingDatasetTypeError"]
-            ).MissingDatasetTypeError,
+            "lsst.daf.butler",
+            "MissingDatasetTypeError",
             "butler_query (MissingDatasetTypeError)",
         )
 
     def test_quantum_graph_len_idiom(self):
         # Empty-qgraph check is QuantumGraph.loadUri(...) + len(qg) == 0.
-        qg_mod = _import_no_future_warning(
-            lambda: __import__("lsst.pipe.base", fromlist=["QuantumGraph"]),
-            "butler_query (QuantumGraph)",
+        QuantumGraph = _import_no_future_warning(
+            "lsst.pipe.base", "QuantumGraph", "butler_query (QuantumGraph)"
         )
-        QuantumGraph = qg_mod.QuantumGraph
         assert hasattr(QuantumGraph, "loadUri")
         assert "__len__" in dir(QuantumGraph)  # len(qg) is the documented count
 
@@ -145,8 +144,7 @@ class TestBpsReportContract:
 
     def test_wms_states_members(self):
         WmsStates = _import_no_future_warning(
-            lambda: __import__("lsst.ctrl.bps", fromlist=["WmsStates"]).WmsStates,
-            "bps_report (WmsStates)",
+            "lsst.ctrl.bps", "WmsStates", "bps_report (WmsStates)"
         )
         names = {m.name for m in WmsStates}
         # bps_report looks these up by identity (never by numeric value).
@@ -157,8 +155,7 @@ class TestBpsReportContract:
         import dataclasses
 
         WmsRunReport = _import_no_future_warning(
-            lambda: __import__("lsst.ctrl.bps", fromlist=["WmsRunReport"]).WmsRunReport,
-            "bps_report (WmsRunReport)",
+            "lsst.ctrl.bps", "WmsRunReport", "bps_report (WmsRunReport)"
         )
         fields = {f.name for f in dataclasses.fields(WmsRunReport)}
         for field in ("state", "job_state_counts", "total_number_jobs"):
@@ -167,8 +164,5 @@ class TestBpsReportContract:
     def test_retrieve_report_importable(self):
         # v28+; bps_report imports it from the submodule (not top-level).
         _import_no_future_warning(
-            lambda: __import__(
-                "lsst.ctrl.bps.report", fromlist=["retrieve_report"]
-            ).retrieve_report,
-            "bps_report (retrieve_report)",
+            "lsst.ctrl.bps.report", "retrieve_report", "bps_report (retrieve_report)"
         )

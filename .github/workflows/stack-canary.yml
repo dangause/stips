@@ -42,8 +42,9 @@ jobs:
         working-directory: ${{ github.workspace }}
 
     env:
+      # The contract test does pure import/API checks — no testdata needed
+      # (with-stack.sh is invoked without --setup-testdata).
       STACK_DIR: /opt/lsst/software/stack
-      TESTDATA_NICKEL_DIR: ${{ github.workspace }}/packages/testdata
 
     steps:
       - name: Install git (AlmaLinux container)
