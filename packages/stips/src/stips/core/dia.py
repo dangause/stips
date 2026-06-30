@@ -53,17 +53,36 @@ def find_template(
     config: Config,
     band: str | None = None,
     prefer_ps1: bool = False,
+    strategy: str | None = None,
 ) -> str | None:
     """Auto-discover the best template collection.
 
     Args:
         config: Pipeline configuration
         band: Filter by band (b/v/r/i)
-        prefer_ps1: Prefer PS1 templates over internal
+        prefer_ps1: Prefer PS1 templates over internal (legacy flag)
+        strategy: "auto" picks per band — PS1 for r/i (if ingested), coadd for
+            b/v. None/"ps1"/"coadd" use the legacy preference-based discovery.
 
     Returns:
         Template collection name, or None if not found
     """
+    # Per-band auto: PS1 for r/i when available, Nickel coadd for b/v.
+    if strategy == "auto":
+        if band in ("r", "i") and butler_query.collection_exists(
+            config, f"templates/ps1/{band}"
+        ):
+            return f"templates/ps1/{band}"
+        coadds = (
+            butler_query.list_collections(
+                config, "templates/deep/*/*", prefix="templates/"
+            )
+            or []
+        )
+        if band:
+            coadds = [c for c in coadds if c.endswith(f"/{band}")]
+        return coadds[0] if coadds else None
+
     # Query PS1 and coadd templates with targeted glob patterns
     candidates = []
     for pattern in ["templates/ps1/*", "templates/deep/*/*"]:

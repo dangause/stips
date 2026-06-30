@@ -1,4 +1,4 @@
-# Nickel Processing Suite - Docker Image Build and Publish
+# Small Telescope Image Processing Suite - Docker Image Build and Publish
 #
 # Builds and publishes container images to GitHub Container Registry.
 #
@@ -8,8 +8,8 @@
 #   - Manual workflow dispatch
 #
 # Images are published to:
-#   ghcr.io/lick-observatory/nps:latest
-#   ghcr.io/lick-observatory/nps:v1.0.0
+#   ghcr.io/lick-observatory/stips:latest
+#   ghcr.io/lick-observatory/stips:v1.0.0
 
 name: Build and Publish Docker Image
 
@@ -89,7 +89,7 @@ jobs:
             # Include branch name for PRs
             type=ref,event=pr
           labels: |
-            org.opencontainers.image.title=Nickel Processing Suite
+            org.opencontainers.image.title=Small Telescope Image Processing Suite
             org.opencontainers.image.description=LSST Science Pipelines for Nickel telescope data
             org.opencontainers.image.vendor=Lick Observatory
 
@@ -146,6 +146,7 @@ jobs:
           sudo apt-get install -y \
             build-essential \
             libseccomp-dev \
+            libglib2.0-dev \
             pkg-config \
             squashfs-tools \
             cryptsetup \
@@ -169,11 +170,11 @@ jobs:
       - name: Build Singularity image
         run: |
           # Build from Docker image
-          singularity build nps.sif docker://${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}
+          singularity build stips.sif docker://${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}
 
       - name: Upload Singularity image as release asset
         uses: softprops/action-gh-release@v1
         with:
-          files: nps.sif
+          files: stips.sif
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

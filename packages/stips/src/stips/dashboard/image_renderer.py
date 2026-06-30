@@ -15,7 +15,7 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 # Cache directory for rendered PNGs
-_CACHE_DIR = Path(tempfile.gettempdir()) / "nps-dashboard-cache"
+_CACHE_DIR = Path(tempfile.gettempdir()) / "stips-dashboard-cache"
 
 
 def get_cache_dir() -> Path:

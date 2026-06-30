@@ -1,18 +1,18 @@
-# Nickel Processing Suite - HPC Testing Image
+# Small Telescope Image Processing Suite - HPC Testing Image
 #
-# This image is identical to the standard NPS image but configured for
+# This image is identical to the standard STIPS image but configured for
 # testing HPC-like parallel execution using Parsl (the same backend that
 # BPS uses on real Slurm/HTCondor clusters).
 #
 # Build:
-#   docker build -t nps:hpc -f docker/Dockerfile.hpc .
+#   docker build -t stips:hpc -f docker/Dockerfile.hpc .
 #
 # Run interactively:
 #   docker run --rm -it \
 #     -v /path/to/repo:/data/repo \
 #     -v /path/to/raw:/data/raw \
 #     -v /path/to/refcats:/data/refcats:ro \
-#     nps:hpc bash
+#     stips:hpc bash
 #
 # Test BPS parallel execution (simulates HPC):
 #   stips bps submit science 20230519 --site local
@@ -25,48 +25,48 @@
 # - The only difference is worker placement (cluster nodes vs local cores)
 
 # =============================================================================
-# Base: Standard NPS Image
+# Base: Standard STIPS Image
 # =============================================================================
 ARG LSST_TAG=v30_0_3
 FROM ghcr.io/lsst/scipipe:al9-${LSST_TAG}
 
-LABEL org.opencontainers.image.description="NPS configured for HPC-like parallel testing"
+LABEL org.opencontainers.image.description="STIPS configured for HPC-like parallel testing"
 
 USER root
 
 # =============================================================================
-# Install NPS Packages
+# Install STIPS Packages
 # =============================================================================
-WORKDIR /opt/nps
+WORKDIR /opt/stips
 
 COPY packages/stips/ packages/stips/
 COPY packages/obs_stips/ packages/obs_stips/
 COPY instruments/nickel/ instruments/nickel/
 COPY packages/obs_nickel_data/ packages/obs_nickel_data/
-COPY scripts/ /opt/nps/scripts/
-COPY bps/ /opt/nps/bps/
+COPY scripts/ /opt/stips/scripts/
+COPY bps/ /opt/stips/bps/
 
 RUN source /opt/lsst/software/stack/loadLSST.bash && \
     setup lsst_distrib && \
-    cd /opt/nps && \
+    cd /opt/stips && \
     pip install --no-deps -e packages/stips && \
     pip install --no-deps -e packages/obs_stips && \
-    chmod +x /opt/nps/scripts/pipeline/*.sh 2>/dev/null || true
+    chmod +x /opt/stips/scripts/pipeline/*.sh 2>/dev/null || true
 
 # =============================================================================
 # Entrypoint
 # =============================================================================
-COPY docker/entrypoint.sh /opt/nps/docker/entrypoint.sh
-RUN chmod +x /opt/nps/docker/entrypoint.sh
+COPY docker/entrypoint.sh /opt/stips/docker/entrypoint.sh
+RUN chmod +x /opt/stips/docker/entrypoint.sh
 
 # Create data directories
 RUN mkdir -p /data/repo /data/raw /data/refcats /data/outputs /config
 
 # Environment
-ENV NPS_ROOT=/opt/nps
-ENV INSTRUMENT_DIR=/opt/nps/instruments/nickel
-ENV STIPS_DEFAULTS=/opt/nps/packages/obs_stips/instrument_defaults
-ENV OBS_NICKEL_DATA=/opt/nps/packages/obs_nickel_data
+ENV STIPS_ROOT=/opt/stips
+ENV INSTRUMENT_DIR=/opt/stips/instruments/nickel
+ENV STIPS_DEFAULTS=/opt/stips/packages/obs_stips/instrument_defaults
+ENV OBS_NICKEL_DATA=/opt/stips/packages/obs_nickel_data
 ENV STACK_DIR=/opt/lsst/software/stack
 ENV REPO=/data/repo
 ENV RAW_PARENT_DIR=/data/raw
@@ -78,5 +78,5 @@ ENV PARSL_MEMORY_PER_WORKER=4096
 
 WORKDIR /data
 
-ENTRYPOINT ["/opt/nps/docker/entrypoint.sh"]
+ENTRYPOINT ["/opt/stips/docker/entrypoint.sh"]
 CMD ["bash"]

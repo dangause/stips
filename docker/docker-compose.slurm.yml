@@ -1,4 +1,4 @@
-# NPS Slurm Test Cluster
+# STIPS Slurm Test Cluster
 #
 # All Slurm services built from the same LSST base image (AlmaLinux 9,
 # Slurm 22.05). Compute nodes have the full LSST stack so they can run
@@ -6,14 +6,14 @@
 #
 # Usage:
 #   # Build images
-#   docker build -t nps-slurm:latest -f docker/Dockerfile.slurm .
-#   docker build -t nps:latest -f docker/Dockerfile .
+#   docker build -t stips-slurm:latest -f docker/Dockerfile.slurm .
+#   docker build -t stips:latest -f docker/Dockerfile .
 #
 #   # Start the cluster
 #   docker compose -f docker/docker-compose.slurm.yml up -d
 #
 #   # Check cluster status
-#   docker exec nps-hpc sinfo
+#   docker exec stips-hpc sinfo
 #
 #   # Stop the cluster
 #   docker compose -f docker/docker-compose.slurm.yml down
@@ -43,7 +43,7 @@ services:
   # Slurm Database Daemon
   # ==========================================================================
   slurmdbd:
-    image: nps-slurm:latest
+    image: stips-slurm:latest
     container_name: slurmdbd
     hostname: slurmdbd
     command: ["slurmdbd"]
@@ -59,7 +59,7 @@ services:
   # Slurm Controller
   # ==========================================================================
   slurmctld:
-    image: nps-slurm:latest
+    image: stips-slurm:latest
     container_name: slurmctld
     hostname: slurmctld
     command: ["slurmctld"]
@@ -67,9 +67,9 @@ services:
       - munge-etc:/shared-munge
       - slurm-log:/var/log/slurm
       - shared-home:/home
-      - ${REPO:-nps-repo}:/data/repo
-      - ${RAW_PARENT_DIR:-nps-raw}:/data/raw
-      - ${REFCAT_REPO:-nps-refcats}:/data/refcats:ro
+      - ${REPO:-stips-repo}:/data/repo
+      - ${RAW_PARENT_DIR:-stips-raw}:/data/raw
+      - ${REFCAT_REPO:-stips-refcats}:/data/refcats:ro
     expose:
       - "6817"
     depends_on:
@@ -81,7 +81,7 @@ services:
   # Compute nodes use systemd as PID 1 (required for Slurm 22 cgroup/v2 scopes).
   # slurmd-init.sh copies the munge key and waits for slurmctld, then execs /sbin/init.
   c1:
-    image: nps-slurm:latest
+    image: stips-slurm:latest
     container_name: c1
     hostname: c1
     entrypoint: ["/usr/local/bin/slurmd-init.sh"]
@@ -90,9 +90,9 @@ services:
       - munge-etc:/shared-munge
       - slurm-log:/var/log/slurm
       - shared-home:/home
-      - ${REPO:-nps-repo}:/data/repo
-      - ${RAW_PARENT_DIR:-nps-raw}:/data/raw
-      - ${REFCAT_REPO:-nps-refcats}:/data/refcats:ro
+      - ${REPO:-stips-repo}:/data/repo
+      - ${RAW_PARENT_DIR:-stips-raw}:/data/raw
+      - ${REFCAT_REPO:-stips-refcats}:/data/refcats:ro
     tmpfs:
       - /run
       - /tmp
@@ -102,7 +102,7 @@ services:
       - slurmctld
 
   c2:
-    image: nps-slurm:latest
+    image: stips-slurm:latest
     container_name: c2
     hostname: c2
     entrypoint: ["/usr/local/bin/slurmd-init.sh"]
@@ -111,9 +111,9 @@ services:
       - munge-etc:/shared-munge
       - slurm-log:/var/log/slurm
       - shared-home:/home
-      - ${REPO:-nps-repo}:/data/repo
-      - ${RAW_PARENT_DIR:-nps-raw}:/data/raw
-      - ${REFCAT_REPO:-nps-refcats}:/data/refcats:ro
+      - ${REPO:-stips-repo}:/data/repo
+      - ${RAW_PARENT_DIR:-stips-raw}:/data/raw
+      - ${REFCAT_REPO:-stips-refcats}:/data/refcats:ro
     tmpfs:
       - /run
       - /tmp
@@ -123,20 +123,20 @@ services:
       - slurmctld
 
   # ==========================================================================
-  # NPS Container (for submitting BPS jobs)
+  # STIPS Container (for submitting BPS jobs)
   # ==========================================================================
-  nps:
-    image: nps:latest
-    container_name: nps-hpc
-    hostname: nps
+  stips:
+    image: stips:latest
+    container_name: stips-hpc
+    hostname: stips
     volumes:
       - shared-home:/home
-      - ${REPO:-nps-repo}:/data/repo
-      - ${RAW_PARENT_DIR:-nps-raw}:/data/raw
-      - ${REFCAT_REPO:-nps-refcats}:/data/refcats:ro
+      - ${REPO:-stips-repo}:/data/repo
+      - ${RAW_PARENT_DIR:-stips-raw}:/data/raw
+      - ${REFCAT_REPO:-stips-refcats}:/data/refcats:ro
       - munge-etc:/shared-munge
     ports:
-      - "${NPS_DASHBOARD_PORT:-8080}:8080"
+      - "${STIPS_DASHBOARD_PORT:-8080}:8080"
     environment:
       - REPO=/data/repo
       - RAW_PARENT_DIR=/data/raw
@@ -153,9 +153,9 @@ volumes:
   slurm-log:
   shared-home:
   mysql-data:
-  nps-repo:
-  nps-raw:
-  nps-refcats:
+  stips-repo:
+  stips-raw:
+  stips-refcats:
 
 networks:
   default:

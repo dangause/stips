@@ -41,33 +41,10 @@ BATCH_SIZE_DEFAULT = 50  # cones per shard file
 SLEEP_BETWEEN_DEFAULT = 0.5  # pause between HTTP calls (throttle)
 MAX_RETRIES_DEFAULT = 3
 
-# Columns needed by convert config (and useful extras)
-PS1_COLUMNS = [
-    "objID",
-    "raMean",
-    "decMean",
-    "raMeanErr",
-    "decMeanErr",
-    "epochMean",
-    "gMeanPSFMag",
-    "rMeanPSFMag",
-    "iMeanPSFMag",
-    "zMeanPSFMag",
-    "yMeanPSFMag",
-    "gMeanPSFMagErr",
-    "rMeanPSFMagErr",
-    "iMeanPSFMagErr",
-    "zMeanPSFMagErr",
-    "yMeanPSFMagErr",
-    "nDetections",
-    "ng",
-    "nr",
-    "ni",
-    "nz",
-    "ny",
-    "qualityFlag",
-    "objInfoFlag",
-]
+# Columns needed by convert config (and useful extras).
+# Single source of truth lives in the importable library module.
+from nickel_refcats.ps1 import PS1_COLUMNS  # noqa: E402
+
 # ----------------------------------
 
 
