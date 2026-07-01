@@ -45,29 +45,29 @@ config.data = {
     "gaia*": ColortermDict(
         data={
             "B": Colorterm(
-                primary="phot_bp_mean_mag",
-                secondary="phot_rp_mean_mag",
+                primary="phot_bp_mean",
+                secondary="phot_rp_mean",
                 c0=0.0,
                 c1=0.446276,
                 c2=0.0,
             ),
             "V": Colorterm(
-                primary="phot_g_mean_mag",
-                secondary="phot_rp_mean_mag",
+                primary="phot_g_mean",
+                secondary="phot_rp_mean",
                 c0=0.0,
                 c1=0.923294,
                 c2=0.0,
             ),
             "R": Colorterm(
-                primary="phot_rp_mean_mag",
-                secondary="phot_bp_mean_mag",
+                primary="phot_rp_mean",
+                secondary="phot_bp_mean",
                 c0=0.0,
                 c1=-0.517519,
                 c2=0.0,
             ),
             "I": Colorterm(
-                primary="phot_rp_mean_mag",
-                secondary="phot_bp_mean_mag",
+                primary="phot_rp_mean",
+                secondary="phot_bp_mean",
                 c0=0.0,
                 c1=0.367222,
                 c2=0.0,
