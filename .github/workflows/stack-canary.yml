@@ -1,0 +1,84 @@
+name: Stack API canary
+
+# Early-warning for LSST stack upgrades. The normal CI (ci.yml) runs the
+# contract test against the PINNED weekly image; this job runs the SAME contract
+# test (tests/test_stack_api_contract.py) against a NEWER weekly, so a renamed /
+# removed / deprecated API that STIPS' in-stack snippets depend on is caught
+# BEFORE the production pin is bumped — instead of silently at runtime.
+#
+# It is intentionally non-blocking (scheduled + manual only; never gates a PR).
+# A red run here means: read the failing assertion, update the one snippet
+# builder it names, then bump ci.yml's image.
+
+on:
+  schedule:
+    # Mondays 06:00 UTC — after the week's new weekly is typically published.
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+    inputs:
+      image:
+        description: "scipipe image tag to canary against (a newer weekly than ci.yml)"
+        required: true
+        default: "ghcr.io/lsst/scipipe:al9-w_latest"
+
+permissions:
+  contents: read
+  issues: write   # to file an alert issue when the canary breaks
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    # Default to the rolling latest-weekly tag for the scheduled run; the manual
+    # run can target any specific weekly. If `al9-w_latest` is ever unpublished,
+    # change the fallback here (and the dispatch default above) to the newest
+    # `al9-w_YYYY_NN` tag.
+    container:
+      image: ${{ github.event.inputs.image || 'ghcr.io/lsst/scipipe:al9-w_latest' }}
+      options: --user 0
+
+    defaults:
+      run:
+        shell: bash
+        working-directory: ${{ github.workspace }}
+
+    env:
+      # The contract test does pure import/API checks — no testdata needed
+      # (with-stack.sh is invoked without --setup-testdata).
+      STACK_DIR: /opt/lsst/software/stack
+
+    steps:
+      - name: Install git (AlmaLinux container)
+        run: |
+          if command -v microdnf >/dev/null 2>&1; then
+            microdnf install -y git
+          elif command -v dnf >/dev/null 2>&1; then
+            dnf -y makecache && dnf -y install git
+          fi
+          git --version
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Mark workspace safe for git (running as root)
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Run the stack API-contract test against the candidate weekly
+        run: |
+          ./scripts/with-stack.sh -S "${STACK_DIR}" -- \
+            python -m pytest packages/stips/tests/test_stack_api_contract.py -v
+
+      - name: Open an alert issue if the canary broke
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          image="${{ github.event.inputs.image || 'ghcr.io/lsst/scipipe:al9-w_latest' }}"
+          title="Stack API canary failed against ${image}"
+          # Avoid duplicate issues for the same break.
+          if gh issue list --search "${title} in:title" --state open \
+               --json number --jq 'length' | grep -qx 0; then
+            gh issue create \
+              --title "${title}" \
+              --label "stack-upgrade" \
+              --body "The stack API-contract test (tests/test_stack_api_contract.py) failed against \`${image}\`, a newer weekly than the pinned CI image. An LSST API that STIPS' in-stack snippets depend on has likely been renamed, removed, or deprecated. Read the failing assertion in the run logs — it names the STIPS module whose snippet builder must be updated — then bump the image in .github/workflows/ci.yml once fixed. Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          fi

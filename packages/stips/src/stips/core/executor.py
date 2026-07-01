@@ -15,8 +15,8 @@ import subprocess
 import time
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
-from stips.core import bps
-from stips.core.stack import run_butler_query, run_pipetask
+from stips.core import bps, bps_report, butler_query
+from stips.core.stack import run_pipetask
 
 if TYPE_CHECKING:
 
@@ -53,6 +53,24 @@ class PipetaskExecutor(Protocol):
     ) -> subprocess.CompletedProcess: ...
 
 
+def _with_datastore_records(args: list[str], needs_records: bool) -> list[str]:
+    """Append --qgraph-datastore-records to a `qgraph` command when required.
+
+    Whether a qgraph needs embedded datastore records is an execution-backend
+    concern (BPS run-qbb needs them; local pipetask run resolves from the
+    Butler), so the executor owns the flag rather than every stage module. No-op
+    for non-qgraph commands, when not required, or if already present.
+    """
+    if (
+        needs_records
+        and args
+        and args[0] == "qgraph"
+        and "--qgraph-datastore-records" not in args
+    ):
+        return [*args, "--qgraph-datastore-records"]
+    return args
+
+
 class LocalExecutor:
     """Execute pipetask commands via direct subprocess (current behavior).
 
@@ -70,6 +88,7 @@ class LocalExecutor:
         config: Config,
         **kwargs,
     ) -> subprocess.CompletedProcess:
+        args = _with_datastore_records(args, self.needs_datastore_records)
         # Strip kwargs only used by BPSExecutor (e.g. output_run)
         filtered = {k: v for k, v in kwargs.items() if k in self._PASSTHROUGH_KWARGS}
         return run_pipetask(args, config, **filtered)
@@ -166,48 +185,13 @@ def _check_output_collection(output_run: str, config: Config) -> bool:
     """Check if a Butler output_run collection has actual datasets.
 
     BPS infrastructure may create an empty RUN collection before quanta
-    execute, so checking collection existence alone is insufficient.
-    We query for datasets to confirm quanta actually produced output.
+    execute, so checking collection existence alone is insufficient. The
+    collection's dataset-type summary is non-empty only when quanta produced
+    output, so it answers exists-and-non-empty in one structured query.
     """
     if not output_run:
         return False
-    try:
-        # First check the collection exists at all
-        result = run_butler_query(
-            ["query-collections", str(config.repo), output_run],
-            config,
-            check=False,
-        )
-        if result.returncode != 0 or output_run not in (result.stdout or ""):
-            return False
-
-        # Then verify it contains actual datasets (not just an empty shell)
-        ds_result = run_butler_query(
-            [
-                "query-datasets",
-                str(config.repo),
-                "--collections",
-                output_run,
-                "--limit",
-                "1",
-            ],
-            config,
-            check=False,
-        )
-        # If query-datasets returns any output lines beyond the header,
-        # the collection has real data
-        if ds_result.returncode != 0:
-            return False
-        lines = [
-            ln
-            for ln in (ds_result.stdout or "").splitlines()
-            if ln.strip()
-            and not ln.strip().startswith("type")
-            and not ln.strip().startswith("----")
-        ]
-        return len(lines) > 0
-    except Exception:
-        return False
+    return butler_query.collection_has_datasets(config, output_run)
 
 
 def _translate_bps_to_completed_process(
@@ -284,6 +268,7 @@ class BPSExecutor:
         config: Config,
         **kwargs,
     ) -> subprocess.CompletedProcess:
+        args = _with_datastore_records(args, self.needs_datastore_records)
         subcommand = args[0] if args else ""
 
         if subcommand == "qgraph":
@@ -378,9 +363,13 @@ class BPSExecutor:
         start = time.monotonic()
 
         while time.monotonic() - start < self.timeout:
-            status_result = bps.status(run_id, config)
-            raw_output = status_result.get("output", "")
-            parsed_status = _parse_bps_report(raw_output)
+            # Prefer the structured ctrl_bps Python API (state/counts keyed by
+            # the WmsStates enum, immune to bps-report table formatting). Fall
+            # back to parsing `bps report` stdout if it is unavailable.
+            parsed_status = bps_report.summary_for_run(run_id, config)
+            if parsed_status is None:
+                raw_output = bps.status(run_id, config).get("output", "")
+                parsed_status = _parse_bps_report(raw_output)
             state = parsed_status["state"]
 
             if state in ("SUCCEEDED", "FAILED", "DELETED"):

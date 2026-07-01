@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from stips.core import butler_query, quanta_report
 from stips.core.pipeline import (
     REFCATS_CHAIN,
     CollectionNames,
@@ -14,11 +15,10 @@ from stips.core.pipeline import (
     is_empty_qgraph,
     night_to_day_obs,
     parse_bad_exposures,
-    parse_butler_query_output,
     parse_quanta_summary,
     validate_night,
 )
-from stips.core.stack import run_butler, run_butler_query
+from stips.core.stack import run_butler
 
 if TYPE_CHECKING:
     from stips.core.config import Config
@@ -49,31 +49,6 @@ class DIAResult:
     error: str | None = None
 
 
-def _collection_exists(config: Config, name: str) -> bool:
-    """True if a template collection with the exact name exists."""
-    result = run_butler_query(
-        ["query-collections", str(config.repo), name], config, check=False
-    )
-    if result.returncode != 0:
-        return False
-    return name in parse_butler_query_output(result.stdout, prefix_filter="templates/")
-
-
-def _find_coadd_template(config: Config, band: str | None) -> str | None:
-    """First Nickel coadd template collection matching ``band`` (or None)."""
-    result = run_butler_query(
-        ["query-collections", str(config.repo), "templates/deep/*/*"],
-        config,
-        check=False,
-    )
-    if result.returncode != 0:
-        return None
-    candidates = parse_butler_query_output(result.stdout, prefix_filter="templates/")
-    if band:
-        candidates = [c for c in candidates if c.endswith(f"/{band}")]
-    return candidates[0] if candidates else None
-
-
 def find_template(
     config: Config,
     band: str | None = None,
@@ -94,25 +69,26 @@ def find_template(
     """
     # Per-band auto: PS1 for r/i when available, Nickel coadd for b/v.
     if strategy == "auto":
-        if band in ("r", "i") and _collection_exists(config, f"templates/ps1/{band}"):
+        if band in ("r", "i") and butler_query.collection_exists(
+            config, f"templates/ps1/{band}"
+        ):
             return f"templates/ps1/{band}"
-        return _find_coadd_template(config, band)
-
-    repo = str(config.repo)
+        coadds = (
+            butler_query.list_collections(
+                config, "templates/deep/*/*", prefix="templates/"
+            )
+            or []
+        )
+        if band:
+            coadds = [c for c in coadds if c.endswith(f"/{band}")]
+        return coadds[0] if coadds else None
 
     # Query PS1 and coadd templates with targeted glob patterns
     candidates = []
     for pattern in ["templates/ps1/*", "templates/deep/*/*"]:
-        try:
-            result = run_butler_query(
-                ["query-collections", repo, pattern], config, check=False
-            )
-            if result.returncode == 0:
-                candidates.extend(
-                    parse_butler_query_output(result.stdout, prefix_filter="templates/")
-                )
-        except Exception as e:
-            log.debug(f"Failed to query template pattern {pattern}: {e}")
+        candidates.extend(
+            butler_query.list_collections(config, pattern, prefix="templates/") or []
+        )
 
     if not candidates:
         return None
@@ -201,17 +177,13 @@ def run(
     # Prefer the CHAINED parent over individual RUN collections, since the
     # CHAINED parent includes results from both primary and fallback configs.
     try:
-        result = run_butler_query(
-            [
-                "query-collections",
-                repo,
+        sci_collections = (
+            butler_query.list_collections(
+                config,
                 f"{prof.collection_prefix}/runs/{night}/processCcd/*",
-            ],
-            config,
-            check=False,
-        )
-        sci_collections = parse_butler_query_output(
-            result.stdout, prefix_filter=f"{prof.collection_prefix}/"
+                prefix=f"{prof.collection_prefix}/",
+            )
+            or []
         )
         # Prefer CHAINED parents (no /run or /run_fb suffix) over individual RUNs.
         # Join ALL CHAINED parents so DIA sees science outputs from every
@@ -286,13 +258,13 @@ def run(
 
         # Find raw collection (optional for DIA, targeted query)
         raw_run = ""
-        raw_result = run_butler_query(
-            ["query-collections", repo, f"{prof.collection_prefix}/raw/{night}/*"],
-            config,
-            check=False,
-        )
-        raw_collections = parse_butler_query_output(
-            raw_result.stdout, prefix_filter=f"{prof.collection_prefix}/"
+        raw_collections = (
+            butler_query.list_collections(
+                config,
+                f"{prof.collection_prefix}/raw/{night}/*",
+                prefix=f"{prof.collection_prefix}/",
+            )
+            or []
         )
         if raw_collections:
             raw_run = raw_collections[0]
@@ -319,9 +291,6 @@ def run(
             data_query,
         ]
 
-        if executor.needs_datastore_records:
-            qgraph_args.append("--qgraph-datastore-records")
-
         if subtract_config.exists():
             qgraph_args.extend(["--config-file", f"subtractImages:{subtract_config}"])
         if detect_config.exists():
@@ -337,9 +306,16 @@ def run(
             log_file=log_file,
         )
 
-        # Check for empty quantum graph (no matching data for this night/band)
+        # Check for empty quantum graph (no matching data for this night/band).
+        # Prefer a structural check on the saved qgraph (len(qg) == 0) over
+        # grepping the human-readable "QuantumGraph contains no quanta" log line,
+        # which is not a stable API. Fall back to the stdout grep only if the
+        # structural check could not run (e.g. file missing / older stack).
         combined_qg_output = (qg_result.stdout or "") + (qg_result.stderr or "")
-        if is_empty_qgraph(combined_qg_output):
+        empty_qg = butler_query.quantum_graph_is_empty(config, qg_file)
+        if empty_qg is None:
+            empty_qg = is_empty_qgraph(combined_qg_output)
+        if empty_qg:
             log.warning(
                 f"Empty quantum graph for {night}/{band or 'all'} — "
                 f"no matching science data found for DIA"
@@ -362,7 +338,9 @@ def run(
                 error=f"QGraph build failed: {qg_result.stderr or qg_result.stdout}",
             )
 
-        # Run DIA
+        # Run DIA. --summary writes a machine-readable quanta report (preferred
+        # over the stdout "Executed N quanta..." regex; see below).
+        summary_file = qg_file.with_suffix(".summary.json")
         dia_result = executor.run_pipetask(
             [
                 "run",
@@ -375,6 +353,7 @@ def run(
                 "-j",
                 str(jobs),
                 "--register-dataset-types",
+                *quanta_report.summary_run_args(summary_file),
             ],
             config,
             capture_output=True,
@@ -383,9 +362,15 @@ def run(
             output_run=cols.diff_run,
         )
 
-        # Parse quanta counts to handle partial success
+        # Parse quanta counts to handle partial success. Prefer the structured
+        # --summary JSON; fall back to the stdout/log regex when it is absent
+        # (e.g. the BPS executor path, which does not run `pipetask run`).
         combined_output = (dia_result.stdout or "") + (dia_result.stderr or "")
-        quanta_ok, quanta_fail = parse_quanta_summary(combined_output, log_file)
+        counts = quanta_report.parse_summary_file(summary_file)
+        if counts is not None:
+            quanta_ok, quanta_fail = counts
+        else:
+            quanta_ok, quanta_fail = parse_quanta_summary(combined_output, log_file)
 
         if dia_result.returncode != 0 and quanta_ok == 0:
             return DIAResult(
@@ -405,14 +390,7 @@ def run(
         # Verify the RUN collection exists before chaining.
         # BPS may report success even when all quanta failed, leaving
         # no RUN collection in the Butler.
-        verify_result = run_butler_query(
-            ["query-collections", repo, cols.diff_run],
-            config,
-            check=False,
-        )
-        if verify_result.returncode != 0 or cols.diff_run not in (
-            verify_result.stdout or ""
-        ):
+        if not butler_query.collection_exists(config, cols.diff_run):
             return DIAResult(
                 success=False,
                 night=night,
@@ -435,44 +413,22 @@ def run(
             log_file=log_file,
         )
 
-        # Count outputs
-        diff_count = 0
-        src_count = 0
-        try:
-            result = run_butler_query(
-                [
-                    "query-datasets",
-                    repo,
-                    "difference_image",
-                    "--collections",
-                    cols.diff_run,
-                    "--where",
-                    f"instrument='{prof.name}' AND day_obs={day_obs}",
-                ],
-                config,
-                check=False,
+        # Count outputs via the Butler Python query API (structured JSON) instead
+        # of parsing query-datasets tabular stdout. A failed query yields None,
+        # which we treat as 0 to preserve the prior best-effort behavior.
+        where = f"instrument='{prof.name}' AND day_obs={day_obs}"
+        diff_count = (
+            butler_query.count_datasets(
+                config, "difference_image", cols.diff_run, where=where
             )
-            diff_count = len(parse_butler_query_output(result.stdout))
-        except Exception:
-            pass
-
-        try:
-            result = run_butler_query(
-                [
-                    "query-datasets",
-                    repo,
-                    "dia_source_unfiltered",
-                    "--collections",
-                    cols.diff_run,
-                    "--where",
-                    f"instrument='{prof.name}' AND day_obs={day_obs}",
-                ],
-                config,
-                check=False,
+            or 0
+        )
+        src_count = (
+            butler_query.count_datasets(
+                config, "dia_source_unfiltered", cols.diff_run, where=where
             )
-            src_count = len(parse_butler_query_output(result.stdout))
-        except Exception:
-            pass
+            or 0
+        )
 
         # If pipeline "succeeded" but produced no difference images, report failure.
         # This commonly happens when rewarpTemplate finds no template overlap for

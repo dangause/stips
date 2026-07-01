@@ -268,12 +268,7 @@ def run(
                     "-d",
                     f"instrument='{prof.name}' AND exposure.observation_type='bias'",
                 ]
-                + isr_config_args(prof, "cpBiasIsr")
-                + (
-                    ["--qgraph-datastore-records"]
-                    if executor.needs_datastore_records
-                    else []
-                ),
+                + isr_config_args(prof, "cpBiasIsr"),
                 config,
                 log_file=log_file,
             )
@@ -366,12 +361,7 @@ def run(
                     "-c",
                     "cpFlatIsr:doOverscan=True",
                 ]
-                + isr_config_args(prof, "cpFlatIsr")
-                + (
-                    ["--qgraph-datastore-records"]
-                    if executor.needs_datastore_records
-                    else []
-                ),
+                + isr_config_args(prof, "cpFlatIsr"),
                 config,
                 log_file=log_file,
             )

@@ -7,15 +7,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from stips.core import butler_query
 from stips.core.pipeline import (
     REFCATS_CHAIN,
-    butler_query_has_results,
     generate_run_timestamp,
     night_to_day_obs,
-    parse_butler_query_output,
     validate_night,
 )
-from stips.core.stack import run_butler_query
 
 if TYPE_CHECKING:
     from stips.core.config import Config
@@ -34,7 +32,6 @@ class ForcedPhotResult:
 
 
 def _collection_has_difference_images(
-    repo: str,
     collection: str,
     config: Config,
     *,
@@ -46,29 +43,12 @@ def _collection_has_difference_images(
     if band:
         query += f" AND band='{band}'"
 
-    result = run_butler_query(
-        [
-            "query-datasets",
-            repo,
-            "difference_image",
-            "--collections",
-            collection,
-            "--where",
-            query,
-            "--limit",
-            "1",
-        ],
-        config,
-        check=False,
+    return butler_query.has_datasets(
+        config, "difference_image", collection, where=query
     )
-
-    if result.returncode != 0:
-        return False
-    return butler_query_has_results(result.stdout or "")
 
 
 def _select_diff_collection(
-    repo: str,
     night: str,
     config: Config,
     *,
@@ -76,27 +56,17 @@ def _select_diff_collection(
 ) -> tuple[str | None, list[str]]:
     """Select the newest diff collection that contains datasets for this band."""
     prof = config.require_profile()
-    diff_result = run_butler_query(
-        [
-            "query-collections",
-            repo,
-            f"{prof.collection_prefix}/runs/{night}/diff/*/run",
-        ],
-        config,
-        check=False,
-    )
-
-    if diff_result.returncode != 0:
-        return None, []
-
     candidates = sorted(
-        parse_butler_query_output(
-            diff_result.stdout, prefix_filter=f"{prof.collection_prefix}/"
-        ),
+        butler_query.list_collections(
+            config,
+            f"{prof.collection_prefix}/runs/{night}/diff/*/run",
+            prefix=f"{prof.collection_prefix}/",
+        )
+        or [],
         reverse=True,
     )
     for coll in candidates:
-        if _collection_has_difference_images(repo, coll, config, band=band):
+        if _collection_has_difference_images(coll, config, band=band):
             return coll, candidates
     return None, candidates
 
@@ -148,28 +118,21 @@ def run(
     # Prefer the CHAINED parent (includes primary + fallback results)
     # over individual RUN collections.
     processccd_coll = None
-    result = run_butler_query(
-        [
-            "query-collections",
-            repo,
+    colls = (
+        butler_query.list_collections(
+            config,
             f"{prof.collection_prefix}/runs/{night}/processCcd/*",
-        ],
-        config,
-        check=False,
-    )
-    if result.returncode == 0:
-        colls = parse_butler_query_output(
-            result.stdout, prefix_filter=f"{prof.collection_prefix}/"
+            prefix=f"{prof.collection_prefix}/",
         )
-        if colls:
-            # Prefer CHAINED parents over individual RUNs
-            chained = [
-                c for c in colls if not c.endswith(("/run",)) and "/run_fb" not in c
-            ]
-            if chained:
-                processccd_coll = sorted(chained)[-1]
-            else:
-                processccd_coll = sorted(colls)[-1]
+        or []
+    )
+    if colls:
+        # Prefer CHAINED parents over individual RUNs
+        chained = [c for c in colls if not c.endswith(("/run",)) and "/run_fb" not in c]
+        if chained:
+            processccd_coll = sorted(chained)[-1]
+        else:
+            processccd_coll = sorted(colls)[-1]
 
     if not processccd_coll:
         return ForcedPhotResult(
@@ -252,7 +215,7 @@ def run(
         if image_type in ("diffim", "both"):
             # Select a diff collection that actually contains the requested band.
             diff_coll, diff_candidates = _select_diff_collection(
-                repo, night, config, band=band
+                night, config, band=band
             )
 
             if not diff_coll:

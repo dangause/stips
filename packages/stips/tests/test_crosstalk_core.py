@@ -128,12 +128,12 @@ class TestResolveRawRuns(unittest.TestCase):
         import stips.core.crosstalk as mod
 
         calls = []
-        orig_query = mod.run_butler_query
+        orig_lc = mod.butler_query.list_collections
         orig_butler = mod.run_butler
         orig_get_raw = mod.get_raw_dir
         try:
-            mod.run_butler_query = lambda args, config, **k: _FakeProc(
-                "Name\n----\nCTIO1m/raw/20070321/ts1\n"
+            mod.butler_query.list_collections = (
+                lambda config, pattern, *, prefix=None: ["CTIO1m/raw/20070321/ts1"]
             )
             mod.run_butler = lambda args, config, **k: calls.append(args[0])
             mod.get_raw_dir = lambda config, night: (_ for _ in ()).throw(
@@ -143,7 +143,7 @@ class TestResolveRawRuns(unittest.TestCase):
                 ["20070321"], _FakeConfig("/repo"), _FakeProfile()
             )
         finally:
-            mod.run_butler_query = orig_query
+            mod.butler_query.list_collections = orig_lc
             mod.run_butler = orig_butler
             mod.get_raw_dir = orig_get_raw
 
@@ -154,7 +154,7 @@ class TestResolveRawRuns(unittest.TestCase):
         import stips.core.crosstalk as mod
 
         calls = []
-        orig_query = mod.run_butler_query
+        orig_lc = mod.butler_query.list_collections
         orig_butler = mod.run_butler
         orig_get_raw = mod.get_raw_dir
 
@@ -163,14 +163,16 @@ class TestResolveRawRuns(unittest.TestCase):
                 return True
 
         try:
-            mod.run_butler_query = lambda args, config, **k: _FakeProc("")  # none found
+            mod.butler_query.list_collections = (
+                lambda config, pattern, *, prefix=None: []  # none found
+            )
             mod.run_butler = lambda args, config, **k: calls.append(args[0])
             mod.get_raw_dir = lambda config, night: _ExistingDir()
             runs = mod._resolve_raw_runs(
                 ["20070321"], _FakeConfig("/repo"), _FakeProfile()
             )
         finally:
-            mod.run_butler_query = orig_query
+            mod.butler_query.list_collections = orig_lc
             mod.run_butler = orig_butler
             mod.get_raw_dir = orig_get_raw
 

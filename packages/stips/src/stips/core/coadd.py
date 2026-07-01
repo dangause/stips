@@ -17,17 +17,15 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from stips.core import butler_query
 from stips.core.pipeline import (
     REFCATS_CHAIN,
-    butler_query_has_results,
     generate_run_timestamp,
-    parse_butler_query_output,
 )
 from stips.core.stack import (
     run_butler,
     run_butler_python,
     run_butler_python_json,
-    run_butler_query,
     run_pipetask,
 )
 
@@ -109,20 +107,9 @@ def check_template_exists(
     collection = f"templates/deep/tract{tract}/{band}"
 
     try:
-        result = run_butler_query(
-            [
-                "query-datasets",
-                str(config.repo),
-                "template_coadd",
-                "--collections",
-                collection,
-                "--where",
-                f"band='{band}'",
-            ],
-            config,
-            check=False,
-        )
-        if result.returncode == 0 and butler_query_has_results(result.stdout):
+        if butler_query.has_datasets(
+            config, "template_coadd", collection, where=f"band='{band}'"
+        ):
             return collection
     except Exception as e:
         log.debug(f"Failed to check template existence for {collection}: {e}")
@@ -147,26 +134,18 @@ def find_science_collections_for_nights(
     """
     prof = config.require_profile()
     collections = []
-    repo = str(config.repo)
 
     for night in nights:
         try:
-            result = run_butler_query(
-                [
-                    "query-collections",
-                    repo,
-                    f"{prof.collection_prefix}/runs/{night}/processCcd/*",
-                ],
+            night_colls = butler_query.list_collections(
                 config,
-                check=False,
+                f"{prof.collection_prefix}/runs/{night}/processCcd/*",
+                prefix=f"{prof.collection_prefix}/",
             )
-            if result.returncode != 0:
+            if night_colls is None:
                 log.warning(f"  No processCcd collections found for {night}")
                 continue
 
-            night_colls = parse_butler_query_output(
-                result.stdout, prefix_filter=f"{prof.collection_prefix}/"
-            )
             if not night_colls:
                 log.info(
                     f"  No processCcd collections found for {night} "
@@ -189,23 +168,8 @@ def find_science_collections_for_nights(
             found = False
             for coll in night_colls:
                 # Verify this collection has data for the requested band
-                check_result = run_butler_query(
-                    [
-                        "query-datasets",
-                        repo,
-                        "preliminary_visit_image",
-                        "--collections",
-                        coll,
-                        "--where",
-                        f"band='{band}'",
-                        "--limit",
-                        "1",
-                    ],
-                    config,
-                    check=False,
-                )
-                if check_result.returncode == 0 and butler_query_has_results(
-                    check_result.stdout
+                if butler_query.has_datasets(
+                    config, "preliminary_visit_image", coll, where=f"band='{band}'"
                 ):
                     collections.append(coll)
                     log.info(f"  Found {night} -> {coll}")
@@ -375,15 +339,7 @@ def run(
             # exists from a previous failed attempt — if so, rebase to clean it up.
             collection_name = f"templates/deep/tract{tract}/{band}"
             try:
-                check_result = run_butler_query(
-                    ["query-collections", str(config.repo), collection_name],
-                    config,
-                    check=False,
-                )
-                if (
-                    check_result.returncode == 0
-                    and collection_name in check_result.stdout
-                ):
+                if butler_query.collection_exists(config, collection_name):
                     log.info(
                         f"Stale collection {collection_name} exists without data, will rebase"
                     )

@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from stips.core import butler_query, quanta_report
 from stips.core.pipeline import (
     REFCATS_CHAIN,
     CollectionNames,
@@ -16,7 +17,6 @@ from stips.core.pipeline import (
     isr_config_args,
     night_to_day_obs,
     parse_bad_exposures,
-    parse_butler_query_output,
     parse_quanta_summary,
     read_log_delta,
     validate_night,
@@ -24,7 +24,6 @@ from stips.core.pipeline import (
 from stips.core.refcat import refcat_overlay_config
 from stips.core.stack import (
     run_butler,
-    run_butler_query,
 )
 
 if TYPE_CHECKING:
@@ -271,13 +270,11 @@ def run(
 
     # Find the raw collection for this night (targeted query)
     try:
-        result = run_butler_query(
-            ["query-collections", repo, f"{cols.prefix}/raw/{night}/*"],
-            config,
-            check=False,
-        )
-        raw_collections = parse_butler_query_output(
-            result.stdout, prefix_filter=f"{cols.prefix}/"
+        raw_collections = (
+            butler_query.list_collections(
+                config, f"{cols.prefix}/raw/{night}/*", prefix=f"{cols.prefix}/"
+            )
+            or []
         )
         raw_run = raw_collections[0] if raw_collections else None
         if not raw_run:
@@ -518,9 +515,6 @@ def run(
             # pipeline; the same overrides feed the calib-build ISR (calibs.py).
             qgraph_args.extend(isr_config_args(prof))
 
-            if executor.needs_datastore_records:
-                qgraph_args.append("--qgraph-datastore-records")
-
             # For fallback attempts, build a qgraph that excludes quanta
             # whose outputs already exist in any prior successful RUN.
             # --skip-existing-in filters at graph-build time based on _metadata
@@ -539,6 +533,7 @@ def run(
             executor.run_pipetask(qgraph_args, config, log_file=log_file)
 
             # Build run arguments
+            summary_file = qg_science.with_suffix(".summary.json")
             run_args = [
                 "run",
                 "-b",
@@ -550,6 +545,7 @@ def run(
                 "-j",
                 str(jobs),
                 "--register-dataset-types",
+                *quanta_report.summary_run_args(summary_file),
             ]
 
             # Fallback qgraphs are already reduced to unresolved quanta via
@@ -571,17 +567,23 @@ def run(
                 output_run=output_run,
             )
 
-            # Parse actual quanta counts from output (or log file if --no-log-tty)
+            # Parse actual quanta counts. Prefer the structured --summary JSON;
+            # fall back to the stdout/log regex when it is absent (e.g. the BPS
+            # executor path, which does not run `pipetask run`).
             combined_output = (result.stdout or "") + "\n" + (result.stderr or "")
             if not combined_output.strip():
                 combined_output = read_log_delta(
                     log_file, log_start_pos=log_start_pos, max_chars=8000
                 )
-            quanta_ok, quanta_fail = parse_quanta_summary(
-                combined_output,
-                log_file,
-                log_start_pos=log_start_pos,
-            )
+            counts = quanta_report.parse_summary_file(summary_file)
+            if counts is not None:
+                quanta_ok, quanta_fail = counts
+            else:
+                quanta_ok, quanta_fail = parse_quanta_summary(
+                    combined_output,
+                    log_file,
+                    log_start_pos=log_start_pos,
+                )
 
             if result.returncode == 0:
                 # Full success with this config.
@@ -785,12 +787,7 @@ def run(
         # (no outputs written = no RUN collection created).
         verified_runs: list[str] = []
         for run_name in successful_runs:
-            result = run_butler_query(
-                ["query-collections", repo, run_name],
-                config,
-                check=False,
-            )
-            if result.returncode == 0 and run_name in (result.stdout or ""):
+            if butler_query.collection_exists(config, run_name):
                 verified_runs.append(run_name)
             else:
                 log.warning(
@@ -845,12 +842,7 @@ def run(
                     str(qg_coadd),
                     "-d",
                     f"instrument='{prof.name}' AND skymap='{prof.skymap_name}'",
-                ]
-                + (
-                    ["--qgraph-datastore-records"]
-                    if executor.needs_datastore_records
-                    else []
-                ),
+                ],
                 config,
                 log_file=log_file,
             )

@@ -52,6 +52,55 @@ class TestLocalExecutor:
             ["run", "-b", "/repo"], mock_config, log_file=log_path, check=False
         )
 
+    def test_local_does_not_inject_datastore_records(self):
+        # LocalExecutor.needs_datastore_records is False -> flag never added
+        from stips.core.executor import LocalExecutor
+
+        with patch(
+            "stips.core.executor.run_pipetask",
+            return_value=subprocess.CompletedProcess(args=["pipetask"], returncode=0),
+        ) as mrp:
+            LocalExecutor().run_pipetask(
+                ["qgraph", "-b", "/repo"], MagicMock(), check=False
+            )
+        passed_args = mrp.call_args[0][0]
+        assert "--qgraph-datastore-records" not in passed_args
+
+
+class TestWithDatastoreRecords:
+    def test_appends_for_qgraph_when_needed(self):
+        from stips.core.executor import _with_datastore_records
+
+        out = _with_datastore_records(["qgraph", "-b", "/r"], True)
+        assert out == ["qgraph", "-b", "/r", "--qgraph-datastore-records"]
+
+    def test_noop_when_not_needed(self):
+        from stips.core.executor import _with_datastore_records
+
+        assert _with_datastore_records(["qgraph", "-b"], False) == ["qgraph", "-b"]
+
+    def test_noop_for_non_qgraph(self):
+        from stips.core.executor import _with_datastore_records
+
+        assert _with_datastore_records(["run", "-g", "x"], True) == ["run", "-g", "x"]
+
+    def test_idempotent(self):
+        from stips.core.executor import _with_datastore_records
+
+        args = ["qgraph", "--qgraph-datastore-records"]
+        assert _with_datastore_records(args, True) == args
+
+    def test_bps_injects_on_qgraph(self):
+        from stips.core.executor import BPSExecutor
+
+        with patch(
+            "stips.core.executor.run_pipetask",
+            return_value=subprocess.CompletedProcess(args=["pipetask"], returncode=0),
+        ) as mrp:
+            # qgraph subcommand runs locally even under BPS; flag must be injected
+            BPSExecutor().run_pipetask(["qgraph", "-b", "/r"], MagicMock(), check=False)
+        assert "--qgraph-datastore-records" in mrp.call_args[0][0]
+
 
 class TestParsePipetaskArgs:
     def test_parses_qgraph_file(self):

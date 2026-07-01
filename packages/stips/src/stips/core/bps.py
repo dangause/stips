@@ -273,6 +273,32 @@ def render_bps_config(
     return output_file
 
 
+#: Matches ``Run Id``/``Run ID``/``run_id`` followed by ``: <value>`` anywhere in
+#: a line (tolerating a leading log prefix); the ``Run Name`` line is excluded by
+#: the caller.
+_RUN_ID_RE = re.compile(r"\brun[ _]?id\s*:\s*(\S+)", re.IGNORECASE)
+
+
+def _extract_run_id(stdout: str) -> str | None:
+    """Extract the BPS run id from ``bps submit`` stdout.
+
+    The v30 submit banner prints ``Run Id: <id>`` followed by ``Run Name: <name>``
+    (``ctrl_bps.drivers.submit_driver``). Match ``Run Id``/``Run ID``/``run_id``
+    case-insensitively (and tolerate a leading log/timestamp prefix) while
+    explicitly excluding the ``Run Name:`` line — a superset of the original
+    ``"Run ID:" in line or "run_id:" in line`` substring check, which the prior
+    ``startswith("run id")`` fix had inadvertently narrowed (it dropped the
+    ``run_id:`` underscore variant and any prefixed line).
+    """
+    for line in stdout.splitlines():
+        if "run name" in line.lower():
+            continue
+        match = _RUN_ID_RE.search(line)
+        if match:
+            return match.group(1).strip()
+    return None
+
+
 def submit(
     bps_cfg: BPSConfig,
     config: Config,
@@ -328,15 +354,7 @@ def submit(
         )
 
         # Parse output for run ID
-        run_id = None
-        if result.stdout:
-            # Look for run ID in output (format varies by WMS)
-            for line in result.stdout.splitlines():
-                if "Run ID:" in line or "run_id:" in line:
-                    parts = line.split(":", 1)
-                    if len(parts) > 1:
-                        run_id = parts[1].strip()
-                        break
+        run_id = _extract_run_id(result.stdout or "")
 
         success = result.returncode == 0
 
