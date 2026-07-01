@@ -7,21 +7,22 @@
 # (BP/G/RP) transformed to B/V/R/I via the "gaia*" block in colorterms.py.
 # Selected by refcat.mode == "gaia" (see stips.core.refcat.refcat_overlay_config).
 #
-# Astrometry is identical to refcats_gaia_ps1.py. The Gaia refcat already carries
-# BP/G/RP fluxes (see nickel_refcats.gaia COLS_SQL + gaia_dr3_config.py
-# mag_column_list), so no new refcat data is needed — only this wiring.
+# The Gaia refcat already carries BP/G/RP fluxes (see nickel_refcats.gaia
+# COLS_SQL + gaia_dr3_config.py mag_column_list), so no new refcat data is needed.
+#
+# Astrometry (and the applyColorTerms / colorterms.load setup) is identical to
+# refcats_gaia_ps1.py, so inherit it via config.load and override ONLY the
+# photometry (the single real difference) — keeping the two Gaia paths in sync.
 import os
 
-# ---- Astrometry: Gaia DR3 (single-flux astrometric reference) ----
-config.connections.astrometry_ref_cat = "gaia_dr3"
-config.astrometry_ref_loader.anyFilterMapsToThis = "phot_g_mean"
-config.astrometry_ref_loader.filterMap = {}
-config.astrometry.referenceSelector.magLimit.fluxField = "phot_g_mean_flux"
+_config_dir = os.path.dirname(os.path.abspath(__file__))
+config.load(os.path.join(_config_dir, "refcats_gaia_ps1.py"))
 
-# ---- Photometry: Gaia DR3 (BP/G/RP -> B/V/R/I via colorterms) ----
+# ---- Photometry: Gaia DR3 (BP/G/RP -> B/V/R/I) instead of PS1 ----
 config.connections.photometry_ref_cat = "gaia_dr3"
 # Map each science band to a Gaia flux field (base names from gaia_dr3_config.py
-# mag_column_list). The "gaia*" colorterms then refine each with a Gaia colour.
+# mag_column_list). The "gaia*" colorterms (loaded by refcats_gaia_ps1.py) then
+# refine each with a Gaia colour.
 config.photometry_ref_loader.filterMap = {
     "b": "phot_bp_mean",
     "v": "phot_g_mean",
@@ -32,7 +33,4 @@ config.photometry_ref_loader.filterMap = {
     "gp": "phot_g_mean",
     "rp": "phot_rp_mean",
 }
-config.photometry.applyColorTerms = True
 config.photometry.photoCatName = "gaia"  # matches the "gaia*" block in colorterms.py
-_config_dir = os.path.dirname(os.path.abspath(__file__))
-config.photometry.colorterms.load(os.path.join(_config_dir, "colorterms.py"))
