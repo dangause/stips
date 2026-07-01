@@ -123,6 +123,8 @@ class CoaddConfigs:
     """Coadd template building configuration paths."""
 
     make_direct_warp: str | None = None
+    select_template_coadd_visits: str | None = None
+    select_deep_coadd_visits: str | None = None
 
 
 @dataclass
@@ -262,6 +264,10 @@ class RunConfig:
         coadd_cfg_data = configs.get("coadd", {})
         coadd_configs = CoaddConfigs(
             make_direct_warp=coadd_cfg_data.get("make_direct_warp"),
+            select_template_coadd_visits=coadd_cfg_data.get(
+                "select_template_coadd_visits"
+            ),
+            select_deep_coadd_visits=coadd_cfg_data.get("select_deep_coadd_visits"),
         )
 
         # Apply pipeline_type defaults
@@ -471,6 +477,24 @@ def _run_ps1_templates(
             result.template_collections[band] = f"templates/ps1/{band}"
 
 
+def _build_coadd_config_files(run_cfg: "RunConfig", config: "Config") -> list[str]:
+    """Map configured coadd config files to ``<taskLabel>:<resolved-path>`` entries.
+
+    Resolution is instrument-dir-first (see Config.resolve_config), so a fork can
+    override any of these by dropping the file in instruments/<name>/configs/.
+    """
+    mapping = [
+        ("makeDirectWarp", run_cfg.coadd_configs.make_direct_warp),
+        ("selectTemplateCoaddVisits", run_cfg.coadd_configs.select_template_coadd_visits),
+        ("selectDeepCoaddVisits", run_cfg.coadd_configs.select_deep_coadd_visits),
+    ]
+    files: list[str] = []
+    for label, rel in mapping:
+        if rel:
+            files.append(f"{label}:{config.resolve_config(rel)}")
+    return files
+
+
 def _run_coadd_templates(
     run_cfg: RunConfig,
     config: Config,
@@ -573,10 +597,7 @@ def _run_coadd_templates(
         log.info(f"Building coadd template for {band}-band...")
 
         if not dry_run:
-            coadd_config_files = []
-            if run_cfg.coadd_configs.make_direct_warp:
-                cfg_path = config.resolve_config(run_cfg.coadd_configs.make_direct_warp)
-                coadd_config_files.append(f"makeDirectWarp:{cfg_path}")
+            coadd_config_files = _build_coadd_config_files(run_cfg, config)
 
             coadd_log = _get_step_log_file("coadd_template", band=band)
             coadd_result = coadd.run(

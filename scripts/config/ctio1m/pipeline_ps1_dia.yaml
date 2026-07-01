@@ -1,0 +1,74 @@
+# CTIO 1.0m / Y4KCam — PS1-template DIA validation on the SA98 Landolt field.
+#
+# PURPOSE (capability validation, "Approach A", PS1 arm)
+# The PS1 counterpart to pipeline_coadd_dia.yaml: difference the SAME held-out
+# science night (20100121, SA98) against an external PS1 template instead of a
+# Nickel-style coadd, so the two template strategies can be compared directly on
+# identical science. SA98 is equatorial (Dec -0.37), so PS1 (Dec > -30) covers it.
+#
+# SHARED REPO — run the coadd arm FIRST.
+#   This config points at the SAME repo as pipeline_coadd_dia.yaml and REUSES the
+#   calibs + science already produced there (skip_calibs/skip_science = true). It
+#   only ingests PS1 templates and re-runs DIA + forced photometry. Both diffs then
+#   live in one repo (coadd diff vs PS1 diff) for a clean comparison.
+#
+# RUNBOOK (stack-activated shell)
+#   # 0. Prereq: pipeline_coadd_dia.yaml has already run (science for 20100121 exists).
+#   # 1. PS1-arm run (ingest PS1 r/i templates -> DIA -> fphot; no calibs/science).
+#   .venv/bin/stips -c scripts/config/ctio1m/pipeline_ps1_dia.yaml run
+#   #    (preview first with:  ... run --dry-run)
+#   # 2. Compare: coadd-template diff vs PS1-template diff for night 20100121 in the
+#   #    shared repo (both should be clean — flat residual, fphot diff flux ~0).
+
+env:
+  REPO: "/Users/dangause/Developer/lick/data_ctio/sa98_repo"
+  STACK_DIR: "/Users/dangause/Developer/lick/lsst/lsst_stack"
+  INSTRUMENT_DIR: "/Users/dangause/Developer/lick/lsst/lsst_stack/stack/stips/instruments/ctio1m"
+  RAW_PARENT_DIR: "/Users/dangause/Developer/lick/data_ctio"
+  REFCAT_REPO: "/Users/dangause/Developer/lick/lsst/lsst_stack/stack/refcats"
+  NOIRLAB_PROPOSAL: "2009B-0170"
+
+object: "SA98"
+ra: 102.9863
+dec: -0.3719
+
+# PS1 templates support r/i.
+bands: ["r", "i"]
+
+template:
+  type: ps1
+  # Y4KCam unbinned FOV is ~0.33 deg/side (4104 px x 0.289"/px). 0.5 deg cutout
+  # gives ~5 arcmin margin per side for pointing dither; increase if PS1 overlap
+  # failures appear (see "PS1 template overlap failures" in CLAUDE.md).
+  size: 0.5
+
+science:
+  nights:
+    - 20100121   # same held-out science night as the coadd arm (shared repo)
+
+configs:
+  science:
+    calibrate_image: calibrateImage/tuned_configs/dense_strict.py
+    calibrate_image_fallbacks:
+      - calibrateImage/tuned_configs/dense_relaxed.py
+      - calibrateImage/tuned_configs/sparse_relaxed.py
+    colorterms: apply_colorterms.py
+  dia:
+    # PS1->Y4KCam PSF matching (convolveTemplate); framework default.
+    subtract_images: dia/subtractImages_ps1.py
+    detect_and_measure: dia/detectAndMeasure.py
+
+options:
+  jobs: 4
+  concurrent_nights: 1
+  skip_calibs: true          # reuse the coadd-arm repo's calibs
+  skip_science: true         # reuse the coadd-arm repo's science for 20100121
+  rebuild_templates: false   # PS1 templates don't need rebuild
+  skip_dia: false
+  forced_phot: true
+  forced_phot_image_type: diffim
+  continue_on_error: true
+  use_fallbacks: true
+
+lightcurve:
+  enabled: false
