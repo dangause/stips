@@ -21,7 +21,7 @@ from stips.core.pipeline import (
     read_log_delta,
     validate_night,
 )
-from stips.core.refcat import refcat_overlay_config
+from stips.core.refcat import GAIA_DATASET, PS1_DATASET, refcat_overlay_config
 from stips.core.stack import (
     run_butler,
 )
@@ -486,6 +486,22 @@ def run(
                 config_file_args += [
                     "--config-file",
                     f"calibrateImage:{overlay_path}",
+                ]
+                # The single-visit QA ref-match tasks hardcode the MONSTER refcat,
+                # which is empty for non-monster fields (e.g. southern gaia targets
+                # south of PS1) and fails qgraph generation. Point them at the same
+                # refcats the overlay uses: astrometry is Gaia in both modes,
+                # photometry is Gaia (gaia) or PS1 (gaia_ps1).
+                photom = (
+                    GAIA_DATASET if science_cfg.refcat_mode == "gaia" else PS1_DATASET
+                )
+                config_file_args += [
+                    "--config",
+                    "makeAnalysisSingleVisitStarAstrometricRefMatchNickel:"
+                    f"connections.refCatalog={GAIA_DATASET}",
+                    "--config",
+                    "makeAnalysisSingleVisitStarPhotometricRefMatchNickel:"
+                    f"connections.refCat={photom}",
                 ]
             config_file_args += ["--config-file", f"calibrateImage:{colorterms_config}"]
 
