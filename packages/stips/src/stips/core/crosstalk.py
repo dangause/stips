@@ -199,13 +199,13 @@ def build_and_certify_crosstalk(
     # ConflictingDefinitionError on that collection, which is what broke
     # multi-night calibs (every night after the first re-certified and conflicted,
     # with a fragile cascade that could fail the whole night's calibs).
-    already = parse_butler_query_output(
-        run_butler_query(
-            ["query-collections", repo, cols.crosstalk_calib],
+    already = (
+        butler_query.list_collections(
             config,
-            check=False,
-        ).stdout,
-        prefix_filter=f"{prof.collection_prefix}/",
+            cols.crosstalk_calib,
+            prefix=f"{prof.collection_prefix}/",
+        )
+        or []
     )
     if already:
         log.info(

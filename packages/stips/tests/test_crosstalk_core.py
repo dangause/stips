@@ -205,14 +205,14 @@ class TestCrosstalkIdempotency(unittest.TestCase):
         def require_profile(self):
             return self._prof
 
-    def _run(self, query_stdout):
+    def _run(self, exists):
         import stips.core.crosstalk as mod
 
         prof = self._Prof()
         prof.crosstalk = self._CT()
         calls = []
-        orig_q, orig_b, orig_stack = (
-            mod.run_butler_query,
+        orig_lc, orig_b, orig_stack = (
+            mod.butler_query.list_collections,
             mod.run_butler,
             mod.run_with_stack,
         )
@@ -222,20 +222,22 @@ class TestCrosstalkIdempotency(unittest.TestCase):
                 stdout = ""
                 stderr = ""
 
-            mod.run_butler_query = lambda args, config, **k: _FakeProc(query_stdout)
+            mod.butler_query.list_collections = lambda config, pattern, **k: (
+                ["CTIO1m/calib/crosstalk"] if exists else []
+            )
             mod.run_butler = lambda args, config, **k: calls.append(args[0])
             mod.run_with_stack = lambda *a, **k: (
                 calls.append("run_with_stack") or _Worker()
             )
             result = mod.build_and_certify_crosstalk("20070321", self._Cfg(prof))
         finally:
-            mod.run_butler_query = orig_q
+            mod.butler_query.list_collections = orig_lc
             mod.run_butler = orig_b
             mod.run_with_stack = orig_stack
         return result, calls
 
     def test_skips_rebuild_and_recertify_when_calib_exists(self):
-        result, calls = self._run("Name\n----\nCTIO1m/calib/crosstalk\n")
+        result, calls = self._run(exists=True)
         self.assertTrue(result.success)
         self.assertEqual(result.calib_collection, "CTIO1m/calib/crosstalk")
         self.assertNotIn("run_with_stack", calls)  # did not rebuild
@@ -243,7 +245,7 @@ class TestCrosstalkIdempotency(unittest.TestCase):
 
     def test_builds_and_certifies_when_calib_absent(self):
         # No existing collection -> the worker build runs (and would certify).
-        result, calls = self._run("")
+        result, calls = self._run(exists=False)
         self.assertIn("run_with_stack", calls)
 
 
