@@ -12,9 +12,12 @@ pre-fetching many pointings at once.
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 import pandas as pd
+
+log = logging.getLogger(__name__)
 
 #: Columns required by convertReferenceCatalog ConvertGaiaManager (+ a few extras).
 #: Must stay a superset of what ``gaia_dr3_config.py`` maps.
@@ -76,6 +79,26 @@ def _launch_gaia_job(adql: str):
     )
 
 
+def _launch_gaia_job_sync(adql: str):
+    """Synchronous Gaia TAP fallback for when the async result-storage is down.
+
+    Gaia async TAP writes results to a job-storage volume that suffers periodic
+    outages (HTTP 500 "result path does not exist"). A synchronous query returns
+    results inline over HTTP, bypassing that volume, but is capped at 2000 rows
+    server-side — so request the brightest 2000 by G, which is ample for
+    astrometric/photometric calibration. Isolated so tests can mock it.
+    """
+    from astroquery.gaia import Gaia
+
+    Gaia.MAIN_GAIA_TABLE = _GAIA_TABLE
+    Gaia.TIMEOUT = 600
+    sync_adql = (
+        adql.replace("SELECT ", "SELECT TOP 2000 ", 1)
+        + " ORDER BY g.phot_g_mean_mag"
+    )
+    return Gaia.launch_job(query=sync_adql, output_format="votable")
+
+
 def fetch_gaia_cone(
     ra: float,
     dec: float,
@@ -110,8 +133,15 @@ def fetch_gaia_cone(
         ``out_csv``.
     """
     adql = _build_cone_adql(ra, dec, radius_deg, ruwe_max, require_5param)
-    job = _launch_gaia_job(adql)
-    res = job.get_results()
+    try:
+        job = _launch_gaia_job(adql)
+        res = job.get_results()
+    except Exception as exc:  # noqa: BLE001 - async job-storage outages are common
+        log.warning(
+            "Gaia async TAP failed (%s); falling back to sync (brightest 2000)", exc
+        )
+        job = _launch_gaia_job_sync(adql)
+        res = job.get_results()
     df = res if isinstance(res, pd.DataFrame) else res.to_pandas()
     df.columns = [c.lower() for c in df.columns]
 
