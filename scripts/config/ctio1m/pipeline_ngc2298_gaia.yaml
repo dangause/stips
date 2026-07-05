@@ -1,0 +1,80 @@
+# CTIO 1.0m / Y4KCam — NGC2298 globular-cluster coadd-template DIA, GAIA refcats.
+#
+# PURPOSE: a real-signal DIA test. NGC2298 is a dense globular cluster with RR
+# Lyrae / variable stars — a coadd (averaging each variable to its mean) minus a
+# held-out epoch (each variable at an instantaneous phase) recovers the variables
+# as real difference sources. This exercises the tuned DIA (bleed mask +
+# SAT-excluded detection + spatial kernel) on a clean, consistently-pointed deep
+# field, AND the new Gaia-only refcat path (refcat.mode=gaia) — no RSP MONSTER
+# dump, since NGC2298 (Dec -36) is south of PS1's -30deg limit.
+#
+# RUNBOOK (stack-activated shell, run from the integration worktree):
+#   stips -c scripts/config/ctio1m/pipeline_ngc2298_gaia.yaml download
+#   stips -c scripts/config/ctio1m/pipeline_ngc2298_gaia.yaml run
+
+env:
+  REPO: "/Users/dangause/Developer/lick/data_ctio/ngc2298_repo"
+  STACK_DIR: "/Users/dangause/Developer/lick/lsst/lsst_stack"
+  INSTRUMENT_DIR: "/Users/dangause/Developer/lick/lsst/lsst_stack/stack/stips/instruments/ctio1m"
+  RAW_PARENT_DIR: "/Users/dangause/Developer/lick/data_ctio"
+  REFCAT_REPO: "/Users/dangause/Developer/lick/lsst/lsst_stack/stack/refcats"
+  NOIRLAB_PROPOSAL: "smarts"
+
+object: "NGC2298"
+# Cluster centre (median of on-field frames; consistent pointing).
+ra: 102.2452
+dec: -36.0049
+
+# Broadband bands with good multi-night coverage (~20 frames/band/night).
+bands: ["v", "i"]
+
+# On-demand Gaia refcats for the cone (astrometry + photometry from Gaia DR3).
+# NGC2298 is south of PS1, so this uses the Gaia-only overlay (refcats_gaia_only).
+refcat:
+  mode: gaia
+  radius_deg: 0.4
+
+template:
+  type: coadd
+  # 3 nights from the Sep-2006 run -> deep coadd; RR Lyrae average toward their
+  # mean across the different-phase epochs.
+  nights:
+    - 20060927
+    - 20060929
+    - 20061001
+
+science:
+  # Held-out Dec-2006 night (~2.5 months later): variables at different phases
+  # than the Sep coadd mean -> recovered as real difference sources.
+  nights:
+    - 20061216
+
+configs:
+  science:
+    calibrate_image: calibrateImage/tuned_configs/dense_strict.py
+    calibrate_image_fallbacks:
+      - calibrateImage/tuned_configs/dense_relaxed.py
+      - calibrateImage/tuned_configs/sparse_relaxed.py
+  coadd:
+    make_direct_warp: coadds/makeDirectWarp.py
+    select_template_coadd_visits: coadds/selectTemplateCoaddVisits.py
+    select_deep_coadd_visits: coadds/selectDeepCoaddVisits.py
+  dia:
+    # Y4KCam-tuned (bleed mask + SAT-excluded detection + spatial kernel).
+    subtract_images: dia/subtractImages.py
+    detect_and_measure: dia/detectAndMeasure.py
+
+options:
+  jobs: 4
+  concurrent_nights: 2
+  skip_calibs: false
+  skip_science: false
+  rebuild_templates: true
+  skip_dia: false
+  forced_phot: true
+  forced_phot_image_type: diffim
+  continue_on_error: true
+  use_fallbacks: true
+
+lightcurve:
+  enabled: false
