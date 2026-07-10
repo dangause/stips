@@ -76,6 +76,17 @@ class TestButlerQueryContract:
             )
         assert hasattr(Butler, "registry")  # v27 fallback path
 
+    def test_data_coordinate_mapping_access(self):
+        # dataset_data_id_values reads ``ref.dataId["htm7"]`` — the DataCoordinate
+        # returned as a ref's dataId must support mapping-style item access by
+        # dimension name. If this becomes attribute-only, the htm7 snippet breaks.
+        from lsst.daf.butler import DataCoordinate
+
+        assert hasattr(DataCoordinate, "__getitem__"), (
+            "DataCoordinate no longer supports dataId[dimension] access — "
+            "core/butler_query dataset_data_id_values snippet must be updated"
+        )
+
     def test_missing_dataset_type_error_importable(self):
         # count snippets catch MissingDatasetTypeError to map to count 0.
         _import_no_future_warning(

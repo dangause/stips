@@ -57,6 +57,26 @@ class TestScriptBuilders:
         assert "queryCollections" in s  # fallback
         assert "templates/*" in s
 
+    def test_data_id_values_script_valid(self):
+        from stips.core.butler_query import _build_data_id_values_script
+
+        s = _build_data_id_values_script(
+            "/repo", "gaia_dr3", ["refcats"], "htm7"
+        )
+        ast.parse(s)
+        # modern API + v27 registry fallback both present
+        assert "query_datasets" in s
+        assert "queryDatasets" in s
+        assert "explain=False" in s
+        # missing dataset-type / collection map to [] (not present)
+        assert "MissingDatasetTypeError" in s
+        assert "MissingCollectionError" in s
+        # dataId dimension access + values embedded
+        assert 'ref.dataId[dimension]' in s
+        assert "gaia_dr3" in s
+        assert "refcats" in s
+        assert "htm7" in s
+
     def test_qg_count_script_uses_len(self):
         from stips.core.butler_query import _build_qg_count_script
 
@@ -126,6 +146,59 @@ class TestCountAndExistence:
 
         with patch.object(butler_query, "run_butler_python_json", return_value=None):
             assert butler_query.has_datasets(_cfg(), "dt", "coll") is False
+
+
+class TestDataIdValues:
+    def test_present_ids_returned_sorted(self):
+        from stips.core import butler_query
+
+        with patch.object(
+            butler_query,
+            "run_butler_python_json",
+            return_value={"values": [100, 101, 102]},
+        ):
+            out = butler_query.dataset_data_id_values(
+                _cfg(), "gaia_dr3", "refcats", "htm7"
+            )
+        assert out == [100, 101, 102]
+
+    def test_empty_when_nothing_present(self):
+        from stips.core import butler_query
+
+        # Missing dataset type / collection -> snippet prints {"values": []}.
+        with patch.object(
+            butler_query, "run_butler_python_json", return_value={"values": []}
+        ):
+            out = butler_query.dataset_data_id_values(
+                _cfg(), "gaia_dr3", "refcats", "htm7"
+            )
+        assert out == []
+
+    def test_none_on_query_failure(self):
+        from stips.core import butler_query
+
+        # run_butler_python_json returns None when the in-stack snippet failed —
+        # distinct from an empty result.
+        with patch.object(butler_query, "run_butler_python_json", return_value=None):
+            out = butler_query.dataset_data_id_values(
+                _cfg(), "gaia_dr3", "refcats", "htm7"
+            )
+        assert out is None
+
+    def test_passes_repo_dataset_collection_dimension(self):
+        from stips.core import butler_query
+
+        with patch.object(
+            butler_query, "run_butler_python_json", return_value={"values": []}
+        ) as m:
+            butler_query.dataset_data_id_values(
+                _cfg("/myrepo"), "panstarrs1_dr2", "refcats", "htm7"
+            )
+        script = m.call_args[0][0]
+        assert "/myrepo" in script
+        assert "panstarrs1_dr2" in script
+        assert "refcats" in script
+        assert "htm7" in script
 
 
 class TestCollections:

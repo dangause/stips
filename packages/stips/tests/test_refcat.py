@@ -100,6 +100,45 @@ def test_present_trixels_parses_butler_ids():
     assert got == {100, 101}
 
 
+def test_query_present_htm7_uses_adapter():
+    from stips.core import refcat
+
+    cfg = mock.Mock()
+    with mock.patch.object(
+        refcat.butler_query,
+        "dataset_data_id_values",
+        return_value=[100, 101, 102],
+    ) as m:
+        got = refcat._query_present_htm7(cfg, "gaia_dr3")
+    assert got == {100, 101, 102}
+    # Delegates with the refcats collection and htm7 dimension.
+    m.assert_called_once_with(cfg, "gaia_dr3", "refcats", "htm7")
+
+
+def test_query_present_htm7_empty_when_none_present():
+    from stips.core import refcat
+
+    with mock.patch.object(
+        refcat.butler_query, "dataset_data_id_values", return_value=[]
+    ):
+        got = refcat._query_present_htm7(mock.Mock(), "gaia_dr3")
+    assert got == set()
+
+
+def test_query_present_htm7_query_failure_returns_empty(caplog):
+    from stips.core import refcat
+
+    # Adapter returns None (in-stack query failed) -> empty set + a WARNING,
+    # not a phantom "present" set that would skip the fetch.
+    with mock.patch.object(
+        refcat.butler_query, "dataset_data_id_values", return_value=None
+    ):
+        with caplog.at_level("WARNING"):
+            got = refcat._query_present_htm7(mock.Mock(), "gaia_dr3")
+    assert got == set()
+    assert any("gaia_dr3" in rec.message for rec in caplog.records)
+
+
 def test_refcatresult_defaults():
     r = RefcatResult(mode="gaia_ps1")
     assert r.gaia_status is None and r.ps1_status is None

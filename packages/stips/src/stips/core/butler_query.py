@@ -111,6 +111,61 @@ except MissingDatasetTypeError:
 """
 
 
+def _build_data_id_values_script(
+    repo: str,
+    dataset_type: str,
+    collections: list[str],
+    dimension: str,
+) -> str:
+    """Build a snippet printing ``{"values": [...]}`` of one dataId dimension.
+
+    Prints the sorted, de-duplicated integer values of ``dimension`` (e.g.
+    ``htm7``) across every matching dataset ref. Prefers
+    ``butler.query_datasets(..., explain=False)`` (v28+, returns ``[]`` instead of
+    raising on an empty result) and falls back to ``registry.queryDatasets`` on
+    v27. A missing dataset type *or* missing collection maps to ``[]`` (nothing
+    present) rather than an error, matching the "which shards already exist?"
+    existence semantics its caller needs.
+    """
+    return f"""
+import json
+from lsst.daf.butler import Butler
+try:
+    from lsst.daf.butler import MissingDatasetTypeError
+except Exception:  # pragma: no cover - older stacks lack the symbol
+    class MissingDatasetTypeError(Exception):
+        pass
+try:
+    from lsst.daf.butler import MissingCollectionError
+except Exception:  # pragma: no cover - relocated/absent on some stacks
+    try:
+        from lsst.daf.butler.registry import MissingCollectionError
+    except Exception:
+        class MissingCollectionError(Exception):
+            pass
+
+butler = Butler.from_config({repo!r}, writeable=False)
+dataset_type = {dataset_type!r}
+collections = {collections!r}
+dimension = {dimension!r}
+try:
+    try:
+        refs = butler.query_datasets(
+            dataset_type,
+            collections=collections,
+            find_first=False,
+            explain=False,
+        )
+    except (AttributeError, TypeError):
+        # v27 fallback: registry.queryDatasets (no explain/find_first kwargs).
+        refs = butler.registry.queryDatasets(dataset_type, collections=collections)
+    values = sorted({{int(ref.dataId[dimension]) for ref in refs}})
+    print(json.dumps({{"values": values}}))
+except (MissingDatasetTypeError, MissingCollectionError):
+    print(json.dumps({{"values": []}}))
+"""
+
+
 def _build_list_collections_script(repo: str, pattern: str) -> str:
     """Build an in-stack snippet that prints ``{"collections": [...]}`` for a glob."""
     return f"""
@@ -229,6 +284,29 @@ def has_datasets(
     )
     count = _field(run_butler_python_json(script, config), "count")
     return count is not None and int(count) > 0
+
+
+def dataset_data_id_values(
+    config: "Config",
+    dataset_type: str,
+    collections: str | Sequence[str],
+    dimension: str,
+) -> list[int] | None:
+    """Sorted, unique integer values of one dataId ``dimension`` for a dataset.
+
+    Example: the ``htm7`` trixel ids already ingested for a refcat dataset type.
+    Returns ``[]`` when the dataset type or collection is absent (nothing
+    present), or ``None`` if the in-stack query failed to run — letting callers
+    distinguish "none present" from "query failed". Replaces regex-scraping bare
+    integers out of ``butler query-datasets`` CLI stdout.
+    """
+    script = _build_data_id_values_script(
+        str(config.repo), dataset_type, _as_collection_list(collections), dimension
+    )
+    values = _field(run_butler_python_json(script, config), "values")
+    if values is None:
+        return None
+    return [int(v) for v in values]
 
 
 def list_collections(
