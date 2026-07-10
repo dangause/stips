@@ -20,10 +20,14 @@ import os
 import tempfile
 import unittest
 
-import lsst.utils.tests
 import numpy as np
-from conftest import active_instrument_dir
-from stips.pipeline_tools.build_crosstalk_calib import make_crosstalk_calib
+import pytest
+
+pytest.importorskip("lsst.utils.tests")
+
+import lsst.utils.tests  # noqa: E402
+from ctio1m_helpers import active_instrument_dir  # noqa: E402
+from stips.pipeline_tools.build_crosstalk_calib import make_crosstalk_calib  # noqa: E402
 
 
 def _y4kcam_detector(active):
