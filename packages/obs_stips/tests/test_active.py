@@ -4,6 +4,11 @@ import sys
 import unittest
 from pathlib import Path
 
+import pytest
+
+# Every test here imports lsst.obs.stips(.active); skip cleanly in a plain venv.
+pytest.importorskip("lsst.obs.stips")
+
 FIX = str(Path(__file__).parent / "data" / "demo_instrument")
 FIX_CAM = str(Path(__file__).parent / "data" / "demo_camera_instrument")
 

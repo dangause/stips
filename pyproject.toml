@@ -81,8 +81,8 @@ testpaths = [
     "instruments/ctio1m/tests",
     "packages/stips/tests",
     "packages/obs_stips/tests",
+    "packages/refcats/tests",
     # "packages/defects/tests",
-    # "packages/refcats/tests",
     # "packages/colorterms/tests",
     # "packages/tuning/tests",
 ]

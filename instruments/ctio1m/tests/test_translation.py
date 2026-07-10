@@ -8,7 +8,7 @@ real Y4KCam keywords.
 
 import astropy.units as u
 from astropy.time import Time
-from conftest import load_ctio1m_profile
+from ctio1m_helpers import load_ctio1m_profile
 
 PROFILE = load_ctio1m_profile()
 

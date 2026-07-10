@@ -1,6 +1,6 @@
 """Stack-free tests for the CTIO 1.0m Y4KCam profile + hooks."""
 
-from conftest import load_ctio1m_profile
+from ctio1m_helpers import load_ctio1m_profile
 
 
 def test_identity():

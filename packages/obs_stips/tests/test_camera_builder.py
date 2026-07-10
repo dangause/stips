@@ -4,14 +4,18 @@ import tempfile
 import textwrap
 import unittest
 
-import lsst.afw.cameraGeom as cg
-import lsst.geom as geom
-from lsst.obs.stips.camera_builder import (
+import pytest
+
+pytest.importorskip("lsst.afw.cameraGeom")
+
+import lsst.afw.cameraGeom as cg  # noqa: E402
+import lsst.geom as geom  # noqa: E402
+from lsst.obs.stips.camera_builder import (  # noqa: E402
     _axis_map,
     build_camera,
     build_yaml_camera,
 )
-from stips import CameraSpec
+from stips import CameraSpec  # noqa: E402
 
 # Minimal 2-amp-per-axis (4-amp) yaml with central-cross overscan, mirroring
 # the Y4KCam layout: 2032 imaging + 20 overscan per amp -> 4104 raw / 4064 trimmed.

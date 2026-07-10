@@ -19,8 +19,12 @@ has exactly one detector with FOUR amplifiers.
 
 import unittest
 
-import lsst.utils.tests
-from conftest import active_instrument_dir
+import pytest
+
+pytest.importorskip("lsst.utils.tests")
+
+import lsst.utils.tests  # noqa: E402
+from ctio1m_helpers import active_instrument_dir  # noqa: E402
 
 
 class TestY4KCamCamera(unittest.TestCase):

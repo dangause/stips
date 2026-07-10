@@ -1,7 +1,11 @@
 import unittest
 from pathlib import Path
 
-from lsst.obs.stips import profile_loader
+import pytest
+
+pytest.importorskip("lsst.obs.stips")
+
+from lsst.obs.stips import profile_loader  # noqa: E402
 
 FIX = Path(__file__).parent / "data" / "demo_instrument"
 

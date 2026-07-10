@@ -126,6 +126,10 @@ class TestYamlConfig(unittest.TestCase):
         import sys
         from pathlib import Path
 
+        import pytest
+
+        pytest.importorskip("lsst.obs.stips")
+
         from lsst.obs.stips.profile_loader import load_profile_from_dir
 
         FIX = str(
