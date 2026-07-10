@@ -13,7 +13,7 @@ from stips.core.pipeline import (
     CollectionNames,
     build_exclusion_expr,
     is_empty_qgraph,
-    night_to_day_obs,
+    night_day_obs_expr,
     parse_bad_exposures,
     parse_quanta_summary,
     validate_night,
@@ -157,7 +157,9 @@ def run(
     night = validate_night(night)
     cols = CollectionNames(night, prefix=prof.collection_prefix)
     repo = str(config.repo)
-    day_obs = night_to_day_obs(night, offset_days=prof.night_to_dayobs_offset_days)
+    # A Lick observing night spans two UT days (pre-/post-midnight); include
+    # both so pre-midnight exposures are not dropped from difference imaging.
+    day_obs_expr = night_day_obs_expr(night, prof)
 
     # Resolve template
     template_collection = template
@@ -230,7 +232,7 @@ def run(
 
     data_query = (
         f"instrument='{prof.name}' AND exposure.observation_type='science' "
-        f"AND day_obs={day_obs}{object_expr}{exclusion_expr}{band_expr}"
+        f"AND {day_obs_expr}{object_expr}{exclusion_expr}{band_expr}"
     )
 
     # Pipeline and config paths
@@ -416,7 +418,7 @@ def run(
         # Count outputs via the Butler Python query API (structured JSON) instead
         # of parsing query-datasets tabular stdout. A failed query yields None,
         # which we treat as 0 to preserve the prior best-effort behavior.
-        where = f"instrument='{prof.name}' AND day_obs={day_obs}"
+        where = f"instrument='{prof.name}' AND {day_obs_expr}"
         diff_count = (
             butler_query.count_datasets(
                 config, "difference_image", cols.diff_run, where=where

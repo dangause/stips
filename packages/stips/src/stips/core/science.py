@@ -15,7 +15,7 @@ from stips.core.pipeline import (
     build_exclusion_expr,
     find_bad_coord_exposures,
     isr_config_args,
-    night_to_day_obs,
+    night_day_obs_expr,
     parse_bad_exposures,
     parse_quanta_summary,
     read_log_delta,
@@ -155,13 +155,8 @@ def resolve_object_filter(
     # Query all unique target names from Butler directly.
     where = f"instrument='{prof.name}' AND exposure.observation_type='science'"
     if night:
-        from stips.core.pipeline import night_to_day_obs
-
         # See run() — a Lick observing night spans two UT days.
-        day_obs_next = night_to_day_obs(
-            night, offset_days=prof.night_to_dayobs_offset_days
-        )
-        where += f" AND day_obs IN ({night}, {day_obs_next})"
+        where += f" AND {night_day_obs_expr(night, prof)}"
 
     script = f"""
 import json
@@ -397,10 +392,9 @@ def run(
     # A single Lick observing night can span two UT days: exposures taken
     # before Pacific midnight have day_obs=night, and post-midnight exposures
     # have day_obs=night+1 (what night_to_day_obs returns). Query both.
-    day_obs_next = night_to_day_obs(night, offset_days=prof.night_to_dayobs_offset_days)
     data_query = (
         f"instrument='{prof.name}' AND exposure.observation_type='science'"
-        f" AND day_obs IN ({night}, {day_obs_next})"
+        f" AND {night_day_obs_expr(night, prof)}"
         f"{object_expr}{band_expr}{exclusion_expr}"
     )
 

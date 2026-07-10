@@ -94,6 +94,72 @@ def night_to_day_obs(night: str, offset_days: int = 1) -> str:
     return (dt + timedelta(days=offset_days)).strftime("%Y%m%d")
 
 
+def night_day_obs_values(
+    night: str,
+    profile=None,
+    *,
+    offset_days: int | None = None,
+) -> tuple[int, ...]:
+    """Return the distinct UT ``day_obs`` values an observing night can span.
+
+    A single local observing night can straddle UT midnight: exposures taken
+    before midnight (Pacific evening) have ``day_obs == night``, while
+    post-midnight exposures have ``day_obs == night + offset_days`` (what
+    :func:`night_to_day_obs` returns). Butler queries must include *both* days
+    or pre-midnight exposures are silently dropped.
+
+    Args:
+        night: Local observing night (YYYYMMDD)
+        profile: Active instrument profile; its
+            ``night_to_dayobs_offset_days`` is used when ``offset_days`` is not
+            given explicitly. Defaults to 1 (Nickel-correct) when both are None.
+        offset_days: Explicit local->UT offset, overriding the profile value.
+
+    Returns:
+        Tuple of distinct integer ``day_obs`` values (one value when the offset
+        collapses both days onto the same date, e.g. ``offset_days=0``).
+    """
+    if offset_days is None:
+        offset_days = (
+            profile.night_to_dayobs_offset_days if profile is not None else 1
+        )
+    first = int(night)
+    second = int(night_to_day_obs(night, offset_days=offset_days))
+    if second == first:
+        return (first,)
+    return (first, second)
+
+
+def night_day_obs_expr(
+    night: str,
+    profile=None,
+    *,
+    column: str = "day_obs",
+    offset_days: int | None = None,
+) -> str:
+    """Build a Butler WHERE fragment selecting a night's UT ``day_obs`` value(s).
+
+    Emits ``{column} IN (a, b)`` for the two UT days an observing night spans,
+    or ``{column}=a`` when the offset collapses them onto a single date. See
+    :func:`night_day_obs_values` for the two-UT-day rationale.
+
+    Args:
+        night: Local observing night (YYYYMMDD)
+        profile: Active instrument profile (supplies the offset).
+        column: Column name to constrain (e.g. ``"day_obs"`` or
+            ``"exposure.day_obs"``).
+        offset_days: Explicit local->UT offset, overriding the profile value.
+
+    Returns:
+        A WHERE clause fragment (no leading ``AND``).
+    """
+    values = night_day_obs_values(night, profile, offset_days=offset_days)
+    if len(values) == 1:
+        return f"{column}={values[0]}"
+    joined = ", ".join(str(v) for v in values)
+    return f"{column} IN ({joined})"
+
+
 def isr_config_args(
     profile, label: str = "isr", *, include_crosstalk: bool = True
 ) -> list[str]:
@@ -209,15 +275,14 @@ def find_bad_coord_exposures(
     # A Lick observing night can span two UT days (Pacific evening = night,
     # post-midnight = night+1). Query both. The local->UT offset is
     # instrument-configurable via the active profile.
-    offset_days = (
-        config.profile.night_to_dayobs_offset_days if config.profile is not None else 1
+    day_obs_expr = night_day_obs_expr(
+        night, config.profile, column="exposure.day_obs"
     )
-    day_obs_next = night_to_day_obs(night, offset_days=offset_days)
 
     # Build WHERE clause
     where = (
         f"instrument='{instrument_name}' AND exposure.observation_type='science'"
-        f" AND exposure.day_obs IN ({night}, {day_obs_next})"
+        f" AND {day_obs_expr}"
     )
     if object_filter:
         where += f" AND exposure.target_name='{object_filter}'"
