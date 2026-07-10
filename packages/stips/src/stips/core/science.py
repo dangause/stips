@@ -15,6 +15,7 @@ from stips.core.pipeline import (
     build_exclusion_expr,
     find_bad_coord_exposures,
     isr_config_args,
+    latest_raw_run,
     night_day_obs_expr,
     parse_bad_exposures,
     parse_quanta_summary,
@@ -263,15 +264,11 @@ def run(
     if science_config is not None:
         science_cfg.calibrate_image = science_config
 
-    # Find the raw collection for this night (targeted query)
+    # Find the raw collection for this night (targeted query).
+    # Use the newest raw ingest — a re-ingest (e.g. after a header fix) appends
+    # a newer timestamp that supersedes the stale earlier one.
     try:
-        raw_collections = (
-            butler_query.list_collections(
-                config, f"{cols.prefix}/raw/{night}/*", prefix=f"{cols.prefix}/"
-            )
-            or []
-        )
-        raw_run = raw_collections[0] if raw_collections else None
+        raw_run = latest_raw_run(config, night)
         if not raw_run:
             return ScienceResult(
                 success=False,

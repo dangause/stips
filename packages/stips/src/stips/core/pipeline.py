@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 # Re-exported for backwards compatibility; canonical home is stips.collections.
 from stips.collections import CollectionNames as CollectionNames
 from stips.collections import generate_run_timestamp as generate_run_timestamp
+from stips.core import butler_query
 
 if TYPE_CHECKING:
     from stips.core.config import Config
@@ -350,6 +351,127 @@ print(json.dumps(results))
 
 # Standard chains
 REFCATS_CHAIN = "refcats"
+
+
+def _is_processccd_parent(collection: str) -> bool:
+    """True for a CHAINED processCcd parent (not a bare ``/run`` or ``/run_fb*``).
+
+    Science processing writes RUN collections ``.../processCcd/{ts}/run`` plus
+    ``.../run_fb1..3`` for fallback ``calibrateImage`` configs, all chained under
+    the CHAINED parent ``.../processCcd/{ts}``. The parent is what downstream
+    consumers (DIA, coadd, fphot) must use, since it aggregates the primary and
+    every successful fallback RUN.
+    """
+    return not collection.endswith("/run") and "/run_fb" not in collection
+
+
+def latest_raw_run(config: Config, night: str) -> str | None:
+    """Return the newest raw-ingest collection for ``night`` (or ``None``).
+
+    ``list_collections`` returns names sorted ascending, so the timestamped raw
+    ingest collections sort oldest-first; the newest (``[-1]``) is the correct
+    one to use, since a re-ingest (e.g. after a header fix) appends a newer
+    timestamp that supersedes the stale earlier one.
+    """
+    prof = config.require_profile()
+    raw_collections = (
+        butler_query.list_collections(
+            config,
+            f"{prof.collection_prefix}/raw/{night}/*",
+            prefix=f"{prof.collection_prefix}/",
+        )
+        or []
+    )
+    return raw_collections[-1] if raw_collections else None
+
+
+def resolve_processccd_collections(
+    config: Config,
+    night: str,
+    *,
+    all_parents: bool = False,
+    verify_datasets: bool = False,
+    dataset_type: str | None = None,
+    where: str = "",
+) -> list[str]:
+    """Resolve the processCcd science collection(s) to feed downstream steps.
+
+    Encapsulates the "prefer the CHAINED parent over individual ``/run`` and
+    ``/run_fb*`` RUNs" policy shared by DIA, coadd, and forced photometry, with a
+    single, consistent tie-break: CHAINED parents are returned **newest-first**.
+
+    Args:
+        config: Pipeline configuration.
+        night: Observing night (YYYYMMDD).
+        all_parents: When True, return every CHAINED parent (DIA needs the union
+            across disjoint band groups). When False (default), return only the
+            single newest parent (fphot / coadd).
+        verify_datasets: When True, keep only collections that actually contain
+            ``dataset_type`` (coadd's per-band verification). Requires
+            ``dataset_type``.
+        dataset_type: Dataset type checked when ``verify_datasets`` is True.
+        where: Optional Butler WHERE clause for the verification query
+            (e.g. ``"band='r'"``).
+
+    Returns:
+        Matching collection names, newest-first. Empty list when none is found
+        (or none survive verification).
+
+    Notes:
+        If **no** CHAINED parent exists for the night, this falls back to a bare
+        RUN collection, preferring ``/run`` over any ``/run_fb*`` (a lone
+        fallback RUN is only a partial result), and logs a WARNING — downstream
+        steps normally expect the CHAINED parent.
+    """
+    if verify_datasets and dataset_type is None:
+        raise ValueError("verify_datasets=True requires a dataset_type to check.")
+
+    prof = config.require_profile()
+    colls = (
+        butler_query.list_collections(
+            config,
+            f"{prof.collection_prefix}/runs/{night}/processCcd/*",
+            prefix=f"{prof.collection_prefix}/",
+        )
+        or []
+    )
+    if not colls:
+        return []
+
+    # Newest-first CHAINED parents.
+    parents = sorted(
+        (c for c in colls if _is_processccd_parent(c)), reverse=True
+    )
+
+    if not parents:
+        # No CHAINED parent: fall back to a bare RUN, preferring /run over a lone
+        # /run_fb* (which only holds partial, fallback-config results).
+        runs = sorted((c for c in colls if c.endswith("/run")), reverse=True)
+        fallback_runs = sorted((c for c in colls if "/run_fb" in c), reverse=True)
+        candidates = runs or fallback_runs
+        if not candidates:
+            return []
+        chosen = candidates[0]
+        log.warning(
+            "No CHAINED processCcd parent for night %s; falling back to bare RUN "
+            "collection %s (partial results — downstream steps normally expect "
+            "the CHAINED parent).",
+            night,
+            chosen,
+        )
+        parents = [chosen]
+
+    if verify_datasets:
+        parents = [
+            c
+            for c in parents
+            if butler_query.has_datasets(config, dataset_type, c, where=where)
+        ]
+
+    if not parents:
+        return []
+
+    return parents if all_parents else parents[:1]
 
 
 def parse_butler_query_output(

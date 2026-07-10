@@ -13,9 +13,11 @@ from stips.core.pipeline import (
     CollectionNames,
     build_exclusion_expr,
     is_empty_qgraph,
+    latest_raw_run,
     night_day_obs_expr,
     parse_bad_exposures,
     parse_quanta_summary,
+    resolve_processccd_collections,
     validate_night,
 )
 from stips.core.stack import run_butler
@@ -179,27 +181,14 @@ def run(
     # Prefer the CHAINED parent over individual RUN collections, since the
     # CHAINED parent includes results from both primary and fallback configs.
     try:
-        sci_collections = (
-            butler_query.list_collections(
-                config,
-                f"{prof.collection_prefix}/runs/{night}/processCcd/*",
-                prefix=f"{prof.collection_prefix}/",
-            )
-            or []
+        # Prefer CHAINED parents over individual RUNs, and join ALL CHAINED
+        # parents so DIA sees science outputs from every band group (broadband +
+        # narrowband are processed separately). Band groups are disjoint by
+        # filter, so no duplicate datasets across parents.
+        parent_collections = resolve_processccd_collections(
+            config, night, all_parents=True
         )
-        # Prefer CHAINED parents (no /run or /run_fb suffix) over individual RUNs.
-        # Join ALL CHAINED parents so DIA sees science outputs from every
-        # band group (broadband + narrowband are processed separately).
-        # sorted() gives deterministic order; band groups are disjoint by filter
-        # so no duplicate datasets across parents.
-        chained = [
-            c for c in sci_collections if not c.endswith("/run") and "/run_fb" not in c
-        ]
-        sci_parents = (
-            ",".join(sorted(chained))
-            if chained
-            else sci_collections[-1] if sci_collections else None
-        )
+        sci_parents = ",".join(parent_collections) if parent_collections else None
 
         if not sci_parents:
             return DIAResult(
@@ -258,18 +247,9 @@ def run(
         qg_dir.mkdir(parents=True, exist_ok=True)
         qg_file = qg_dir / f"diff_{night}_{cols.run_ts}.qg"
 
-        # Find raw collection (optional for DIA, targeted query)
-        raw_run = ""
-        raw_collections = (
-            butler_query.list_collections(
-                config,
-                f"{prof.collection_prefix}/raw/{night}/*",
-                prefix=f"{prof.collection_prefix}/",
-            )
-            or []
-        )
-        if raw_collections:
-            raw_run = raw_collections[0]
+        # Find raw collection (optional for DIA, targeted query). Use the newest
+        # raw ingest so a re-ingest supersedes a stale earlier one.
+        raw_run = latest_raw_run(config, night) or ""
 
         input_collections = f"{sci_parents},{cols.calib_chain},{REFCATS_CHAIN},{prof.skymap_collection},{template_collection}"
         if raw_run:

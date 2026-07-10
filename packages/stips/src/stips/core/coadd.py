@@ -21,6 +21,7 @@ from stips.core import butler_query
 from stips.core.pipeline import (
     REFCATS_CHAIN,
     generate_run_timestamp,
+    resolve_processccd_collections,
 )
 from stips.core.stack import (
     run_butler,
@@ -132,51 +133,25 @@ def find_science_collections_for_nights(
     Returns:
         List of collection names with science outputs for this band
     """
-    prof = config.require_profile()
     collections = []
 
     for night in nights:
         try:
-            night_colls = butler_query.list_collections(
+            # Prefer the newest CHAINED parent over individual RUN collections
+            # (the parent aggregates the primary and any fallback configs), and
+            # verify it actually holds data for the requested band.
+            resolved = resolve_processccd_collections(
                 config,
-                f"{prof.collection_prefix}/runs/{night}/processCcd/*",
-                prefix=f"{prof.collection_prefix}/",
+                night,
+                verify_datasets=True,
+                dataset_type="preliminary_visit_image",
+                where=f"band='{band}'",
             )
-            if night_colls is None:
-                log.warning(f"  No processCcd collections found for {night}")
-                continue
-
-            if not night_colls:
-                log.info(
-                    f"  No processCcd collections found for {night} "
-                    "(likely no successful science run)"
-                )
-                continue
-
-            # Prefer the CHAINED parent collection over individual RUN
-            # collections — the CHAINED collection includes results from
-            # both the primary config and any fallback configs.
-            # Within each group, sort descending to pick the newest timestamp.
-            night_colls.sort(
-                key=lambda c: (
-                    1 if not c.endswith("/run") and "/run_fb" not in c else 0,
-                    c,
-                ),
-                reverse=True,
-            )
-
-            found = False
-            for coll in night_colls:
-                # Verify this collection has data for the requested band
-                if butler_query.has_datasets(
-                    config, "preliminary_visit_image", coll, where=f"band='{band}'"
-                ):
-                    collections.append(coll)
-                    log.info(f"  Found {night} -> {coll}")
-                    found = True
-                    break
-
-            if not found:
+            if resolved:
+                coll = resolved[0]
+                collections.append(coll)
+                log.info(f"  Found {night} -> {coll}")
+            else:
                 log.info(f"  Night {night} has no {band}-band data (skipping)")
 
         except Exception as e:
