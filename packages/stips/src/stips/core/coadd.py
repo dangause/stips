@@ -259,6 +259,37 @@ print(json.dumps(sorted(bad_visits)))
     return []
 
 
+def _remove_run_collections(
+    runs: list[str],
+    repo: str,
+    config: Config,
+    log_file: Path | None,
+) -> None:
+    """Remove orphaned template RUN collections, logging (never raising) on failure.
+
+    Called only AFTER a replacement template has been built, verified, and the
+    parent chain redefined to point at the new run — so these runs are no longer
+    chain members and deleting them cannot destroy the live template. Leaving an
+    old run orphaned is acceptable; aborting an already-successful rebuild
+    because cleanup failed is not, so every failure is downgraded to a WARNING.
+    """
+    for old_run in runs:
+        try:
+            result = run_butler(
+                ["remove-collections", repo, old_run, "--no-confirm"],
+                config,
+                check=False,
+                log_file=log_file,
+            )
+            if result.returncode != 0:
+                log.warning(
+                    f"Failed to remove superseded template run {old_run} "
+                    f"(exit {result.returncode}); leaving it orphaned"
+                )
+        except Exception as e:  # noqa: BLE001 - cleanup must never abort a success
+            log.warning(f"Failed to remove superseded template run {old_run}: {e}")
+
+
 def run(
     nights: list[str],
     band: str,
@@ -388,6 +419,33 @@ def run(
     qg_file = qg_dir / f"template_t{tract}_{band}_{run_ts}.qg"
 
     try:
+        # Build-then-swap sequencing (F-009).
+        #
+        # OLD (destructive) order: on a rebase the parent chain was emptied
+        # (collection-chain --mode redefine) and the parent removed
+        # (remove-collections) *before* the replacement was built. A failed
+        # build — the common case (template overlap / WCS issues) — therefore
+        # left NO template at all, with no rollback, and the removal's own
+        # failure was swallowed by check=False.
+        #
+        # NEW order: (1) build the coadd into a fresh timestamped RUN, passing
+        # no --output CHAINED collection so the build cannot touch the live
+        # template; (2) verify the new RUN actually holds template_coadd; (3)
+        # only then redefine the parent chain to the new RUN (one atomic swap);
+        # (4) then remove the now-de-chained old RUNs, best-effort. If the build
+        # or verification fails, the existing template is left completely
+        # untouched.
+
+        # Snapshot the existing template's RUN collections up front so they can
+        # be cleaned up *after* a verified swap. Nothing is deleted here.
+        old_runs: list[str] = []
+        if needs_rebase:
+            existing_runs = butler_query.list_collections(
+                config, f"{template_parent}/*"
+            )
+            if existing_runs:
+                old_runs = [c for c in existing_runs if c != template_run]
+
         # Register instrument (idempotent)
         run_butler(
             ["register-instrument", repo, prof.instrument_class],
@@ -395,22 +453,6 @@ def run(
             check=False,
             log_file=log_file,
         )
-
-        # Handle rebase (overwrite existing template)
-        if needs_rebase:
-            log.info(f"Rebasing existing template: {template_parent}")
-            run_butler(
-                ["collection-chain", repo, template_parent, "--mode", "redefine"],
-                config,
-                check=False,
-                log_file=log_file,
-            )
-            run_butler(
-                ["remove-collections", repo, template_parent, "--no-confirm"],
-                config,
-                check=False,
-                log_file=log_file,
-            )
 
         # Build input chain
         input_chain = ",".join(input_collections)
@@ -435,7 +477,9 @@ def run(
             for cf in config_files:
                 config_args.extend(["--config-file", cf])
 
-        # Build quantum graph
+        # Build quantum graph into the new RUN only. No --output CHAINED
+        # collection is passed: the existing template chain is left untouched
+        # until the new outputs are built and verified below.
         qgraph_args = [
             "qgraph",
             "-b",
@@ -444,8 +488,6 @@ def run(
             f"{pipeline}#coadds-only",
             "-i",
             full_input,
-            "-o",
-            template_parent,
             "--output-run",
             template_run,
             "--save-qgraph",
@@ -472,23 +514,12 @@ def run(
             log_file=log_file,
         )
 
-        # Update collection chain
-        run_butler(
-            [
-                "collection-chain",
-                repo,
-                template_parent,
-                template_run,
-                "--mode",
-                "prepend",
-            ],
-            config,
-            log_file=log_file,
-        )
-
-        # Verify that template_coadd datasets were actually produced
-        verified = check_template_exists(band, tract, config)
-        if not verified:
+        # Verify the NEW run actually produced template_coadd datasets BEFORE
+        # touching the existing template. On failure, leave the old template in
+        # place and report the build as failed.
+        if not butler_query.has_datasets(
+            config, "template_coadd", template_run, where=f"band='{band}'"
+        ):
             return CoaddResult(
                 success=False,
                 band=band,
@@ -496,9 +527,31 @@ def run(
                 nights_used=nights,
                 error=(
                     f"Coadd pipeline ran but produced no template_coadd datasets "
-                    f"for band={band}, tract={tract}. Check pipeline logs."
+                    f"in {template_run} for band={band}, tract={tract}. Existing "
+                    f"template (if any) left untouched. Check pipeline logs."
                 ),
             )
+
+        # Verified: atomically swap the parent chain to point at the new run.
+        # In a rebase this also drops the old runs from the chain, which must
+        # happen before they can be removed.
+        run_butler(
+            [
+                "collection-chain",
+                repo,
+                template_parent,
+                template_run,
+                "--mode",
+                "redefine",
+            ],
+            config,
+            log_file=log_file,
+        )
+
+        # Now that the old runs are no longer chain members, clean them up
+        # (best-effort — failures are logged, never fatal).
+        if old_runs:
+            _remove_run_collections(old_runs, repo, config, log_file)
 
         collection = template_parent
         log.info(f"Coadd template built: {collection}")
