@@ -6,7 +6,7 @@ are already present in the Butler ``refcats`` collection, and only fetches /
 converts / ingests the missing ones.
 
 No ``lsst.*`` or ``nickel_refcats`` import happens at module load — stack
-access is confined to ``run_with_stack`` / ``run_butler_query`` (mocked in
+access is confined to ``run_butler`` / the ``butler_query`` adapters (mocked in
 unit tests), and ``nickel_refcats`` symbols are bound lazily on first use so
 importing this module (and hence the CLI) never fails just because
 ``obs-nickel-refcats`` is broken or missing.
@@ -17,12 +17,12 @@ from __future__ import annotations
 import datetime as dt
 import json
 import logging
-import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from stips.core.stack import run_butler, run_butler_query
+from stips.core import butler_query
+from stips.core.stack import run_butler
 
 if TYPE_CHECKING:
     # Static-analysis-only bindings for the lazily loaded names below.
@@ -123,24 +123,26 @@ class RefcatResult:
 def _query_present_htm7(config: "Config", dataset_type: str) -> set[int]:
     """Return the htm7 ids already present for ``dataset_type`` in ``refcats``.
 
-    Queries the Butler and parses htm7 dataId values out of the output. Isolated
-    behind this function so unit tests can mock the Butler interaction.
-    """
-    repo = str(config.repo)
-    result = run_butler_query(
-        ["query-datasets", repo, "--collections", "refcats", dataset_type],
-        config,
-        check=False,
-    )
-    if getattr(result, "returncode", 1) != 0 or not getattr(result, "stdout", ""):
-        return set()
+    Delegates to the structured ``butler_query`` adapter, which runs an in-stack
+    Butler Python query and returns the htm7 dataId values as JSON — replacing
+    the old regex scrape of ``butler query-datasets`` CLI table text (where any
+    numeric column, e.g. a run id or size, could be mistaken for a present
+    trixel). Isolated behind this function so unit tests can mock it directly.
 
-    ids: set[int] = set()
-    for line in result.stdout.splitlines():
-        # htm7 appears as a bare integer dataId column in query-datasets output.
-        for tok in re.findall(r"\b\d{3,}\b", line):
-            ids.add(int(tok))
-    return ids
+    A missing dataset type / collection reads as "none present" (empty set). If
+    the in-stack query itself fails to run (adapter returns ``None``), that is
+    logged and also treated as none-present, preserving the prior rc!=0 behavior
+    while surfacing the failure.
+    """
+    ids = butler_query.dataset_data_id_values(config, dataset_type, "refcats", "htm7")
+    if ids is None:
+        log.warning(
+            "Could not query present htm7 trixels for %s (in-stack query failed); "
+            "treating as none present",
+            dataset_type,
+        )
+        return set()
+    return set(ids)
 
 
 def present_trixels(config: "Config", dataset_type: str) -> set[int]:

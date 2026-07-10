@@ -50,16 +50,13 @@ def needs_bootstrap(config: Config) -> bool:
 
     # Repo exists — verify critical collections are present.
     # A clean bug could remove skymaps/refcats while leaving butler.yaml.
-    from stips.core.stack import run_butler_query
+    from stips.core import butler_query
 
     for collection in ("skymaps", "refcats"):
         try:
-            result = run_butler_query(
-                ["query-collections", str(config.repo), collection],
-                config,
-                check=False,
-            )
-            if result.returncode != 0 or collection not in result.stdout:
+            # collection_exists() is False both when the collection is absent and
+            # when the in-stack query fails to run — either way, bootstrap.
+            if not butler_query.collection_exists(config, collection):
                 log.warning(
                     f"Collection '{collection}' missing from repo — "
                     f"bootstrap needed"
