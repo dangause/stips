@@ -211,6 +211,18 @@ This usually means some exposures have incorrect coordinates in their FITS heade
 stips science 20230519 --object 2023ixf --ra 210.91 --dec 54.32
 ```
 
+### `ModuleNotFoundError` or stale paths after moving/renaming the checkout
+
+The `.venv` is an editable install: it records **absolute** paths to the
+packages (via `.pth` files) at install time. If you move, rename, or copy the
+repository checkout to a new location, a `.venv` carried over from the old path
+points at packages that no longer exist there, producing import errors or
+picking up a stale copy. Rebuild the environment from scratch:
+
+```bash
+rm -rf .venv && uv sync --group dev
+```
+
 
 ## Next Steps
 
