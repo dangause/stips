@@ -46,5 +46,10 @@ stips-skymap-make = "stips.skymap.make_skymap_from_datasets:main"
 # EDA tools
 stips-eda-butler = "stips.eda.butler_inspect:main"
 
+[tool.uv.sources]
+# obs-nickel-refcats is a workspace member (packages/refcats); without this
+# entry a clean `uv sync` fails with "missing an entry in tool.uv.sources".
+obs-nickel-refcats = { workspace = true }
+
 [tool.setuptools.packages.find]
 where = ["src"]
