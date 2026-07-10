@@ -412,16 +412,17 @@ def run(
     if match_count is not None:
         log.info(f"Found {match_count} matching science exposures for {night}")
 
-    # Register instrument
-    try:
-        run_butler(
-            ["register-instrument", repo, prof.instrument_class],
-            config,
-            check=False,
-            log_file=log_file,
-        )
-    except Exception:
-        pass  # Already registered
+    # Register instrument. check=False already tolerates the common
+    # "already registered" non-zero exit, matching dia/calibs/coadd. No
+    # try/except here on purpose: the only remaining raise path is a
+    # stack-activation/spawn failure, which must surface rather than be
+    # silently swallowed.
+    run_butler(
+        ["register-instrument", repo, prof.instrument_class],
+        config,
+        check=False,
+        log_file=log_file,
+    )
 
     # Build quantum graph for single-visit processing
     qg_dir = config.repo / "qgraphs"
@@ -577,27 +578,28 @@ def run(
                 )
 
             if result.returncode == 0:
-                # Full success with this config.
-                # If quanta_ok is 0 but returncode is 0, parsing likely failed
-                # (pipetask wouldn't exit 0 with no work). Log and assume at
-                # least 1 so downstream counters stay positive.
-                effective_ok = quanta_ok if quanta_ok > 0 else 1
+                # Full success with this config (rc==0 => pipetask ran the
+                # planned quanta). Record the true parsed count. If quanta_ok
+                # is 0 here, the quanta summary could not be parsed — record
+                # the honest 0 plus an explicit parse-failure marker rather
+                # than fabricating a count. Success is still driven by rc==0.
                 if quanta_ok == 0:
-                    log.debug(
-                        "Quanta summary not found in output (returncode=0); "
-                        "assuming 1 succeeded"
+                    attempt.quanta_parse_failed = True
+                    log.warning(
+                        "Quanta summary could not be parsed (returncode=0); "
+                        "recording 0 succeeded with quanta_parse_failed=True. "
+                        "Reported counts may understate the work actually done."
                     )
-                attempt.quanta_succeeded = effective_ok
-                cumulative_succeeded += effective_ok
+                attempt.quanta_succeeded = quanta_ok
+                cumulative_succeeded += quanta_ok
                 successful_runs.append(output_run)
                 any_success = True
                 config_used = tuned_config
                 fallback_used = is_fallback
                 if is_fallback:
-                    new_wins = quanta_ok
                     log.info(
                         f"Fallback config {tuned_config.name} rescued all "
-                        f"{new_wins} remaining quanta"
+                        f"{quanta_ok} remaining quanta"
                     )
                 else:
                     log.info(
@@ -620,22 +622,18 @@ def run(
 
                 # Determine how many NEW successes this config produced
                 if is_fallback:
-                    new_wins = quanta_ok  # Fallback qgraph only has failed quanta
+                    # Fallback qgraphs only contain quanta that previously
+                    # failed, so every success here is a new win. (quanta_ok
+                    # is > 0 in this branch, so there is no "rescued nothing"
+                    # case to guard — that path lands in the total-failure
+                    # branch below.)
+                    new_wins = quanta_ok
                     cumulative_succeeded += new_wins
                     log.warning(
                         f"Fallback config {tuned_config.name}: "
                         f"{new_wins} new quanta rescued, {quanta_fail} still failing "
                         f"(cumulative: {cumulative_succeeded} succeeded)"
                     )
-                    # If this fallback rescued zero new quanta, stop trying
-                    if new_wins == 0:
-                        log.info(
-                            "Fallback produced no new successes — remaining "
-                            f"{quanta_fail} failures appear to be data-quality "
-                            "issues, not config-related. Stopping fallback attempts."
-                        )
-                        plog.add_attempt(attempt)
-                        break
                 else:
                     cumulative_succeeded += quanta_ok
                     log.warning(
@@ -666,7 +664,12 @@ def run(
                 attempt.failed_exposures = processing_log.parse_pipetask_failures(
                     result.stderr or "", result.stdout or ""
                 )
-                attempt.quanta_failed = quanta_fail if quanta_fail > 0 else 1
+                # Record the honest parsed count. If the summary could not be
+                # parsed (quanta_fail == 0 despite the non-zero returncode),
+                # mark the parse failure instead of fabricating a count of 1.
+                attempt.quanta_failed = quanta_fail
+                if quanta_fail == 0:
+                    attempt.quanta_parse_failed = True
                 plog.add_attempt(attempt)
 
                 log.error(
@@ -688,7 +691,11 @@ def run(
         except Exception as e:
             error_str = str(e)
             attempt.error = error_str[:500]
-            attempt.quanta_failed = 1
+            # The attempt raised before any quanta could be counted, so the
+            # failure count is unknown, not 1. Leave quanta_failed at 0 and
+            # mark the parse failure; the populated ``error`` field (and the
+            # any_success flag) carry the failure downstream.
+            attempt.quanta_parse_failed = True
             plog.add_attempt(attempt)
 
             # Log detailed error information
@@ -747,10 +754,15 @@ def run(
     provenance.upsert_from_log(plog, config)  # non-fatal; logs on failure
 
     # Use cumulative counts — cumulative_succeeded tracks unique successes
-    # across all configs, and the last attempt's failure count represents
-    # the remaining unresolved failures.
+    # across all configs. Failures are NOT summed: because each fallback's
+    # qgraph is reduced (via --skip-existing-in) to only the quanta that
+    # previously failed, the LAST attempt's failure count is precisely the set
+    # of still-unresolved quanta. Summing would double-count. Name it honestly
+    # so callers know it is the last attempt's remaining failures, not a total.
     total_succeeded = cumulative_succeeded
-    total_failed = plog.configs_tried[-1].quanta_failed if plog.configs_tried else 0
+    last_attempt_failed = (
+        plog.configs_tried[-1].quanta_failed if plog.configs_tried else 0
+    )
 
     # Check if any config succeeded
     if not any_success:
@@ -764,7 +776,7 @@ def run(
             coadd_run=None,
             error=last_error or "All configs failed",
             quanta_succeeded=total_succeeded,
-            quanta_failed=total_failed,
+            quanta_failed=last_attempt_failed,
         )
 
     try:
@@ -794,7 +806,7 @@ def run(
                 coadd_run=None,
                 error="No RUN collections were created (all quanta failed)",
                 quanta_succeeded=0,
-                quanta_failed=total_failed,
+                quanta_failed=last_attempt_failed,
             )
 
         chain_members = list(reversed(verified_runs))
@@ -876,7 +888,7 @@ def run(
             config_used=str(config_used) if config_used else None,
             fallback_used=fallback_used,
             quanta_succeeded=total_succeeded,
-            quanta_failed=total_failed,
+            quanta_failed=last_attempt_failed,
         )
 
     except Exception as e:
@@ -889,5 +901,5 @@ def run(
             config_used=str(config_used) if config_used else None,
             fallback_used=fallback_used,
             quanta_succeeded=total_succeeded,
-            quanta_failed=total_failed,
+            quanta_failed=last_attempt_failed,
         )

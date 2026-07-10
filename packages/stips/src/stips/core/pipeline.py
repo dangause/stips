@@ -312,7 +312,19 @@ print(json.dumps(results))
 """
 
     exposures = run_butler_python_json(script, config)
+    if exposures is None:
+        # The in-stack query crashed (None), which is NOT the same as "no
+        # exposures matched" ([]). Silently returning [] here would disable
+        # the stuck-DEC coordinate-validation safety net without anyone
+        # noticing. Do not raise (degraded/offline runs must proceed), but the
+        # operator must see that the check did not run.
+        log.error(
+            "Coordinate validation could not run (in-stack exposure query "
+            "returned no result) — proceeding WITHOUT bad-coordinate exclusion."
+        )
+        return []
     if not exposures:
+        # Genuinely no exposures matched the query; nothing to validate.
         return []
 
     bad_ids: list[int] = []

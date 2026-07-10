@@ -30,6 +30,10 @@ class ConfigAttempt:
     quanta_failed: int = 0
     failed_exposures: list[dict] = field(default_factory=list)
     error: str | None = None
+    # Set when the pipetask reported success (or ran) but the quanta summary
+    # could not be parsed, so quanta_succeeded/quanta_failed are the honest
+    # unparsed 0 rather than a fabricated count.
+    quanta_parse_failed: bool = False
 
 
 @dataclass
