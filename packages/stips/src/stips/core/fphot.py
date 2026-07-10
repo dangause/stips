@@ -12,8 +12,11 @@ from stips.core.pipeline import (
     REFCATS_CHAIN,
     generate_run_timestamp,
     night_to_day_obs,
+    resolve_processccd_collections,
     validate_night,
 )
+
+VALID_IMAGE_TYPES = frozenset({"visit", "diffim", "both"})
 
 if TYPE_CHECKING:
     from stips.core.config import Config
@@ -103,6 +106,16 @@ def run(
     """
     from stips.core.executor import LocalExecutor
 
+    if image_type not in VALID_IMAGE_TYPES:
+        return ForcedPhotResult(
+            success=False,
+            night=night,
+            error=(
+                f"Invalid image_type {image_type!r}; expected one of "
+                f"{sorted(VALID_IMAGE_TYPES)}."
+            ),
+        )
+
     if executor is None:
         executor = LocalExecutor()
 
@@ -114,25 +127,10 @@ def run(
     output_collections: list[str] = []
     errors: list[str] = []
 
-    # Find processCcd collection
-    # Prefer the CHAINED parent (includes primary + fallback results)
-    # over individual RUN collections.
-    processccd_coll = None
-    colls = (
-        butler_query.list_collections(
-            config,
-            f"{prof.collection_prefix}/runs/{night}/processCcd/*",
-            prefix=f"{prof.collection_prefix}/",
-        )
-        or []
-    )
-    if colls:
-        # Prefer CHAINED parents over individual RUNs
-        chained = [c for c in colls if not c.endswith(("/run",)) and "/run_fb" not in c]
-        if chained:
-            processccd_coll = sorted(chained)[-1]
-        else:
-            processccd_coll = sorted(colls)[-1]
+    # Find the processCcd collection: prefer the newest CHAINED parent (includes
+    # primary + fallback results) over individual RUN collections.
+    parent_collections = resolve_processccd_collections(config, night)
+    processccd_coll = parent_collections[0] if parent_collections else None
 
     if not processccd_coll:
         return ForcedPhotResult(
