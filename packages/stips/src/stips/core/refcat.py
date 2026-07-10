@@ -5,8 +5,11 @@ idempotent: it computes the HTM7 trixels covering the target cone, checks which
 are already present in the Butler ``refcats`` collection, and only fetches /
 converts / ingests the missing ones.
 
-No ``lsst.*`` import happens at module load — stack access is confined to
-``run_with_stack`` / ``run_butler_query`` (mocked in unit tests).
+No ``lsst.*`` or ``nickel_refcats`` import happens at module load — stack
+access is confined to ``run_with_stack`` / ``run_butler_query`` (mocked in
+unit tests), and ``nickel_refcats`` symbols are bound lazily on first use so
+importing this module (and hence the CLI) never fails just because
+``obs-nickel-refcats`` is broken or missing.
 """
 
 from __future__ import annotations
@@ -19,18 +22,66 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from nickel_refcats.convert import convert_catalog
-from nickel_refcats.coverage import missing_trixels
-from nickel_refcats.gaia import fetch_gaia_cone
-from nickel_refcats.htm import cones_to_htm
-from nickel_refcats.ps1 import PS1FootprintError, fetch_ps1_cone
-
 from stips.core.stack import run_butler, run_butler_query
 
 if TYPE_CHECKING:
+    # Static-analysis-only bindings for the lazily loaded names below.
+    from nickel_refcats.convert import convert_catalog
+    from nickel_refcats.coverage import missing_trixels
+    from nickel_refcats.gaia import fetch_gaia_cone
+    from nickel_refcats.htm import cones_to_htm
+    from nickel_refcats.ps1 import PS1FootprintError, fetch_ps1_cone
+
     from stips.core.config import Config
 
 log = logging.getLogger(__name__)
+
+#: nickel_refcats symbols bound lazily into module globals by
+#: ``_load_nickel_refcats`` (and via PEP 562 ``__getattr__`` for attribute
+#: access, e.g. monkeypatching in tests).
+_NICKEL_REFCATS_NAMES = (
+    "convert_catalog",
+    "missing_trixels",
+    "fetch_gaia_cone",
+    "cones_to_htm",
+    "PS1FootprintError",
+    "fetch_ps1_cone",
+)
+
+
+def _load_nickel_refcats() -> None:
+    """Bind ``nickel_refcats`` symbols into module globals on first use.
+
+    Deferred so that importing ``stips.core.refcat`` (and therefore the
+    ``stips`` CLI) does not require ``obs-nickel-refcats`` to be importable;
+    a broken install only surfaces when refcat functionality is invoked.
+    ``setdefault`` keeps any already-bound value (e.g. a test monkeypatch).
+    """
+    g = globals()
+    if all(name in g for name in _NICKEL_REFCATS_NAMES):
+        return
+    from nickel_refcats.convert import convert_catalog
+    from nickel_refcats.coverage import missing_trixels
+    from nickel_refcats.gaia import fetch_gaia_cone
+    from nickel_refcats.htm import cones_to_htm
+    from nickel_refcats.ps1 import PS1FootprintError, fetch_ps1_cone
+
+    for name, value in (
+        ("convert_catalog", convert_catalog),
+        ("missing_trixels", missing_trixels),
+        ("fetch_gaia_cone", fetch_gaia_cone),
+        ("cones_to_htm", cones_to_htm),
+        ("PS1FootprintError", PS1FootprintError),
+        ("fetch_ps1_cone", fetch_ps1_cone),
+    ):
+        g.setdefault(name, value)
+
+
+def __getattr__(name: str):
+    if name in _NICKEL_REFCATS_NAMES:
+        _load_nickel_refcats()
+        return globals()[name]
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 #: Butler dataset-type names (must match the convert configs + colorterm aliases).
 GAIA_DATASET = "gaia_dr3"
@@ -194,6 +245,7 @@ def _ensure_one(
 
     Returns ``"covered"`` (already present) or ``"fetched"`` (newly ingested).
     """
+    _load_nickel_refcats()
     # A needed trixel is satisfied if it has an ingested shard OR we already
     # requested it (it may legitimately contain no usable sources, so it never
     # gets a shard — without this it would be re-fetched on every run).
@@ -235,6 +287,7 @@ def ensure_refcats(
     if mode == "monster":
         return result
 
+    _load_nickel_refcats()
     needed = set(cones_to_htm([(ra, dec, radius_deg)], depth=7))
     result.needed_trixels = len(needed)
     stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
