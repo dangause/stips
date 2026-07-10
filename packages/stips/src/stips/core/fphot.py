@@ -11,7 +11,7 @@ from stips.core import butler_query
 from stips.core.pipeline import (
     REFCATS_CHAIN,
     generate_run_timestamp,
-    night_to_day_obs,
+    night_day_obs_expr,
     validate_night,
 )
 
@@ -143,9 +143,10 @@ def run(
 
     log.info(f"Using processCcd collection: {processccd_coll}")
 
-    # Build data query
-    day_obs = night_to_day_obs(night, offset_days=prof.night_to_dayobs_offset_days)
-    data_query = f"instrument='{prof.name}' AND day_obs={day_obs}"
+    # Build data query. A Lick observing night spans two UT days
+    # (pre-/post-midnight); include both so pre-midnight exposures are not
+    # dropped from forced photometry.
+    data_query = f"instrument='{prof.name}' AND {night_day_obs_expr(night, prof)}"
     if band:
         data_query += f" AND band='{band}'"
 
