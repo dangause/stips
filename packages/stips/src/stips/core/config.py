@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -9,6 +10,8 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from stips.profile import InstrumentProfile
+
+_log = logging.getLogger(__name__)
 
 
 # Repo packages/ dir, derived from this file's location
@@ -69,6 +72,11 @@ def _discover_cp_pipe_dir(stack_dir: Path) -> Path | None:
             break
 
     if not loader:
+        _log.warning(
+            "CP_PIPE_DIR not discovered (no LSST loader script in %s); calib "
+            "pipelines will fail — set CP_PIPE_DIR explicitly.",
+            stack_dir,
+        )
         return None
 
     # Query eups for cp_pipe location
@@ -88,9 +96,19 @@ eups list -d cp_pipe 2>/dev/null | head -1 | awk '{{print $1}}'
             path = Path(result.stdout.strip())
             if path.exists():
                 return path
-    except Exception:
-        pass
+    except Exception as e:
+        _log.warning(
+            "CP_PIPE_DIR auto-discovery failed (%s: %s); calib pipelines will "
+            "fail — set CP_PIPE_DIR explicitly.",
+            type(e).__name__,
+            e,
+        )
+        return None
 
+    _log.warning(
+        "CP_PIPE_DIR not discovered from the LSST stack; calib pipelines will "
+        "fail — set CP_PIPE_DIR explicitly."
+    )
     return None
 
 

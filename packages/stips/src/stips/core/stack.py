@@ -382,8 +382,20 @@ def run_butler_python(
             capture_output=True,
             check=True,
         )
+    except subprocess.CalledProcessError as e:
+        stderr = (e.stderr or "").strip()
+        if len(stderr) > 2000:
+            stderr = "…" + stderr[-2000:]
+        _log.warning(
+            "run_butler_python: in-stack script exited %s; stderr: %s",
+            e.returncode,
+            stderr or "<empty>",
+        )
+        return None
     except Exception as e:
-        _log.debug(f"run_butler_python failed: {e}")
+        # Spawn/setup failure (e.g. missing bash or loader). Still return None
+        # for callers, but make the cause visible.
+        _log.warning("run_butler_python: unexpected failure: %s: %s", type(e).__name__, e)
         return None
 
     # Return stripped stdout (may contain setup chatter before the real output)
@@ -418,4 +430,15 @@ def run_butler_python_json(
                 return json.loads(line)
             except json.JSONDecodeError:
                 continue
+
+    # The script ran and printed output, but no parseable JSON line was found.
+    # Surface a snippet so the operator can see what was printed instead.
+    snippet = output.strip()
+    if len(snippet) > 500:
+        snippet = "…" + snippet[-500:]
+    _log.warning(
+        "run_butler_python_json: no JSON line found in in-stack output; "
+        "last output was: %s",
+        snippet or "<empty>",
+    )
     return None
