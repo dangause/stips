@@ -17,7 +17,12 @@ import unittest
 from pathlib import Path
 
 import astropy.units as u
+import pytest
 from astropy.time import Time
+
+# The translator is synthesized from lsst.obs.stips.active, which requires the
+# LSST stack; skip cleanly in a plain venv.
+pytest.importorskip("lsst.daf.butler")
 
 # instruments/nickel/tests/test_translation_golden.py -> parents[1] == instruments/nickel
 _INSTRUMENT_DIR = str(Path(__file__).resolve().parents[1])

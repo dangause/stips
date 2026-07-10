@@ -20,6 +20,11 @@ import numpy as np
 import pytest
 from astropy.io import fits
 
+# stips.pipeline_tools.ingest_ps1_template imports the LSST stack (and calls
+# sys.exit if it is missing), so guard the whole module: skip cleanly in a
+# plain venv instead of erroring during fixture setup.
+pytest.importorskip("lsst.afw.image")
+
 # Test coordinates (M67 open cluster - well-covered by PS1)
 TEST_RA = 132.825
 TEST_DEC = 11.8

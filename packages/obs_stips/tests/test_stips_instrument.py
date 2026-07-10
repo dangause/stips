@@ -11,11 +11,15 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from lsst.daf.butler import Butler
-from lsst.obs.base import DefineVisitsTask
-from lsst.obs.stips.formatter import StipsRawFormatter
-from lsst.obs.stips.instrument import StipsInstrument
-from stips import Field, InstrumentProfile, Site
+import pytest
+
+pytest.importorskip("lsst.daf.butler")
+
+from lsst.daf.butler import Butler  # noqa: E402
+from lsst.obs.base import DefineVisitsTask  # noqa: E402
+from lsst.obs.stips.formatter import StipsRawFormatter  # noqa: E402
+from lsst.obs.stips.instrument import StipsInstrument  # noqa: E402
+from stips import Field, InstrumentProfile, Site  # noqa: E402
 
 # instruments/nickel/ holds the real camera yaml (camera/nickel.yaml). getCamera
 # loads it by path from INSTRUMENT_DIR, so the camera-loading tests point

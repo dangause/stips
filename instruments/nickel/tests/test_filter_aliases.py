@@ -10,6 +10,12 @@ import os
 import unittest
 from pathlib import Path
 
+import pytest
+
+# The translator is synthesized from lsst.obs.stips.active, which requires the
+# LSST stack; skip cleanly in a plain venv.
+pytest.importorskip("lsst.daf.butler")
+
 # instruments/nickel/tests/test_filter_aliases.py -> parents[1] == instruments/nickel
 _INSTRUMENT_DIR = str(Path(__file__).resolve().parents[1])
 

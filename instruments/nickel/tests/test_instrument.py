@@ -21,8 +21,12 @@ import os
 import unittest
 from pathlib import Path
 
-import lsst.utils.tests
-from lsst.obs.base import DefineVisitsTask
+import pytest
+
+pytest.importorskip("lsst.obs.base")
+
+import lsst.utils.tests  # noqa: E402
+from lsst.obs.base import DefineVisitsTask  # noqa: E402
 
 # instruments/nickel/tests/test_instrument.py -> parents[1] == instruments/nickel
 _INSTRUMENT_DIR = str(Path(__file__).resolve().parents[1])
