@@ -64,7 +64,9 @@ def test_reference_packages_layout(tmp_path, monkeypatch):
     instrument_dir = tmp_path / "instruments" / "x"
     instrument_dir.mkdir(parents=True)
     prof = _profile(obs_data_package="obs_x_data")
-    assert resolve_data_package_dir(prof, instrument_dir) == fake_packages / "obs_x_data"
+    assert (
+        resolve_data_package_dir(prof, instrument_dir) == fake_packages / "obs_x_data"
+    )
 
 
 def test_colocated_wins_over_reference_packages(tmp_path, monkeypatch):
