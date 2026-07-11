@@ -116,10 +116,15 @@ instruments/nickel/
 ├── fetch.py               # Optional co-located hook (raw-data fetch)
 ├── camera/
 │   └── nickel.yaml        # Camera geometry (1024×1024 CCD)
-├── pipelines/             # DRP.yaml, DIA.yaml, ForcedPhotRaDec.yaml, ...
-├── configs/               # calibrateImage/, dia/, coadds/
-└── template_metadata.json # Coadd-template bookkeeping
+├── template_metadata.json # Coadd-template bookkeeping
+├── README.md
+└── tests/                 # Reference translation/camera golden tests
 ```
+
+Nickel ships **no** `pipelines/` or `configs/` dirs — it inherits the framework
+reference pipelines and configs from `packages/obs_stips/instrument_defaults/`.
+A fork adds its own `instruments/<x>/pipelines/` or `configs/` only to override
+individual files (resolved instrument-dir-first, else framework default).
 
 There are no instrument/translator/formatter subclasses here — `obs_stips` synthesizes those from `profile.py` at import time (see `active.py` above). The instrument and translator quirks that used to live in a `lsst.obs.nickel` package are expressed declaratively via the `InstrumentProfile` fields and `@hook`s in `profile.py`.
 

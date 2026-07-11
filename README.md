@@ -185,15 +185,20 @@ The group-level `-c/--config` YAML is the sole config source. Its `env:` block s
 
 ### Transient Analysis Workflow
 
+> **Use full-precision coordinates** (6+ decimal places, e.g. SN 2023ixf at
+> `210.910750, 54.311694`). Rounding RA/Dec to 2 decimals is a ~5–17″ offset —
+> enough to miss a point source on Nickel's 0.37″/pixel scale, so forced
+> photometry measures galaxy background instead of the SN.
+
 ```bash
 # 1. Ingest PS1 template for r-band
-stips ps1-template --ra 210.91 --dec 54.32 --band r
+stips ps1-template --ra 210.910750 --dec 54.311694 --band r
 
 # 2. Run forced photometry on difference images
-stips fphot 20230519 --ra 210.91 --dec 54.32
+stips fphot 20230519 --ra 210.910750 --dec 54.311694
 
 # 3. Extract light curve
-stips lightcurve --ra 210.91 --dec 54.32 \
+stips lightcurve --ra 210.910750 --dec 54.311694 \
     --collections "Nickel/runs/20230519/forcedPhotRaDec/*/run" \
     --dataset-type forced_phot_diffim_radec \
     --name "SN 2023ixf"
@@ -382,27 +387,30 @@ stips dia 20230519 --auto --prefer-ps1 --band r  # Prefer PS1 template
 
 ### Step 5: Forced Photometry
 
+Pass **full-precision** RA/Dec (6+ decimals); 2-decimal rounding offsets the
+aperture by ~5–17″ and measures background instead of the source.
+
 ```bash
-stips fphot 20230519 --ra 210.91 --dec 54.32
-stips fphot 20230519 --ra 210.91 --dec 54.32 --band r --image-type both
+stips fphot 20230519 --ra 210.910750 --dec 54.311694
+stips fphot 20230519 --ra 210.910750 --dec 54.311694 --band r --image-type both
 ```
 
 ### Step 6: Light Curve Extraction
 
 ```bash
 # From DIA sources
-stips lightcurve --ra 210.91 --dec 54.32 \
+stips lightcurve --ra 210.910750 --dec 54.311694 \
     --collections "Nickel/runs/*/diff/*/run" \
     --name "SN 2023ixf"
 
 # From forced photometry (more reliable)
-stips lightcurve --ra 210.91 --dec 54.32 \
+stips lightcurve --ra 210.910750 --dec 54.311694 \
     --collections "Nickel/runs/*/forcedPhotRaDec/*/run" \
     --dataset-type forced_phot_diffim_radec \
     --name "SN 2023ixf"
 
 # With display options (absolute magnitude, days since explosion)
-stips lightcurve --ra 210.91 --dec 54.32 \
+stips lightcurve --ra 210.910750 --dec 54.311694 \
     --collections "Nickel/runs/*/forcedPhotRaDec/*/run" \
     --dataset-type forced_phot_diffim_radec \
     --name "SN 2023ixf" \

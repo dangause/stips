@@ -66,11 +66,16 @@ instruments/<x>/
 ├── profile.py                 # THE file you edit — your InstrumentProfile + @hooks
 ├── camera/
 │   └── <x>.yaml               # LSST yamlCamera geometry (detectors, plate scale)
-├── pipelines/                 # instrument-tuned pipeline YAMLs (copy & tune)
-├── configs/                   # pipeline task config overrides (copy & tune)
 ├── fetch.py                   # OPTIONAL: a data-fetch hook (delete if you place raws by hand)
+├── template_metadata.json     # OPTIONAL: coadd-template bookkeeping
+├── README.md
 └── tests/                     # OPTIONAL: reference tests, adapt to your golden values
 ```
+
+`nickel` deliberately ships **no** `pipelines/` or `configs/` dirs — it inherits
+the framework reference set from `packages/obs_stips/instrument_defaults/`
+(see §6). Add your own `instruments/<x>/pipelines/` or `configs/` **only** to
+override individual files; a minimal fork carries none.
 
 That's the whole fork. No `python/lsst/obs/<x>/`, no bindings, no
 `pyproject.toml`, no `ups/` table — `obs_stips` builds the LSST instrument
@@ -92,9 +97,9 @@ profile = InstrumentProfile(
     name="Nickel",
     policy_name="Nickel",                 # defaults to name if omitted
     site=Site(
-        latitude=37.3414,
-        longitude=-121.6429,
-        elevation=1283.0,
+        latitude=37.343333,
+        longitude=-121.636667,
+        elevation=1290.0,
         name="Lick Observatory",          # if set, uses EarthLocation.of_site(name)
     ),
     # physical_filter -> band
@@ -196,10 +201,19 @@ These are the real `InstrumentProfile` fields (from
   without forking the shared `DRP.yaml`. E.g. an instrument with no defect maps
   sets `isr_overrides={"doDefect": False}` (CTIO does exactly this). Default
   `{}` (inherit the framework ISR config unchanged).
+- **`crosstalk`** — Optional `stips.CrosstalkSpec` declaring intra-detector
+  crosstalk coefficients for a **multi-amp** camera (an N×N matrix, N = amp
+  count, zero diagonal). When set, STIPS builds a `CrosstalkCalib` from it,
+  certifies it into the calib chain, and enables ISR crosstalk correction
+  (`stips measure-crosstalk` can measure the matrix from data first). `None`
+  (Nickel, single-amp) disables crosstalk entirely.
 - **`obs_data_package`** — Optional companion EUPS data package with curated
   calibs / defects / crosstalk (`"obs_nickel_data"`). Left as a normal EUPS
   package; the stack activation sets it up by name. Omit if you have none — and
   disable the ISR steps that would need its products via `isr_overrides`.
+- **`package_dir`** — Optional filesystem path to the instrument package root,
+  for profiles that need to resolve their own bundled resources. Normally left
+  unset (the loader already knows `INSTRUMENT_DIR`); Nickel omits it.
 - **`fetch_data`** — Optional callable hook: `fetch_data(night, config, *,
   overwrite=False) -> "ok" | "not_found" | "failed"`, used by `stips download`.
   Wire it from a co-located module (Nickel's `profile.py` does `from fetch import
