@@ -128,7 +128,17 @@ class InstrumentProfile:
     # builds a CrosstalkCalib from this matrix, certifies it into the calib chain,
     # and enables ISR crosstalk correction. None disables crosstalk entirely.
     crosstalk: Optional["CrosstalkSpec"] = None
+    # Name of an optional EUPS data package of curated calibrations (defects,
+    # crosstalk, ...), e.g. "obs_nickel_data". STIPS eups-setup's it into the
+    # stack environment when its directory resolves (see ``package_dir``).
     obs_data_package: Optional[str] = None
+    # Explicit override for where ``obs_data_package`` lives on disk. Absolute
+    # paths are used as-is; a relative path is resolved against the active
+    # instrument dir (INSTRUMENT_DIR), so a fork can co-locate the data package
+    # under its own instruments/<x>/ tree (e.g. package_dir="obs_<x>_data").
+    # When None, STIPS looks for <instrument_dir>/<obs_data_package> and then the
+    # reference packages/<obs_data_package> layout. See
+    # ``stips.core.config.resolve_data_package_dir`` for the full precedence.
     package_dir: Optional[str] = None
     refcat_path: Optional[str] = None
     # Optional data-fetch hook. Signature:

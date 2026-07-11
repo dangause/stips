@@ -9,8 +9,12 @@ import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from stips.core.config import resolve_data_package_dir
+
 if TYPE_CHECKING:
     from stips.core.config import Config
+
+_log = logging.getLogger(__name__)
 
 
 # Location of the framework `packages/` directory, derived from this file's own
@@ -100,12 +104,22 @@ export RAW_PARENT_DIR="{config.raw_parent_dir}"
         env_exports += f'export RUN_ID="{run_id}"\n'
 
     # Instrument data package (e.g. obs_nickel_data) — only when the profile
-    # declares one. Path literal is inlined twice to avoid bash-var/f-string
-    # brace-escaping bugs.
+    # declares one AND its directory resolves (explicit package_dir, co-located
+    # under the instrument dir, or the reference packages/ layout). Path literal
+    # is inlined twice to avoid bash-var/f-string brace-escaping bugs.
     data_block = ""
     if data_pkg:
-        data_dir = _PACKAGES_DIR / data_pkg
-        data_block = f"""
+        data_dir = resolve_data_package_dir(prof, instrument_dir)
+        if data_dir is None:
+            _log.debug(
+                "profile declares obs_data_package=%r but no directory resolved "
+                "(checked package_dir, %s, and %s); skipping data-package setup",
+                data_pkg,
+                instrument_dir / data_pkg,
+                _PACKAGES_DIR / data_pkg,
+            )
+        else:
+            data_block = f"""
 # Check for {data_pkg}
 if [ -d "{data_dir}" ]; then
     setup -r "{data_dir}" {data_pkg} 2>/dev/null || true
@@ -354,9 +368,6 @@ def check_stack(config: Config) -> bool:
         return "ok" in result.stdout
     except (subprocess.CalledProcessError, FileNotFoundError):
         return False
-
-
-_log = logging.getLogger(__name__)
 
 
 def run_butler_python(
