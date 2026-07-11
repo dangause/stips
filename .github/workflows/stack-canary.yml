@@ -1,14 +1,18 @@
 name: Stack API canary
 
-# Early-warning for LSST stack upgrades. The normal CI (ci.yml) runs the
-# contract test against the PINNED weekly image; this job runs the SAME contract
-# test (tests/test_stack_api_contract.py) against a NEWER weekly, so a renamed /
-# removed / deprecated API that STIPS' in-stack snippets depend on is caught
-# BEFORE the production pin is bumped — instead of silently at runtime.
+# Early-warning for LSST stack upgrades. The normal CI (ci.yml) runs these
+# checks against the PINNED weekly image; this job runs the SAME checks against a
+# NEWER weekly, so a renamed / removed / deprecated API is caught BEFORE the
+# production pin is bumped — instead of silently at runtime. Two checks run:
+#   - tests/test_stack_api_contract.py: STIPS' in-stack Python snippets.
+#   - packages/obs_stips/tests/test_pipeline_graphs.py: builds a task graph for
+#     every shipped pipeline YAML + every STIPS-invoked subset, so drift in a
+#     pipeline task FQN or config field (qMin/qMax, maxPsfFwhm, ...) is caught
+#     here rather than serially on real data after the bump.
 #
 # It is intentionally non-blocking (scheduled + manual only; never gates a PR).
 # A red run here means: read the failing assertion, update the one snippet
-# builder it names, then bump ci.yml's image.
+# builder or pipeline config it names, then bump ci.yml's image.
 
 on:
   schedule:
@@ -42,8 +46,9 @@ jobs:
         working-directory: ${{ github.workspace }}
 
     env:
-      # The contract test does pure import/API checks — no testdata needed
-      # (with-stack.sh is invoked without --setup-testdata).
+      # Both tests do pure import/API/config-graph checks — no testdata needed
+      # (with-stack.sh is invoked without --setup-testdata; to_graph resolves the
+      # task graph, not a quantum graph, so it needs no repo or data).
       STACK_DIR: /opt/lsst/software/stack
 
     steps:
@@ -62,10 +67,12 @@ jobs:
       - name: Mark workspace safe for git (running as root)
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
-      - name: Run the stack API-contract test against the candidate weekly
+      - name: Run the stack API-contract + pipeline-graph tests against the candidate weekly
         run: |
           ./scripts/with-stack.sh -S "${STACK_DIR}" -- \
-            python -m pytest packages/stips/tests/test_stack_api_contract.py -v
+            python -m pytest \
+              packages/stips/tests/test_stack_api_contract.py \
+              packages/obs_stips/tests/test_pipeline_graphs.py -v
 
       - name: Open an alert issue if the canary broke
         if: failure()
@@ -80,5 +87,5 @@ jobs:
             gh issue create \
               --title "${title}" \
               --label "stack-upgrade" \
-              --body "The stack API-contract test (tests/test_stack_api_contract.py) failed against \`${image}\`, a newer weekly than the pinned CI image. An LSST API that STIPS' in-stack snippets depend on has likely been renamed, removed, or deprecated. Read the failing assertion in the run logs — it names the STIPS module whose snippet builder must be updated — then bump the image in .github/workflows/ci.yml once fixed. Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+              --body "The stack canary (test_stack_api_contract.py and/or test_pipeline_graphs.py) failed against \`${image}\`, a newer weekly than the pinned CI image. An LSST API that STIPS' in-stack snippets depend on, or a task class/config field a shipped pipeline YAML references, has likely been renamed, removed, or deprecated. Read the failing assertion in the run logs — it names the STIPS module or the pipeline YAML/task whose config must be updated — then bump the image in .github/workflows/ci.yml once fixed. Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           fi
