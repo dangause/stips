@@ -99,10 +99,14 @@ def find_repo_root(start: Optional[Path | str] = None) -> Path:
     for cand in (p, *p.parents):
         if (cand / "instruments").is_dir() and (cand / "packages").is_dir():
             return cand
-    raise RuntimeError(f"Could not locate repo root (instruments/ + packages/) from {p}")
+    raise RuntimeError(
+        f"Could not locate repo root (instruments/ + packages/) from {p}"
+    )
 
 
-def discover_instruments(repo_root: Optional[Path | str] = None) -> list[InstrumentDirInfo]:
+def discover_instruments(
+    repo_root: Optional[Path | str] = None,
+) -> list[InstrumentDirInfo]:
     """Return every ``instruments/<name>/`` dir that ships a ``profile.py``.
 
     Sorted by name for stable pytest parametrization ids.
@@ -206,26 +210,28 @@ def active_instrument_dir(instrument_dir: Path | str) -> Iterator[Any]:
 
 def assert_profile_valid(profile: Any) -> None:
     """The profile loads and its required fields are populated and sane."""
-    assert isinstance(profile.name, str) and profile.name.strip(), (
-        "profile.name must be a non-empty string"
-    )
+    assert (
+        isinstance(profile.name, str) and profile.name.strip()
+    ), "profile.name must be a non-empty string"
     assert profile.collection_prefix, f"{profile.name}: collection_prefix must be set"
     assert profile.policy_name, f"{profile.name}: policy_name must be set"
     assert profile.instrument_class, f"{profile.name}: instrument_class must be set"
     assert profile.filter_key, f"{profile.name}: filter_key must be set"
-    assert profile.filters, f"{profile.name}: filters (physical->band) must be non-empty"
+    assert (
+        profile.filters
+    ), f"{profile.name}: filters (physical->band) must be non-empty"
     assert profile.header_map, f"{profile.name}: header_map must be non-empty"
 
     site = profile.site
-    assert -90.0 <= site.latitude <= 90.0, (
-        f"{profile.name}: latitude {site.latitude} out of range"
-    )
-    assert -180.0 <= site.longitude <= 360.0, (
-        f"{profile.name}: longitude {site.longitude} out of range"
-    )
-    assert -500.0 < site.elevation < 10000.0, (
-        f"{profile.name}: implausible elevation {site.elevation}"
-    )
+    assert (
+        -90.0 <= site.latitude <= 90.0
+    ), f"{profile.name}: latitude {site.latitude} out of range"
+    assert (
+        -180.0 <= site.longitude <= 360.0
+    ), f"{profile.name}: longitude {site.longitude} out of range"
+    assert (
+        -500.0 < site.elevation < 10000.0
+    ), f"{profile.name}: implausible elevation {site.elevation}"
 
 
 def assert_exposure_id_scheme(profile: Any, contract_data: Any) -> None:
@@ -239,14 +245,14 @@ def assert_exposure_id_scheme(profile: Any, contract_data: Any) -> None:
     assert hooks["visit_id"](header) == exp, "visit_id must equal exposure_id"
 
     seq = contract_data.EXPECTED_SEQ
-    assert exp % 10000 == seq, (
-        f"exposure_id low digits {exp % 10000} do not encode seq {seq}"
-    )
+    assert (
+        exp % 10000 == seq
+    ), f"exposure_id low digits {exp % 10000} do not encode seq {seq}"
 
     plus_one = hooks["exposure_id"](contract_data.SAMPLE_HEADER_SEQ_PLUS_ONE)
-    assert plus_one == exp + 1, (
-        f"exposure_id not monotonic in seq: seq+1 gave {plus_one}, expected {exp + 1}"
-    )
+    assert (
+        plus_one == exp + 1
+    ), f"exposure_id not monotonic in seq: seq+1 gave {plus_one}, expected {exp + 1}"
 
 
 def assert_translation_contract(profile: Any, contract_data: Any) -> None:
@@ -258,7 +264,13 @@ def assert_translation_contract(profile: Any, contract_data: Any) -> None:
     header = contract_data.SAMPLE_HEADER
     expected = contract_data.EXPECTED_TRANSLATION
 
-    for key in ("observation_type", "day_obs", "observation_id", "exposure_id", "visit_id"):
+    for key in (
+        "observation_type",
+        "day_obs",
+        "observation_id",
+        "exposure_id",
+        "visit_id",
+    ):
         if key in expected:
             got = hooks[key](header)
             assert got == expected[key], f"{key}: {got!r} != expected {expected[key]!r}"
@@ -266,26 +278,26 @@ def assert_translation_contract(profile: Any, contract_data: Any) -> None:
     if "tracking_radec" in expected:
         coord = hooks["tracking_radec"](header)
         want_ra, want_dec = expected["tracking_radec"]
-        assert abs(coord.ra.to_value(u.deg) - want_ra) < 0.01, (
-            f"tracking RA {coord.ra.to_value(u.deg)} != {want_ra}"
-        )
-        assert abs(coord.dec.to_value(u.deg) - want_dec) < 0.01, (
-            f"tracking Dec {coord.dec.to_value(u.deg)} != {want_dec}"
-        )
+        assert (
+            abs(coord.ra.to_value(u.deg) - want_ra) < 0.01
+        ), f"tracking RA {coord.ra.to_value(u.deg)} != {want_ra}"
+        assert (
+            abs(coord.dec.to_value(u.deg) - want_dec) < 0.01
+        ), f"tracking Dec {coord.dec.to_value(u.deg)} != {want_dec}"
 
     if "datetime_begin_mjd" in expected:
         t0 = hooks["datetime_begin"](header)
         assert isinstance(t0, Time), "datetime_begin must return an astropy Time"
-        assert abs(t0.mjd - expected["datetime_begin_mjd"]) < 1e-6, (
-            f"datetime_begin mjd {t0.mjd} != {expected['datetime_begin_mjd']}"
-        )
+        assert (
+            abs(t0.mjd - expected["datetime_begin_mjd"]) < 1e-6
+        ), f"datetime_begin mjd {t0.mjd} != {expected['datetime_begin_mjd']}"
 
     if "datetime_end_mjd" in expected:
         t1 = hooks["datetime_end"](header)
         assert isinstance(t1, Time), "datetime_end must return an astropy Time"
-        assert abs(t1.mjd - expected["datetime_end_mjd"]) < 1e-6, (
-            f"datetime_end mjd {t1.mjd} != {expected['datetime_end_mjd']}"
-        )
+        assert (
+            abs(t1.mjd - expected["datetime_end_mjd"]) < 1e-6
+        ), f"datetime_end mjd {t1.mjd} != {expected['datetime_end_mjd']}"
 
 
 def assert_observation_type_cases(profile: Any, contract_data: Any) -> None:
@@ -319,9 +331,9 @@ def assert_unknown_filter_contract(profile: Any, contract_data: Any) -> None:
         assert raised, f"unknown_filter({raw!r}) should raise ValueError"
     else:
         got = hook_fn({}, raw)
-        assert got == spec["result"], (
-            f"unknown_filter({raw!r}) -> {got!r}, expected {spec['result']!r}"
-        )
+        assert (
+            got == spec["result"]
+        ), f"unknown_filter({raw!r}) -> {got!r}, expected {spec['result']!r}"
 
 
 class FetchConfigStub:
@@ -345,6 +357,6 @@ def assert_fetch_status_contract(fetch_module: Any, contract_data: Any) -> None:
     for code, expected in ((0, "ok"), (2, "not_found"), (1, "failed")):
         with mock.patch.object(fetch_module, "_fetch_night", return_value=code):
             status = fetch_module.fetch_data(night, cfg, overwrite=True)
-        assert status == expected, (
-            f"backend code {code} -> {status!r}, expected {expected!r}"
-        )
+        assert (
+            status == expected
+        ), f"backend code {code} -> {status!r}, expected {expected!r}"

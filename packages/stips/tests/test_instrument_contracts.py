@@ -17,7 +17,6 @@ Optional assets skip-with-reason rather than fail:
 from __future__ import annotations
 
 import pytest
-
 from stips.testing import instrument_contract as ic
 
 INSTRUMENTS = ic.discover_instruments()
@@ -90,9 +89,9 @@ def test_fetch_contract(instrument, contract_data):
 def test_fetch_hook_registered(instrument, profile):
     if not instrument.has_fetch:
         pytest.skip(f"{instrument.name}: no fetch.py")
-    assert profile.fetch_data is not None, (
-        f"{instrument.name}: ships fetch.py but profile.fetch_data is not wired"
-    )
+    assert (
+        profile.fetch_data is not None
+    ), f"{instrument.name}: ships fetch.py but profile.fetch_data is not wired"
 
 
 # --------------------------------------------------------------------------- #
@@ -104,9 +103,9 @@ def test_camera_asset_contract(instrument, profile):
     """`profile.camera` must resolve: either a CameraSpec or an existing yaml."""
     cam = profile.camera
     if isinstance(cam, str):
-        assert (instrument.path / cam).is_file(), (
-            f"{instrument.name}: profile.camera={cam!r} not found under {instrument.path}"
-        )
+        assert (
+            instrument.path / cam
+        ).is_file(), f"{instrument.name}: profile.camera={cam!r} not found under {instrument.path}"
     else:
         # CameraSpec-style object; minimal structural sanity.
         assert cam.nx > 0 and cam.ny > 0
