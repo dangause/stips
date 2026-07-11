@@ -9,7 +9,6 @@ import unittest
 import warnings
 
 import numpy as np
-
 from stips.pipeline_tools import build_defects as bd
 
 

@@ -661,7 +661,9 @@ def main(argv=None) -> int:
     # Manual rectangles.
     manual_rects_labeled: List[LabeledRect] = []
     if args.manual_csv:
-        manual_rects_labeled.extend(_read_manual_csv(os.path.expanduser(args.manual_csv)))
+        manual_rects_labeled.extend(
+            _read_manual_csv(os.path.expanduser(args.manual_csv))
+        )
     if args.manual_box:
         for x0, y0, w, h in args.manual_box:
             manual_rects_labeled.append((int(x0), int(y0), int(w), int(h), "manual"))
