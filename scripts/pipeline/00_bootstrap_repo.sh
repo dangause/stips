@@ -52,7 +52,7 @@ OBS_STIPS_DIR="${OBS_STIPS_DIR:-$REPO_ROOT/packages/obs_stips}"
 if [ -d "$OBS_STIPS_DIR" ]; then
   setup -r "$OBS_STIPS_DIR" obs_stips 2>/dev/null || true
 fi
-OBS_NICKEL_DATA="${OBS_NICKEL_DATA:-$REPO_ROOT/packages/obs_nickel_data}"
+OBS_NICKEL_DATA="${OBS_NICKEL_DATA:-$REPO_ROOT/instruments/nickel/obs_nickel_data}"
 if [ -d "$OBS_NICKEL_DATA" ]; then
   setup -r "$OBS_NICKEL_DATA" obs_nickel_data || true
 fi

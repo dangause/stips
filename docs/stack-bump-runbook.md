@@ -78,7 +78,7 @@ reintroduce a hardcoded env number there.
 3. **Sanity-check activation:** `stips env` (exercises `check_stack()` in
    `packages/stips/src/stips/core/stack.py`) against the new `STACK_DIR`.
 
-4. **End-to-end smoke on `packages/testdata`.** Run bootstrap → calibs → science
+4. **End-to-end smoke on `instruments/nickel/testdata`.** Run bootstrap → calibs → science
    → dia on one night and assert `diff_image_count > 0` — the single assertion
    that transits every coupling class (ingest, ISR, WCS, coadd/template,
    subtraction, dataset-type names). Use the `stips` CLI stages (or `stips run`)

@@ -56,8 +56,8 @@ site:
       # The instrument is declarative (loaded by path from INSTRUMENT_DIR).
       setup -r /opt/stips/packages/obs_stips obs_stips 2>/dev/null || true
       export PYTHONPATH=/opt/stips/packages/stips/src:${PYTHONPATH:-}
-      if [[ -d /opt/stips/packages/obs_nickel_data ]]; then
-          setup -r /opt/stips/packages/obs_nickel_data obs_nickel_data 2>/dev/null || true
+      if [[ -d /opt/stips/instruments/nickel/obs_nickel_data ]]; then
+          setup -r /opt/stips/instruments/nickel/obs_nickel_data obs_nickel_data 2>/dev/null || true
       fi
       export REPO=/data/repo
       export INSTRUMENT_DIR=/opt/stips/instruments/nickel

@@ -7,7 +7,7 @@ this package via symlink, so existing pipeline scripts continue to work.
 Usage (editable install):
 
 ```bash
-python -m pip install -e packages/defects
+python -m pip install -e instruments/nickel/defects
 obsn-defects-from-flats --help
 ```
 

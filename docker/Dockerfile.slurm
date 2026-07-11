@@ -62,7 +62,6 @@ WORKDIR /opt/stips
 
 COPY packages/obs_stips/ packages/obs_stips/
 COPY instruments/nickel/ instruments/nickel/
-COPY packages/obs_nickel_data/ packages/obs_nickel_data/
 
 RUN source /opt/lsst/software/stack/loadLSST.bash && \
     setup lsst_distrib && \

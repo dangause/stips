@@ -20,7 +20,7 @@ if [[ -f "$${PWD}/scripts/utilities/repo_paths.sh" ]]; then \
 fi; \
 export REPO_ROOT="$${REPO_ROOT:-$${PWD}}"; \
 export INSTRUMENT_DIR="$${INSTRUMENT_DIR:-$${REPO_ROOT}/instruments/nickel}"; \
-export TESTDATA_NICKEL_DIR="$${TESTDATA_NICKEL_DIR:-$${REPO_ROOT}/packages/testdata}"; \
+export TESTDATA_NICKEL_DIR="$${TESTDATA_NICKEL_DIR:-$${REPO_ROOT}/instruments/nickel/testdata}"; \
 export REPO="$${REPO:-}"; \
 export LSST_CONDA_ENV_NAME="$${LSST_CONDA_ENV_NAME:-}"
 endef
@@ -41,7 +41,7 @@ fi; \
 setup lsst_distrib; \
 _setup_local() { [[ -d "$$1/ups" ]] && { eups declare -r "$$1" "$$2" -t current 2>/dev/null || true; setup "$$2" 2>/dev/null || setup -r "$$1" "$$2"; }; }; \
 OBS_STIPS_LOCAL="$${REPO_ROOT}/packages/obs_stips"; \
-OBS_NICKEL_DATA_LOCAL="$${REPO_ROOT}/packages/obs_nickel_data"; \
+OBS_NICKEL_DATA_LOCAL="$${REPO_ROOT}/instruments/nickel/obs_nickel_data"; \
 _setup_local "$$OBS_STIPS_LOCAL" obs_stips; \
 _setup_local "$$OBS_NICKEL_DATA_LOCAL" obs_nickel_data; \
 _setup_local "$${TESTDATA_NICKEL_DIR}" testdata_nickel; \
@@ -84,8 +84,8 @@ declare-eups: ## Declare obs_stips, obs_nickel_data, and testdata_nickel in the 
 	  elif [ -f "$${STACK_DIR}/loadLSST.bash" ]; then source "$${STACK_DIR}/loadLSST.bash"; \
 	  else echo "STACK_DIR loader not found (loadLSST)"; exit 1; fi; \
 	  cd "$(PWD)/packages/obs_stips" && eups declare obs_stips git -r . -t current || true; \
-	  cd "$(PWD)/packages/obs_nickel_data" && eups declare obs_nickel_data git -r . -t current || true; \
-	  cd "$(PWD)/packages/testdata" && eups declare testdata_nickel git -r . -t current 2>/dev/null || true'
+	  cd "$(PWD)/instruments/nickel/obs_nickel_data" && eups declare obs_nickel_data git -r . -t current || true; \
+	  cd "$(PWD)/instruments/nickel/testdata" && eups declare testdata_nickel git -r . -t current 2>/dev/null || true'
 
 .PHONY: stack-install
 stack-install: ## Install an LSST stack release (TAG=w_2025_10 or r_28_0_0). Does not touch existing stack.
@@ -112,7 +112,7 @@ format: ## Ruff format across the workspace
 
 .PHONY: test
 test: ## Run pytest suite (requires stack env)
-	$(SHELL) -lc '$(setup_stack) python -m pytest -q packages/stips/tests packages/obs_stips/tests instruments/nickel/tests'
+	$(SHELL) -lc '$(setup_stack) python -m pytest -q'
 
 .PHONY: notebook
 notebook: ## Start Jupyter Lab with LSST stack + UV venv active

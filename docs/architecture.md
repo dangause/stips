@@ -130,7 +130,7 @@ There are no instrument/translator/formatter subclasses here — `obs_stips` syn
 
 ### 4. obs_nickel_data (Curated Calibrations)
 
-A standalone EUPS data package (unaffected by the instrument collapse — it stays a real package, `setup -r packages/obs_nickel_data obs_nickel_data`). Pre-built calibration products following LSST conventions:
+A standalone EUPS data package co-located under the instrument tree at `instruments/nickel/obs_nickel_data` (`setup -r instruments/nickel/obs_nickel_data obs_nickel_data`), resolved at runtime via the profile's `obs_data_package` field. Pre-built calibration products following LSST conventions:
 
 ```
 obs_nickel_data/

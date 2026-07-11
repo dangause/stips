@@ -109,20 +109,20 @@ docker run -v /path/to/repo:/data/repo \
 
 ```
 stips/
-├── packages/
+├── packages/                 # Framework only
 │   ├── stips/                # Framework core + CLI (the `stips` command) + pipeline tools
 │   ├── obs_stips/            # Instrument-neutral LSST glue (lsst.obs.stips): translator base,
 │   │                         #   camera builder, the `active` Instrument/translator synthesizer,
 │   │                         #   shared tasks, and reference pipelines/configs (instrument_defaults/)
-│   ├── obs_nickel_data/      # Curated Nickel calibrations (defects)
-│   ├── lick_searchable_archive/  # Lick archive client (Nickel data fetch)
-│   ├── defects/              # Defect mask generation
-│   ├── refcats/              # Reference catalog tooling (MONSTER shard dump/ingest)
-│   ├── colorterms/           # Color term fitting
-│   ├── testdata/             # Test fixtures and data
-│   └── tuning/               # Pipeline tuning utilities
+│   └── refcats/              # Reference catalog tooling (MONSTER shard dump/ingest)
 ├── instruments/              # Declarative instrument profiles (loaded by INSTRUMENT_DIR)
 │   ├── nickel/               # Reference profile (profile.py, camera, fetch.py, tests)
+│   │   ├── obs_nickel_data/  # Curated Nickel calibrations (defects) — EUPS data package
+│   │   ├── testdata/         # Test fixtures and data (testdata_nickel EUPS product)
+│   │   ├── defects/          # Defect mask generation
+│   │   ├── colorterms/       # Color term fitting
+│   │   ├── tuning/           # Pipeline tuning utilities
+│   │   └── vendor/lick_searchable_archive/  # Vendored Lick archive (client used by fetch.py)
 │   └── ctio1m/               # CTIO 1.0m / Y4KCam (4-amp camera, NOIRLab fetch, tests)
 ├── scripts/
 │   ├── config/               # Per-target YAML configs (2023ixf, 2020wnt, ctio1m, ...)

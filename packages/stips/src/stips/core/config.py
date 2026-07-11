@@ -36,10 +36,11 @@ def resolve_data_package_dir(
        fork can co-locate the package under its own ``instruments/<x>/`` tree
        (e.g. ``package_dir="obs_<x>_data"``). Honored even if the path does not
        yet exist, since it is an explicit declaration.
-    2. ``<instrument_dir>/<obs_data_package>`` if it exists — the co-located fork
-       layout, without needing an explicit ``package_dir``.
-    3. ``<framework packages/>/<obs_data_package>`` if it exists — the reference
-       layout (``packages/obs_nickel_data``); kept working for the monorepo.
+    2. ``<instrument_dir>/<obs_data_package>`` if it exists — the co-located
+       layout, without needing an explicit ``package_dir``. This is the
+       reference layout (``instruments/nickel/obs_nickel_data``).
+    3. ``<framework packages/>/<obs_data_package>`` if it exists — a legacy
+       fallback for a package still living under the framework ``packages/`` dir.
     4. ``None`` — the profile declares no data package, or a package is named but
        none of the candidate locations exist (caller skips data-package setup).
 

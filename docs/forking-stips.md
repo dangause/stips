@@ -208,9 +208,12 @@ These are the real `InstrumentProfile` fields (from
   (`stips measure-crosstalk` can measure the matrix from data first). `None`
   (Nickel, single-amp) disables crosstalk entirely.
 - **`obs_data_package`** — Optional companion EUPS data package with curated
-  calibs / defects / crosstalk (`"obs_nickel_data"`). Left as a normal EUPS
-  package; the stack activation sets it up by name. Omit if you have none — and
-  disable the ISR steps that would need its products via `isr_overrides`.
+  calibs / defects / crosstalk (`"obs_nickel_data"`). Co-locate it under your
+  instrument dir (the reference layout is `instruments/nickel/obs_nickel_data`);
+  `resolve_data_package_dir()` finds `<INSTRUMENT_DIR>/<obs_data_package>`
+  automatically, and the stack activation sets it up by name. Omit if you have
+  none — and disable the ISR steps that would need its products via
+  `isr_overrides`.
 - **`package_dir`** — Optional filesystem path to the instrument package root,
   for profiles that need to resolve their own bundled resources. Normally left
   unset (the loader already knows `INSTRUMENT_DIR`); Nickel omits it.

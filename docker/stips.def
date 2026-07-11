@@ -89,7 +89,7 @@ From: stips:latest
     export STACK_DIR=/opt/lsst/software/stack
     export INSTRUMENT_DIR=/opt/stips/instruments/nickel
     export STIPS_DEFAULTS=/opt/stips/packages/obs_stips/instrument_defaults
-    export OBS_NICKEL_DATA=/opt/stips/packages/obs_nickel_data
+    export OBS_NICKEL_DATA=/opt/stips/instruments/nickel/obs_nickel_data
     export STIPS_ROOT=/opt/stips
 
     # Default data paths (can be overridden with --env)
