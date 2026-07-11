@@ -32,7 +32,7 @@ BANDS = {
 
 def _ps1_match(ra, dec):
     # Reuse the single PS1 DR2 mean-object query (same MAST params live in one place).
-    from nickel_refcats.ps1 import _query_ps1_mean
+    from stips_refcats.ps1 import _query_ps1_mean
 
     d = _query_ps1_mean(ra, dec, radius_deg=5.0 / 3600.0)  # 5 arcsec cone
     d = d[(d.gMeanPSFMag > 0) & (d.rMeanPSFMag > 0) & (d.iMeanPSFMag > 0)]

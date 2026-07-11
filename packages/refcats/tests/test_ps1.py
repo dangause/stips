@@ -4,7 +4,7 @@ from unittest import mock
 import numpy as np
 import pandas as pd
 import pytest
-from nickel_refcats import ps1
+from stips_refcats import ps1
 
 PS1_COLS = [
     "objID",

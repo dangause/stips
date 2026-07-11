@@ -22,9 +22,9 @@ All steps use existing tools — no Landolt-specific scripts:
 - `packages/refcats/scripts/dump_monster_shards.py` — runs on the Rubin
   Science Platform; dumps requested HTM7 shards from the dp1 Butler and
   tarballs them.
-- `nickel-refcats merge` (from `packages/refcats`) — extracts the tarball
+- `stips-refcats merge` (from `packages/refcats`) — extracts the tarball
   into the local shard dir and invalidates the ECSV so bootstrap rebuilds it.
-- `nickel-refcats status` — sanity-checks coverage at any point.
+- `stips-refcats status` — sanity-checks coverage at any point.
 
 ## Workflow
 
@@ -64,7 +64,7 @@ Outputs `the_monster_20250219_new.tgz` in the current directory.
 ### 3. Merge locally
 
 ```bash
-nickel-refcats merge the_monster_20250219_new.tgz \
+stips-refcats merge the_monster_20250219_new.tgz \
   --shard-dir $REFCAT_REPO/data/refcats/the_monster_20250219_afw
 ```
 
@@ -100,7 +100,7 @@ bash scripts/pipeline/00_bootstrap_repo.sh
 ### 5. Verify coverage
 
 ```bash
-nickel-refcats status --shard-dir $REFCAT_REPO/data/refcats/the_monster_20250219_afw
+stips-refcats status --shard-dir $REFCAT_REPO/data/refcats/the_monster_20250219_afw
 ```
 
 Compares `monster_plan/htm7_list.txt` to shards on disk and reports any

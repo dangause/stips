@@ -1,4 +1,4 @@
-from nickel_refcats.coverage import missing_trixels
+from stips_refcats.coverage import missing_trixels
 
 
 def test_missing_trixels_returns_needed_not_present():

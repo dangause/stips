@@ -23,8 +23,8 @@ needs_stack = pytest.mark.skipif(
     reason="LSST stack not active (convertReferenceCatalog not on PATH)",
 )
 
-# Columns produced by nickel_refcats.gaia.fetch_gaia_cone (what gaia_dr3_config.py
-# maps). Must mirror COLS_SQL in nickel_refcats.gaia, including the 10 off-diagonal
+# Columns produced by stips_refcats.gaia.fetch_gaia_cone (what gaia_dr3_config.py
+# maps). Must mirror COLS_SQL in stips_refcats.gaia, including the 10 off-diagonal
 # ``*_corr`` covariance columns: gaia_dr3_config sets full_position_information=True,
 # so ConvertGaiaManager._setCoordinateCovariance reads every
 # ``{a}_{b}_corr`` pair over (ra, dec, parallax, pmra, pmdec). Omitting them makes
@@ -63,8 +63,8 @@ def _canned_gaia_csv(path: Path) -> Path:
 
 @needs_stack
 def test_convert_gaia_emits_njy_shards(tmp_path):
-    from nickel_refcats.convert import convert_catalog
     from stips.core.refcat import _convert_config_path
+    from stips_refcats.convert import convert_catalog
 
     src = _canned_gaia_csv(tmp_path / "gaia.csv")
     out_dir = tmp_path / "gaia-refcat"

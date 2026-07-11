@@ -33,17 +33,23 @@ import argparse
 import datetime as dt
 import subprocess
 import sys
+from importlib.resources import files
 from pathlib import Path
 
 # Real conversion logic now lives in the importable library so the orchestrator
 # (stips.core.refcat) and this CLI share one implementation.
-from nickel_refcats.convert import convert_catalog
+from stips_refcats.convert import convert_catalog
+
+
+def _default_config(config_name: str) -> str:
+    """Path to a convertReferenceCatalog config shipped as stips_refcats data."""
+    return str(files("stips_refcats").joinpath("configs", config_name))
 
 
 def convert_one(
     name: str, out_base: Path, config: Path, source_csv: Path, force: bool
 ) -> Path:
-    """Thin shim over :func:`nickel_refcats.convert.convert_catalog`.
+    """Thin shim over :func:`stips_refcats.convert.convert_catalog`.
 
     Returns the path to filename_to_htm.ecsv produced by the conversion.
     """
@@ -77,9 +83,9 @@ def parse_args() -> argparse.Namespace:
     )
     ap.add_argument("--ps1-csv", default="./data/ps1_all_cones/merged_ps1_cones.csv")
 
-    # Configs
-    ap.add_argument("--gaia-config", default="scripts/gaia_dr3_config.py")
-    ap.add_argument("--ps1-config", default="scripts/ps1_config.py")
+    # Configs (shipped as stips_refcats package data)
+    ap.add_argument("--gaia-config", default=_default_config("gaia_dr3_config.py"))
+    ap.add_argument("--ps1-config", default=_default_config("ps1_config.py"))
     return ap.parse_args()
 
 

@@ -3,7 +3,7 @@ from unittest import mock
 
 import numpy as np
 import pandas as pd
-from nickel_refcats import gaia
+from stips_refcats import gaia
 
 GAIA_COLS = [
     "source_id",

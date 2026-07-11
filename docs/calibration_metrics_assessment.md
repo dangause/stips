@@ -306,7 +306,7 @@ The initial run processed only 1 of 4 Tier 1 nights because the local MONSTER re
 
 2. **`packages/refcats/scripts/dump_monster_shards.py`** (vendored from a standalone RSP utility) was run on the Rubin Science Platform to dump those 34 shards from the dp1 Butler — yielding 16.6 MB of new AFW-format FITS shards.
 
-3. **`nickel-refcats merge`** extracted the tarball into `$REFCAT_REPO/data/refcats/the_monster_20250219_afw/`, invalidating the stale ECSV manifest so the next bootstrap regenerates it.
+3. **`stips-refcats merge`** extracted the tarball into `$REFCAT_REPO/data/refcats/the_monster_20250219_afw/`, invalidating the stale ECSV manifest so the next bootstrap regenerates it.
 
 4. **Re-bootstrap** of the Landolt repo (after dropping the existing `refcats/the_monster_20250219_local` RUN collection) re-ingested all 387 shards, providing the qgraph builder with full coverage across the Landolt fields.
 

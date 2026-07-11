@@ -1,4 +1,4 @@
-# src/nickel_refcats/cli.py
+# src/stips_refcats/cli.py
 from __future__ import annotations
 
 import argparse
@@ -300,7 +300,7 @@ def run_status(ns: argparse.Namespace) -> None:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(prog="nickel-refcats")
+    ap = argparse.ArgumentParser(prog="stips-refcats")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     # cones subcommand

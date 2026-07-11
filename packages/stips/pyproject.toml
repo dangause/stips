@@ -15,7 +15,7 @@ dependencies = [
     "rich>=13.0.0",
     "matplotlib>=3.5.0",
     "click>=8.0.0",
-    "obs-nickel-refcats",
+    "stips-refcats",
 ]
 
 [project.optional-dependencies]
@@ -47,9 +47,9 @@ stips-skymap-make = "stips.skymap.make_skymap_from_datasets:main"
 stips-eda-butler = "stips.eda.butler_inspect:main"
 
 [tool.uv.sources]
-# obs-nickel-refcats is a workspace member (packages/refcats); without this
+# stips-refcats is a workspace member (packages/refcats); without this
 # entry a clean `uv sync` fails with "missing an entry in tool.uv.sources".
-obs-nickel-refcats = { workspace = true }
+stips-refcats = { workspace = true }
 
 [tool.setuptools.packages.find]
 where = ["src"]

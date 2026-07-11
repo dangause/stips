@@ -131,6 +131,9 @@ exclude = [
 ignore = [
     # LSST pipeline configs are executed with an injected `config` object.
     "packages/obs_stips/instrument_defaults/configs",
+    # convertReferenceCatalog configs, likewise executed with an injected
+    # `config` object (shipped as stips_refcats package data).
+    "packages/refcats/src/stips_refcats/configs",
 ]
 # Keep noise down when LSST/Rubin dependencies are not in the active venv.
 reportMissingImports = "warning"

@@ -5,11 +5,11 @@ idempotent: it computes the HTM7 trixels covering the target cone, checks which
 are already present in the Butler ``refcats`` collection, and only fetches /
 converts / ingests the missing ones.
 
-No ``lsst.*`` or ``nickel_refcats`` import happens at module load — stack
+No ``lsst.*`` or ``stips_refcats`` import happens at module load — stack
 access is confined to ``run_butler`` / the ``butler_query`` adapters (mocked in
-unit tests), and ``nickel_refcats`` symbols are bound lazily on first use so
+unit tests), and ``stips_refcats`` symbols are bound lazily on first use so
 importing this module (and hence the CLI) never fails just because
-``obs-nickel-refcats`` is broken or missing.
+``stips-refcats`` is broken or missing.
 """
 
 from __future__ import annotations
@@ -26,20 +26,20 @@ from stips.core.stack import run_butler
 
 if TYPE_CHECKING:
     # Static-analysis-only bindings for the lazily loaded names below.
-    from nickel_refcats.convert import convert_catalog
-    from nickel_refcats.coverage import missing_trixels
-    from nickel_refcats.gaia import fetch_gaia_cone
-    from nickel_refcats.htm import cones_to_htm
-    from nickel_refcats.ps1 import PS1FootprintError, fetch_ps1_cone
+    from stips_refcats.convert import convert_catalog
+    from stips_refcats.coverage import missing_trixels
+    from stips_refcats.gaia import fetch_gaia_cone
+    from stips_refcats.htm import cones_to_htm
+    from stips_refcats.ps1 import PS1FootprintError, fetch_ps1_cone
 
     from stips.core.config import Config
 
 log = logging.getLogger(__name__)
 
-#: nickel_refcats symbols bound lazily into module globals by
-#: ``_load_nickel_refcats`` (and via PEP 562 ``__getattr__`` for attribute
+#: stips_refcats symbols bound lazily into module globals by
+#: ``_load_refcats`` (and via PEP 562 ``__getattr__`` for attribute
 #: access, e.g. monkeypatching in tests).
-_NICKEL_REFCATS_NAMES = (
+_REFCATS_NAMES = (
     "convert_catalog",
     "missing_trixels",
     "fetch_gaia_cone",
@@ -49,22 +49,22 @@ _NICKEL_REFCATS_NAMES = (
 )
 
 
-def _load_nickel_refcats() -> None:
-    """Bind ``nickel_refcats`` symbols into module globals on first use.
+def _load_refcats() -> None:
+    """Bind ``stips_refcats`` symbols into module globals on first use.
 
     Deferred so that importing ``stips.core.refcat`` (and therefore the
-    ``stips`` CLI) does not require ``obs-nickel-refcats`` to be importable;
+    ``stips`` CLI) does not require ``stips-refcats`` to be importable;
     a broken install only surfaces when refcat functionality is invoked.
     ``setdefault`` keeps any already-bound value (e.g. a test monkeypatch).
     """
     g = globals()
-    if all(name in g for name in _NICKEL_REFCATS_NAMES):
+    if all(name in g for name in _REFCATS_NAMES):
         return
-    from nickel_refcats.convert import convert_catalog
-    from nickel_refcats.coverage import missing_trixels
-    from nickel_refcats.gaia import fetch_gaia_cone
-    from nickel_refcats.htm import cones_to_htm
-    from nickel_refcats.ps1 import PS1FootprintError, fetch_ps1_cone
+    from stips_refcats.convert import convert_catalog
+    from stips_refcats.coverage import missing_trixels
+    from stips_refcats.gaia import fetch_gaia_cone
+    from stips_refcats.htm import cones_to_htm
+    from stips_refcats.ps1 import PS1FootprintError, fetch_ps1_cone
 
     for name, value in (
         ("convert_catalog", convert_catalog),
@@ -78,8 +78,8 @@ def _load_nickel_refcats() -> None:
 
 
 def __getattr__(name: str):
-    if name in _NICKEL_REFCATS_NAMES:
-        _load_nickel_refcats()
+    if name in _REFCATS_NAMES:
+        _load_refcats()
         return globals()[name]
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
@@ -88,7 +88,7 @@ def __getattr__(name: str):
 GAIA_DATASET = "gaia_dr3"
 PS1_DATASET = "panstarrs1_dr2"
 
-#: convertReferenceCatalog config files (live alongside the fetch scripts).
+#: convertReferenceCatalog config files (shipped as stips_refcats package data).
 GAIA_CONVERT_CONFIG = "gaia_dr3_config.py"
 PS1_CONVERT_CONFIG = "ps1_config.py"
 
@@ -220,11 +220,17 @@ def _record_requested(config: "Config", name: str, trixels: set[int]) -> None:
 
 
 def _convert_config_path(config_name: str) -> Path:
-    """Absolute path to a convertReferenceCatalog config in packages/refcats."""
-    import nickel_refcats
+    """Filesystem path to a convertReferenceCatalog config shipped with stips_refcats.
 
-    pkg_root = Path(nickel_refcats.__file__).resolve().parent.parent.parent
-    return pkg_root / "scripts" / config_name
+    The configs live as package data under ``stips_refcats/configs/`` and are
+    resolved via ``importlib.resources``. ``convertReferenceCatalog`` reads them
+    as file PATHS (they are LSST injected-``config`` files, not importable
+    modules), so we return a concrete filesystem path — valid here because the
+    package is always a normal (non-zipped) install.
+    """
+    from importlib.resources import files
+
+    return Path(str(files("stips_refcats").joinpath("configs", config_name)))
 
 
 def _refcat_out_dir(config: "Config", name: str, stamp: str) -> Path:
@@ -248,7 +254,7 @@ def _ensure_one(
 
     Returns ``"covered"`` (already present) or ``"fetched"`` (newly ingested).
     """
-    _load_nickel_refcats()
+    _load_refcats()
     # A needed trixel is satisfied if it has an ingested shard OR we already
     # requested it (it may legitimately contain no usable sources, so it never
     # gets a shard — without this it would be re-fetched on every run).
@@ -290,7 +296,7 @@ def ensure_refcats(
     if mode == "monster":
         return result
 
-    _load_nickel_refcats()
+    _load_refcats()
     needed = set(cones_to_htm([(ra, dec, radius_deg)], depth=7))
     result.needed_trixels = len(needed)
     stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")

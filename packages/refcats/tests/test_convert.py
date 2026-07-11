@@ -2,7 +2,7 @@ from pathlib import Path
 from unittest import mock
 
 import pytest
-from nickel_refcats.convert import convert_catalog
+from stips_refcats.convert import convert_catalog
 
 
 def test_convert_skips_when_map_exists(tmp_path: Path):
@@ -13,7 +13,7 @@ def test_convert_skips_when_map_exists(tmp_path: Path):
     src.write_text("ra,dec\n1,2\n")
     cfg = tmp_path / "cfg.py"
     cfg.write_text("")
-    with mock.patch("nickel_refcats.convert.subprocess.run") as run:
+    with mock.patch("stips_refcats.convert.subprocess.run") as run:
         result = convert_catalog("GAIA", src, cfg, out, force=False)
     run.assert_not_called()
     assert result == out / "filename_to_htm.ecsv"
@@ -32,7 +32,7 @@ def test_convert_runs_cli_and_returns_map(tmp_path: Path):
         return mock.Mock(returncode=0)
 
     with mock.patch(
-        "nickel_refcats.convert.subprocess.run", side_effect=fake_run
+        "stips_refcats.convert.subprocess.run", side_effect=fake_run
     ) as run:
         result = convert_catalog("PS1", src, cfg, out, force=False)
     run.assert_called_once()

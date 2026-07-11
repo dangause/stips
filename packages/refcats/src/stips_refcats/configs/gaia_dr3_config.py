@@ -31,7 +31,7 @@ config.epoch_scale = "tcb"
 
 # Emit epoch + proper motion + parallax + position covariances so the astrometry
 # loader can propagate positions to the visit epoch. Requires the *_corr
-# covariance columns in the input CSV (see COLS_SQL in nickel_refcats.gaia) and
+# covariance columns in the input CSV (see COLS_SQL in stips_refcats.gaia) and
 # all coord/pm/parallax error columns set above.
 config.full_position_information = True
 

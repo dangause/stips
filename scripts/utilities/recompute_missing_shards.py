@@ -181,7 +181,7 @@ def main() -> None:
 
         print("\nNext steps:")
         print("  1. Download missing shards from RSP using dump_monster_shards.py")
-        print(f"  2. Run: nickel-refcats merge <tarball> --shard-dir {SHARD_DIR}")
+        print(f"  2. Run: stips-refcats merge <tarball> --shard-dir {SHARD_DIR}")
         print(f"  3. Delete {SHARD_DIR}/filename_to_htm.ecsv to force rebuild")
         print("  4. Re-bootstrap the extended_objects_repo")
     else:

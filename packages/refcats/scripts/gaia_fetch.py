@@ -50,7 +50,7 @@ MAX_RETRIES_DEFAULT = 4
 
 # Columns required by convertReferenceCatalog ConvertGaiaManager + some extras.
 # Single source of truth lives in the importable library module.
-from nickel_refcats.gaia import COLS_SQL  # noqa: E402
+from stips_refcats.gaia import COLS_SQL  # noqa: E402
 
 # ----------------------------------
 
