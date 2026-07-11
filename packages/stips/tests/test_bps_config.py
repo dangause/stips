@@ -184,13 +184,15 @@ class TestFullBPSLifecycle:
 
     def test_bps_executor_full_roundtrip(self, tmp_path):
         """BPSExecutor routes 'run' through custom pipeline with qgraph injection."""
+        from stips.core import quanta_report
         from stips.core.executor import BPSExecutor
 
-        executor = BPSExecutor(site="local", poll_interval=0.01, timeout=1.0)
+        executor = BPSExecutor(site="htcondor", poll_interval=0.01, timeout=1.0)
         config = self._make_mock_config(tmp_path)
 
         # Mock bps.submit to use real render_bps_config
         from stips.core import bps as bps_mod
+        from stips.core import bps_report as bps_report_mod
 
         submit_called_with = {}
 
@@ -212,35 +214,41 @@ class TestFullBPSLifecycle:
             "          0        0          0\n"
         )
 
-        with patch.object(bps_mod, "submit", side_effect=capturing_submit):
-            with patch.object(
-                bps_mod,
-                "status",
-                return_value={"success": True, "output": succeeded_report},
-            ):
-                result = executor.run_pipetask(
-                    [
-                        "run",
-                        "-b",
-                        str(config.repo),
-                        "-g",
-                        "/data/repo/graph.qg",
-                        "-j",
-                        "4",
-                    ],
-                    config,
-                    check=False,
-                )
+        summary_file = tmp_path / "roundtrip.summary.json"
+
+        with patch.object(
+            bps_mod, "submit", side_effect=capturing_submit
+        ), patch.object(
+            bps_mod,
+            "status",
+            return_value={"success": True, "output": succeeded_report},
+        ), patch.object(
+            bps_report_mod, "summary_for_run", return_value=None
+        ):
+            result = executor.run_pipetask(
+                [
+                    "run",
+                    "-b",
+                    str(config.repo),
+                    "-g",
+                    "/data/repo/graph.qg",
+                    "-j",
+                    "4",
+                    "--summary",
+                    str(summary_file),
+                ],
+                config,
+                check=False,
+            )
 
         # Verify the submit was called with correct params
         assert submit_called_with["pipeline"] == "custom"
         assert submit_called_with["qgraph_file"] == "/data/repo/graph.qg"
-        assert submit_called_with["site"] == "local"
+        assert submit_called_with["site"] == "htcondor"
 
-        # Verify the result is a proper CompletedProcess
+        # Verify the result is a proper CompletedProcess with structured counts.
         assert result.returncode == 0
-        assert "3 quanta successfully" in result.stdout
-        assert "0 failed" in result.stdout
+        assert quanta_report.parse_summary_file(summary_file) == (3, 0)
 
 
 class TestDockerSlurmSiteConfig:

@@ -67,3 +67,19 @@ def parse_summary_file(path: "Path | str") -> tuple[int, int] | None:
         elif status in _FAIL:
             failed += 1
     return succeeded, failed
+
+
+def write_summary_file(path: "Path | str", succeeded: int, failed: int) -> None:
+    """Write a minimal ``pipetask run --summary``-shaped JSON with these counts.
+
+    Symmetric to :func:`parse_summary_file`: emits ``succeeded`` ``"success"`` and
+    ``failed`` ``"failure"`` entries under ``quantaReports`` so the same reader
+    recovers ``(succeeded, failed)``. This lets a backend that does not run local
+    ``pipetask`` (the BPS executor) convey the counts it already knows through the
+    structured channel science.py prefers, instead of fabricating a stdout string
+    that the human-readable regex never matched.
+    """
+    reports = [{"status": _SUCCESS}] * max(0, succeeded) + [
+        {"status": "failure"}
+    ] * max(0, failed)
+    Path(path).write_text(json.dumps({"quantaReports": reports}))

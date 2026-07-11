@@ -15,7 +15,7 @@ import subprocess
 import time
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
-from stips.core import bps, bps_report, butler_query
+from stips.core import bps, bps_report, butler_query, quanta_report
 from stips.core.stack import run_pipetask
 
 if TYPE_CHECKING:
@@ -105,7 +105,8 @@ def _parse_pipetask_args(args: list[str]) -> dict:
 
     Returns:
         Dict with keys: subcommand, repo, qgraph_file, pipeline,
-        input_collections, output_collection, output_run, data_query, jobs
+        input_collections, output_collection, output_run, data_query, jobs,
+        summary_file
     """
     parsed: dict = {
         "subcommand": args[0] if args else None,
@@ -117,6 +118,7 @@ def _parse_pipetask_args(args: list[str]) -> dict:
         "output_run": None,
         "data_query": None,
         "jobs": None,
+        "summary_file": None,
     }
 
     flag_map = {
@@ -129,6 +131,10 @@ def _parse_pipetask_args(args: list[str]) -> dict:
         "-j": "jobs",
         "--output-run": "output_run",
         "--save-qgraph": "save_qgraph",
+        # ``pipetask run --summary <file>`` — the structured channel science.py
+        # reads quanta counts from. BPS doesn't run local pipetask, so the
+        # executor writes this file itself from the counts it knows.
+        "--summary": "summary_file",
     }
 
     i = 1  # Skip subcommand
@@ -194,38 +200,62 @@ def _check_output_collection(output_run: str, config: Config) -> bool:
     return butler_query.collection_has_datasets(config, output_run)
 
 
-def _translate_bps_to_completed_process(
-    bps_status: dict,
+def _emit_bps_result(
+    returncode: int,
+    succeeded: int,
+    failed: int,
+    *,
+    summary_file: str | None = None,
+    stderr: str = "",
 ) -> subprocess.CompletedProcess:
-    """Translate BPS status into a CompletedProcess.
+    """Build the CompletedProcess for a BPS run, conveying counts structurally.
 
-    Stage modules parse CompletedProcess.stdout with _parse_quanta_summary()
-    which looks for "Executed N quanta successfully, M failed out of total T".
-    We format our stdout to match that pattern.
-
-    Args:
-        bps_status: Dict with state, succeeded, failed keys from _parse_bps_report()
-
-    Returns:
-        CompletedProcess with returncode and formatted stdout
+    science.py reads quanta counts from the ``--summary`` JSON via
+    ``quanta_report.parse_summary_file`` — the same channel ``pipetask run
+    --summary`` populates locally. BPS runs no local pipetask, so the executor
+    writes that file itself from the counts it knows (WMS report, or the
+    output-collection probe). ``stdout`` is purely informational and is never
+    parsed for counts (this replaces the old fabricated
+    ``"...failed out of total N"`` string, which never matched
+    ``pipeline.parse_quanta_summary``'s regex — a dead fallback link).
     """
-    state = bps_status.get("state", "UNKNOWN")
-    quanta_ok = bps_status.get("succeeded", 0)
-    quanta_fail = bps_status.get("failed", 0)
-    total = quanta_ok + quanta_fail
+    if summary_file:
+        try:
+            quanta_report.write_summary_file(summary_file, succeeded, failed)
+        except OSError as e:
+            log.warning("Could not write BPS quanta summary to %s: %s", summary_file, e)
 
-    returncode = 0 if state == "SUCCEEDED" else 1
-
-    stdout = (
-        f"Executed {quanta_ok} quanta successfully, "
-        f"{quanta_fail} failed out of total {total}"
-    )
-
+    stdout = f"BPS run: {succeeded} quanta succeeded, {failed} failed"
     return subprocess.CompletedProcess(
         args=["bps", "submit"],
         returncode=returncode,
         stdout=stdout,
-        stderr="",
+        stderr=stderr,
+    )
+
+
+def _translate_bps_to_completed_process(
+    bps_status: dict,
+    *,
+    summary_file: str | None = None,
+) -> subprocess.CompletedProcess:
+    """Translate a BPS status dict into a CompletedProcess with structured counts.
+
+    Args:
+        bps_status: Dict with state, succeeded, failed keys from _parse_bps_report()
+        summary_file: Optional ``--summary`` path to write the counts to.
+
+    Returns:
+        CompletedProcess with returncode set from state and counts written to
+        ``summary_file`` (not fabricated into stdout).
+    """
+    state = bps_status.get("state", "UNKNOWN")
+    quanta_ok = bps_status.get("succeeded", 0)
+    quanta_fail = bps_status.get("failed", 0)
+    returncode = 0 if state == "SUCCEEDED" else 1
+
+    return _emit_bps_result(
+        returncode, quanta_ok, quanta_fail, summary_file=summary_file
     )
 
 
@@ -295,6 +325,8 @@ class BPSExecutor:
             log.warning("No qgraph file in args, falling back to local execution")
             return run_pipetask(args, config, **kwargs)
 
+        summary_file = parsed.get("summary_file")
+
         # Build BPSConfig for submission
         output_run = parsed.get("output_run") or ""
         bps_cfg = bps.BPSConfig(
@@ -321,12 +353,32 @@ class BPSExecutor:
 
         run_id = bps_result.run_id
 
-        # Synchronous backend (Parsl): bps submit blocks until completion.
-        # The job is already done when we get here. BPS exits 0 even when
-        # all quanta fail (Parsl orchestration "succeeds"), so we check
-        # Butler for the output_run collection as the definitive test.
+        # No run id means we cannot poll the WMS. There are two very different
+        # reasons for this, and conflating them is exactly finding F-015:
+        #
+        #   (a) Synchronous backend (Parsl): `bps submit` blocks until the
+        #       workflow finishes, and Parsl exposes no pollable run
+        #       (`ParslService.report` raises NotImplementedError). A missing run
+        #       id here is EXPECTED — verify the output collection instead.
+        #   (b) Asynchronous backend (HTCondor) where both the submit banner and
+        #       the WMS run-id fallback (bps.submit) failed. This is a DEGRADED
+        #       mode: we wanted to poll and cannot. Previously this was silently
+        #       misclassified as (a); now it is loud, and we fall back to the
+        #       output-collection probe only as a last resort.
         if not run_id:
-            log.info("  BPS job completed (synchronous backend)")
+            synchronous = bps.is_synchronous_site(self.site)
+            if synchronous:
+                log.info("  BPS job completed (synchronous backend)")
+            else:
+                log.warning(
+                    "  BPS run id unavailable (site=%s): cannot poll WMS; "
+                    "falling back to output-collection probe of %s. Success "
+                    "determination is degraded — an empty/partial run may be "
+                    "misjudged.",
+                    self.site,
+                    output_run,
+                )
+
             collection_exists = _check_output_collection(output_run, config)
             if collection_exists:
                 log.info(f"  Output collection verified: {output_run}")
@@ -338,20 +390,16 @@ class BPSExecutor:
                 )
                 returncode = 1
 
-            # Synthesize quanta summary for stage module parsing.
-            # Use conservative counts: 1/0 based on collection existence.
+            # Conservative counts (1/0 based on collection existence), conveyed
+            # through the structured --summary channel rather than a fabricated
+            # stdout string.
             quanta_ok = 1 if collection_exists else 0
             quanta_fail = 0 if collection_exists else 1
-            total = quanta_ok + quanta_fail
-
-            result_stdout = (
-                f"Executed {quanta_ok} quanta successfully, "
-                f"{quanta_fail} failed out of total {total}"
-            )
-            return subprocess.CompletedProcess(
-                args=["bps", "submit"],
-                returncode=returncode,
-                stdout=result_stdout,
+            return _emit_bps_result(
+                returncode,
+                quanta_ok,
+                quanta_fail,
+                summary_file=summary_file,
                 stderr=bps_result.stderr or "",
             )
 
@@ -386,7 +434,9 @@ class BPSExecutor:
                                 f"state={state}, "
                                 f"logs at: {bps_result.submit_dir}/logging/\n"
                             )
-                return _translate_bps_to_completed_process(parsed_status)
+                return _translate_bps_to_completed_process(
+                    parsed_status, summary_file=summary_file
+                )
 
             time.sleep(interval)
             interval = min(interval * 1.5, max_interval)
