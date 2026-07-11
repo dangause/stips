@@ -36,6 +36,9 @@ stips-archive-nights = "stips.pipeline_tools.generate_nights_list:main"
 stips-archive-ingest-ps1 = "stips.pipeline_tools.ingest_ps1_template:main"
 stips-archive-template-meta = "stips.pipeline_tools.template_metadata:main"
 
+# Calibration tools
+stips-defects-build = "stips.pipeline_tools.build_defects:main"
+
 # DIA tools
 stips-dia-assess = "stips.pipeline_tools.assess_dia_quality:main"
 stips-dia-lightcurve = "stips.pipeline_tools.extract_lightcurve:main"

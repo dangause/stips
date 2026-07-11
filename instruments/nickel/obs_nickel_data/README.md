@@ -34,7 +34,7 @@ The filename timestamp indicates when the defects become valid. Defects remain v
 
 ### Defects
 
-1. Generate defects using the `obsn-defects-from-flats` tool from the `defects` package
+1. Generate defects using the `stips-defects-build` tool (see `instruments/nickel/defects/README.md`)
 2. Convert the CSV output to ECSV format with proper metadata headers
 3. Name the file with the validity start date: `YYYYMMDDTHHMMSS.ecsv`
 4. Place in `Nickel/defects/ccd0/`
