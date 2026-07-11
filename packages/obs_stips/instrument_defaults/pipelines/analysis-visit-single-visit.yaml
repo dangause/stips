@@ -7,6 +7,12 @@
 description: |
   Plots and metrics to assess visit quality before joint calibration steps,
   with matching only to external reference catalogs.
+
+  Task labels carry a "Visit" suffix to stay distinct from the same-named
+  upstream tasks in $DRP_PIPE_DIR's analysis-visit-single-visit.yaml ingredient,
+  which DRP.yaml also imports. (Formerly suffixed "Nickel"; renamed because task
+  labels become dataset-type names in every fork's Butler repo -- see
+  docs/migrations.md.)
 # imports:
 #   - location: $ANALYSIS_TOOLS_DIR/pipelines/visitQualityCore.yaml
 #     include: analyzeCalibrateImageMetadata
@@ -29,7 +35,7 @@ tasks:
   #     file: $ANALYSIS_TOOLS_DIR/config/sourceTableCore.py
   #     connections.data: single_visit_star
   #     connections.outputName: single_visit_star
-  makeAnalysisSingleVisitStarAstrometricRefMatchNickel:
+  makeAnalysisSingleVisitStarAstrometricRefMatchVisit:
     class: lsst.analysis.tools.tasks.astrometricCatalogMatch.AstrometricCatalogMatchVisitTask
     config:
       connections.targetCatalog: single_visit_star
@@ -37,14 +43,14 @@ tasks:
       connections.refCatalog: the_monster_20250219_local  #gaia_dr3
       # keep the output name the analyzer expects
       connections.matchedCatalog: "{targetCatalog}_ref_match_astrom"
-  analyzeSingleVisitStarAstrometricRefMatchNickel:
+  analyzeSingleVisitStarAstrometricRefMatchVisit:
     class: lsst.analysis.tools.tasks.refCatSourceAnalysis.RefCatSourceAnalysisTask
     config:
       file: $ANALYSIS_TOOLS_DIR/config/refCatSourceAstrometricCore.py
       connections.targetCatalog: single_visit_star
       connections.data: "{targetCatalog}_ref_match_astrom"
       connections.outputName: "single_visit_star_ref_match_astrom"
-  makeAnalysisSingleVisitStarPhotometricRefMatchNickel:
+  makeAnalysisSingleVisitStarPhotometricRefMatchVisit:
     class: lsst.analysis.tools.tasks.photometricCatalogMatch.PhotometricCatalogMatchVisitTask
     config:
       file: $STIPS_DEFAULTS/configs/analysisToolsPhotometricCatalogMatchVisit.py
@@ -52,7 +58,7 @@ tasks:
       connections.visitSummaryTable: preliminary_visit_summary
       connections.refCat: the_monster_20250219_local
       connections.matchedCatalog: "{targetCatalog}_ref_match_photom"
-  analyzeSingleVisitStarPhotometricRefMatchNickel:
+  analyzeSingleVisitStarPhotometricRefMatchVisit:
     class: lsst.analysis.tools.tasks.refCatSourcePhotometricAnalysis.RefCatSourcePhotometricAnalysisTask
     config:
       file: $ANALYSIS_TOOLS_DIR/config/refCatSourcePhotometricCore.py
@@ -68,10 +74,10 @@ tasks:
 #       - analyzeAmpInterfaceOffsetMetadata
 #       - analyzeInitialSummaryStats
 #       - analyzeSingleVisitStar
-#       - makeAnalysisSingleVisitStarAstrometricRefMatchNickel
-#       - analyzeSingleVisitStarAstrometricRefMatchNickel
-#       - makeAnalysisSingleVisitStarPhotometricRefMatchNickel
-#       - analyzeSingleVisitStarPhotometricRefMatchNickel
+#       - makeAnalysisSingleVisitStarAstrometricRefMatchVisit
+#       - analyzeSingleVisitStarAstrometricRefMatchVisit
+#       - makeAnalysisSingleVisitStarPhotometricRefMatchVisit
+#       - analyzeSingleVisitStarPhotometricRefMatchVisit
 #     description: |
 #       Subset containing all visit-level analysis tasks that run on the final
 #       sources. This subset contains all of the tasks in this pipeline, and

@@ -25,6 +25,16 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
   `packages/obs_stips/instrument_defaults/README.md` documents the tiering
   contract (what a fork inherits vs MUST review — photometric calibration!).
 
+### QA task-label rename: `...Nickel` → `...Visit` (F-013)
+- Renamed 5 analysis/QA task labels in DRP.yaml /
+  analysis-visit-single-visit.yaml / visit-quality-detector.yaml
+  (`analyzeCalibrateImageMetadataNickel` → `...MetadataVisit`,
+  `*SingleVisitStar{Astrometric,Photometric}RefMatchNickel` → `...RefMatchVisit`).
+  Task labels become dataset-type names in every fork's Butler repo.
+- **Migration:** no data loss; reruns write under the new label-derived dataset
+  names; dashboards/queries referencing the old `..Nickel_metadata/_log/_config`
+  names must update. See `docs/migrations.md`.
+
 ### Crosstalk for multi-amplifier instruments
 - **Declarative crosstalk**: instrument profiles can carry a `CrosstalkSpec`
   (N×N coefficient matrix + units). STIPS builds a `CrosstalkCalib`, certifies it

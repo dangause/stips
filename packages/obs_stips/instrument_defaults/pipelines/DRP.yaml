@@ -314,7 +314,7 @@ subsets:
       - standardizeSingleVisitStar
       # - analyzeAmpOffsetMetadata
       # - analyzeAmpInterfaceOffsetMetadata
-      - analyzeCalibrateImageMetadataNickel
+      - analyzeCalibrateImageMetadataVisit
       - analyzeInitialSummaryStats
     description: |
       A step that processes raws to initial processed images and star catalogs.
@@ -329,10 +329,10 @@ subsets:
       - consolidateSingleVisitStar
       - consolidateVisitSummary
       - analyzeSingleVisitStar
-      - makeAnalysisSingleVisitStarAstrometricRefMatchNickel
-      - analyzeSingleVisitStarAstrometricRefMatchNickel
-      - makeAnalysisSingleVisitStarPhotometricRefMatchNickel
-      - analyzeSingleVisitStarPhotometricRefMatchNickel
+      - makeAnalysisSingleVisitStarAstrometricRefMatchVisit
+      - analyzeSingleVisitStarAstrometricRefMatchVisit
+      - makeAnalysisSingleVisitStarPhotometricRefMatchVisit
+      - analyzeSingleVisitStarPhotometricRefMatchVisit
     description: |
       A step that consolidates per-detector initial star catalogs and metadata
       to full-focal-plane visit-level versions, and runs analysis on initial
@@ -386,16 +386,16 @@ subsets:
     - standardizeSingleVisitStar
     # - analyzeAmpOffsetMetadata
     # - analyzeAmpInterfaceOffsetMetadata
-    - analyzeCalibrateImageMetadataNickel
+    - analyzeCalibrateImageMetadataVisit
     - analyzeInitialSummaryStats
     # 1b
     - consolidateSingleVisitStar
     - consolidateVisitSummary
     - analyzeSingleVisitStar
-    - makeAnalysisSingleVisitStarAstrometricRefMatchNickel
-    - analyzeSingleVisitStarAstrometricRefMatchNickel
-    - makeAnalysisSingleVisitStarPhotometricRefMatchNickel
-    - analyzeSingleVisitStarPhotometricRefMatchNickel
+    - makeAnalysisSingleVisitStarAstrometricRefMatchVisit
+    - analyzeSingleVisitStarAstrometricRefMatchVisit
+    - makeAnalysisSingleVisitStarPhotometricRefMatchVisit
+    - analyzeSingleVisitStarPhotometricRefMatchVisit
     # 1c
     - associateIsolatedStar
     - analyzeSingleVisitStarAssociation
