@@ -273,7 +273,7 @@ class TestBPSProjectDefault:
         mock_config.raw_parent_dir = Path("/fake/raw")
         mock_config.refcat_repo = Path("/fake/refcats")
         mock_config.require_profile.return_value = SimpleNamespace(
-            name=instrument_name, obs_data_package=""
+            name=instrument_name, obs_data_package="", ps1_band_map={"r": "r", "i": "i"}
         )
         return mock_config
 
