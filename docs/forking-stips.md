@@ -341,7 +341,12 @@ Gaia+PS1 refcat overlay live in `instruments/nickel/configs/` — they are fit f
 one telescope and are deliberately excluded from the neutral tier. Until you fit
 your own color terms and drop a `colorterms.py` into `instruments/<x>/configs/`,
 your photometry is calibrated with a plain per-visit zeropoint (color terms
-OFF). This is a fork's **#1 review item**. The rules:
+OFF). This is a fork's **#1 review item**. Two framework tools produce these
+per-instrument files: `stips-colorterms-fit` fits your `colorterms.py` from
+matched standard-star photometry (recipe:
+`instruments/nickel/colorterms/README.md`) and `stips-tune-calibrate-image`
+searches `calibrateImage` parameters to produce your `tuned_configs/` (recipe:
+`instruments/nickel/tuning/README.md`). The rules:
 
 - **Override one file by dropping a same-named file.** The CLI resolves each
   pipeline/config **instrument-dir-first, else framework default** (via

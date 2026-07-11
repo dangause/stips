@@ -38,6 +38,8 @@ stips-archive-template-meta = "stips.pipeline_tools.template_metadata:main"
 
 # Calibration tools
 stips-defects-build = "stips.pipeline_tools.build_defects:main"
+stips-colorterms-fit = "stips.pipeline_tools.fit_colorterms:main"
+stips-tune-calibrate-image = "stips.pipeline_tools.tune_calibrate_image:main"
 
 # DIA tools
 stips-dia-assess = "stips.pipeline_tools.assess_dia_quality:main"
