@@ -16,6 +16,7 @@ Example usage:
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 from dataclasses import dataclass, field
@@ -25,6 +26,9 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from stips.core.config import Config
+
+
+log = logging.getLogger(__name__)
 
 
 # Repo's packages/ directory (bps.py is at packages/stips/src/stips/core/bps.py;
@@ -38,6 +42,38 @@ VALID_PIPELINES = ("calibs", "science", "dia", "fphot", "custom")
 
 # Valid site names
 VALID_SITES = ("slurm", "htcondor", "local", "singularity-slurm", "docker-slurm")
+
+# Sites whose ``wmsServiceClass`` is Parsl (see ``bps/sites/*.yaml``). Parsl runs
+# *synchronously* — ``bps submit`` blocks until the workflow finishes and there is
+# no pollable WMS run (``ParslService.report`` raises ``NotImplementedError``), so
+# a missing run id on these sites is EXPECTED, not an error. HTCondor is the only
+# asynchronous site: it submits and returns a run id for later polling.
+_PARSL_SITES = frozenset({"local", "slurm", "singularity-slurm", "docker-slurm"})
+_HTCONDOR_SITES = frozenset({"htcondor"})
+
+
+def is_synchronous_site(site: str) -> bool:
+    """Whether ``site`` runs synchronously (Parsl) with no pollable WMS run.
+
+    On synchronous sites a missing ``run_id`` is legitimate (the job already
+    finished during ``bps submit``); on asynchronous sites (HTCondor) it means
+    run-id extraction failed and the poll strategy is unavailable.
+    """
+    return site in _PARSL_SITES
+
+
+def wms_service_fqn_for_site(site: str) -> str | None:
+    """WMS service class FQN for a site, or ``None`` if unknown.
+
+    Mirrors the ``wmsServiceClass`` in ``bps/sites/{site}.yaml``. Only the
+    asynchronous (HTCondor) FQN is used by the run-id WMS fallback; the Parsl
+    FQN is returned for completeness but its ``report`` is unimplemented.
+    """
+    if site in _HTCONDOR_SITES:
+        return "lsst.ctrl.bps.htcondor.HTCondorService"
+    if site in _PARSL_SITES:
+        return "lsst.ctrl.bps.parsl.ParslService"
+    return None
 
 
 @dataclass
@@ -299,6 +335,67 @@ def _extract_run_id(stdout: str) -> str | None:
     return None
 
 
+def _match_run_id(runs: list[dict], output_run: str) -> str | None:
+    """Pick the ``wms_id`` of the run matching ``output_run`` from a WMS listing.
+
+    ``output_run`` is the RUN collection this submission targets — it is rendered
+    into the BPS config as ``outputRun`` and is unique (it carries a timestamp),
+    so it identifies the just-submitted workflow among the WMS's recent runs.
+    ``WmsRunReport`` exposes it via ``run`` (and the payload/path echo pieces of
+    it), so we match defensively across those fields but require a **single**
+    unambiguous match — otherwise we return ``None`` and let the caller degrade
+    loudly rather than poll the wrong run.
+    """
+    if not output_run:
+        return None
+
+    matched: list[str] = []
+    for r in runs:
+        wms_id = r.get("wms_id")
+        if not wms_id:
+            continue
+        for key in ("run", "payload", "path"):
+            value = r.get(key) or ""
+            if output_run == value or output_run in value:
+                matched.append(str(wms_id))
+                break
+
+    if len(matched) == 1:
+        return matched[0]
+    return None
+
+
+def _resolve_run_id_via_wms(
+    bps_cfg: BPSConfig,
+    config: Config,
+) -> str | None:
+    """Recover a run id from the WMS when the submit banner did not yield one.
+
+    Structured fallback for asynchronous (HTCondor) submissions: list recent WMS
+    runs via ``bps_report.list_runs`` (``retrieve_report(run_id=None)``) and match
+    the one whose RUN collection equals ``bps_cfg.output_run``. Returns ``None``
+    when the WMS is unavailable, returns nothing, or does not match uniquely — the
+    caller then treats the run id as genuinely unavailable.
+
+    Not attempted on synchronous (Parsl) sites: there is no pollable run there, so
+    a missing banner id is expected rather than something to recover.
+    """
+    if is_synchronous_site(bps_cfg.site):
+        return None
+
+    fqn = wms_service_fqn_for_site(bps_cfg.site)
+    if not fqn:
+        return None
+
+    from stips.core import bps_report
+
+    runs = bps_report.list_runs(config, wms_service_fqn=fqn)
+    if not runs:
+        return None
+
+    return _match_run_id(runs, bps_cfg.output_run or "")
+
+
 def submit(
     bps_cfg: BPSConfig,
     config: Config,
@@ -353,10 +450,32 @@ def submit(
             cwd=submit_dir,
         )
 
-        # Parse output for run ID
-        run_id = _extract_run_id(result.stdout or "")
-
         success = result.returncode == 0
+
+        # Layered run-id extraction, most-reliable-first:
+        #   1. the submit banner (cheap; works on v30 —
+        #      ``ctrl_bps.drivers.submit_driver`` prints ``Run Id: <id>``).
+        #   2. structured WMS fallback (query ``retrieve_report`` and match this
+        #      submission's output RUN collection) when the banner parse fails.
+        # The CLI ``bps submit`` invocation is kept as-is on purpose: an
+        # in-process submit would change ctrl_bps config/logging semantics and is
+        # too risky to fold into this fix. Only run-id *recovery* is layered.
+        run_id = None
+        if success:
+            run_id = _extract_run_id(result.stdout or "")
+            if run_id is None:
+                run_id = _resolve_run_id_via_wms(bps_cfg, config)
+                if run_id is None and not is_synchronous_site(bps_cfg.site):
+                    # Async site with no recoverable run id: no longer silent.
+                    # The executor turns this into a loud, degraded mode rather
+                    # than misclassifying it as a finished synchronous backend.
+                    log.error(
+                        "bps submit (site=%s) succeeded but no run id could be "
+                        "extracted from the banner or recovered from the WMS "
+                        "(output_run=%s); WMS polling is unavailable for this run.",
+                        bps_cfg.site,
+                        bps_cfg.output_run or "",
+                    )
 
         return BPSResult(
             success=success,

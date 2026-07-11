@@ -67,6 +67,172 @@ class TestSummaryForRun:
             assert bps_report.summary_for_run("r1", self._cfg()) is None
 
 
+class TestListRunsScript:
+    def test_script_is_valid_python_and_lists_runs(self):
+        from stips.core import bps_report
+
+        s = bps_report._build_list_runs_script(bps_report.HTCONDOR_SERVICE)
+        ast.parse(s)  # raises if malformed
+        assert "retrieve_report" in s
+        # run_id=None is the documented "list all runs" form
+        assert "run_id=None" in s
+        # emits the identifying fields the matcher uses
+        assert "wms_id" in s
+        assert '"run"' in s
+        assert bps_report.HTCONDOR_SERVICE in s
+
+    def test_script_embeds_fqn_safely(self):
+        from stips.core import bps_report
+
+        s = bps_report._build_list_runs_script("x'y.Service")
+        ast.parse(s)
+
+
+class TestListRuns:
+    def _cfg(self):
+        cfg = MagicMock()
+        cfg.repo = "/repo"
+        return cfg
+
+    def test_returns_list_when_present(self):
+        from stips.core import bps_report
+
+        payload = [{"wms_id": "42.0", "run": "Nickel/runs/x/run"}]
+        with patch.object(bps_report, "run_butler_python_json", return_value=payload):
+            assert bps_report.list_runs(self._cfg()) == payload
+
+    def test_none_when_empty(self):
+        from stips.core import bps_report
+
+        with patch.object(bps_report, "run_butler_python_json", return_value=[]):
+            assert bps_report.list_runs(self._cfg()) is None
+
+    def test_none_when_query_failed(self):
+        from stips.core import bps_report
+
+        with patch.object(bps_report, "run_butler_python_json", return_value=None):
+            assert bps_report.list_runs(self._cfg()) is None
+
+
+class TestSiteClassification:
+    def test_parsl_sites_are_synchronous(self):
+        from stips.core import bps
+
+        for site in ("local", "slurm", "singularity-slurm", "docker-slurm"):
+            assert bps.is_synchronous_site(site) is True
+
+    def test_htcondor_is_asynchronous(self):
+        from stips.core import bps
+
+        assert bps.is_synchronous_site("htcondor") is False
+
+    def test_wms_fqn_for_htcondor(self):
+        from stips.core import bps
+
+        assert (
+            bps.wms_service_fqn_for_site("htcondor")
+            == "lsst.ctrl.bps.htcondor.HTCondorService"
+        )
+
+    def test_wms_fqn_for_parsl_site(self):
+        from stips.core import bps
+
+        assert "parsl" in bps.wms_service_fqn_for_site("local").lower()
+
+    def test_wms_fqn_unknown_site(self):
+        from stips.core import bps
+
+        assert bps.wms_service_fqn_for_site("nonsense") is None
+
+
+class TestMatchRunId:
+    def test_unique_match_on_run_field(self):
+        from stips.core import bps
+
+        runs = [
+            {"wms_id": "1.0", "run": "Nickel/runs/a/run", "payload": "", "path": ""},
+            {"wms_id": "2.0", "run": "Nickel/runs/b/run", "payload": "", "path": ""},
+        ]
+        assert bps._match_run_id(runs, "Nickel/runs/b/run") == "2.0"
+
+    def test_substring_match_on_path(self):
+        from stips.core import bps
+
+        runs = [
+            {
+                "wms_id": "9.0",
+                "run": "",
+                "payload": "",
+                "path": "/repo/bps/submit/custom_x_ts",
+            }
+        ]
+        # output_run echoed inside a longer path still matches
+        assert bps._match_run_id(runs, "custom_x_ts") == "9.0"
+
+    def test_ambiguous_match_returns_none(self):
+        from stips.core import bps
+
+        runs = [
+            {"wms_id": "1.0", "run": "Nickel/runs/x/run", "payload": "", "path": ""},
+            {"wms_id": "2.0", "run": "Nickel/runs/x/run", "payload": "", "path": ""},
+        ]
+        assert bps._match_run_id(runs, "Nickel/runs/x/run") is None
+
+    def test_no_match_returns_none(self):
+        from stips.core import bps
+
+        runs = [{"wms_id": "1.0", "run": "other", "payload": "", "path": ""}]
+        assert bps._match_run_id(runs, "Nickel/runs/x/run") is None
+
+    def test_empty_output_run_returns_none(self):
+        from stips.core import bps
+
+        runs = [{"wms_id": "1.0", "run": "anything", "payload": "", "path": ""}]
+        assert bps._match_run_id(runs, "") is None
+
+
+class TestResolveRunIdViaWms:
+    def _cfg(self):
+        return MagicMock()
+
+    def test_synchronous_site_skips_wms(self):
+        from stips.core import bps
+
+        cfg = bps.BPSConfig(
+            pipeline="custom", night="00000000", site="local", output_run="r/run"
+        )
+        with patch("stips.core.bps_report.list_runs") as mlist:
+            assert bps._resolve_run_id_via_wms(cfg, self._cfg()) is None
+            mlist.assert_not_called()
+
+    def test_async_site_matches_run(self):
+        from stips.core import bps
+
+        cfg = bps.BPSConfig(
+            pipeline="custom",
+            night="00000000",
+            site="htcondor",
+            output_run="Nickel/runs/b/run",
+        )
+        runs = [
+            {"wms_id": "7.0", "run": "Nickel/runs/b/run", "payload": "", "path": ""}
+        ]
+        with patch("stips.core.bps_report.list_runs", return_value=runs):
+            assert bps._resolve_run_id_via_wms(cfg, self._cfg()) == "7.0"
+
+    def test_async_site_wms_unavailable(self):
+        from stips.core import bps
+
+        cfg = bps.BPSConfig(
+            pipeline="custom",
+            night="00000000",
+            site="htcondor",
+            output_run="Nickel/runs/b/run",
+        )
+        with patch("stips.core.bps_report.list_runs", return_value=None):
+            assert bps._resolve_run_id_via_wms(cfg, self._cfg()) is None
+
+
 class TestExtractRunId:
     def test_v30_banner_run_id_label(self):
         from stips.core import bps
@@ -102,3 +268,124 @@ class TestExtractRunId:
         from stips.core import bps
 
         assert bps._extract_run_id("nothing here\n") is None
+
+
+class TestSubmitLayeredRunId:
+    """submit() layers banner parse -> WMS fallback and stops being silent."""
+
+    def _cfg(self, tmp_path):
+        cfg = MagicMock()
+        cfg.repo = tmp_path
+        return cfg
+
+    def _result(self, stdout="", returncode=0, stderr=""):
+        import subprocess
+
+        return subprocess.CompletedProcess(
+            args=["bps", "submit"],
+            returncode=returncode,
+            stdout=stdout,
+            stderr=stderr,
+        )
+
+    def test_banner_success_skips_wms(self, tmp_path):
+        from stips.core import bps
+
+        cfg = self._cfg(tmp_path)
+        bcfg = bps.BPSConfig(
+            pipeline="custom",
+            night="00000000",
+            site="htcondor",
+            output_run="Nickel/runs/a/run",
+        )
+        with patch(
+            "stips.core.bps.render_bps_config", return_value=tmp_path / "c.yaml"
+        ), patch(
+            "stips.core.stack.run_with_stack",
+            return_value=self._result("Run Id: 55.0\nRun Name: x\n"),
+        ), patch(
+            "stips.core.bps._resolve_run_id_via_wms"
+        ) as mres:
+            res = bps.submit(bcfg, cfg)
+
+        assert res.run_id == "55.0"
+        mres.assert_not_called()
+
+    def test_banner_fail_uses_wms_fallback(self, tmp_path):
+        from stips.core import bps
+
+        cfg = self._cfg(tmp_path)
+        bcfg = bps.BPSConfig(
+            pipeline="custom",
+            night="00000000",
+            site="htcondor",
+            output_run="Nickel/runs/a/run",
+        )
+        with patch(
+            "stips.core.bps.render_bps_config", return_value=tmp_path / "c.yaml"
+        ), patch(
+            "stips.core.stack.run_with_stack",
+            return_value=self._result("no id in this banner\n"),
+        ), patch(
+            "stips.core.bps._resolve_run_id_via_wms", return_value="77.0"
+        ):
+            res = bps.submit(bcfg, cfg)
+
+        assert res.run_id == "77.0"
+
+    def test_both_fail_async_logs_error(self, tmp_path, caplog):
+        import logging
+
+        from stips.core import bps
+
+        cfg = self._cfg(tmp_path)
+        bcfg = bps.BPSConfig(
+            pipeline="custom",
+            night="00000000",
+            site="htcondor",
+            output_run="Nickel/runs/a/run",
+        )
+        with patch(
+            "stips.core.bps.render_bps_config", return_value=tmp_path / "c.yaml"
+        ), patch(
+            "stips.core.stack.run_with_stack",
+            return_value=self._result("no id\n"),
+        ), patch(
+            "stips.core.bps._resolve_run_id_via_wms", return_value=None
+        ), caplog.at_level(
+            logging.ERROR, logger="stips.core.bps"
+        ):
+            res = bps.submit(bcfg, cfg)
+
+        assert res.run_id is None
+        assert any(
+            "no run id could be extracted" in r.getMessage() for r in caplog.records
+        )
+
+    def test_sync_site_missing_run_id_is_not_an_error(self, tmp_path, caplog):
+        import logging
+
+        from stips.core import bps
+
+        cfg = self._cfg(tmp_path)
+        bcfg = bps.BPSConfig(
+            pipeline="custom",
+            night="00000000",
+            site="local",
+            output_run="Nickel/runs/a/run",
+        )
+        # No WMS patch needed: _resolve_run_id_via_wms short-circuits for Parsl.
+        with patch(
+            "stips.core.bps.render_bps_config", return_value=tmp_path / "c.yaml"
+        ), patch(
+            "stips.core.stack.run_with_stack",
+            return_value=self._result("no id (parsl ran synchronously)\n"),
+        ), caplog.at_level(
+            logging.ERROR, logger="stips.core.bps"
+        ):
+            res = bps.submit(bcfg, cfg)
+
+        assert res.run_id is None
+        assert res.success is True
+        # Legitimate synchronous case: no ERROR emitted.
+        assert not [r for r in caplog.records if r.levelno >= logging.ERROR]

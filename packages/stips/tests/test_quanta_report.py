@@ -96,3 +96,20 @@ def test_unrecognized_shape_returns_none(tmp_path):
     # no quantaReports key -> None (fall back to regex), not (0, 0)
     p = _write(tmp_path, {"somethingElse": []})
     assert quanta_report.parse_summary_file(p) is None
+
+
+def test_write_summary_file_roundtrips(tmp_path):
+    from stips.core import quanta_report
+
+    p = tmp_path / "written.summary.json"
+    quanta_report.write_summary_file(p, 4, 2)
+    # symmetric with the reader the BPS executor relies on
+    assert quanta_report.parse_summary_file(p) == (4, 2)
+
+
+def test_write_summary_file_zero_counts(tmp_path):
+    from stips.core import quanta_report
+
+    p = tmp_path / "zero.summary.json"
+    quanta_report.write_summary_file(p, 0, 0)
+    assert quanta_report.parse_summary_file(p) == (0, 0)
