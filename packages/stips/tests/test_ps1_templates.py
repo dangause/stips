@@ -215,18 +215,41 @@ class TestPS1Conversion:
 
 
 class TestBandMapping:
-    """Test PS1 to Nickel filter band mapping."""
+    """Local-band -> PS1-band resolution is now profile-driven (F-011)."""
 
-    def test_band_mapping(self, ps1_ingestion_module):
-        """Test that band mapping dictionary is correct."""
-        mapping = ps1_ingestion_module.PS1_TO_NICKEL_BANDS
+    def test_resolve_uses_profile_map(self, ps1_ingestion_module, monkeypatch):
+        """_resolve_ps1_band reads the active profile's ps1_band_map."""
+        import stips.core.config as cfg
 
-        # Check expected mappings
-        assert mapping["r"] == "r"  # Direct match
-        assert mapping["i"] == "i"  # Direct match
-        assert mapping["g"] == "v"  # PS1 g → Nickel V
-        assert mapping["z"] == "i"  # PS1 z → Nickel I (no z-band)
-        assert mapping["y"] == "i"  # PS1 y → Nickel I (no y-band)
+        class _Prof:
+            ps1_band_map = {"r": "r", "i": "i"}
+
+        monkeypatch.setattr(cfg, "load_active_profile", lambda *a, **k: _Prof())
+
+        assert ps1_ingestion_module._resolve_ps1_band("r") == "r"
+        assert ps1_ingestion_module._resolve_ps1_band("i") == "i"
+        # A band not in the map is not PS1-eligible.
+        assert ps1_ingestion_module._resolve_ps1_band("v") is None
+
+    def test_resolve_new_capability_g(self, ps1_ingestion_module, monkeypatch):
+        """A Sloan-style profile makes g PS1-eligible without framework edits."""
+        import stips.core.config as cfg
+
+        class _Prof:
+            ps1_band_map = {"g": "g"}
+
+        monkeypatch.setattr(cfg, "load_active_profile", lambda *a, **k: _Prof())
+        assert ps1_ingestion_module._resolve_ps1_band("g") == "g"
+
+    def test_resolve_identity_when_no_profile(self, ps1_ingestion_module, monkeypatch):
+        """Without a loadable profile, fall back to identity (parity)."""
+        import stips.core.config as cfg
+
+        def _boom(*a, **k):
+            raise RuntimeError("INSTRUMENT_DIR not set")
+
+        monkeypatch.setattr(cfg, "load_active_profile", _boom)
+        assert ps1_ingestion_module._resolve_ps1_band("r") == "r"
 
 
 class TestMetadataTracking:

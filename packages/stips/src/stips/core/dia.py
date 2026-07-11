@@ -17,6 +17,7 @@ from stips.core.pipeline import (
     night_day_obs_expr,
     parse_bad_exposures,
     parse_quanta_summary,
+    ps1_band_map,
     resolve_processccd_collections,
     validate_night,
 )
@@ -63,15 +64,17 @@ def find_template(
         config: Pipeline configuration
         band: Filter by band (b/v/r/i)
         prefer_ps1: Prefer PS1 templates over internal (legacy flag)
-        strategy: "auto" picks per band — PS1 for r/i (if ingested), coadd for
-            b/v. None/"ps1"/"coadd" use the legacy preference-based discovery.
+        strategy: "auto" picks per band — PS1 for the profile's PS1-eligible
+            bands (if ingested), coadd otherwise. None/"ps1"/"coadd" use the
+            legacy preference-based discovery.
 
     Returns:
         Template collection name, or None if not found
     """
-    # Per-band auto: PS1 for r/i when available, Nickel coadd for b/v.
+    # Per-band auto: PS1 for the profile's PS1-eligible bands when available,
+    # coadd for the rest.
     if strategy == "auto":
-        if band in ("r", "i") and butler_query.collection_exists(
+        if band in ps1_band_map(config) and butler_query.collection_exists(
             config, f"templates/ps1/{band}"
         ):
             return f"templates/ps1/{band}"

@@ -131,6 +131,16 @@ class InstrumentProfile:
     obs_data_package: Optional[str] = None
     package_dir: Optional[str] = None
     refcat_path: Optional[str] = None
+    # PS1-template policy: maps a LOCAL science band name -> the PS1 band name to
+    # download for it (orientation is LOCAL -> PS1, the direction the framework
+    # asks in: "given this local science band, is it PS1-eligible and which PS1
+    # cutout do I fetch?"). The map's KEYS are the local bands eligible for
+    # external PS1 templates; every other band falls back to a coadd template in
+    # "auto" mode. PS1 serves grizy, so a Johnson-Cousins instrument like Nickel
+    # maps only its r/i bands (``{"r": "r", "i": "i"}``); a Sloan fork could add
+    # ``{"g": "g"}``. The default (empty dict) means "no PS1 templates" — the safe
+    # choice for an unknown fork, which then uses coadd templates for every band.
+    ps1_band_map: dict[str, str] = field(default_factory=dict)
     # Optional data-fetch hook. Signature:
     #   fetch_data(night: str, config: Config, *, overwrite: bool = False) -> str
     # Returns one of "ok" | "not_found" | "failed". When None, `stips download`

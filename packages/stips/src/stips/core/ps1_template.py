@@ -49,7 +49,8 @@ def run(
     Args:
         ra: Right ascension in degrees
         dec: Declination in degrees
-        band: Nickel band (r or i only - PS1 doesn't cover b/v)
+        band: Local science band; must be PS1-eligible per the active profile's
+            ``ps1_band_map`` (e.g. r or i for Nickel — PS1 doesn't cover b/v)
         config: Pipeline configuration
         collection: Output collection (default: templates/ps1/{band})
         tract: Tract number (auto-determined if None)
@@ -63,13 +64,20 @@ def run(
     Returns:
         PS1TemplateResult with collection and status
     """
-    if band not in ("r", "i"):
+    from stips.core.pipeline import ps1_band_map
+
+    band_map = ps1_band_map(config)
+    if band not in band_map:
+        eligible = ", ".join(sorted(band_map)) or "(none configured)"
         return PS1TemplateResult(
             success=False,
             band=band,
             collection=collection or f"templates/ps1/{band}",
-            error=f"PS1 templates only available for r/i bands, not {band}",
+            error=(
+                f"PS1 templates only available for bands: {eligible}; " f"got {band!r}"
+            ),
         )
+    ps1_band = band_map[band]
 
     if collection is None:
         collection = f"templates/ps1/{band}"
@@ -97,6 +105,12 @@ def run(
         "--output-dir",
         str(output_dir),
     ]
+
+    # Only pass --ps1-band when the profile maps the local band to a different
+    # PS1 band; for an identity map (e.g. Nickel r->r, i->i) the ingest tool's
+    # own default (ps1_band = band) reproduces today's argument list exactly.
+    if ps1_band != band:
+        args.extend(["--ps1-band", ps1_band])
 
     if tract is not None:
         args.extend(["--tract", str(tract)])

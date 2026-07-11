@@ -817,8 +817,11 @@ def clean(
     "-b",
     "--band",
     required=True,
-    type=click.Choice(["r", "i"]),
-    help="Band (e.g. r or i)",
+    # No static click.Choice: the set of PS1-eligible bands is instrument-specific
+    # and lives in the active profile's ``ps1_band_map``, which is only loaded at
+    # runtime (INSTRUMENT_DIR). We validate against it inside the handler instead,
+    # so the error can name the profile's actual eligible bands.
+    help="Local science band; must be PS1-eligible for the active instrument",
 )
 @click.option("--collection", help="Output collection (default: templates/ps1/{band})")
 @click.option("--tract", type=int, help="Tract number (auto-determined if not set)")
@@ -841,7 +844,8 @@ def ps1_template(
 ) -> None:
     """Download and ingest PS1 template for difference imaging.
 
-    PS1 templates are available for r and i bands only.
+    PS1 templates are available only for the active instrument's PS1-eligible
+    bands (the keys of the profile's ``ps1_band_map`` — e.g. r and i for Nickel).
 
     \b
     Example:
@@ -849,6 +853,17 @@ def ps1_template(
         stips ps1-template --ra 210.91 --dec 54.32 --band i --degrade-seeing 2.0
     """
     config = _load_config(ctx)
+
+    from stips.core.pipeline import ps1_band_map
+
+    eligible = ps1_band_map(config)
+    if band not in eligible:
+        allowed = ", ".join(sorted(eligible)) or "(none configured)"
+        _print_error(
+            f"Band {band!r} is not PS1-eligible for this instrument; "
+            f"available: {allowed}"
+        )
+        sys.exit(1)
 
     _print_info(f"Ingesting PS1 {band}-band template at RA={ra:.4f}, Dec={dec:.4f}...")
 

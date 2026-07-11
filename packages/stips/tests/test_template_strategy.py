@@ -1,16 +1,40 @@
+"""Band->template policy is profile-driven (F-011).
+
+The "PS1 for r/i, coadd otherwise" policy is NOT hardcoded: it comes from the
+active profile's ``ps1_band_map`` (LOCAL band -> PS1 band; keys = PS1-eligible
+bands). These tests pin Nickel's historical behavior AND prove a fork with a
+different filter set (e.g. Sloan ``{"g": "g"}``) gets PS1 templates for its own
+bands without editing the framework.
+"""
+
+from types import SimpleNamespace
 from unittest import mock
 
 import stips.core.dia as dia
+import stips.core.ps1_template as ps1_template
+import stips.core.run as run
+
+# Nickel's historical policy, expressed as a profile map.
+NICKEL_MAP = {"r": "r", "i": "i"}
+
+
+def _config(ps1_band_map):
+    """A minimal stand-in Config carrying a profile with the given band map."""
+    return SimpleNamespace(profile=SimpleNamespace(ps1_band_map=ps1_band_map))
+
+
+# ---------------------------------------------------------------------------
+# dia.find_template(strategy="auto")
+# ---------------------------------------------------------------------------
 
 
 def test_find_template_auto_prefers_ps1_for_ri(monkeypatch):
-    # find_template(strategy="auto") now resolves via the butler_query seam.
     monkeypatch.setattr(
         dia.butler_query,
         "collection_exists",
         lambda config, name: name == "templates/ps1/r",
     )
-    got = dia.find_template(config=mock.Mock(), band="r", strategy="auto")
+    got = dia.find_template(config=_config(NICKEL_MAP), band="r", strategy="auto")
     assert got == "templates/ps1/r"
 
 
@@ -23,7 +47,9 @@ def test_find_template_auto_uses_coadd_for_bv(monkeypatch):
         "list_collections",
         lambda config, pattern, prefix=None: ["templates/deep/tract1/v"],
     )
-    got = dia.find_template(config=mock.Mock(), band="v", strategy="auto")
+    # 'v' is not a key of the Nickel map -> coadd, even though a ps1 collection
+    # would "exist" per the mock above.
+    got = dia.find_template(config=_config(NICKEL_MAP), band="v", strategy="auto")
     assert got == "templates/deep/tract1/v"
 
 
@@ -36,13 +62,50 @@ def test_find_template_auto_ri_falls_back_to_coadd_without_ps1(monkeypatch):
         "list_collections",
         lambda config, pattern, prefix=None: ["templates/deep/tract1/r"],
     )
-    got = dia.find_template(config=mock.Mock(), band="r", strategy="auto")
+    got = dia.find_template(config=_config(NICKEL_MAP), band="r", strategy="auto")
     assert got == "templates/deep/tract1/r"
 
 
-def test_auto_template_builds_ps1_for_ri_and_coadd_for_bv(monkeypatch):
-    import stips.core.run as run
+def test_find_template_auto_new_capability_ps1_for_g(monkeypatch):
+    # A Sloan-style fork declaring {"g": "g"} gets PS1 templates for g with NO
+    # framework edits — the whole point of F-011.
+    monkeypatch.setattr(
+        dia.butler_query,
+        "collection_exists",
+        lambda config, name: name == "templates/ps1/g",
+    )
+    got = dia.find_template(config=_config({"g": "g"}), band="g", strategy="auto")
+    assert got == "templates/ps1/g"
 
+
+# ---------------------------------------------------------------------------
+# ps1_template.run band validation
+# ---------------------------------------------------------------------------
+
+
+def test_ps1_template_run_rejects_ineligible_band():
+    # Nickel parity: 'v' is not PS1-eligible; run() fails early (before any stack
+    # call) with a message naming the profile's eligible bands.
+    res = ps1_template.run(ra=1.0, dec=2.0, band="v", config=_config(NICKEL_MAP))
+    assert res.success is False
+    assert res.band == "v"
+    # Message names the profile's eligible bands (sorted), not a hardcoded "r/i".
+    assert "i, r" in res.error
+    assert "v" in res.error
+
+
+def test_ps1_template_run_rejects_when_no_ps1_bands():
+    res = ps1_template.run(ra=1.0, dec=2.0, band="r", config=_config({}))
+    assert res.success is False
+    assert "(none configured)" in res.error
+
+
+# ---------------------------------------------------------------------------
+# run._run_auto_templates band split
+# ---------------------------------------------------------------------------
+
+
+def _capture_auto_split(monkeypatch, bands, ps1_band_map, template_nights):
     built = []
     monkeypatch.setattr(
         run,
@@ -62,51 +125,52 @@ def test_auto_template_builds_ps1_for_ri_and_coadd_for_bv(monkeypatch):
         object_name="x",
         ra=1.0,
         dec=2.0,
-        bands=["r", "i", "b", "v"],
+        bands=bands,
         template_type="auto",
-        template_nights=["20230728"],
+        template_nights=template_nights,
     )
     out = run._run_auto_templates(
         cfg,
-        config=mock.Mock(),
+        config=_config(ps1_band_map),
         result=mock.Mock(),
         science_cfg=mock.Mock(),
         dry_run=True,
+    )
+    return out, built
+
+
+def test_auto_template_builds_ps1_for_ri_and_coadd_for_bv(monkeypatch):
+    # Nickel parity: [b, v, r, i] -> ps1:[r, i], coadd:[b, v].
+    out, built = _capture_auto_split(
+        monkeypatch,
+        bands=["r", "i", "b", "v"],
+        ps1_band_map=NICKEL_MAP,
+        template_nights=["20230728"],
     )
     assert out is None
     assert ("ps1", ("r", "i")) in built
     assert ("coadd", ("b", "v")) in built
 
 
-def test_auto_template_skips_coadd_without_template_nights(monkeypatch):
-    import stips.core.run as run
+def test_auto_template_new_capability_ps1_for_g(monkeypatch):
+    # Fork with {"g": "g"}: g -> ps1, everything else -> coadd.
+    _, built = _capture_auto_split(
+        monkeypatch,
+        bands=["g", "r"],
+        ps1_band_map={"g": "g"},
+        template_nights=["20230728"],
+    )
+    assert ("ps1", ("g",)) in built
+    assert ("coadd", ("r",)) in built
 
-    built = []
-    monkeypatch.setattr(
-        run,
-        "_run_ps1_templates",
-        lambda run_cfg, config, result, dry_run, bands=None: built.append("ps1"),
-    )
-    monkeypatch.setattr(
-        run,
-        "_run_coadd_templates",
-        lambda *a, **k: built.append("coadd"),
-    )
-    cfg = run.RunConfig(
-        object_name="x",
-        ra=1.0,
-        dec=2.0,
+
+def test_auto_template_skips_coadd_without_template_nights(monkeypatch):
+    _, built = _capture_auto_split(
+        monkeypatch,
         bands=["r", "b"],
-        template_type="auto",
+        ps1_band_map=NICKEL_MAP,
         template_nights=[],
     )
-    run._run_auto_templates(
-        cfg,
-        config=mock.Mock(),
-        result=mock.Mock(),
-        science_cfg=mock.Mock(),
-        dry_run=True,
-    )
     # PS1 runs for r; coadd skipped because no template_nights for b.
-    assert "ps1" in built
-    assert "coadd" not in built
+    assert ("ps1", ("r",)) in built
+    assert not any(kind == "coadd" for kind, _ in built)

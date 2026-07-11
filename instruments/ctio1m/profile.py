@@ -56,6 +56,10 @@ profile = InstrumentProfile(
         "I": "I",
     },
     filter_key="FILTERID",
+    # PS1 templates (LOCAL band -> PS1 band). PS1 serves grizy; Y4KCam's r/i map
+    # to PS1 r/i. u/b/v have no PS1 equivalent and fall back to coadd templates in
+    # "auto" mode. Matches the reference Nickel r/i policy.
+    ps1_band_map={"r": "r", "i": "i"},
     # FITS INSTRUME is "Y4KCam" (the camera), not the instrument name "CTIO1m".
     instrument_header_value="Y4KCam",
     header_map={
