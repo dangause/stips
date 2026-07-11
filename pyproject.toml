@@ -37,11 +37,11 @@ line-length = 110
 target-version = "py312"
 src = [
     "instruments/nickel",
-    "packages/defects",
+    "instruments/nickel/defects",
     "packages/refcats",
     "instruments/nickel/testdata",
-    "packages/tuning",
-    "packages/colorterms",
+    "instruments/nickel/tuning",
+    "instruments/nickel/colorterms",
     "packages/stips",
     "packages/obs_stips",
     "scripts",
@@ -82,9 +82,9 @@ testpaths = [
     "packages/stips/tests",
     "packages/obs_stips/tests",
     "packages/refcats/tests",
-    # "packages/defects/tests",
-    # "packages/colorterms/tests",
-    # "packages/tuning/tests",
+    # "instruments/nickel/defects/tests",
+    # "instruments/nickel/colorterms/tests",
+    # "instruments/nickel/tuning/tests",
 ]
 # Exclude vendor packages and upstream directories from test discovery
 norecursedirs = [
@@ -111,11 +111,11 @@ include = [
     "instruments/ctio1m",
     "packages/stips",
     "packages/obs_stips",
-    "packages/defects",
+    "instruments/nickel/defects",
     "packages/refcats",
     "instruments/nickel/testdata",
-    "packages/tuning",
-    "packages/colorterms",
+    "instruments/nickel/tuning",
+    "instruments/nickel/colorterms",
     "scripts",
 ]
 exclude = [
