@@ -2,6 +2,10 @@
 """
 Configuration for subtractImages when using PS1 templates.
 
+FRAMEWORK DEFAULT: this is a REFERENCE tuning from the Nickel 1-m. It is resolved
+instrument-dir-first, so a fork can override it by shipping its own
+configs/dia/subtractImages_ps1.py (see instrument_defaults/README.md).
+
 PS1 templates have ~1" native seeing, while Nickel science images typically have
 1.5-3" seeing. This config optimizes PSF matching for this scenario.
 

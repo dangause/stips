@@ -4,6 +4,37 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
 
 ## [Unreleased]
 
+### Defaults tiering: Nickel-fitted science calibration moved out of the framework tier (F-012)
+- **Moved to `instruments/nickel/configs/`** (behavior for Nickel unchanged —
+  instrument-dir-first resolution finds them there): the Landolt-fit
+  `colorterms.py`, all `calibrateImage/tuned_configs/*.py`, and the Nickel-band
+  `refcats_gaia_ps1.py`.
+- **Neutral framework defaults** in `obs_stips/instrument_defaults/configs/`:
+  `colorterms.py` is now an **empty** library; `apply_colorterms.py`,
+  `analysisToolsPhotometricCatalogMatchVisit.py`, and `refcats_gaia_ps1.py` are
+  instrument-aware — they load the active instrument's `configs/colorterms.py`
+  / `configs/filter_map.py` via `$INSTRUMENT_DIR` when present and enable color
+  terms **only when the resolved library is non-empty** (an empty library with
+  `applyColorTerms=True` fails LSST config validation). The neutral
+  `refcats_gaia_ps1.py` derives its PS1 filterMap from the profile's
+  `ps1_band_map`.
+- `filter_map.py` now covers CTIO 1.0m's uppercase `U` physical filter
+  (previously a live KeyError for analysis tasks on U-band data).
+- DRP.yaml/dia/coadd/skymap threshold comments relabeled honestly as
+  "reference tuning from the Nickel 1-m"; new
+  `packages/obs_stips/instrument_defaults/README.md` documents the tiering
+  contract (what a fork inherits vs MUST review — photometric calibration!).
+
+### QA task-label rename: `...Nickel` → `...Visit` (F-013)
+- Renamed 5 analysis/QA task labels in DRP.yaml /
+  analysis-visit-single-visit.yaml / visit-quality-detector.yaml
+  (`analyzeCalibrateImageMetadataNickel` → `...MetadataVisit`,
+  `*SingleVisitStar{Astrometric,Photometric}RefMatchNickel` → `...RefMatchVisit`).
+  Task labels become dataset-type names in every fork's Butler repo.
+- **Migration:** no data loss; reruns write under the new label-derived dataset
+  names; dashboards/queries referencing the old `..Nickel_metadata/_log/_config`
+  names must update. See `docs/migrations.md`.
+
 ### Crosstalk for multi-amplifier instruments
 - **Declarative crosstalk**: instrument profiles can carry a `CrosstalkSpec`
   (N×N coefficient matrix + units). STIPS builds a `CrosstalkCalib`, certifies it

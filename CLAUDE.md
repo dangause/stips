@@ -61,9 +61,12 @@ Pipelines and config overrides resolve **instrument-dir-first, else framework
 default** via `Config.resolve_pipeline()` / `resolve_config()`. A fork overrides
 one file by dropping a same-named file into its own
 `instruments/<x>/pipelines/` or `configs/`; everything else inherits the
-framework defaults in `packages/obs_stips/instrument_defaults/`. `nickel` ships
-**no** override dirs (it uses the defaults, which *are* the reference Nickel
-tuning); `ctio1m` ships a `configs/` dir with its ISR/camera tweaks.
+framework defaults in `packages/obs_stips/instrument_defaults/`. The defaults
+tier is neutral: Nickel-FITTED science calibration (Landolt `colorterms.py`,
+`calibrateImage/tuned_configs/`, the Nickel-band `refcats_gaia_ps1.py`) lives in
+`instruments/nickel/configs/`; `ctio1m` ships a `configs/` dir with its skymap
+tweak. The tiering contract (what a fork inherits vs MUST review) is documented
+in `packages/obs_stips/instrument_defaults/README.md`.
 
 ## Repository Structure
 
@@ -516,7 +519,8 @@ class, same for every fork).
 - PS1 ingestion: `packages/stips/src/stips/pipeline_tools/ingest_ps1_template.py`
 - Generic LSST glue: `packages/obs_stips/python/lsst/obs/stips/`
 - Framework default pipelines: `packages/obs_stips/instrument_defaults/pipelines/` (DRP.yaml, DIA.yaml, ForcedPhotRaDec.yaml, ...)
-- Framework default configs: `packages/obs_stips/instrument_defaults/configs/` (calibrateImage/, dia/, coadds/)
+- Framework default configs: `packages/obs_stips/instrument_defaults/configs/` (dia/, coadds/, neutral colorterms/filter_map; tiering contract in `instrument_defaults/README.md`)
+- Nickel-fitted science configs: `instruments/nickel/configs/` (colorterms.py, calibrateImage/tuned_configs/, refcats_gaia_ps1.py)
 - Bootstrap shell script: `scripts/pipeline/`
 - Target configs: `scripts/config/{target}/`
 - Adding a new instrument: `docs/forking-stips.md`

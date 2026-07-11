@@ -194,3 +194,120 @@ def test_invoked_subset_builds_task_graph(
     _apply_stips_runtime_config(pipeline, yaml_name)
     graph = pipeline.to_graph()
     assert len(graph.tasks) > 0, f"{yaml_name}#{subset} produced an empty task graph"
+
+
+# ---------------------------------------------------------------------------
+# Defaults tiering (F-012): the neutral defaults must build for an instrument
+# that ships NO colorterms/tuned configs (ctio1m), and the reference Nickel
+# resolution must be unchanged (its Landolt colorterm library stays applied).
+# ---------------------------------------------------------------------------
+
+CTIO1M_INSTRUMENT_DIR = _REPO_ROOT / "instruments" / "ctio1m"
+
+# The QA photometric ref-match task label (renamed from ...RefMatchNickel; see
+# docs/migrations.md) whose config loads colorterms.py + filter_map.py.
+_PHOTOM_REFMATCH_LABEL = "makeAnalysisSingleVisitStarPhotometricRefMatchVisit"
+
+
+def _build_stage1(lsst_pipe_base, instrument_dir, monkeypatch):
+    """Build DRP.yaml#stage1-single-visit exactly as science.py runs it."""
+    monkeypatch.setenv("STIPS_DEFAULTS", str(STIPS_DEFAULTS_ROOT))
+    monkeypatch.setenv("INSTRUMENT_DIR", str(instrument_dir))
+    path = PIPELINES_DIR / "DRP.yaml"
+    pipeline = lsst_pipe_base.Pipeline.fromFile(f"{path}#stage1-single-visit")
+    _apply_stips_runtime_config(pipeline, "DRP.yaml")
+    return pipeline.to_graph()
+
+
+def test_stage1_nickel_colorterms_parity(monkeypatch) -> None:
+    """Reference Nickel resolution is unchanged by the F-012 tiering.
+
+    The instrument-aware apply_colorterms.py must find the Nickel Landolt-fit
+    library (now at instruments/nickel/configs/colorterms.py) via
+    $INSTRUMENT_DIR and keep color terms ON with the same coefficients.
+    """
+    lsst_pipe_base = pytest.importorskip("lsst.pipe.base")
+    graph = _build_stage1(lsst_pipe_base, INSTRUMENT_DIR_PATH, monkeypatch)
+
+    calib = graph.tasks["calibrateImage"].config
+    assert calib.photometry.applyColorTerms is True
+    library = calib.photometry.colorterms.data
+    assert set(library) == {"ps1*", "gaia*", "*monster*"}
+    # Spot-check the Landolt I-band fit (c0=-0.379, c1=0.352) survived the move.
+    i_term = library["ps1*"].data["I"]
+    assert i_term.c0 == pytest.approx(-0.379)
+    assert i_term.c1 == pytest.approx(0.352)
+
+    # The QA ref-match task resolves the same library + the reference filter map.
+    qa = graph.tasks[_PHOTOM_REFMATCH_LABEL].config
+    assert qa.referenceCatalogLoader.doApplyColorTerms is True
+    fmap = qa.referenceCatalogLoader.refObjLoader.filterMap
+    assert fmap["R"] == "monster_ComCam_r" and fmap["b"] == "monster_ComCam_g"
+
+
+def test_stage1_builds_for_ctio1m(monkeypatch) -> None:
+    """The neutral defaults tier builds for a second instrument (F-012).
+
+    ctio1m ships no configs/colorterms.py, so the instrument-aware glue must
+    fall back to the empty neutral library and leave color terms OFF (an empty
+    library with applyColorTerms=True fails config validation) -- proving a
+    fork does not silently inherit Nickel's photometric calibration.
+    """
+    lsst_pipe_base = pytest.importorskip("lsst.pipe.base")
+    graph = _build_stage1(lsst_pipe_base, CTIO1M_INSTRUMENT_DIR, monkeypatch)
+    assert len(graph.tasks) > 0
+
+    calib = graph.tasks["calibrateImage"].config
+    assert calib.photometry.applyColorTerms is False
+    assert len(calib.photometry.colorterms.data) == 0
+
+    qa = graph.tasks[_PHOTOM_REFMATCH_LABEL].config
+    assert qa.referenceCatalogLoader.doApplyColorTerms is False
+    # The neutral filter_map covers every ctio1m filter, incl. the uppercase
+    # "U" physical filter that used to KeyError (F-012).
+    fmap = qa.referenceCatalogLoader.refObjLoader.filterMap
+    for key in ("u", "b", "v", "r", "i", "U", "B", "V", "R", "I"):
+        assert key in fmap, f"ctio1m filter {key!r} missing from filter_map"
+
+
+@pytest.mark.parametrize(
+    "instrument_dir",
+    [
+        pytest.param(INSTRUMENT_DIR_PATH, id="nickel"),
+        pytest.param(CTIO1M_INSTRUMENT_DIR, id="ctio1m"),
+    ],
+)
+def test_gaia_ps1_overlay_builds(instrument_dir, monkeypatch) -> None:
+    """The refcats_gaia_ps1 overlay builds for both instruments.
+
+    science.py applies this overlay via --config-file when refcat.mode ==
+    "gaia_ps1", resolved instrument-dir-first: Nickel gets its hand-written
+    overlay (full band map + Landolt color terms), ctio1m the neutral default
+    that derives its PS1 filterMap from the profile's ps1_band_map.
+    """
+    lsst_pipe_base = pytest.importorskip("lsst.pipe.base")
+    monkeypatch.setenv("STIPS_DEFAULTS", str(STIPS_DEFAULTS_ROOT))
+    monkeypatch.setenv("INSTRUMENT_DIR", str(instrument_dir))
+
+    # Mirror Config.resolve_config(): instrument-dir-first, else framework.
+    overlay = instrument_dir / "configs" / "refcats_gaia_ps1.py"
+    if not overlay.exists():
+        overlay = STIPS_DEFAULTS_ROOT / "configs" / "refcats_gaia_ps1.py"
+
+    path = PIPELINES_DIR / "DRP.yaml"
+    pipeline = lsst_pipe_base.Pipeline.fromFile(f"{path}#stage1-single-visit")
+    pipeline.addConfigFile("calibrateImage", str(overlay))
+    graph = pipeline.to_graph()
+
+    calib = graph.tasks["calibrateImage"].config
+    assert calib.connections.photometry_ref_cat == "panstarrs1_dr2"
+    fmap = dict(calib.photometry_ref_loader.filterMap)
+    assert fmap["r"] == "rMeanPSFMag" and fmap["i"] == "iMeanPSFMag"
+    if instrument_dir == INSTRUMENT_DIR_PATH:
+        # Nickel overlay: full band map, Landolt color terms ON.
+        assert fmap["b"] == "gMeanPSFMag" and fmap["v"] == "gMeanPSFMag"
+        assert calib.photometry.applyColorTerms is True
+    else:
+        # Neutral overlay: map derived from ctio1m ps1_band_map, colorterms OFF.
+        assert fmap == {"r": "rMeanPSFMag", "i": "iMeanPSFMag"}
+        assert calib.photometry.applyColorTerms is False
