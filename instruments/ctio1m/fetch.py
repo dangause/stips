@@ -16,11 +16,14 @@ Settings are read from the framework config's generic ``env`` block:
   ``NOIRLAB_INSTRUMENT`` archive instrument name (default ``y4kcam``)
   ``NOIRLAB_PROPOSAL``   optional proposal-id filter (e.g. ``2007A-0002``)
   ``NOIRLAB_OBSTYPES``   optional comma list to restrict obs_type (default all)
+
+Only the NOIRLab backend (``_fetch_night``) and this env schema live here; the
+``fetch_data`` wrapper (env read, night validation, status mapping) is the
+shared framework scaffolding in :mod:`stips.fetch`.
 """
 
 from __future__ import annotations
 
-import datetime as dt
 import json
 import logging
 import shutil
@@ -28,6 +31,8 @@ import subprocess
 import urllib.error
 import urllib.request
 from pathlib import Path
+
+from stips.fetch import make_fetch_data, parse_night
 
 _DEFAULT_API = "https://astroarchive.noirlab.edu"
 _DEFAULT_INSTRUMENT = "y4kcam"
@@ -80,10 +85,7 @@ def _normalize_header(fits_path: Path) -> None:
 
 def _night_to_caldat(night: str) -> str:
     """``YYYYMMDD`` observing night -> archive ``caldat`` ``YYYY-MM-DD``."""
-    try:
-        return dt.datetime.strptime(night, "%Y%m%d").strftime("%Y-%m-%d")
-    except ValueError as err:
-        raise ValueError(f"Invalid night '{night}' (use YYYYMMDD)") from err
+    return parse_night(night).strftime("%Y-%m-%d")
 
 
 def _post_json(url: str, payload: dict, timeout: int = 120) -> list:
@@ -199,24 +201,26 @@ def _fetch_night(
     return 0
 
 
-def fetch_data(night: str, config, *, overwrite: bool = False) -> str:
-    """``InstrumentProfile.fetch_data`` hook for CTIO (NOIRLab Astro Data Archive).
+def _build_kwargs(env: dict) -> dict:
+    """Map the generic config ``env`` block onto ``_fetch_night`` kwargs.
 
-    Downloads a night's raws into ${RAW_PARENT_DIR}/<night>/raw/. NOIRLab
-    settings come from the config's generic ``env`` block. Returns
-    ``"ok"`` | ``"not_found"`` | ``"failed"``.
+    This is the CTIO/NOIRLab env schema: ``NOIRLAB_API`` (trailing slash
+    stripped), ``NOIRLAB_INSTRUMENT`` (with defaults), an optional
+    ``NOIRLAB_PROPOSAL`` filter, and ``NOIRLAB_OBSTYPES`` (comma list -> list).
     """
-    env = getattr(config, "env", {}) or {}
     obstypes = [
         o.strip() for o in env.get("NOIRLAB_OBSTYPES", "").split(",") if o.strip()
     ]
-    code = _fetch_night(
-        night,
-        Path(config.raw_parent_dir),
-        api=env.get("NOIRLAB_API", _DEFAULT_API).rstrip("/"),
-        instrument=env.get("NOIRLAB_INSTRUMENT", _DEFAULT_INSTRUMENT),
-        proposal=env.get("NOIRLAB_PROPOSAL") or None,
-        obstypes=obstypes,
-        overwrite=overwrite,
-    )
-    return {0: "ok", 2: "not_found"}.get(code, "failed")
+    return {
+        "api": env.get("NOIRLAB_API", _DEFAULT_API).rstrip("/"),
+        "instrument": env.get("NOIRLAB_INSTRUMENT", _DEFAULT_INSTRUMENT),
+        "proposal": env.get("NOIRLAB_PROPOSAL") or None,
+        "obstypes": obstypes,
+    }
+
+
+# InstrumentProfile.fetch_data hook: downloads a night's raws into
+# ${RAW_PARENT_DIR}/<night>/raw/ and returns "ok" | "not_found" | "failed".
+# The wrapper (env read, night validation, status mapping) is shared framework
+# scaffolding; only the NOIRLab backend + env schema above are CTIO-specific.
+fetch_data = make_fetch_data(_fetch_night, _build_kwargs)
