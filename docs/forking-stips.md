@@ -221,7 +221,12 @@ These are the real `InstrumentProfile` fields (from
   overwrite=False) -> "ok" | "not_found" | "failed"`, used by `stips download`.
   Wire it from a co-located module (Nickel's `profile.py` does `from fetch import
   fetch_data` — the loader puts `instruments/<x>/` on `sys.path` so a co-located
-  `fetch.py` is importable). Leave unset if you place raws by hand.
+  `fetch.py` is importable). Your `fetch.py` implements only the archive backend
+  `_fetch_night(night, raw_root, *, overwrite, **kwargs) -> int` (0 ok / 1 failed
+  / 2 not-found) plus a `build_kwargs(env)` mapping your env schema, then
+  `fetch_data = make_fetch_data(_fetch_night, build_kwargs)` from `stips.fetch`
+  (use `stips.fetch.parse_night` for `YYYYMMDD` validation) — the wrapper, night
+  validation, and status mapping are shared. Leave unset if you place raws by hand.
 - **`policy_name`**, **`refcat_path`** — Optional; `policy_name` defaults to `name`.
 
 ### Quirk hooks (`@hook(profile)`)

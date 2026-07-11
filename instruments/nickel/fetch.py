@@ -13,6 +13,10 @@ module level stays stdlib-only so that importing the Nickel profile (which wires
 
 Lick-specific settings are read from the framework config's generic ``env``
 block (``LICK_ARCHIVE_DIR``, ``LICK_ARCHIVE_URL``, ``LICK_ARCHIVE_INSTR``).
+
+Only the Lick backend (``_fetch_night``) and this env schema live here; the
+``fetch_data`` wrapper (env read, night validation, status mapping) is the
+shared framework scaffolding in :mod:`stips.fetch`.
 """
 
 from __future__ import annotations
@@ -22,6 +26,8 @@ import logging
 import sys
 from pathlib import Path
 from typing import Iterable
+
+from stips.fetch import make_fetch_data, parse_night
 
 try:
     from zoneinfo import ZoneInfo
@@ -58,10 +64,7 @@ def _import_client():
 def _daterange_for_night(night: str, timezone: str) -> tuple[dt.datetime, dt.datetime]:
     """Return [local-noon, next-local-noon) window for an observing night."""
     tz = ZoneInfo(timezone)
-    try:
-        date = dt.datetime.strptime(night, "%Y%m%d").date()
-    except ValueError as err:
-        raise ValueError(f"Invalid night '{night}' (use YYYYMMDD)") from err
+    date = parse_night(night)
     start = dt.datetime.combine(date, dt.time(12, 0), tzinfo=tz)
     return start, start + dt.timedelta(days=1)
 
@@ -176,19 +179,21 @@ def _fetch_night(
     return 0
 
 
-def fetch_data(night: str, config, *, overwrite: bool = False) -> str:
-    """InstrumentProfile.fetch_data hook for Nickel (Lick searchable archive).
+def _build_kwargs(env: dict) -> dict:
+    """Map the generic config ``env`` block onto ``_fetch_night`` kwargs.
 
-    Downloads a night's raws into ${RAW_PARENT_DIR}/<night>/raw/. Lick settings
-    are read from the config's generic env block. Returns "ok"|"not_found"|"failed".
+    This is the Nickel/Lick env schema: ``LICK_ARCHIVE_DIR`` (client path, may be
+    absent), ``LICK_ARCHIVE_URL`` and ``LICK_ARCHIVE_INSTR`` (with defaults).
     """
-    env = getattr(config, "env", {}) or {}
-    code = _fetch_night(
-        night,
-        Path(config.raw_parent_dir),
-        client_path=env.get("LICK_ARCHIVE_DIR"),
-        archive_url=env.get("LICK_ARCHIVE_URL", _DEFAULT_ARCHIVE_URL),
-        instrument=env.get("LICK_ARCHIVE_INSTR", _DEFAULT_INSTR),
-        overwrite=overwrite,
-    )
-    return {0: "ok", 2: "not_found"}.get(code, "failed")
+    return {
+        "client_path": env.get("LICK_ARCHIVE_DIR"),
+        "archive_url": env.get("LICK_ARCHIVE_URL", _DEFAULT_ARCHIVE_URL),
+        "instrument": env.get("LICK_ARCHIVE_INSTR", _DEFAULT_INSTR),
+    }
+
+
+# InstrumentProfile.fetch_data hook: downloads a night's raws into
+# ${RAW_PARENT_DIR}/<night>/raw/ and returns "ok" | "not_found" | "failed".
+# The wrapper (env read, night validation, status mapping) is shared framework
+# scaffolding; only the Lick backend + env schema above are Nickel-specific.
+fetch_data = make_fetch_data(_fetch_night, _build_kwargs)

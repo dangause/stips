@@ -351,7 +351,19 @@ def assert_fetch_status_contract(fetch_module: Any, contract_data: Any) -> None:
     Parameterized by the instrument's env schema: ``FETCH_NIGHT`` (a valid night
     string) and ``FETCH_ENV`` (the ``env`` block the hook reads). The backend
     ``_fetch_night`` is mocked, so this is network-free.
+
+    Because the status mapping and env/night plumbing are hoisted into
+    :func:`stips.fetch.make_fetch_data`, we assert the instrument actually wires
+    the shared wrapper (its ``fetch_data`` closure is defined in ``stips.fetch``)
+    rather than copy-pasting one -- that is what keeps the mapping single-source.
     """
+    from stips import fetch as framework_fetch
+
+    assert fetch_module.fetch_data.__module__ == framework_fetch.__name__, (
+        f"{fetch_module.__name__}.fetch_data must be built via "
+        "stips.fetch.make_fetch_data (shared wrapper), not a per-instrument copy"
+    )
+
     night = contract_data.FETCH_NIGHT
     cfg = FetchConfigStub(contract_data.FETCH_ENV)
     for code, expected in ((0, "ok"), (2, "not_found"), (1, "failed")):
