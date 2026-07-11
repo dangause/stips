@@ -395,7 +395,9 @@ def run_butler_python(
     except Exception as e:
         # Spawn/setup failure (e.g. missing bash or loader). Still return None
         # for callers, but make the cause visible.
-        _log.warning("run_butler_python: unexpected failure: %s: %s", type(e).__name__, e)
+        _log.warning(
+            "run_butler_python: unexpected failure: %s: %s", type(e).__name__, e
+        )
         return None
 
     # Return stripped stdout (may contain setup chatter before the real output)

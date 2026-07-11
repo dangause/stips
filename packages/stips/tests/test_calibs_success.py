@@ -80,9 +80,7 @@ def _invoke(tmp_path, *, run_rc, counts, ingest_rc=0, ingest_stderr=""):
         patch.object(calibs, "butler_query", bq),
         patch.object(calibs, "get_raw_dir", return_value=raw_dir),
     ):
-        result = calibs.run(
-            NIGHT, config, jobs=1, executor=executor, skip_curated=True
-        )
+        result = calibs.run(NIGHT, config, jobs=1, executor=executor, skip_curated=True)
     return result, SimpleNamespace(run_butler=run_butler, executor=executor, bq=bq)
 
 

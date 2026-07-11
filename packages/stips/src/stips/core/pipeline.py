@@ -121,9 +121,7 @@ def night_day_obs_values(
         collapses both days onto the same date, e.g. ``offset_days=0``).
     """
     if offset_days is None:
-        offset_days = (
-            profile.night_to_dayobs_offset_days if profile is not None else 1
-        )
+        offset_days = profile.night_to_dayobs_offset_days if profile is not None else 1
     first = int(night)
     second = int(night_to_day_obs(night, offset_days=offset_days))
     if second == first:
@@ -276,9 +274,7 @@ def find_bad_coord_exposures(
     # A Lick observing night can span two UT days (Pacific evening = night,
     # post-midnight = night+1). Query both. The local->UT offset is
     # instrument-configurable via the active profile.
-    day_obs_expr = night_day_obs_expr(
-        night, config.profile, column="exposure.day_obs"
-    )
+    day_obs_expr = night_day_obs_expr(night, config.profile, column="exposure.day_obs")
 
     # Build WHERE clause
     where = (
@@ -451,9 +447,7 @@ def resolve_processccd_collections(
         return []
 
     # Newest-first CHAINED parents.
-    parents = sorted(
-        (c for c in colls if _is_processccd_parent(c)), reverse=True
-    )
+    parents = sorted((c for c in colls if _is_processccd_parent(c)), reverse=True)
 
     if not parents:
         # No CHAINED parent: fall back to a bare RUN, preferring /run over a lone

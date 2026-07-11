@@ -59,16 +59,21 @@ class _Recorder:
         self.butler_returncodes: dict[str, int] = {}
 
     def subcommands(self, kind: str | None = None) -> list[str]:
-        return [
-            sub for (k, sub, _args) in self.calls if kind is None or k == kind
-        ]
+        return [sub for (k, sub, _args) in self.calls if kind is None or k == kind]
 
     def args_for(self, sub: str) -> list[list[str]]:
         return [a for (_k, s, a) in self.calls if s == sub]
 
 
-def _install(monkeypatch, coadd, recorder, *, pipetask_raises_on=None,
-             verify_has_datasets=True, old_runs=None):
+def _install(
+    monkeypatch,
+    coadd,
+    recorder,
+    *,
+    pipetask_raises_on=None,
+    verify_has_datasets=True,
+    old_runs=None,
+):
     """Wire up all mocks used by coadd.run() and return the recorder."""
     template_run_holder: dict[str, str] = {}
 
@@ -118,10 +123,14 @@ OLD_RUNS = [
 ]
 
 
-def test_failed_build_leaves_old_template_untouched(coadd_module, monkeypatch, tmp_path):
+def test_failed_build_leaves_old_template_untouched(
+    coadd_module, monkeypatch, tmp_path
+):
     """A build that raises must not have redefined/removed the old template first."""
     rec = _Recorder()
-    _install(monkeypatch, coadd_module, rec, pipetask_raises_on="run", old_runs=OLD_RUNS)
+    _install(
+        monkeypatch, coadd_module, rec, pipetask_raises_on="run", old_runs=OLD_RUNS
+    )
 
     result = coadd_module.run(
         ["20230101"], BAND, _config(tmp_path), tract=TRACT, overwrite=True

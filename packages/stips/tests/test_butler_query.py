@@ -60,9 +60,7 @@ class TestScriptBuilders:
     def test_data_id_values_script_valid(self):
         from stips.core.butler_query import _build_data_id_values_script
 
-        s = _build_data_id_values_script(
-            "/repo", "gaia_dr3", ["refcats"], "htm7"
-        )
+        s = _build_data_id_values_script("/repo", "gaia_dr3", ["refcats"], "htm7")
         ast.parse(s)
         # modern API + v27 registry fallback both present
         assert "query_datasets" in s
@@ -72,7 +70,7 @@ class TestScriptBuilders:
         assert "MissingDatasetTypeError" in s
         assert "MissingCollectionError" in s
         # dataId dimension access + values embedded
-        assert 'ref.dataId[dimension]' in s
+        assert "ref.dataId[dimension]" in s
         assert "gaia_dr3" in s
         assert "refcats" in s
         assert "htm7" in s

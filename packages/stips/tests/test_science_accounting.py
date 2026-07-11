@@ -61,9 +61,7 @@ def test_science_rc0_unparseable_records_honest_zero(tmp_path, monkeypatch, capl
         "list_collections",
         lambda *a, **k: ["Nickel/raw/20230519/20230519T000000Z"],
     )
-    monkeypatch.setattr(
-        science.butler_query, "collection_exists", lambda *a, **k: True
-    )
+    monkeypatch.setattr(science.butler_query, "collection_exists", lambda *a, **k: True)
     monkeypatch.setattr(science, "_count_matching_exposures", lambda *a, **k: 3)
     # Summary file never written -> parse_summary_file returns None; force the
     # stdout/log regex fallback to also find nothing.

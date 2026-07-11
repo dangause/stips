@@ -83,6 +83,7 @@ def __getattr__(name: str):
         return globals()[name]
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
+
 #: Butler dataset-type names (must match the convert configs + colorterm aliases).
 GAIA_DATASET = "gaia_dr3"
 PS1_DATASET = "panstarrs1_dr2"

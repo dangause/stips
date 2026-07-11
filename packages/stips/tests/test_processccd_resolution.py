@@ -93,9 +93,7 @@ def test_resolver_prefers_parent_over_run_and_run_fb(pipeline_module, monkeypatc
     monkeypatch.setattr(
         pipeline_module.butler_query, "list_collections", _fake_list(names)
     )
-    got = pipeline_module.resolve_processccd_collections(
-        _nickel_config(), "20230519"
-    )
+    got = pipeline_module.resolve_processccd_collections(_nickel_config(), "20230519")
     assert got == [base]
 
 
@@ -167,9 +165,7 @@ def test_resolver_fallback_uses_run_fb_when_no_run(pipeline_module, monkeypatch)
     monkeypatch.setattr(
         pipeline_module.butler_query, "list_collections", _fake_list(names)
     )
-    got = pipeline_module.resolve_processccd_collections(
-        _nickel_config(), "20230519"
-    )
+    got = pipeline_module.resolve_processccd_collections(_nickel_config(), "20230519")
     # Newest-first among the fallback RUNs.
     assert got == [f"{base}/run_fb2"]
 

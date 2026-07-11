@@ -32,9 +32,9 @@ class TestNightDayObsValues:
         assert night_day_obs_values("20230519", _profile(0)) == (20230519,)
 
     def test_explicit_offset_overrides_profile(self):
-        assert night_day_obs_values(
-            "20230519", _profile(1), offset_days=0
-        ) == (20230519,)
+        assert night_day_obs_values("20230519", _profile(1), offset_days=0) == (
+            20230519,
+        )
 
     def test_year_boundary(self):
         assert night_day_obs_values("20231231") == (20231231, 20240101)
@@ -57,9 +57,7 @@ class TestNightDayObsExpr:
         assert night_day_obs_expr("20230519", _profile(0)) == "day_obs=20230519"
 
     def test_default_profile_none(self):
-        assert (
-            night_day_obs_expr("20230519") == "day_obs IN (20230519, 20230520)"
-        )
+        assert night_day_obs_expr("20230519") == "day_obs IN (20230519, 20230520)"
 
 
 class TestCallSitesUseHelper:
