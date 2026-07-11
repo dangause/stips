@@ -14,7 +14,13 @@
 
 > The CLI is `stips`. The active instrument is a declarative profile under `instruments/<name>/`, selected at runtime via the `INSTRUMENT_DIR` path in your config's `env:` block (the reference profile is `instruments/nickel`).
 
-> Tested with LSST Science Pipelines `v30.0.3` and `v11.0.0`
+> **Supported LSST stack:** release **`v30_0_3`** — the version the Docker
+> images build on and the one the docs are validated against. CI validates every
+> push against the pinned weekly **`w_2025_32`**, and a scheduled canary tracks
+> **`w_latest`** so upcoming breakage surfaces before the pin moves. (The old
+> "v11.0.0" note here was a `rubin-env` conda-environment number, not a stack
+> release — a category error, now removed.) Before bumping the stack, follow
+> [docs/stack-bump-runbook.md](docs/stack-bump-runbook.md).
 
 ---
 
