@@ -24,7 +24,7 @@ import re
 # Safe to import at module load: fetch.py is stdlib-only at import time
 # (urllib/json); the NOIRLab archive is hit only when fetch_data() runs.
 from fetch import fetch_data as _fetch_data
-from stips import CrosstalkSpec, Field, InstrumentProfile, Site, hook
+from stips import CrosstalkSpec, Field, InstrumentProfile, Site, hook, make_exposure_id
 
 log = logging.getLogger("lsst.obs.stips.ctio1m.profile")
 
@@ -196,13 +196,6 @@ def _day_obs(header):
     return int(_datetime_end(header).datetime.strftime("%Y%m%d"))
 
 
-# Epoch used for the 31-bit-safe exposure_id (days since 2000-01-01).
-def _epoch0():
-    import astropy.time
-
-    return astropy.time.Time("2000-01-01T00:00:00", scale="utc")
-
-
 # ---------------------------------------------------------------------------
 # Quirk hooks. Signatures mirror the reference Nickel profile's hooks exactly.
 # ---------------------------------------------------------------------------
@@ -243,13 +236,7 @@ def exposure_id(header):
     Mirrors the Nickel scheme: a full YYYYMMDD date * 10000 overflows 31 bits,
     so days-since-2000 (the end-of-exposure UTC day) is used as the date term.
     """
-    seqnum = _seqnum(header)
-    t = _datetime_end(header)
-    days = int((t - _epoch0()).to_value("day"))
-    exp_id = days * 10000 + seqnum
-    if exp_id >= 2**31:
-        raise ValueError(f"exposure_id {exp_id} is out of 31-bit range")
-    return exp_id
+    return make_exposure_id(_datetime_end(header), _seqnum(header))
 
 
 @hook(profile)

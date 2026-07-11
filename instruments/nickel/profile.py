@@ -7,7 +7,7 @@ import logging
 # Safe to import at module load: fetch.py is stdlib-only at import time
 # (the lick_archive client is lazy-imported inside the fetch implementation).
 from fetch import fetch_data as _fetch_data
-from stips import Field, InstrumentProfile, Site, hook
+from stips import Field, InstrumentProfile, Site, hook, make_exposure_id
 
 log = logging.getLogger("lsst.obs.stips.nickel.profile")
 
@@ -139,13 +139,6 @@ def _day_obs(header):
     return int(_datetime_end(header).datetime.strftime("%Y%m%d"))
 
 
-# Epoch used for exposure_id (days since 2000-01-01).
-def _epoch0():
-    import astropy.time
-
-    return astropy.time.Time("2000-01-01T00:00:00", scale="utc")
-
-
 # ---------------------------------------------------------------------------
 # Quirk hooks: bodies ported VERBATIM from the legacy NickelTranslator.
 # ---------------------------------------------------------------------------
@@ -204,12 +197,7 @@ def exposure_id(header):
     ID = (days_since_2000 * 10000) + OBSNUM
     """
     obsnum = int(header["OBSNUM"])
-    t = _datetime_end(header)
-    days = int((t - _epoch0()).to_value("day"))
-    exposure_id = days * 10000 + obsnum
-    if exposure_id >= 2**31:
-        raise ValueError(f"exposure_id {exposure_id} is out of 31-bit range")
-    return exposure_id
+    return make_exposure_id(_datetime_end(header), obsnum)
 
 
 @hook(profile)
