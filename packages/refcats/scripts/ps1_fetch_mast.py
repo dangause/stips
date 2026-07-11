@@ -43,7 +43,7 @@ MAX_RETRIES_DEFAULT = 3
 
 # Columns needed by convert config (and useful extras).
 # Single source of truth lives in the importable library module.
-from nickel_refcats.ps1 import PS1_COLUMNS  # noqa: E402
+from stips_refcats.ps1 import PS1_COLUMNS  # noqa: E402
 
 # ----------------------------------
 

@@ -73,9 +73,9 @@ bootstrap: ## Bootstrap Butler repo + refcats + skymap
 # orchestration with `stips -c <config.yaml> run`.
 
 .PHONY: refcat-cones
-refcat-cones: ## Generate cones.csv + htm7_list.txt via nickel-refcats (pass ARGS="--ras ... --decs ...")
+refcat-cones: ## Generate cones.csv + htm7_list.txt via stips-refcats (pass ARGS="--ras ... --decs ...")
 	$(SHELL) -lc 'cd $(PWD) && $(setup_stack) \
-		PYTHONPATH=$${PYTHONPATH}:$${PWD}/packages/refcats/src python -u -m nickel_refcats cones $(ARGS)'
+		PYTHONPATH=$${PYTHONPATH}:$${PWD}/packages/refcats/src python -u -m stips_refcats cones $(ARGS)'
 
 .PHONY: declare-eups
 declare-eups: ## Declare obs_stips, obs_nickel_data, and testdata_nickel in the current stack (uses STACK_DIR and env files)

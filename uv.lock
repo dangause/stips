@@ -12,11 +12,11 @@ members = [
     "obs-nickel-colorterms",
     "obs-nickel-data",
     "obs-nickel-defects",
-    "obs-nickel-refcats",
     "obs-nickel-testdata",
     "obs-nickel-tuning",
     "obs-stips",
     "stips",
+    "stips-refcats",
 ]
 
 [manifest.dependency-groups]
@@ -1995,17 +1995,6 @@ requires-dist = [
 ]
 
 [[package]]
-name = "obs-nickel-refcats"
-version = "0.1.0"
-source = { editable = "packages/refcats" }
-dependencies = [
-    { name = "pyyaml" },
-]
-
-[package.metadata]
-requires-dist = [{ name = "pyyaml" }]
-
-[[package]]
 name = "obs-nickel-testdata"
 version = "0.1.0"
 source = { editable = "packages/testdata" }
@@ -3201,10 +3190,10 @@ dependencies = [
     { name = "click" },
     { name = "matplotlib" },
     { name = "numpy" },
-    { name = "obs-nickel-refcats" },
     { name = "pandas" },
     { name = "pyyaml" },
     { name = "rich" },
+    { name = "stips-refcats" },
 ]
 
 [package.optional-dependencies]
@@ -3223,14 +3212,25 @@ requires-dist = [
     { name = "jinja2", marker = "extra == 'dashboard'", specifier = ">=3.1.0" },
     { name = "matplotlib", specifier = ">=3.5.0" },
     { name = "numpy" },
-    { name = "obs-nickel-refcats", editable = "packages/refcats" },
     { name = "pandas" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "rich", specifier = ">=13.0.0" },
     { name = "sse-starlette", marker = "extra == 'dashboard'", specifier = ">=1.8.0" },
+    { name = "stips-refcats", editable = "packages/refcats" },
     { name = "uvicorn", extras = ["standard"], marker = "extra == 'dashboard'", specifier = ">=0.24.0" },
 ]
 provides-extras = ["dashboard"]
+
+[[package]]
+name = "stips-refcats"
+version = "0.1.0"
+source = { editable = "packages/refcats" }
+dependencies = [
+    { name = "pyyaml" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "pyyaml" }]
 
 [[package]]
 name = "structlog"

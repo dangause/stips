@@ -3,16 +3,23 @@ requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "obs-nickel-refcats"
+name = "stips-refcats"
 version = "0.1.0"
-description = "Manifests and helpers for Nickel reference catalogs."
+description = "Instrument-neutral reference-catalog helpers for STIPS (Gaia/PS1 cone fetch, HTM coverage, LSST refcat conversion)."
 authors = [{ name = "Dan Gause" }]
 requires-python = ">=3.12"
 dependencies = ["pyyaml"]
 readme = "README.md"
 
 [project.scripts]
-nickel-refcats = "nickel_refcats.cli:main"
+stips-refcats = "stips_refcats.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+# convertReferenceCatalog config files are shipped as package data and resolved
+# via importlib.resources by stips.core.refcat. They are read as file PATHS by
+# the LSST CLI (not imported as modules), so they live in a data directory
+# rather than an importable subpackage.
+stips_refcats = ["configs/*.py"]
