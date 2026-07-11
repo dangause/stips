@@ -1128,7 +1128,10 @@ def ingest_exposure_to_butler(
 
     # Get skymap to determine tract/patch.
     # Prefer the active instrument's profile values, allowing env overrides.
-    # Wrapped in try/except so this script stays runnable without a loaded profile.
+    # Wrapped in try/except so this script stays runnable without a loaded
+    # profile — but when the profile is unavailable AND no env override is
+    # given, fail loud rather than silently assuming Nickel (F-043).
+    profile_error: Exception | None = None
     try:
         from stips.core.config import load_active_profile
 
@@ -1136,12 +1139,31 @@ def ingest_exposure_to_butler(
         prof_skymap_name = prof.skymap_name
         prof_skymap_collection = prof.skymap_collection
         prof_instrument = prof.name
-    except Exception:
+    except Exception as exc:
         prof_skymap_name = None
         prof_skymap_collection = None
-        prof_instrument = "Nickel"
+        prof_instrument = None
+        profile_error = exc
 
-    skymap_name = os.environ.get("SKYMAP_NAME") or prof_skymap_name or "nickelRings-v1"
+    _profile_hint = (
+        f"instrument profile not loaded ({profile_error})"
+        if profile_error is not None
+        else "the loaded instrument profile does not define it"
+    )
+
+    skymap_name = os.environ.get("SKYMAP_NAME") or prof_skymap_name
+    if not skymap_name:
+        raise RuntimeError(
+            f"skymap name unavailable: {_profile_hint} and SKYMAP_NAME is "
+            "unset; set INSTRUMENT_DIR to instruments/<name>/ (containing "
+            "profile.py) in your config env: block, or export SKYMAP_NAME."
+        )
+    if not prof_instrument:
+        raise RuntimeError(
+            f"instrument name unavailable: {_profile_hint}; set INSTRUMENT_DIR "
+            "to instruments/<name>/ (containing profile.py) in your config "
+            "env: block."
+        )
     skymap_collections = (
         os.environ.get("SKYMAPS_CHAIN") or prof_skymap_collection or "skymaps"
     )
