@@ -1,14 +1,15 @@
 {% if run.nights %}
+{% set bands = run.display_bands %}
 <table class="night-table">
     <thead>
         <tr>
             <th>Night</th>
             <th>Calibs</th>
             <th>Science</th>
-            {% for band in run.bands or ['r', 'i'] %}
+            {% for band in bands %}
             <th>DIA({{ band }})</th>
             {% endfor %}
-            {% for band in run.bands or ['r', 'i'] %}
+            {% for band in bands %}
             <th>FPhot({{ band }})</th>
             {% endfor %}
         </tr>
@@ -19,10 +20,10 @@
             <td class="mono"><a href="/run/{{ run.run_id }}/night/{{ ns.night }}" class="night-link">{{ ns.night }}</a></td>
             <td><span class="cell-status {{ ns.calibs }}">{{ ns.calibs }}</span></td>
             <td><span class="cell-status {{ ns.science }}">{{ ns.science }}</span></td>
-            {% for band in run.bands or ['r', 'i'] %}
+            {% for band in bands %}
             <td><span class="cell-status {{ ns.dia.get(band, 'pending') }}">{{ ns.dia.get(band, 'pending') }}</span></td>
             {% endfor %}
-            {% for band in run.bands or ['r', 'i'] %}
+            {% for band in bands %}
             <td><span class="cell-status {{ ns.fphot.get(band, 'pending') }}">{{ ns.fphot.get(band, 'pending') }}</span></td>
             {% endfor %}
         </tr>

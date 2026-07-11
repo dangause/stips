@@ -34,6 +34,30 @@ class Phase(str, Enum):
 
 PHASE_ORDER = list(Phase)
 
+# Sentinel band list used when neither a run's log nor the active profile can
+# supply the bands. Renders as an explicit "unknown" column in the night grid
+# rather than fabricating Nickel's r/i default (F-043).
+UNKNOWN_BANDS: list[str] = ["?"]
+
+
+def _profile_bands() -> list[str]:
+    """Bands (dedup, order-preserving) from the active instrument profile.
+
+    Returns [] when the profile is unavailable so callers fall back to the
+    explicit-unknown sentinel instead of pretending r/i. Used only as a
+    fallback when a run's log lacks a ``Bands: [...]`` line.
+    """
+    try:
+        from stips.core.config import load_active_profile
+
+        seen: dict[str, None] = {}
+        for band in load_active_profile().filters.values():
+            if band:
+                seen.setdefault(band, None)
+        return list(seen)
+    except Exception:
+        return []
+
 
 @dataclass
 class NightStatus:
@@ -72,6 +96,17 @@ class RunInfo:
     @property
     def status_class(self) -> str:
         return self.status.value
+
+    @property
+    def display_bands(self) -> list[str]:
+        """Bands for the night grid: the run's parsed bands, else the active
+        profile's filters, else the explicit-unknown sentinel.
+
+        Never fabricates Nickel's r/i default (F-043); when neither the run log
+        nor a loadable profile supplies bands, the UI shows an explicit unknown
+        column rather than silently pretending r/i.
+        """
+        return self.bands or _profile_bands() or UNKNOWN_BANDS
 
 
 class LogTailer:
@@ -428,6 +463,11 @@ def _scan_night_logs(run_dir: Path, info: RunInfo) -> None:
     failed_dia = set(getattr(info, "_failed_dia", []))
     failed_fphot = set(getattr(info, "_failed_fphot", []))
 
+    # Bands for the per-band DIA/fphot columns: the run's parsed bands, else the
+    # active profile's filters, else the explicit-unknown sentinel — never a
+    # fabricated Nickel r/i default (F-043).
+    grid_bands = info.bands or _profile_bands() or UNKNOWN_BANDS
+
     nights_list = []
     for night in sorted(night_set):
         ns = NightStatus(night=night)
@@ -448,7 +488,7 @@ def _scan_night_logs(run_dir: Path, info: RunInfo) -> None:
         run_done = info.current_phase == Phase.COMPLETE
         dia_dir = run_dir / "dia"
         if dia_dir.is_dir():
-            for band in info.bands or ["r", "i"]:
+            for band in grid_bands:
                 key = f"{night}/{band}"
                 if _has_log(dia_dir, f"{night}_{band}"):
                     ns.dia[band] = "failed" if key in failed_dia else "success"
@@ -459,13 +499,13 @@ def _scan_night_logs(run_dir: Path, info: RunInfo) -> None:
                 else:
                     ns.dia[band] = "pending"
         else:
-            for band in info.bands or ["r", "i"]:
+            for band in grid_bands:
                 ns.dia[band] = "skipped" if run_done else "pending"
 
         # Fphot status per band
         fphot_dir = run_dir / "fphot"
         if fphot_dir.is_dir():
-            for band in info.bands or ["r", "i"]:
+            for band in grid_bands:
                 if _has_log(fphot_dir, f"{night}_{band}"):
                     ns.fphot[band] = "failed" if night in failed_fphot else "success"
                 elif info.current_phase == Phase.FPHOT:
@@ -475,7 +515,7 @@ def _scan_night_logs(run_dir: Path, info: RunInfo) -> None:
                 else:
                     ns.fphot[band] = "pending"
         else:
-            for band in info.bands or ["r", "i"]:
+            for band in grid_bands:
                 ns.fphot[band] = "skipped" if run_done else "pending"
 
         nights_list.append(ns)

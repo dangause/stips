@@ -38,7 +38,7 @@ def render_fits_image(
     dataset_type: str,
     night: str,
     band: str,
-    instrument_name: str = "Nickel",
+    instrument_name: str,
 ) -> Path | None:
     """Render a FITS image from Butler to a cached PNG file.
 
@@ -120,7 +120,7 @@ def _build_render_script(
     night: str,
     band: str,
     output_path: str,
-    instrument_name: str = "Nickel",
+    instrument_name: str,
 ) -> str:
     """Build Python script that loads FITS via Butler and renders to PNG."""
     return f"""

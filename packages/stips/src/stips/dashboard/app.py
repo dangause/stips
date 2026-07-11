@@ -26,13 +26,15 @@ from stips.dashboard.collector import (
 _HERE = Path(__file__).parent
 
 
-def create_app(logs_dir: Path, instrument_name: str = "Nickel") -> FastAPI:
+def create_app(logs_dir: Path, *, instrument_name: str) -> FastAPI:
     """Create the FastAPI dashboard application.
 
     Args:
         logs_dir: Path to the logs directory to monitor.
-        instrument_name: Butler instrument name used in dataset queries
-            (threaded from the active profile by the launcher).
+        instrument_name: Butler instrument name used in dataset queries.
+            Required (no default): the launcher threads it from the active
+            profile, so the dashboard never silently masquerades as Nickel
+            (F-043).
 
     Returns:
         Configured FastAPI application.
@@ -312,7 +314,13 @@ def create_app(logs_dir: Path, instrument_name: str = "Nickel") -> FastAPI:
             return JSONResponse({"available": False, "error": "Repository not found"})
 
         data = query_catalog(
-            repo_path, catalog_type, night, band, limit, offset, instrument_name
+            repo_path,
+            catalog_type,
+            night,
+            band,
+            limit,
+            offset,
+            instrument_name=instrument_name,
         )
         return JSONResponse(data)
 
@@ -419,7 +427,7 @@ def _render_night_grid(run: RunInfo) -> str:
     if not run.nights:
         return '<p class="empty-state">No night data found</p>'
 
-    bands = run.bands or ["r", "i"]
+    bands = run.display_bands
     rows = []
     for ns in run.nights:
         cells = [
