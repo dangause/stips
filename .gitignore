@@ -87,7 +87,6 @@ packages/refcats/upstream/
 *.png
 
 # Project docs (auto-generated)
-CLAUDE.md
 
 # Claude Code / superpowers session state
 .claude/
