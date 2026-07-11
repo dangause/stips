@@ -214,6 +214,11 @@ def render_bps_config(
     timestamp = generate_timestamp()
     prof = config.require_profile()
 
+    # Default band / PS1 template collection follow the profile's band->template
+    # policy: fall back to the first PS1-eligible band (ps1_band_map key) rather
+    # than a hardcoded "r". For Nickel/CTIO1m this is "r", preserving behavior.
+    default_band = bps_cfg.band or next(iter(prof.ps1_band_map), "r")
+
     # Load template config
     template_path = find_bps_config(bps_cfg.pipeline, config)
     template_content = template_path.read_text()
@@ -251,9 +256,9 @@ def render_bps_config(
         "computeSite": bps_cfg.site,
         "operator": bps_cfg.operator,
         "project": bps_cfg.project,
-        "band": bps_cfg.band or "r",
+        "band": default_band,
         "template_collection": bps_cfg.template_collection
-        or f"templates/ps1/{bps_cfg.band or 'r'}",
+        or f"templates/ps1/{default_band}",
         "coord_collection": bps_cfg.coord_collection or "",
         "object_filter": object_filter,
         "pipeline": bps_cfg.pipeline,

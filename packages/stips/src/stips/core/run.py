@@ -439,9 +439,11 @@ def _run_ps1_templates(
 ) -> None:
     """Ingest PS1 templates for each band (defaults to all configured bands)."""
     from stips.core import ps1_template
+    from stips.core.pipeline import ps1_band_map
 
+    eligible = ps1_band_map(config)
     for band in bands if bands is not None else run_cfg.bands:
-        if band not in ("r", "i"):
+        if band not in eligible:
             log.warning(f"PS1 templates not available for band {band}, skipping")
             continue
 
@@ -612,13 +614,17 @@ def _run_auto_templates(
     science_cfg: "ScienceConfig",
     dry_run: bool,
 ) -> RunResult | None:
-    """Auto template strategy: PS1 for r/i, Nickel coadd for b/v.
+    """Auto template strategy: PS1 for the profile's PS1-eligible bands, coadd
+    for the rest.
 
     Returns a RunResult early-exit on coadd failure (when continue_on_error is
     False), else None.
     """
-    ri = [b for b in run_cfg.bands if b in ("r", "i")]
-    bv = [b for b in run_cfg.bands if b not in ("r", "i")]
+    from stips.core.pipeline import ps1_band_map
+
+    eligible = ps1_band_map(config)
+    ri = [b for b in run_cfg.bands if b in eligible]
+    bv = [b for b in run_cfg.bands if b not in eligible]
     if ri:
         _run_ps1_templates(run_cfg, config, result, dry_run, bands=ri)
     if bv:

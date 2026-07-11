@@ -95,6 +95,26 @@ def night_to_day_obs(night: str, offset_days: int = 1) -> str:
     return (dt + timedelta(days=offset_days)).strftime("%Y%m%d")
 
 
+def ps1_band_map(config: "Config") -> dict[str, str]:
+    """Return the active profile's LOCAL-band -> PS1-band map (empty if no profile).
+
+    This is the single source of truth for the band->template policy (F-011):
+    the KEYS are the local science bands eligible for external PS1 templates, and
+    each value is the PS1 band to download for it. An empty map (no profile, or a
+    fork that declares none) means "no PS1 templates" — every band then falls
+    back to a coadd template in "auto" mode.
+    """
+    prof = getattr(config, "profile", None)
+    if prof is None:
+        return {}
+    return dict(getattr(prof, "ps1_band_map", None) or {})
+
+
+def ps1_eligible_bands(config: "Config") -> list[str]:
+    """Local science bands eligible for PS1 templates (``ps1_band_map`` keys)."""
+    return list(ps1_band_map(config).keys())
+
+
 def night_day_obs_values(
     night: str,
     profile=None,

@@ -57,6 +57,10 @@ profile = InstrumentProfile(
         "5000/100": "OIII",
     },
     filter_key="FILTNAM",
+    # PS1 templates (LOCAL band -> PS1 band). PS1 serves grizy; Nickel's r/i
+    # (Cousins R/I) map to PS1 r/i. b/v have no PS1 equivalent and fall back to
+    # coadd templates in "auto" mode. This reproduces the historical r/i policy.
+    ps1_band_map={"r": "r", "i": "i"},
     header_map={
         "exposure_time": Field("EXPTIME", unit="s", default=0.0),
         "dark_time": Field("EXPTIME", unit="s", default=0.0),
