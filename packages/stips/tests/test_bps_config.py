@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-# Repo root is 3 levels up from packages/obs_nickel/tests/
+# Repo root is 3 levels up from packages/stips/tests/
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
@@ -72,7 +72,7 @@ class TestRenderBpsConfigQgraph:
 
         # find_bps_config() goes: config.instrument_dir.parent.parent / "bps" / "pipelines"
         mock_config = MagicMock()
-        mock_config.instrument_dir = REPO_ROOT / "packages" / "obs_nickel"
+        mock_config.instrument_dir = REPO_ROOT / "instruments" / "nickel"
         mock_config.repo = tmp_path / "repo"
         mock_config.stack_dir = Path("/fake/stack")
         mock_config.cp_pipe_dir = Path("/fake/cp_pipe")
@@ -143,7 +143,7 @@ class TestFullBPSLifecycle:
 
     def _make_mock_config(self, tmp_path):
         mock_config = MagicMock()
-        mock_config.instrument_dir = REPO_ROOT / "packages" / "obs_nickel"
+        mock_config.instrument_dir = REPO_ROOT / "instruments" / "nickel"
         mock_config.repo = tmp_path / "repo"
         mock_config.stack_dir = Path("/fake/stack")
         mock_config.cp_pipe_dir = Path("/fake/cp_pipe")

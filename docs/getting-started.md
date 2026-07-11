@@ -133,7 +133,11 @@ When you run `stips -c pipeline.yaml run`, STIPS automatically:
 
 ## Step-by-Step Alternative
 
-If you prefer more control, run each step individually:
+If you prefer more control, run each step individually. Give `ps1-template`,
+`fphot`, and `lightcurve` your target's **full-precision** RA/Dec (6+ decimal
+places — the placeholders below are illustrative). Rounding to 2 decimals
+offsets the aperture by ~5–17″ on Nickel's 0.37″/pixel scale, so forced
+photometry measures galaxy background instead of the source.
 
 ```bash
 # 1. Check your configuration
@@ -212,7 +216,7 @@ stips -c my_pipeline.yaml bootstrap
 This usually means some exposures have incorrect coordinates in their FITS headers (a known Nickel telescope issue where the DEC keyword gets stuck). When using `stips run` with a pipeline YAML, coordinate validation is automatic. For standalone commands, pass `--ra` and `--dec` to enable it:
 
 ```bash
-stips science 20230519 --object 2023ixf --ra 210.91 --dec 54.32
+stips science 20230519 --object 2023ixf --ra 210.910750 --dec 54.311694
 ```
 
 ### `ModuleNotFoundError` or stale paths after moving/renaming the checkout
