@@ -444,3 +444,41 @@ def run_butler_python_json(
         snippet or "<empty>",
     )
     return None
+
+
+def stack_pipelines_version(config: Config) -> str | None:
+    """Return the active LSST *pipelines* version string, or None.
+
+    This is the actual pipelines / EUPS package version (e.g.
+    ``"gf03f954c0e+3d14ea8aaf"``) captured from ``lsst.daf.butler.version`` in
+    the activated stack — NOT the rubin-env / conda env name (``lsst-scipipe-*``)
+    that only identifies the runtime, which two different pipelines releases can
+    share. See ``docs/pipeline-brittleness-and-modernization.md``.
+
+    STIPS itself runs in a plain venv and never imports ``lsst.*``, so the value
+    is read via a short in-stack snippet (the house pattern; see
+    ``core/butler_query.py``). Returns None when the snippet cannot run (e.g. no
+    stack configured), so callers can distinguish "unknown" from a real value.
+    """
+    script = (
+        "import json\n"
+        "_ver = None\n"
+        "try:\n"
+        "    import lsst.daf.butler.version as _v\n"
+        "    _ver = getattr(_v, '__version__', None)\n"
+        "except Exception:\n"
+        "    _ver = None\n"
+        "if not _ver:\n"
+        "    try:\n"
+        "        import lsst.daf.butler as _b\n"
+        "        _ver = getattr(_b, '__version__', None)\n"
+        "    except Exception:\n"
+        "        _ver = None\n"
+        "print(json.dumps({'version': _ver}))\n"
+    )
+    result = run_butler_python_json(script, config)
+    if isinstance(result, dict):
+        version = result.get("version")
+        if isinstance(version, str) and version:
+            return version
+    return None
