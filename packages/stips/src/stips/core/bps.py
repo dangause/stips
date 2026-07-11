@@ -24,6 +24,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from stips.core.config import resolve_data_package_dir
+
 if TYPE_CHECKING:
     from stips.core.config import Config
 
@@ -233,8 +235,14 @@ def render_bps_config(
         "stips_defaults": str(_PACKAGES_DIR / "obs_stips" / "instrument_defaults"),
         "stips_src": str(_PACKAGES_DIR / "stips" / "src"),
         "obs_data_package": prof.obs_data_package or "",
+        # Resolve the data-package dir with the shared precedence (explicit
+        # package_dir, co-located under the instrument dir, or the reference
+        # packages/ layout) so a fork's data package need not live under the
+        # framework packages/ directory.
         "instrument_data_dir": (
-            str(_PACKAGES_DIR / prof.obs_data_package) if prof.obs_data_package else ""
+            str(_data_dir)
+            if (_data_dir := resolve_data_package_dir(prof, config.instrument_dir))
+            else ""
         ),
         "stack_dir": str(config.stack_dir),
         "cp_pipe_dir": str(config.cp_pipe_dir) if config.cp_pipe_dir else "",

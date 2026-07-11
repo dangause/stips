@@ -19,6 +19,63 @@ _log = logging.getLogger(__name__)
 _PACKAGES_DIR = Path(__file__).resolve().parents[4]
 
 
+def resolve_data_package_dir(
+    profile: "InstrumentProfile", instrument_dir: str | Path
+) -> Path | None:
+    """Resolve the directory of the profile's curated-calibration data package.
+
+    The active instrument declares an optional EUPS data package of curated
+    calibrations via ``profile.obs_data_package`` (e.g. ``obs_nickel_data``).
+    This locates that package on disk so callers can eups-setup / PYTHONPATH it,
+    without assuming it lives under the framework's own ``packages/`` directory.
+
+    Resolution precedence:
+
+    1. ``profile.package_dir`` if set — an explicit override. An absolute path is
+       used as-is; a relative path is resolved against ``instrument_dir`` so a
+       fork can co-locate the package under its own ``instruments/<x>/`` tree
+       (e.g. ``package_dir="obs_<x>_data"``). Honored even if the path does not
+       yet exist, since it is an explicit declaration.
+    2. ``<instrument_dir>/<obs_data_package>`` if it exists — the co-located fork
+       layout, without needing an explicit ``package_dir``.
+    3. ``<framework packages/>/<obs_data_package>`` if it exists — the reference
+       layout (``packages/obs_nickel_data``); kept working for the monorepo.
+    4. ``None`` — the profile declares no data package, or a package is named but
+       none of the candidate locations exist (caller skips data-package setup).
+
+    Args:
+        profile: The active instrument profile.
+        instrument_dir: The active instrument directory (``INSTRUMENT_DIR``).
+
+    Returns:
+        The resolved data-package directory, or ``None`` if not resolvable.
+    """
+    instrument_dir = Path(instrument_dir)
+
+    # (1) Explicit override wins, existence-independent.
+    package_dir = getattr(profile, "package_dir", None)
+    if package_dir:
+        p = Path(package_dir).expanduser()
+        return p if p.is_absolute() else (instrument_dir / p)
+
+    data_pkg = getattr(profile, "obs_data_package", None)
+    if not data_pkg:
+        return None
+
+    # (2) Co-located under the instrument dir.
+    colocated = instrument_dir / data_pkg
+    if colocated.exists():
+        return colocated
+
+    # (3) Reference layout: framework packages/ sibling.
+    framework = _PACKAGES_DIR / data_pkg
+    if framework.exists():
+        return framework
+
+    # (4) Named but not found anywhere.
+    return None
+
+
 def load_active_profile(instrument_dir: str | Path | None = None):
     """Load the active instrument profile by path from INSTRUMENT_DIR.
 

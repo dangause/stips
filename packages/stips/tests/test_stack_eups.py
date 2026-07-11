@@ -15,6 +15,10 @@ def _config(data="obs_demo_data", instr="/tmp/pkgs/obs_demo"):
     )
     prof = mock.Mock()
     prof.obs_data_package = data
+    # Explicit override unset: a bare Mock would auto-create a truthy
+    # package_dir attribute, so pin it to None to exercise the obs_data_package
+    # resolution path (co-located, then the reference packages/ layout).
+    prof.package_dir = None
     prof.name = "Demo"
     c.profile = prof
     return c
@@ -35,11 +39,13 @@ class TestStackSetup(unittest.TestCase):
         self.assertNotIn("export OBS_DEMO=", script)
 
     def test_data_package_from_profile(self):
+        # Uses obs_nickel_data (which exists under the reference packages/ layout)
+        # so precedence (3) resolves and the data-package block is emitted.
         with mock.patch.object(
             stack_module, "_find_stack_loader", return_value=Path("/x/loadLSST.sh")
         ):
-            script = stack_module._build_setup_script(_config(data="obs_demo_data"))
-        self.assertIn("obs_demo_data", script)
+            script = stack_module._build_setup_script(_config(data="obs_nickel_data"))
+        self.assertIn("obs_nickel_data", script)
 
     def test_instrument_dir_export_fixed_name(self):
         # INSTRUMENT_DIR is the fixed export name (pipelines use $INSTRUMENT_DIR)
@@ -57,22 +63,24 @@ class TestStackSetup(unittest.TestCase):
         self.assertIn("obs_stips", script)
 
     def test_data_and_sibling_paths_from_packages_dir_not_instrument_parent(self):
-        # The data-package and framework-sibling paths derive from the REAL
-        # _PACKAGES_DIR (from __file__), NOT the synthetic instrument_dir.parent.
+        # The data-package (reference layout) and framework-sibling paths derive
+        # from the REAL _PACKAGES_DIR (from __file__), NOT the synthetic
+        # instrument_dir.parent. obs_nickel_data exists under packages/, so the
+        # reference-layout fallback (precedence 3) resolves to it.
         with mock.patch.object(
             stack_module, "_find_stack_loader", return_value=Path("/x/loadLSST.sh")
         ):
             script = stack_module._build_setup_script(
-                _config(data="obs_demo_data", instr="/tmp/pkgs/obs_demo")
+                _config(data="obs_nickel_data", instr="/tmp/pkgs/obs_demo")
             )
         pkgs = str(stack_module._PACKAGES_DIR)
         self.assertTrue(pkgs.endswith("/packages"), pkgs)
         # data-package setup path uses the real packages dir
-        self.assertIn(f"{pkgs}/obs_demo_data", script)
+        self.assertIn(f"{pkgs}/obs_nickel_data", script)
         # obs_stips sibling path uses the real packages dir
         self.assertIn(f"{pkgs}/obs_stips", script)
         # NOT the synthetic instrument_dir.parent
-        self.assertNotIn("/tmp/pkgs/obs_demo_data", script)
+        self.assertNotIn("/tmp/pkgs/obs_demo/obs_nickel_data", script)
 
     def test_no_data_package_skips_setup(self):
         with mock.patch.object(
