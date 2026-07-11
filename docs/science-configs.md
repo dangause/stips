@@ -14,7 +14,10 @@ Science processing quality depends heavily on field star density and observing c
 
 ### Config Files
 
-All configs live in `packages/obs_stips/instrument_defaults/configs/calibrateImage/tuned_configs/`:
+All configs live in `instruments/nickel/configs/calibrateImage/tuned_configs/`
+(they are Nickel-fitted, so they ship with the Nickel instrument profile rather
+than the neutral framework defaults; YAML `configs:` paths resolve
+instrument-dir-first, so the relative names below are unchanged):
 
 | File | Use Case |
 |------|----------|

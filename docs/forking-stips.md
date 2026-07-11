@@ -324,14 +324,24 @@ than trusting documentation.
 
 ## 6. Step 5 — Pipelines & configs
 
-**You inherit the whole reference set — no copying required for the common
-case.** STIPS ships reference pipelines
+**You inherit the whole neutral reference set — no copying required for the
+common case.** STIPS ships reference pipelines
 (`packages/obs_stips/instrument_defaults/pipelines/`) and config overrides
 (`packages/obs_stips/instrument_defaults/configs/`), and every fork inherits all
-of them by default. A minimal fork carries **zero** pipeline/config files. These
-framework defaults *are* the reference Nickel tuning — a working starting point
-(mostly relaxed thresholds for a small-aperture, sparse-field instrument) that
-you tweak only where your telescope differs. The rules:
+of them by default. A minimal fork carries **zero** pipeline/config files. The
+structural thresholds in these defaults are a REFERENCE tuning from the Nickel
+1-m (relaxed cuts for a small-aperture, sparse-field instrument) — a working
+starting point that you tweak only where your telescope differs. See
+`packages/obs_stips/instrument_defaults/README.md` for the full tiering
+contract.
+
+**What you do NOT inherit: photometric calibration.** Nickel's empirically-fit
+color terms (`colorterms.py`), its `calibrateImage/tuned_configs/`, and its
+Gaia+PS1 refcat overlay live in `instruments/nickel/configs/` — they are fit for
+one telescope and are deliberately excluded from the neutral tier. Until you fit
+your own color terms and drop a `colorterms.py` into `instruments/<x>/configs/`,
+your photometry is calibrated with a plain per-visit zeropoint (color terms
+OFF). This is a fork's **#1 review item**. The rules:
 
 - **Override one file by dropping a same-named file.** The CLI resolves each
   pipeline/config **instrument-dir-first, else framework default** (via

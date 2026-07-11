@@ -1,16 +1,23 @@
 # ruff: noqa: F821
 # instrument_defaults/configs/refcats_gaia_ps1.py
 #
-# calibrateImage overlay that switches the reference catalogs from MONSTER
-# (the DRP.yaml default) to Gaia DR3 (astrometry) + PS1 DR2 (photometry).
+# NEUTRAL FRAMEWORK DEFAULT. calibrateImage overlay that switches the reference
+# catalogs from MONSTER (the DRP.yaml default) to Gaia DR3 (astrometry) + PS1 DR2
+# (photometry). Applied via --config-file by science.py ONLY when
+# refcat.mode == "gaia_ps1".
 #
-# Applied via --config-file by science.py ONLY when refcat.mode == "gaia_ps1".
-# Self-contained: sets photoCatName + loads colorterms here so it does not depend
-# on apply_colorterms.py running after it.
-#
-# After validation on real data, this becomes the DRP.yaml default and a
-# refcats_monster.py overlay handles the opt-in MONSTER path instead.
+# The Gaia astrometry setup is instrument-neutral. The PS1 photometry filterMap
+# is DERIVED from the active instrument profile's ``ps1_band_map`` (LOCAL band ->
+# PS1 band), so a fork inherits a correct r/i map with no per-instrument file.
+# Bands with no PS1 equivalent (e.g. Nickel/CTIO b/v/u) are calibrated purely via
+# color terms and are NOT in ps1_band_map; a fork that needs explicit
+# columns/color handling for those should drop its own ``refcats_gaia_ps1.py``
+# into ``instruments/<name>/configs/`` (resolved instrument-dir-first). The
+# reference Nickel overlay (full b/v/r/i/halpha/oiii/gp/rp map + Landolt color
+# terms) lives at ``instruments/nickel/configs/refcats_gaia_ps1.py``.
 import os
+
+from lsst.obs.stips.profile_loader import load_profile_from_dir
 
 # ---- Astrometry: Gaia DR3 (single-flux astrometric reference) ----
 config.connections.astrometry_ref_cat = "gaia_dr3"
@@ -19,28 +26,25 @@ config.connections.astrometry_ref_cat = "gaia_dr3"
 # MONSTER filterMap baked into DRP.yaml.
 config.astrometry_ref_loader.anyFilterMapsToThis = "phot_g_mean"
 config.astrometry_ref_loader.filterMap = {}
-# The tuned configs (best_calib_t071.py) set the astrometric mag-limit flux field
-# to the MONSTER column; point it at the Gaia G flux so the selector finds it.
+# Tuned configs may set the astrometric mag-limit flux field to a MONSTER column;
+# point it at the Gaia G flux so the selector finds it.
 config.astrometry.referenceSelector.magLimit.fluxField = "phot_g_mean_flux"
 
 # ---- Photometry: PS1 DR2 (per-band flux + color terms) ----
 config.connections.photometry_ref_cat = "panstarrs1_dr2"
-# Map Nickel bands to PS1 mean-PSF magnitude columns. b/v have no native PS1
-# filter and are calibrated entirely via the PS1 g/r color terms below.
+# Derive the LOCAL band -> PS1 mean-PSF magnitude column map from the profile.
+_instrument_dir = os.environ["INSTRUMENT_DIR"]
+_profile = load_profile_from_dir(_instrument_dir)
 config.photometry_ref_loader.filterMap = {
-    "b": "gMeanPSFMag",
-    "v": "gMeanPSFMag",
-    "r": "rMeanPSFMag",
-    "i": "iMeanPSFMag",
-    "halpha": "rMeanPSFMag",
-    "oiii": "gMeanPSFMag",
-    "gp": "gMeanPSFMag",
-    "rp": "rMeanPSFMag",
+    band: f"{ps1_band}MeanPSFMag" for band, ps1_band in _profile.ps1_band_map.items()
 }
-config.photometry.applyColorTerms = True
-# "ps1" matches the "ps1*" block in colorterms.py (kept consistent with the
-# alias in apply_colorterms.py).
 config.photometry.photoCatName = "ps1"
 
-_config_dir = os.path.dirname(os.path.abspath(__file__))
-config.photometry.colorterms.load(os.path.join(_config_dir, "colorterms.py"))
+# Load the active instrument's color-term library if it ships one; enable color
+# terms only when non-empty (an empty library with applyColorTerms=True fails
+# config validation).
+_colorterms_path = os.path.join(_instrument_dir, "configs", "colorterms.py")
+if not os.path.isfile(_colorterms_path):
+    _colorterms_path = os.path.join(os.path.dirname(__file__), "colorterms.py")
+config.photometry.colorterms.load(_colorterms_path)
+config.photometry.applyColorTerms = len(config.photometry.colorterms.data) > 0

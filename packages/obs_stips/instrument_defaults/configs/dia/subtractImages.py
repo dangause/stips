@@ -1,6 +1,10 @@
 # ruff: noqa: F821
 """
-Configuration overrides for subtractImages task (Nickel-to-Nickel DIA).
+Configuration overrides for subtractImages task (coadd-template DIA).
+
+FRAMEWORK DEFAULT: this is a REFERENCE tuning from the Nickel 1-m. It is resolved
+instrument-dir-first, so a fork can override it by shipping its own
+configs/dia/subtractImages.py (see instrument_defaults/README.md).
 
 Optimized for Nickel telescope characteristics:
 - Typical seeing: 1.5-2.5 arcsec

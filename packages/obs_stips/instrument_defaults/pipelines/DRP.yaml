@@ -1,5 +1,9 @@
 description: |
-  Base pipeline for data release production for the Nickel telescope.
+  Framework-default base pipeline for data release production (ISR, calibration,
+  coaddition, difference imaging). Selection/seeing thresholds are a REFERENCE
+  tuning from the Nickel 1-m; they are structural for 1m-class work but a fork
+  should review and, where needed, override them per-instrument via
+  instruments/<x>/pipelines/. See instrument_defaults/README.md.
 
 imports:
   - location: $DRP_PIPE_DIR/pipelines/_ingredients/analysis-visit-single-visit.yaml
@@ -63,6 +67,10 @@ tasks:
       # All tuned configs load best_calib_t071.py as their base.
       # DO NOT add a 'file:' directive here — it overrides --config-file CLI args.
       # --- bootstrap PSF for first-pass detection ---
+      # Reference tuning from the Nickel 1-m (~2" seeing); structural for
+      # 1m-class work but instrument-dependent. Override per-instrument via
+      # instruments/<x>/pipelines/ or a calibrateImage config. See
+      # instrument_defaults/README.md.
       install_simple_psf.fwhm: 2.0
       install_simple_psf.width: 35
       # Parameter configurations
@@ -167,9 +175,11 @@ tasks:
       useVisitSummaryPsf: false
       useVisitSummaryWcs: false
       useVisitSummaryPhotoCalib: false
-      # Relaxed selection thresholds for Nickel 1-m telescope.
-      # LSST defaults (0.015 / 0.022) reject most Nickel visits due to
-      # the telescope's larger PSF variations.
+      # Relaxed warp-selection thresholds: reference tuning from the Nickel 1-m,
+      # where the LSST defaults (0.015 / 0.022) reject most visits due to the
+      # larger PSF variations typical of 1m-class optics. Structural for
+      # small-telescope work; override per-instrument via instruments/<x>/
+      # pipelines/. See instrument_defaults/README.md.
       select.maxEllipResidual: 0.05
       select.maxScaledSizeScatter: 0.05
       doPreWarpInterpolation: true
@@ -185,7 +195,10 @@ tasks:
     config:
       connections.visitSummaries: preliminary_visit_summary
       connections.goodVisits: deep_coadd_visit_selection
-      maxPsfFwhm: 3.0         # Nickel seeing typically 1.5-3.0 arcsec; reject outliers
+      # Reference tuning from the Nickel 1-m (seeing typically 1.5-3.0 arcsec);
+      # reject seeing outliers. Override per-instrument via instruments/<x>/
+      # pipelines/. See instrument_defaults/README.md.
+      maxPsfFwhm: 3.0
       nVisitsMax: -1
 
   selectTemplateCoaddVisits:
@@ -196,7 +209,10 @@ tasks:
       # Keep the best 50% of visits by seeing for template building.
       # Previously qMax=0.9999 accepted all visits, allowing warps with
       # poor WCS (from relaxed fallback configs) into the template coadd.
-      # 0.5 balances quality vs data volume for Nickel's sparse visit counts.
+      # Reference tuning: 0.5 balances quality vs data volume for the sparse
+      # visit counts typical of a 1m-class monitoring campaign (as on Nickel).
+      # Override per-instrument via instruments/<x>/pipelines/. See
+      # instrument_defaults/README.md.
       qMax: 0.5
       nVisitsMin: 1
 
