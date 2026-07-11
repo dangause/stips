@@ -180,8 +180,6 @@ class Config:
         instrument_dir: Active instrument package directory containing
             pipelines/ and configs/ (the primary required instrument field;
             base of all pipeline/config path joins)
-        obs_nickel: Deprecated read-only alias for instrument_dir (kept one
-            release; see the ``obs_nickel`` property)
         raw_parent_dir: Parent directory for raw data
         refcat_repo: Path to reference catalog repository
         cp_pipe_dir: Path to cp_pipe pipelines
@@ -264,24 +262,62 @@ class Config:
             errors.append(f"RAW_PARENT_DIR does not exist: {self.raw_parent_dir}")
         if self.cp_pipe_dir and not self.cp_pipe_dir.exists():
             errors.append(f"CP_PIPE_DIR does not exist: {self.cp_pipe_dir}")
+        if self.refcat_repo and not self.refcat_repo.exists():
+            errors.append(f"REFCAT_REPO does not exist: {self.refcat_repo}")
         return errors
 
 
-def _expand_within(value: str, env: dict[str, str]) -> str:
+# Max ${VAR} expansion passes before we declare a reference cycle. Config env
+# blocks are shallow (a value referencing a value referencing a value), so a
+# legitimate chain resolves in a handful of passes; 10 is generous headroom
+# while still terminating deterministically on a self-referential cycle.
+_MAX_EXPANSION_PASSES = 10
+
+
+def _expand_within(value: str, env: dict[str, str], *, key: str | None = None) -> str:
     """Expand ${VAR} references using ONLY the given env dict (no os.environ).
 
     Args:
         value: String potentially containing ${VAR} references
         env: The config env block — the sole substitution source
+        key: The env key ``value`` came from (for error messages), if known
 
     Returns:
-        String with all ${VAR} references expanded; unknown vars expand to "".
+        String with all ${VAR} references fully expanded.
+
+    Raises:
+        ValueError: If a ``${`` is unterminated (no closing ``}``), if a
+            referenced variable is not defined in the env block, or if the
+            expansion does not terminate within ``_MAX_EXPANSION_PASSES``
+            (a self-referential or mutually-recursive cycle).
     """
+    where = f" (env key '{key}')" if key else ""
+    passes = 0
     while "${" in value:
+        passes += 1
+        if passes > _MAX_EXPANSION_PASSES:
+            raise ValueError(
+                f"${{VAR}} expansion did not terminate after "
+                f"{_MAX_EXPANSION_PASSES} passes{where}; this indicates a "
+                f"self-referential or mutually-recursive reference. Last value: "
+                f"{value!r}. Remove the cycle in the config env: block."
+            )
         start = value.index("${")
-        end = value.index("}", start)
+        end = value.find("}", start)
+        if end == -1:
+            raise ValueError(
+                f"Unterminated '${{' in config value{where}: {value!r}. "
+                f"Every ${{VAR}} must have a closing '}}'."
+            )
         var_name = value[start + 2 : end]
-        var_value = env.get(var_name, "")
+        if var_name not in env:
+            available = ", ".join(sorted(env)) or "(none)"
+            raise ValueError(
+                f"Unknown variable '${{{var_name}}}' referenced in config "
+                f"value{where}: {value!r}. Available env keys: {available}. "
+                f"Check for a typo, or define '{var_name}' in the env: block."
+            )
+        var_value = env[var_name]
         value = value[:start] + var_value + value[end + 1 :]
     return value
 
@@ -322,7 +358,7 @@ def load(
         env = {str(k): str(v) for k, v in env.items()}
 
     # ${VAR} expansion using ONLY the env block (no os.environ)
-    merged = {k: _expand_within(v, env) for k, v in env.items()}
+    merged = {k: _expand_within(v, env, key=k) for k, v in env.items()}
 
     # INSTRUMENT_PACKAGE is removed: the profile is loaded BY PATH from
     # INSTRUMENT_DIR. A lingering INSTRUMENT_PACKAGE in the env block is a stale
