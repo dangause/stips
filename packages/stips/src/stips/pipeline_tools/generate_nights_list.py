@@ -206,7 +206,7 @@ Examples:
 
         print("\nNext steps:")
         print(f"  1. Review: cat {args.output}")
-        print(f"  2. Process: nickel run <config.yaml> with nights from {args.output}")
+        print(f"  2. Process: stips run <config.yaml> with nights from {args.output}")
 
     except ValueError as e:
         print(f"ERROR: {e}", file=sys.stderr)

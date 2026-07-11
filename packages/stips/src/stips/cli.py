@@ -1511,7 +1511,11 @@ def bps(ctx: click.Context) -> None:
 @click.option("-t", "--template", help="Template collection for DIA")
 @click.option("--object", "object_filter", help="Filter by OBJECT header")
 @click.option("--coords", help="Coordinate collection for forced photometry")
-@click.option("--project", default="nickel", help="HPC project/account")
+@click.option(
+    "--project",
+    default=None,
+    help="HPC project/account (default: the active instrument profile's name)",
+)
 @click.option("--dry-run", is_flag=True, help="Show what would be submitted")
 @click.pass_context
 def bps_submit(
@@ -1523,7 +1527,7 @@ def bps_submit(
     template: str | None,
     object_filter: str | None,
     coords: str | None,
-    project: str,
+    project: str | None,
     dry_run: bool,
 ) -> None:
     """Submit a pipeline to BPS for parallel execution.

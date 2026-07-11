@@ -107,7 +107,8 @@ def query_catalog(
     band: str | None = None,
     limit: int = 200,
     offset: int = 0,
-    instrument_name: str = "Nickel",
+    *,
+    instrument_name: str,
 ) -> dict:
     """Query a Butler catalog and return rows as JSON.
 
@@ -230,7 +231,7 @@ def _build_catalog_script(
     band: str | None,
     limit: int,
     offset: int,
-    instrument_name: str = "Nickel",
+    instrument_name: str,
 ) -> str:
     """Build Python script to query a source catalog."""
     cols = json.dumps(CATALOG_TYPES[catalog_type]["columns"])

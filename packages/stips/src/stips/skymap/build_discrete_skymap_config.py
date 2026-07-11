@@ -22,6 +22,7 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 from statistics import median
 
@@ -112,8 +113,11 @@ def main():
     )
     ap.add_argument(
         "--skymap-id",
-        default="nickel_discrete",
-        help="Skymap identifier (coadd name) to write into config",
+        default=None,
+        help=(
+            "Skymap identifier (coadd name) to write into config "
+            "(default: the active instrument profile's skymap_name)"
+        ),
     )
     ap.add_argument(
         "--border-deg",
@@ -131,6 +135,22 @@ def main():
         "--out", required=True, help="Output config file path (pex_config python)"
     )
     args = ap.parse_args()
+
+    # Resolve the skymap id from the active profile when not given, rather than
+    # silently defaulting to a Nickel name (F-043). Fail loud when neither the
+    # flag nor a loadable profile is available.
+    skymap_id = args.skymap_id
+    if not skymap_id:
+        try:
+            from stips.core.config import load_active_profile
+
+            skymap_id = load_active_profile().skymap_name
+        except Exception as exc:  # noqa: BLE001 - surface any load failure
+            sys.exit(
+                f"instrument profile not loaded ({exc}); pass --skymap-id, or "
+                "set INSTRUMENT_DIR to instruments/<name>/ (containing "
+                "profile.py) in your config env: block."
+            )
 
     butler = Butler(args.repo, writeable=False)
 
@@ -171,7 +191,7 @@ def main():
 
     lines = []
     lines.append("# Auto-generated Discrete SkyMap config")
-    lines.append(f'config.name = "{args.skymap_id}"')
+    lines.append(f'config.name = "{skymap_id}"')
     lines.append('config.skyMap.name = "discrete"')
     lines.append('d = config.skyMap["discrete"]')
     lines.append(f"d.raList     = [{ra_deg:.6f}]     # deg")
@@ -186,7 +206,7 @@ def main():
 
     print(f"[ok] wrote config: {out}")
     print(
-        f"[info] name={args.skymap_id}  center=({ra_deg:.6f},{dec_deg:.6f}) deg  radius={radius_deg:.6f} deg"
+        f"[info] name={skymap_id}  center=({ra_deg:.6f},{dec_deg:.6f}) deg  radius={radius_deg:.6f} deg"
     )
     print(f"[hint] register with:\n  butler register-skymap {args.repo} -C {out}")
 

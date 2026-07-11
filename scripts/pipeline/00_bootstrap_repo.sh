@@ -182,11 +182,12 @@ log_section "SkyMap Registration"
 # SKYMAP_CFG (geometry), SKYMAP_NAME, and SKYMAP_COLLECTION are exported by
 # core/stack.py from the active profile, with SKYMAP_CFG resolved instrument-dir
 # first (a fork's own configs/makeSkyMap.py shadows the framework geometry under
-# obs_stips/instrument_defaults/). The fallbacks below cover a direct invocation
-# without those exports (Nickel reference values).
+# obs_stips/instrument_defaults/). SKYMAP_NAME/SKYMAP_COLLECTION MUST come from
+# the profile: rather than silently assuming Nickel values (F-043), fail loud if
+# they are unset (INSTRUMENT_DIR unset or the profile failed to load).
 SKYMAP_CFG="${SKYMAP_CFG:-${STIPS_DEFAULTS:-$REPO_ROOT/packages/obs_stips/instrument_defaults}/configs/makeSkyMap.py}"
-SKYMAP_NAME="${SKYMAP_NAME:-nickelRings-v1}"
-SKYMAP_COLLECTION="${SKYMAP_COLLECTION:-skymaps/nickelRings}"
+: "${SKYMAP_NAME:?SKYMAP_NAME not exported — is INSTRUMENT_DIR set and the instrument profile loaded? Set it in your config env: block.}"
+: "${SKYMAP_COLLECTION:?SKYMAP_COLLECTION not exported — is INSTRUMENT_DIR set and the instrument profile loaded? Set it in your config env: block.}"
 log_info "Registering SkyMap '${SKYMAP_NAME}' (config: ${SKYMAP_CFG})"
 SKYMAP_LOG="${LOG_DIR}/register_skymap_${TS}.log"
 if ! butler register-skymap "$REPO" -C "$SKYMAP_CFG" -c "name=${SKYMAP_NAME}" > "$SKYMAP_LOG" 2>&1; then

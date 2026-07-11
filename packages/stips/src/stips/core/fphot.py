@@ -136,7 +136,7 @@ def run(
         return ForcedPhotResult(
             success=False,
             night=night,
-            error=f"No processCcd collection found for {night}. Run 'nickel science' first.",
+            error=f"No processCcd collection found for {night}. Run 'stips science' first.",
         )
 
     log.info(f"Using processCcd collection: {processccd_coll}")
