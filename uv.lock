@@ -10,9 +10,7 @@ resolution-markers = [
 members = [
     "lick-searchable-archive",
     "obs-nickel-colorterms",
-    "obs-nickel-data",
     "obs-nickel-defects",
-    "obs-nickel-testdata",
     "obs-nickel-tuning",
     "obs-stips",
     "stips",
@@ -1971,11 +1969,6 @@ version = "0.1.0"
 source = { editable = "packages/colorterms" }
 
 [[package]]
-name = "obs-nickel-data"
-version = "0.1.0"
-source = { editable = "packages/obs_nickel_data" }
-
-[[package]]
 name = "obs-nickel-defects"
 version = "0.1.0"
 source = { editable = "packages/defects" }
@@ -1993,11 +1986,6 @@ requires-dist = [
     { name = "pandas" },
     { name = "scipy" },
 ]
-
-[[package]]
-name = "obs-nickel-testdata"
-version = "0.1.0"
-source = { editable = "packages/testdata" }
 
 [[package]]
 name = "obs-nickel-tuning"
