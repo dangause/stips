@@ -415,6 +415,11 @@ stips -c $CFG run
 
 ## 9. Verifying & common gotchas
 
+**Free contract coverage.** Ship `tests/contract_data.py` in your instrument
+dir and the framework's auto-discovered contract suite tests your profile,
+exposure-id scheme, translation, and fetch hook with no test code to write —
+see `docs/instrument-contract.md`.
+
 **Translation parity — test first.** Before running pipelines, point
 `astro_metadata_translator` at a real raw FITS header from your telescope and
 confirm the translator resolves `physical_filter`, `observation_type`,
