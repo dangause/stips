@@ -1,34 +1,66 @@
-# obs-nickel-tuning
+# Nickel calibrateImage tuning — recipe
 
-**Calibration parameter optimization tools for the Nickel telescope.**
+The calibrateImage tuning **harness** is now framework code:
+`stips-tune-calibrate-image` (`stips.pipeline_tools.tune_calibrate_image`). It is
+instrument-neutral and parameterized by the active instrument profile. This
+directory keeps only the Nickel-specific **recipe** — the exact invocation and
+the Nickel search space (`tune.yaml`) that produced the curated tuned configs.
 
-This package contains tools for automatically tuning LSST pipeline configuration parameters
-to optimize performance for Nickel telescope data.
+The tuned **outputs** (the winning `calibrateImage` overrides) live under
+`instruments/nickel/configs/calibrateImage/tuned_configs/` (`dense_strict.py`,
+`2023ixf_relaxed.py`, `best_calib_t071.py`, …), **not** here.
 
-## Contents
+## What the tool does
 
-- `calibrate_pipe_tuner/` - Automated tuning framework for CalibrateImage task
-- `tune.yaml` - Tuning parameter space definitions
-- `tune_calibrate_7.py` - Example tuning script
-- `run_calibrate_tuner.py` - Runner script
+An Optuna search samples `calibrateImage` config parameters from `tune.yaml`,
+runs `pipetask run` on each science visit, reads `visitSummary` metric medians,
+combines them into a single score (min-direction `weight·value/target`,
+max-direction `weight·target/value`) with a failure penalty, and records every
+trial. See the module docstring for the full algorithm.
 
-## Usage
+`tune.yaml` (kept here) is the Nickel-specific input: the parameter search space
+(PSF detection/selection, astrometry matcher, aperture-correction and
+calibration-flux S/N knobs), the metric targets (`psfSigma`, `astromOffset*`,
+`skyNoise`, `magLim`), and the static `overrides_prelude` injected into every
+trial.
 
-These tools are used during pipeline development to optimize configuration parameters
-found in `packages/obs_stips/instrument_defaults/configs/calibrateImage/tuned_configs/`.
+## Nickel recipe
 
-**Note**: This package is NOT required for running the standard Nickel pipelines.
-It's only needed if you're re-tuning the calibration parameters.
-
-## Installation
+Process a set of Nickel science visits first (`stips science`), so postISR +
+calib inputs exist. Then run the tuner inside the LSST stack env (with
+`INSTRUMENT_DIR` pointing at `instruments/nickel`):
 
 ```bash
-pip install -e instruments/nickel/tuning
+stips-tune-calibrate-image \
+  --repo "$REPO" \
+  --pipeline-dir <dir containing pipelines/ProcessCcd.yaml> \
+  --workdir ./tuning_out \
+  --config instruments/nickel/tuning/tune.yaml \
+  --trials 60 \
+  --jobs 6
 ```
 
-## LSST Separation
+The instrument name (`Nickel`) and collection prefix used for default
+input/output collections come from the active profile; override with
+`--instrument` / `--collection-prefix`. postISR and calib-chain collections are
+auto-discovered (`--inputs-postisr` / `--calib-chain` to override). Each trial's
+overrides file is written under `./tuning_out/trials/tNNN/`; the best trial is
+printed as JSON at the end.
 
-This package is intentionally separated from the core `obs-nickel` package because:
-- Tuning tools are development utilities, not runtime requirements
-- They should not be included in LSST upstream submissions
-- The tuned *results* (config files) live in `obs-nickel/configs/`, not the tuning tools themselves
+Copy the winning overrides file to
+`instruments/nickel/configs/calibrateImage/tuned_configs/<name>.py`, prune the
+auto-generated header, and commit it (e.g. `best_calib_t071.py` was trial 71).
+
+## Producing tuned configs for a NEW instrument
+
+The tool is reused unchanged — only `tune.yaml`, the tuned outputs, and this
+recipe are per-instrument:
+
+1. Process science visits for your instrument (`stips science`).
+2. Write a `tune.yaml` for your camera's `calibrateImage` knobs and metric
+   targets (start from this one).
+3. Run `stips-tune-calibrate-image --repo $REPO --pipeline-dir <dir> --workdir
+   <out> --config tune.yaml --trials N`.
+4. Commit the best trial's overrides under
+   `instruments/<name>/configs/calibrateImage/tuned_configs/` and record the
+   invocation in `instruments/<name>/tuning/README.md`.

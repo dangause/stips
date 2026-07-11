@@ -69,7 +69,11 @@ files enable color terms **only when the resolved library is non-empty**:
 **A new fork's #1 review item is photometric calibration.** Fit your own color
 terms and drop `colorterms.py` (and, if you use the Gaia+PS1 refcat path, a
 `refcats_gaia_ps1.py`) into `instruments/<name>/configs/`. Until you do, your
-photometry has no color correction.
+photometry has no color correction. Two framework tools produce these fitted
+files: `stips-colorterms-fit` fits `colorterms.py` from matched standard-star
+photometry, and `stips-tune-calibrate-image` searches `calibrateImage`
+parameters to produce `calibrateImage/tuned_configs/*` (recipes under
+`instruments/nickel/{colorterms,tuning}/README.md`).
 
 ## How overrides resolve (quick reference)
 

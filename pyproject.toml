@@ -39,8 +39,6 @@ src = [
     "instruments/nickel",
     "packages/refcats",
     "instruments/nickel/testdata",
-    "instruments/nickel/tuning",
-    "instruments/nickel/colorterms",
     "packages/stips",
     "packages/obs_stips",
     "scripts",
@@ -97,8 +95,6 @@ testpaths = [
     "packages/obs_stips/tests",
     "packages/refcats/tests",
     # "instruments/nickel/defects/tests",
-    # "instruments/nickel/colorterms/tests",
-    # "instruments/nickel/tuning/tests",
 ]
 # Exclude vendor packages and upstream directories from test discovery
 norecursedirs = [
@@ -128,8 +124,6 @@ include = [
     "instruments/nickel/defects",
     "packages/refcats",
     "instruments/nickel/testdata",
-    "instruments/nickel/tuning",
-    "instruments/nickel/colorterms",
     "scripts",
 ]
 exclude = [
