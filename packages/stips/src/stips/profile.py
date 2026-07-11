@@ -173,3 +173,31 @@ def hook(profile: InstrumentProfile, name: Optional[str] = None) -> Callable:
         return fn
 
     return deco
+
+
+# Epoch for the reference 31-bit-safe exposure-id scheme (days since 2000-01-01).
+EXPOSURE_ID_EPOCH = "2000-01-01T00:00:00"
+
+
+def make_exposure_id(end_time: Any, seqnum: int) -> int:
+    """Pack an end-of-exposure time + sequence number into a 31-bit exposure id.
+
+    ``id = days_since_2000 * 10000 + seqnum`` where ``days_since_2000`` is the
+    integer number of whole days between :data:`EXPOSURE_ID_EPOCH` and
+    ``end_time`` (an ``astropy.time.Time``). A full ``YYYYMMDD`` date * 10000
+    overflows 31 bits, so the days-since-2000 term keeps the id within the signed
+    31-bit range required by the LSST ``exposure``/``visit`` dimensions.
+
+    Instrument profiles that want the reference scheme call this from their
+    ``exposure_id`` hook; only the ``seqnum`` source differs per instrument (e.g.
+    Nickel reads ``OBSNUM``, CTIO parses the frame filename). Raises
+    ``ValueError`` if the result does not fit in 31 bits.
+    """
+    import astropy.time
+
+    epoch0 = astropy.time.Time(EXPOSURE_ID_EPOCH, scale="utc")
+    days = int((end_time - epoch0).to_value("day"))
+    exposure_id = days * 10000 + int(seqnum)
+    if exposure_id >= 2**31:
+        raise ValueError(f"exposure_id {exposure_id} is out of 31-bit range")
+    return exposure_id
