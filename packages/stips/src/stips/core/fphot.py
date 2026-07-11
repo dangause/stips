@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from stips.core import butler_query
+from stips.core import butler_query, dataset_types
 from stips.core.pipeline import (
     REFCATS_CHAIN,
     generate_run_timestamp,
@@ -47,7 +47,7 @@ def _collection_has_difference_images(
         query += f" AND band='{band}'"
 
     return butler_query.has_datasets(
-        config, "difference_image", collection, where=query
+        config, dataset_types.DIFFERENCE_IMAGE, collection, where=query
     )
 
 

@@ -1106,9 +1106,11 @@ def _run_lightcurve_step(
     dry_run: bool,
 ) -> None:
     """Extract lightcurve from forced photometry or DIA sources."""
-    from stips.core import lightcurve
+    from stips.core import dataset_types, lightcurve
 
-    use_forced_phot = run_cfg.lc_config.dataset_type.startswith("forced_phot")
+    use_forced_phot = run_cfg.lc_config.dataset_type.startswith(
+        dataset_types.FORCED_PHOT_PREFIX
+    )
 
     if use_forced_phot:
         collections_list = _discover_fphot_collections(
