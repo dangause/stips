@@ -89,7 +89,8 @@ class BPSConfig:
         object_filter: Optional object name filter
         coord_collection: Coordinate collection for forced photometry
         operator: Username for output collections
-        project: Project/account for HPC allocation
+        project: Project/account for HPC allocation (None → the active
+            profile's name, lowercased)
         dry_run: If True, show what would be submitted without running
         extra_args: Additional arguments to pass to bps submit
     """
@@ -102,7 +103,9 @@ class BPSConfig:
     object_filter: str | None = None
     coord_collection: str | None = None
     operator: str = field(default_factory=lambda: os.environ.get("USER", "stips"))
-    project: str = "nickel"
+    # HPC allocation account. None → resolved from the active profile's
+    # ``name.lower()`` at render time (F-021), rather than hardcoding "nickel".
+    project: str | None = None
     dry_run: bool = False
     extra_args: list[str] = field(default_factory=list)
 
@@ -212,6 +215,11 @@ def render_bps_config(
     timestamp = generate_timestamp()
     prof = config.require_profile()
 
+    # Resolve the HPC project account and BPS payload prefix from the active
+    # profile rather than hardcoding "nickel" (F-021).
+    project = bps_cfg.project or prof.name.lower()
+    payload_prefix = prof.name.lower()
+
     # Load template config
     template_path = find_bps_config(bps_cfg.pipeline, config)
     template_content = template_path.read_text()
@@ -242,7 +250,8 @@ def render_bps_config(
         "refcat_repo": str(config.refcat_repo) if config.refcat_repo else "",
         "computeSite": bps_cfg.site,
         "operator": bps_cfg.operator,
-        "project": bps_cfg.project,
+        "project": project,
+        "payload_prefix": payload_prefix,
         "band": bps_cfg.band or "r",
         "template_collection": bps_cfg.template_collection
         or f"templates/ps1/{bps_cfg.band or 'r'}",

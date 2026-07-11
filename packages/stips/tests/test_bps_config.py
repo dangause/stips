@@ -251,6 +251,61 @@ class TestFullBPSLifecycle:
         assert quanta_report.parse_summary_file(summary_file) == (3, 0)
 
 
+class TestBPSProjectDefault:
+    """F-021: project/payload prefix default from the profile, not "nickel"."""
+
+    def test_project_defaults_to_none(self):
+        """BPSConfig.project defaults to None (resolved from profile at render)."""
+        from stips.core.bps import BPSConfig
+
+        cfg = BPSConfig(pipeline="fphot", night="20230519")
+        assert cfg.project is None
+
+    def _make_mock_config(self, tmp_path, *, instrument_name):
+        from types import SimpleNamespace
+
+        mock_config = MagicMock()
+        # find_bps_config(): instrument_dir.parent.parent / "bps" / "pipelines"
+        mock_config.instrument_dir = REPO_ROOT / "instruments" / "nickel"
+        mock_config.repo = tmp_path / "repo"
+        mock_config.stack_dir = Path("/fake/stack")
+        mock_config.cp_pipe_dir = Path("/fake/cp_pipe")
+        mock_config.raw_parent_dir = Path("/fake/raw")
+        mock_config.refcat_repo = Path("/fake/refcats")
+        mock_config.require_profile.return_value = SimpleNamespace(
+            name=instrument_name, obs_data_package=""
+        )
+        return mock_config
+
+    def test_payload_prefix_defaults_from_profile_name(self, tmp_path):
+        """payloadName uses the profile's lowercased name, not a "nickel" literal."""
+        from stips.core.bps import BPSConfig, render_bps_config
+
+        config = self._make_mock_config(tmp_path, instrument_name="CTIO1m")
+        bps_cfg = BPSConfig(
+            pipeline="fphot", night="20230519", site="local", project=None
+        )
+        rendered = render_bps_config(bps_cfg, config, tmp_path / "submit").read_text()
+
+        assert "ctio1m-fphot-20230519" in rendered
+        assert "nickel-fphot" not in rendered
+        assert "{payload_prefix}" not in rendered
+
+    def test_explicit_project_overrides_default(self, tmp_path):
+        """An explicit --project value is honored (payload prefix still profile)."""
+        from stips.core.bps import BPSConfig, render_bps_config
+
+        config = self._make_mock_config(tmp_path, instrument_name="CTIO1m")
+        bps_cfg = BPSConfig(
+            pipeline="fphot", night="20230519", site="local", project="myalloc"
+        )
+        rendered = render_bps_config(bps_cfg, config, tmp_path / "submit").read_text()
+
+        # Payload prefix comes from the profile; the HPC project account is the
+        # explicit override.
+        assert "ctio1m-fphot-20230519" in rendered
+
+
 class TestDockerSlurmSiteConfig:
     def test_docker_slurm_yaml_exists(self):
         """docker-slurm.yaml site config must exist."""
