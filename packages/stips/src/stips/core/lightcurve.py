@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from stips.core import dataset_types
 from stips.core.stack import run_with_stack
 
 if TYPE_CHECKING:
@@ -19,7 +20,7 @@ class LightcurveConfig:
     enabled: bool = True
 
     # Data selection
-    dataset_type: str = "dia_source_unfiltered"
+    dataset_type: str = dataset_types.DIA_SOURCE_UNFILTERED
     min_snr: float = 3.0
     max_mag_err: float | None = None
     radius: float = 1.0
@@ -75,7 +76,10 @@ class LightcurveConfig:
             enabled=lc.get("enabled", opts.get("lightcurve", True)),
             dataset_type=lc.get(
                 "dataset_type",
-                opts.get("lightcurve_dataset_type", "dia_source_unfiltered"),
+                opts.get(
+                    "lightcurve_dataset_type",
+                    dataset_types.DIA_SOURCE_UNFILTERED,
+                ),
             ),
             min_snr=float(lc.get("min_snr", opts.get("lightcurve_min_snr", 3.0))),
             max_mag_err=(
@@ -123,7 +127,7 @@ def run(
     name: str | None = None,
     output: Path | None = None,
     plot: bool = True,
-    dataset_type: str = "dia_source_unfiltered",
+    dataset_type: str = dataset_types.DIA_SOURCE_UNFILTERED,
     log_file: Path | None = None,
     lc_config: LightcurveConfig | None = None,
 ) -> LightcurveResult:
@@ -193,7 +197,7 @@ def run(
     if name:
         args.extend(["--name", name])
 
-    if dataset_type != "dia_source_unfiltered":
+    if dataset_type != dataset_types.DIA_SOURCE_UNFILTERED:
         args.extend(["--dataset-type", dataset_type])
 
     # Display configuration (new lightcurve config options)

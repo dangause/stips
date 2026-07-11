@@ -7,7 +7,11 @@ This guide walks you through setting up the Small Telescope Image Processing Sui
 Before you begin, ensure you have:
 
 1. **Python 3.12+** installed
-2. **LSST Science Pipelines** (v30.0.3 or later) installed
+2. **LSST Science Pipelines** — supported release **`v30_0_3`** (the version the
+   Docker images build on and the docs are validated against). CI additionally
+   pins the weekly **`w_2025_32`**; newer weeklies usually work but are validated
+   only by the scheduled `w_latest` canary. Before upgrading the stack, follow
+   the [stack-bump runbook](stack-bump-runbook.md).
 3. **UV package manager** installed:
    ```bash
    pip install uv

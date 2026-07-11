@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from stips.core import butler_query
+from stips.core import butler_query, dataset_types
 from stips.core.pipeline import (
     REFCATS_CHAIN,
     generate_run_timestamp,
@@ -109,7 +109,7 @@ def check_template_exists(
 
     try:
         if butler_query.has_datasets(
-            config, "template_coadd", collection, where=f"band='{band}'"
+            config, dataset_types.TEMPLATE_COADD, collection, where=f"band='{band}'"
         ):
             return collection
     except Exception as e:
@@ -144,7 +144,7 @@ def find_science_collections_for_nights(
                 config,
                 night,
                 verify_datasets=True,
-                dataset_type="preliminary_visit_image",
+                dataset_type=dataset_types.PRELIMINARY_VISIT_IMAGE,
                 where=f"band='{band}'",
             )
             if resolved:
@@ -493,7 +493,7 @@ def run(
         # touching the existing template. On failure, leave the old template in
         # place and report the build as failed.
         if not butler_query.has_datasets(
-            config, "template_coadd", template_run, where=f"band='{band}'"
+            config, dataset_types.TEMPLATE_COADD, template_run, where=f"band='{band}'"
         ):
             return CoaddResult(
                 success=False,

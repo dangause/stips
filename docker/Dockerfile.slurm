@@ -69,9 +69,25 @@ RUN source /opt/lsst/software/stack/loadLSST.bash && \
     pip install --no-deps -e packages/obs_stips && \
     chmod +x /opt/stips/packages/obs_stips/instrument_defaults/pipelines/*.yaml 2>/dev/null || true
 
-# Add LSST conda env to default PATH so Parsl's process_worker_pool.py
-# is available when Slurm jobs start on compute nodes
-ENV PATH=/opt/lsst/software/stack/conda/envs/lsst-scipipe-12.1.0/bin:$PATH
+# Add the LSST conda env to the default PATH so Parsl's process_worker_pool.py
+# is available when Slurm jobs start on compute nodes (Slurm launches job steps
+# with non-login shells that never source loadLSST).
+#
+# The env is named lsst-scipipe-<rubin-env-version> (e.g. lsst-scipipe-12.1.0),
+# and that version number changes on every stack bump — hardcoding it guarantees
+# a silent break. Resolve the single matching env at build time and expose it
+# through a version-independent `current` symlink instead. See F-025 /
+# docs/stack-bump-runbook.md.
+RUN set -eu; \
+    matches="$(ls -d /opt/lsst/software/stack/conda/envs/lsst-scipipe-*/ 2>/dev/null || true)"; \
+    n="$(printf '%s\n' "$matches" | grep -c . || true)"; \
+    if [ "$n" -ne 1 ]; then \
+        echo "ERROR: expected exactly one lsst-scipipe conda env, found $n:" >&2; \
+        printf '%s\n' "$matches" >&2; \
+        exit 1; \
+    fi; \
+    ln -sfn "${matches%/}" /opt/lsst/software/stack/conda/envs/current
+ENV PATH=/opt/lsst/software/stack/conda/envs/current/bin:$PATH
 
 # =============================================================================
 # Systemd setup (for compute nodes — slurmd requires cgroup v2 scopes via systemd)

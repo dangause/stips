@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from stips.core import butler_query, quanta_report
+from stips.core import butler_query, dataset_types, quanta_report
 from stips.core.pipeline import (
     REFCATS_CHAIN,
     CollectionNames,
@@ -401,13 +401,16 @@ def run(
         where = f"instrument='{prof.name}' AND {day_obs_expr}"
         diff_count = (
             butler_query.count_datasets(
-                config, "difference_image", cols.diff_run, where=where
+                config, dataset_types.DIFFERENCE_IMAGE, cols.diff_run, where=where
             )
             or 0
         )
         src_count = (
             butler_query.count_datasets(
-                config, "dia_source_unfiltered", cols.diff_run, where=where
+                config,
+                dataset_types.DIA_SOURCE_UNFILTERED,
+                cols.diff_run,
+                where=where,
             )
             or 0
         )
