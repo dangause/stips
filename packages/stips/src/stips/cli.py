@@ -1776,12 +1776,27 @@ def provenance():
     help="stips repo root for git-sha lookup (default: inferred).",
 )
 @click.option("--dry-run", is_flag=True, help="Report without writing.")
-def provenance_sync(roots, out_dir, repo_root, dry_run):
+@click.pass_context
+def provenance_sync(ctx, roots, out_dir, repo_root, dry_run):
     from stips.core import provenance as prov
 
     repo_root = repo_root or Path(__file__).resolve().parents[4]
     out_dir = out_dir or (repo_root / "provenance")
-    roots = list(roots) or prov.default_roots()
+    # Fall back to config-derived roots when no --roots given: best-effort load
+    # of the group-level -c/--config (optional here) so default_roots can use
+    # config.repo.parent. STIPS_DATA_ROOTS still takes precedence inside it.
+    config = None
+    if not roots and ctx.obj.get("config_path"):
+        try:
+            config = cfg_module.load(ctx.obj["config_path"])
+        except ValueError:
+            config = None
+    roots = list(roots) or prov.default_roots(config)
+    if not roots:
+        click.echo(
+            "No data roots to scan. Set STIPS_DATA_ROOTS, pass --roots, or "
+            "provide -c <config.yaml> so the repo's parent dir can be used."
+        )
     summary = prov.sync(
         roots=roots, out_dir=out_dir, repo_root=repo_root, dry_run=dry_run
     )

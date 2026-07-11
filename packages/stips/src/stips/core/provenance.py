@@ -8,6 +8,7 @@ Renderers are pluggable; RUNS.md is one view of runs.json.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import subprocess
@@ -40,6 +41,12 @@ class RunRecord:
     stips_git_describe: str | None = None
     lsst_stack_version: str | None = None
     lsst_stack_version_source: str | None = None  # "repo-scan" | "env"
+    # Actual LSST *pipelines* (EUPS package) version, e.g. "gf03f954c0e+3d14ea8aaf",
+    # captured live from lsst.daf.butler in the activated stack. Distinct from
+    # lsst_stack_version above, which records the rubin-env/conda env name
+    # (lsst-scipipe-*) — a runtime identifier two releases can share. New in F-019;
+    # absent (None) on records written before this field existed.
+    lsst_pipelines_version: str | None = None
     rerun_recipe: str | None = None
     repo_size_bytes: int | None = None
     repo_status: str = "present"  # present | deleted
@@ -69,19 +76,40 @@ def _target_from_repo(repo_name: str) -> str:
 
 
 def _instrument_from_path(repo: Path) -> str:
+    """Best-effort instrument guess from the repo path.
+
+    A last-resort fallback for contexts with no loaded profile (e.g. scanning
+    historical log dirs via ``sync``). Prefer the active profile's name when a
+    ``Config`` is available (see ``instrument_from_config``). Returns the
+    explicit sentinel ``"unknown"`` rather than assuming any one instrument, so a
+    fork's runs are never mislabelled as the reference profile.
+    """
     parts = {p.lower() for p in repo.parts}
     if "data_ctio" in parts or "ctio1m" in parts:
         return "ctio1m"
-    return "nickel"
+    return "unknown"
 
 
-def record_from_log_file(log_path: Path, repo: Path) -> RunRecord:
+def instrument_from_config(config) -> str | None:
+    """Instrument name from the active profile (lowercased), or None.
+
+    The authoritative source when a ``Config`` is in hand: it reflects the
+    profile actually selected via ``INSTRUMENT_DIR``, not a path heuristic.
+    """
+    profile = getattr(config, "profile", None)
+    name = getattr(profile, "name", None)
+    return name.lower() if isinstance(name, str) and name else None
+
+
+def record_from_log_file(
+    log_path: Path, repo: Path, instrument: str | None = None
+) -> RunRecord:
     data = json.loads(log_path.read_text())
     return RunRecord(
         repo=repo.name,
         repo_path=str(repo),
         target=_target_from_repo(repo.name),
-        instrument=_instrument_from_path(repo),
+        instrument=instrument or _instrument_from_path(repo),
         night=data["night"],
         step=data["step"],
         final_status=data.get("final_status", "unknown"),
@@ -265,7 +293,10 @@ def render_markdown(records: list[RunRecord]) -> str:
                 if r.duration_s
                 else "—"
             )
-            env_cell = f"{r.lsst_stack_version or '?'} / {r.stips_git_describe or r.stips_git_sha or '?'}"
+            # Prefer the true pipelines version; fall back to the conda env name
+            # for older records that predate lsst_pipelines_version.
+            stack_ver = r.lsst_pipelines_version or r.lsst_stack_version or "?"
+            env_cell = f"{stack_ver} / {r.stips_git_describe or r.stips_git_sha or '?'}"
             lines.append(
                 f"| {r.repo} | {r.night} | {r.step} | {r.final_status} | "
                 f"{r.successful_exposures} | {dur} | {_human_gb(r.repo_size_bytes)} | "
@@ -340,7 +371,17 @@ def sync(
             incoming.append(rec)
 
     store = out_dir / "runs.json"
-    merged = upsert_records(load_store(store), incoming)
+    existing = load_store(store)
+    # A historical repo scan cannot know the pipelines version a past run used
+    # (the live stack may have moved on), so `sync` never sets it. Preserve any
+    # value a prior live `upsert_from_log` recorded, rather than clobbering it.
+    prior_pipelines = {
+        r.key(): r.lsst_pipelines_version for r in existing if r.lsst_pipelines_version
+    }
+    for rec in incoming:
+        if rec.lsst_pipelines_version is None:
+            rec.lsst_pipelines_version = prior_pipelines.get(rec.key())
+    merged = upsert_records(existing, incoming)
     if not dry_run:
         save_store(store, merged)
         (out_dir / "RUNS.md").write_text(render_markdown(merged))
@@ -367,24 +408,41 @@ def mark_deleted(repos: list[str], out_dir: Path, reclaimed_at: str) -> int:
     return n
 
 
-def default_roots() -> list[Path]:
-    import os
+def default_roots(config=None) -> list[Path]:
+    """Data roots to scan for per-repo ``processing_log`` dirs.
 
+    Precedence, no developer-specific defaults:
+      1. ``STIPS_DATA_ROOTS`` env var (``os.pathsep``-separated absolute paths);
+      2. the parent of the active Butler repo (``config.repo.parent``), when a
+         ``Config`` is supplied — repos live side-by-side under this dir;
+      3. otherwise log a WARNING and return an empty list (scan nothing).
+    """
     env = os.environ.get("STIPS_DATA_ROOTS")
     if env:
         return [Path(p) for p in env.split(os.pathsep) if p]
-    base = Path.home() / "Developer" / "lick"
-    return [base / "lsst" / "data" / "nickel", base / "data_ctio"]
+    repo = getattr(config, "repo", None)
+    if repo is not None:
+        return [Path(repo).expanduser().parent]
+    logging.getLogger(__name__).warning(
+        "no data roots to scan: set STIPS_DATA_ROOTS (os.pathsep-separated "
+        "absolute paths) or pass --roots; nothing will be scanned."
+    )
+    return []
 
 
 def upsert_from_log(plog, config) -> None:
     """Live hook: upsert a single just-finished run. Never raises."""
     try:
+        from stips.core.stack import stack_pipelines_version
+
         repo = Path(config.repo)
         repo_root = Path(__file__).resolve().parents[5]
         out_dir = repo_root / "provenance"
         log_path = repo / "processing_log" / f"{plog.night}_{plog.step}.json"
-        rec = record_from_log_file(log_path, repo)
+        # Instrument from the active profile (authoritative), not a path guess.
+        rec = record_from_log_file(
+            log_path, repo, instrument=instrument_from_config(config)
+        )
         rec.repo_size_bytes = repo_size_bytes(repo)
         rec.stips_git_sha = git_sha_before(repo_root, rec.timestamp_end)
         rec.stips_git_describe = git_describe(repo_root, rec.stips_git_sha)
@@ -393,6 +451,8 @@ def upsert_from_log(plog, config) -> None:
         rec.lsst_stack_version_source = (
             "env" if _env_ver else ("repo-scan" if rec.lsst_stack_version else None)
         )
+        # True pipelines version (live, in-stack) alongside the conda-env name.
+        rec.lsst_pipelines_version = stack_pipelines_version(config)
         rec.duration_s = duration_from_stamps(rec.started_at, rec.ended_at)
         cfg = rec.configs_tried[0]["config"] if rec.configs_tried else None
         rec.rerun_recipe = build_rerun_recipe(
@@ -402,7 +462,7 @@ def upsert_from_log(plog, config) -> None:
             cfg,
             rec.stips_git_sha,
             git_describe=rec.stips_git_describe,
-            lsst_version=rec.lsst_stack_version,
+            lsst_version=rec.lsst_pipelines_version or rec.lsst_stack_version,
         )
         save_store(
             out_dir / "runs.json",
