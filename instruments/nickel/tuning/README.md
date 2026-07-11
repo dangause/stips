@@ -23,7 +23,7 @@ It's only needed if you're re-tuning the calibration parameters.
 ## Installation
 
 ```bash
-pip install -e packages/tuning
+pip install -e instruments/nickel/tuning
 ```
 
 ## LSST Separation

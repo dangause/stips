@@ -112,7 +112,7 @@ format: ## Ruff format across the workspace
 
 .PHONY: test
 test: ## Run pytest suite (requires stack env)
-	$(SHELL) -lc '$(setup_stack) python -m pytest -q packages/stips/tests packages/obs_stips/tests instruments/nickel/tests'
+	$(SHELL) -lc '$(setup_stack) python -m pytest -q'
 
 .PHONY: notebook
 notebook: ## Start Jupyter Lab with LSST stack + UV venv active

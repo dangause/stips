@@ -22,7 +22,7 @@ def _config(data="obs_demo_data", instr="/tmp/pkgs/obs_demo"):
     prof.obs_data_package = data
     # Explicit override unset: a bare Mock would auto-create a truthy
     # package_dir attribute, so pin it to None to exercise the obs_data_package
-    # resolution path (co-located, then the reference packages/ layout).
+    # resolution path (co-located, then the framework packages/ fallback).
     prof.package_dir = None
     prof.name = "Demo"
     c.profile = prof

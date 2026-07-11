@@ -42,7 +42,6 @@ WORKDIR /opt/stips
 COPY packages/stips/ packages/stips/
 COPY packages/obs_stips/ packages/obs_stips/
 COPY instruments/nickel/ instruments/nickel/
-COPY packages/obs_nickel_data/ packages/obs_nickel_data/
 COPY scripts/ /opt/stips/scripts/
 COPY bps/ /opt/stips/bps/
 
@@ -66,7 +65,7 @@ RUN mkdir -p /data/repo /data/raw /data/refcats /data/outputs /config
 ENV STIPS_ROOT=/opt/stips
 ENV INSTRUMENT_DIR=/opt/stips/instruments/nickel
 ENV STIPS_DEFAULTS=/opt/stips/packages/obs_stips/instrument_defaults
-ENV OBS_NICKEL_DATA=/opt/stips/packages/obs_nickel_data
+ENV OBS_NICKEL_DATA=/opt/stips/instruments/nickel/obs_nickel_data
 ENV STACK_DIR=/opt/lsst/software/stack
 ENV REPO=/data/repo
 ENV RAW_PARENT_DIR=/data/raw

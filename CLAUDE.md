@@ -69,17 +69,18 @@ tuning); `ctio1m` ships a `configs/` dir with its ISR/camera tweaks.
 
 ```
 stips/
-├── packages/
+├── packages/                # Framework only
 │   ├── stips/                # stips CLI + pipeline tooling + framework-core (main dev focus)
 │   ├── obs_stips/            # Generic LSST glue (lsst.obs.stips) + instrument_defaults/ pipelines & configs
-│   ├── obs_nickel_data/      # Curated Nickel calibrations (defect maps) — a real EUPS data package
-│   ├── lick_searchable_archive/  # Lick archive client (Nickel raw-data fetch)
-│   ├── refcats/              # Reference-catalog tooling (Gaia DR3 / PS1 shard dump + ingest)
-│   ├── colorterms/           # Color-term fitting
-│   ├── defects/              # Defect-mask generation
-│   ├── testdata/ · tuning/   # Test fixtures; pipeline-tuning utilities
+│   └── refcats/              # Reference-catalog tooling (Gaia DR3 / PS1 shard dump + ingest)
 ├── instruments/             # Declarative instrument profiles (loaded via INSTRUMENT_DIR)
 │   ├── nickel/              # Reference profile (profile.py, camera/, fetch.py, tests/)
+│   │   ├── obs_nickel_data/ # Curated Nickel calibrations (defect maps) — a real EUPS data package
+│   │   ├── testdata/        # Test fixtures (testdata_nickel EUPS product)
+│   │   ├── defects/         # Defect-mask generation
+│   │   ├── colorterms/      # Color-term fitting
+│   │   ├── tuning/          # Pipeline-tuning utilities
+│   │   └── vendor/lick_searchable_archive/  # Vendored Lick archive (client used by fetch.py)
 │   └── ctio1m/              # CTIO 1.0m / Y4KCam (4-amp camera, configs/, tests/)
 ├── scripts/
 │   ├── config/             # Per-target YAML configs (2023ixf, 2020wnt, ctio1m, ...)
@@ -142,11 +143,12 @@ pipelines & configs). Instrument profiles build on top of this.
 - `CpBias.yaml` / `CpFlat.yaml` — Calibration builds.
 - `analysis-dia-lightcurve.yaml` — Lightcurve extraction.
 
-### packages/obs_nickel_data
+### instruments/nickel/obs_nickel_data
 
-A real EUPS data package (unaffected by the instrument collapse; set up by name
+A real EUPS data package (co-located under the instrument tree; set up by name
 via the stack activation). Ships curated Nickel defect maps under
-`Nickel/defects/`.
+`Nickel/defects/`. Resolved at runtime by `resolve_data_package_dir()` via the
+profile's `obs_data_package` field (co-located precedence).
 
 ## Configuration System
 

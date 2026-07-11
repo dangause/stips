@@ -77,7 +77,7 @@ site:
       _STIPS_BIND="{repo},{raw_parent_dir},{refcat_repo},{run_dir}"
       pipetask() {
           apptainer exec --bind "$_STIPS_BIND" "$_STIPS_IMAGE" \
-            bash -c 'source /opt/lsst/software/stack/loadLSST.bash && setup lsst_distrib && setup -r /opt/stips/packages/obs_stips obs_stips 2>/dev/null; setup -r /opt/stips/packages/obs_nickel_data obs_nickel_data 2>/dev/null; export PYTHONPATH=/opt/stips/packages/stips/src:${PYTHONPATH:-}; export INSTRUMENT_DIR=/opt/stips/instruments/nickel; export STIPS_DEFAULTS=/opt/stips/packages/obs_stips/instrument_defaults; export NUMEXPR_MAX_THREADS=1; command pipetask "$@"' _ "$@"
+            bash -c 'source /opt/lsst/software/stack/loadLSST.bash && setup lsst_distrib && setup -r /opt/stips/packages/obs_stips obs_stips 2>/dev/null; setup -r /opt/stips/instruments/nickel/obs_nickel_data obs_nickel_data 2>/dev/null; export PYTHONPATH=/opt/stips/packages/stips/src:${PYTHONPATH:-}; export INSTRUMENT_DIR=/opt/stips/instruments/nickel; export STIPS_DEFAULTS=/opt/stips/packages/obs_stips/instrument_defaults; export NUMEXPR_MAX_THREADS=1; command pipetask "$@"' _ "$@"
       }
 
     # Run directory for Parsl (must be on shared filesystem)
