@@ -16,9 +16,11 @@ the amp count, the amp ordering is preserved, and the calib round-trips through
 ECSV (the format ``butler write/certify`` uses).
 """
 
+import functools
 import os
 import tempfile
 import unittest
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -26,10 +28,17 @@ import pytest
 pytest.importorskip("lsst.utils.tests")
 
 import lsst.utils.tests  # noqa: E402
-from ctio1m_helpers import active_instrument_dir  # noqa: E402
 from stips.pipeline_tools.build_crosstalk_calib import (
     make_crosstalk_calib,
 )  # noqa: E402
+from stips.testing.instrument_contract import (  # noqa: E402
+    active_instrument_dir as _active_instrument_dir,
+)
+
+# instruments/ctio1m/tests/... -> parents[1] == instruments/ctio1m
+active_instrument_dir = functools.partial(
+    _active_instrument_dir, Path(__file__).resolve().parents[1]
+)
 
 
 def _y4kcam_detector(active):

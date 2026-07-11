@@ -1,28 +1,27 @@
-import importlib.util
+"""ctio1m-SPECIFIC fetch tests (NOIRLab Astro Data Archive backend).
+
+The generic ``fetch_data`` status contract (backend code -> ok/not_found/failed)
+is asserted by the shared auto-discovered suite
+(``packages/stips/tests/test_instrument_contracts.py``) using the fixtures in
+``contract_data.py``. What stays here is NOIRLab-specific: caldat conversion,
+find-night filtering, ``_funpack`` handling, and which ``NOIRLAB_*`` env keys
+map onto which ``_fetch_night`` kwargs. Stack-free (fetch.py is stdlib-only at
+import time).
+"""
+
 import unittest
 from pathlib import Path
 from unittest import mock
 
+from stips.testing.instrument_contract import (
+    FetchConfigStub,
+    InstrumentDirInfo,
+    load_fetch,
+)
 
-def _load_fetch():
-    """Load the CTIO fetch hook from instruments/ctio1m/fetch.py by path.
-
-    Stdlib-only at import time (urllib/json), so this stays stack-free.
-    """
-    fetch_py = Path(__file__).resolve().parents[1] / "fetch.py"
-    spec = importlib.util.spec_from_file_location("_ctio1m_fetch", fetch_py)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-fetch = _load_fetch()
-
-
-class _Cfg:
-    def __init__(self, env):
-        self.raw_parent_dir = Path("/tmp/raw")
-        self.env = env
+# instruments/ctio1m/tests/... -> parents[1] == instruments/ctio1m
+_INFO = InstrumentDirInfo(name="ctio1m", path=Path(__file__).resolve().parents[1])
+fetch = load_fetch(_INFO)
 
 
 class TestNightToCaldat(unittest.TestCase):
@@ -86,33 +85,22 @@ class TestFunpack(unittest.TestCase):
         self.assertFalse(fz.exists())  # stale .fz removed
 
 
-class TestFetchData(unittest.TestCase):
-    def _run(self, code, env=None):
-        cfg = _Cfg(env if env is not None else {})
-        with mock.patch.object(fetch, "_fetch_night", return_value=code) as m:
-            status = fetch.fetch_data("20070321", cfg, overwrite=True)
-        return status, m
-
-    def test_ok(self):
-        self.assertEqual(self._run(0)[0], "ok")
-
-    def test_not_found(self):
-        self.assertEqual(self._run(2)[0], "not_found")
-
-    def test_failed(self):
-        self.assertEqual(self._run(1)[0], "failed")
-
+class TestFetchEnvForwarding(unittest.TestCase):
     def test_forwards_env_and_overwrite(self):
-        env = {
-            "NOIRLAB_API": "http://api/",
-            "NOIRLAB_INSTRUMENT": "y4kcam",
-            "NOIRLAB_PROPOSAL": "2007A-0002",
-            "NOIRLAB_OBSTYPES": "object,flat",
-        }
-        _status, m = self._run(0, env)
+        cfg = FetchConfigStub(
+            {
+                "NOIRLAB_API": "http://api/",
+                "NOIRLAB_INSTRUMENT": "y4kcam",
+                "NOIRLAB_PROPOSAL": "2007A-0002",
+                "NOIRLAB_OBSTYPES": "object,flat",
+            }
+        )
+        with mock.patch.object(fetch, "_fetch_night", return_value=0) as m:
+            status = fetch.fetch_data("20070321", cfg, overwrite=True)
+        self.assertEqual(status, "ok")
         args, kwargs = m.call_args
         self.assertEqual(args[0], "20070321")
-        self.assertEqual(args[1], Path("/tmp/raw"))
+        self.assertEqual(args[1], cfg.raw_parent_dir)
         self.assertEqual(kwargs["api"], "http://api")  # trailing slash stripped
         self.assertEqual(kwargs["instrument"], "y4kcam")
         self.assertEqual(kwargs["proposal"], "2007A-0002")
@@ -120,7 +108,7 @@ class TestFetchData(unittest.TestCase):
         self.assertTrue(kwargs["overwrite"])
 
     def test_env_defaults_when_keys_absent(self):
-        cfg = _Cfg({})
+        cfg = FetchConfigStub({})
         with mock.patch.object(fetch, "_fetch_night", return_value=0) as m:
             fetch.fetch_data("20070321", cfg)  # no overwrite -> default False
         _args, kwargs = m.call_args

@@ -1,6 +1,21 @@
-"""Stack-free tests for the CTIO 1.0m Y4KCam profile + hooks."""
+"""Stack-free tests for the CTIO 1.0m Y4KCam profile + hooks.
 
-from ctio1m_helpers import load_ctio1m_profile
+Only ctio1m-SPECIFIC pins live here (identity strings, filter table, measured
+crosstalk matrix). Generic profile validity / exposure-id / translation /
+fetch contracts are covered by the shared auto-discovered suite
+(``packages/stips/tests/test_instrument_contracts.py``).
+"""
+
+from pathlib import Path
+
+from stips.testing.instrument_contract import InstrumentDirInfo, load_profile
+
+# instruments/ctio1m/tests/... -> parents[1] == instruments/ctio1m
+_INFO = InstrumentDirInfo(name="ctio1m", path=Path(__file__).resolve().parents[1])
+
+
+def load_ctio1m_profile():
+    return load_profile(_INFO)
 
 
 def test_identity():
