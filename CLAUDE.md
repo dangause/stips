@@ -78,11 +78,12 @@ stips/
 │   └── refcats/              # Reference-catalog tooling (Gaia DR3 / PS1 shard dump + ingest)
 ├── instruments/             # Declarative instrument profiles (loaded via INSTRUMENT_DIR)
 │   ├── nickel/              # Reference profile (profile.py, camera/, fetch.py, tests/)
+│   │   ├── configs/         # Nickel-fitted calibration (colorterms.py, calibrateImage/tuned_configs/, refcats_gaia_ps1.py)
 │   │   ├── obs_nickel_data/ # Curated Nickel calibrations (defect maps) — a real EUPS data package
 │   │   ├── testdata/        # Test fixtures (testdata_nickel EUPS product)
-│   │   ├── defects/         # Defect-mask generation
-│   │   ├── colorterms/      # Color-term fitting
-│   │   ├── tuning/          # Pipeline-tuning utilities
+│   │   ├── defects/         # Defect-mask generation (stips-defects-build)
+│   │   ├── colorterms/      # Color-term fitting (stips-colorterms-fit)
+│   │   ├── tuning/          # Pipeline-tuning utilities (stips-tune-calibrate-image)
 │   │   └── vendor/lick_searchable_archive/  # Vendored Lick archive (client used by fetch.py)
 │   └── ctio1m/              # CTIO 1.0m / Y4KCam (4-amp camera, configs/, tests/)
 ├── scripts/

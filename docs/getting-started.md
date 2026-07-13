@@ -92,11 +92,10 @@ template:
   type: ps1
   degrade_seeing: 2.0
 
-# Nights to process (empty list = all visits)
-nights:
-  20240101:
-    r: []
-    i: []
+# Science nights to process (simple list of YYYYMMDD local dates)
+science:
+  nights:
+    - 20240101
 
 # Processing options
 options:
@@ -139,30 +138,34 @@ places — the placeholders below are illustrative). Rounding to 2 decimals
 offsets the aperture by ~5–17″ on Nickel's 0.37″/pixel scale, so forced
 photometry measures galaxy background instead of the source.
 
+Every command takes the group-level `-c my_pipeline.yaml` (its `env:` block is the
+sole config source), so bare `stips calibs ...` with no `-c` exits with "No config
+provided".
+
 ```bash
 # 1. Check your configuration
-stips env
+stips -c my_pipeline.yaml env
 
 # 2. Bootstrap the repository
 stips -c my_pipeline.yaml bootstrap
 
 # 3. Process calibrations for a night
-stips calibs 20240101
+stips -c my_pipeline.yaml calibs 20240101
 
 # 4. Process science frames (--ra/--dec enables coordinate validation)
-stips science 20240101 --object my_target --ra 123.456 --dec 45.678
+stips -c my_pipeline.yaml science 20240101 --object my_target --ra 123.456 --dec 45.678
 
 # 5. Ingest PS1 template
-stips ps1-template --ra 123.456 --dec 45.678 --band r
+stips -c my_pipeline.yaml ps1-template --ra 123.456 --dec 45.678 --band r
 
 # 6. Run difference imaging
-stips dia 20240101 --auto --band r
+stips -c my_pipeline.yaml dia 20240101 --auto --band r
 
 # 7. Run forced photometry
-stips fphot 20240101 --ra 123.456 --dec 45.678
+stips -c my_pipeline.yaml fphot 20240101 --ra 123.456 --dec 45.678
 
 # 8. Extract light curve
-stips lightcurve --ra 123.456 --dec 45.678 \
+stips -c my_pipeline.yaml lightcurve --ra 123.456 --dec 45.678 \
     --collections "Nickel/runs/*/forcedPhotRaDec/*/run" \
     --dataset-type forced_phot_diffim_radec \
     --name "My Target" \

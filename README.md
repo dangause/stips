@@ -114,14 +114,16 @@ stips/
 │   ├── obs_stips/            # Instrument-neutral LSST glue (lsst.obs.stips): translator base,
 │   │                         #   camera builder, the `active` Instrument/translator synthesizer,
 │   │                         #   shared tasks, and reference pipelines/configs (instrument_defaults/)
-│   └── refcats/              # Reference catalog tooling (MONSTER shard dump/ingest)
+│   └── refcats/              # Reference-catalog tooling (dist `stips-refcats`, import `stips_refcats`):
+│                             #   Gaia DR3 / PS1 cone fetch, HTM coverage, LSST refcat conversion
 ├── instruments/              # Declarative instrument profiles (loaded by INSTRUMENT_DIR)
 │   ├── nickel/               # Reference profile (profile.py, camera, fetch.py, tests)
+│   │   ├── configs/          # Nickel-fitted calibration (colorterms, tuned_configs, PS1 overlay)
 │   │   ├── obs_nickel_data/  # Curated Nickel calibrations (defects) — EUPS data package
 │   │   ├── testdata/         # Test fixtures and data (testdata_nickel EUPS product)
-│   │   ├── defects/          # Defect mask generation
-│   │   ├── colorterms/       # Color term fitting
-│   │   ├── tuning/           # Pipeline tuning utilities
+│   │   ├── defects/          # Defect mask generation (stips-defects-build)
+│   │   ├── colorterms/       # Color term fitting (stips-colorterms-fit)
+│   │   ├── tuning/           # Pipeline tuning utilities (stips-tune-calibrate-image)
 │   │   └── vendor/lick_searchable_archive/  # Vendored Lick archive (client used by fetch.py)
 │   └── ctio1m/               # CTIO 1.0m / Y4KCam (4-amp camera, NOIRLab fetch, tests)
 ├── scripts/
@@ -132,8 +134,10 @@ stips/
 ├── docker/
 │   ├── Dockerfile            # Standard Docker image
 │   ├── Dockerfile.hpc        # HPC-optimized image
+│   ├── Dockerfile.slurm      # Slurm service image (controller + compute nodes)
 │   ├── docker-compose.yml    # Local development
-│   └── stips.def               # Singularity definition
+│   ├── docker-compose.slurm.yml  # 6-container Slurm test cluster
+│   └── stips.def             # Singularity/Apptainer definition
 ├── bps/
 │   ├── base.yaml             # Base BPS configuration
 │   ├── sites/                # Site configs (slurm, htcondor, local)
@@ -159,18 +163,20 @@ All commands take the group-level config via `stips -c <config.yaml> <command> .
 | `stips bootstrap` | Initialize Butler repository |
 | `stips download NIGHT` | Fetch raw data via the instrument's `fetch_data` hook (Nickel → Lick archive; CTIO → NOIRLab Astro Data Archive) |
 | `stips calibs NIGHT` | Run nightly calibrations (bias, flat, defects) |
+| `stips measure-crosstalk NIGHTS...` | Measure & certify intra-detector crosstalk (multi-amp cameras; needs a profile `CrosstalkSpec`) |
 | `stips science NIGHT` | Process science frames (ISR, WCS, photometry) |
 | `stips dia NIGHT` | Run difference imaging analysis |
 | `stips ps1-template` | Download and ingest PS1 template |
 | `stips fphot NIGHT` | Run forced photometry at RA/Dec |
 | `stips lightcurve` | Extract light curve from sources |
-| `stips clean` | Remove processing outputs for re-runs |
+| `stips calib-metrics` | Dump per-visit astrometric/photometric calibration metrics to CSV |
+| `stips landolt-validate` | Validate photometric calibration against Landolt standards |
+| `stips clean` | Remove processing outputs for re-runs (plan/execute; `--dry-run`) |
 | `stips run` | Run full pipeline from the `-c` YAML config |
 | `stips dashboard` | Launch browser-based pipeline monitoring (needs the `stips[dashboard]` extra) |
-| `stips bps submit` | Submit pipeline to BPS cluster |
-| `stips bps status` | Check BPS run status |
-| `stips bps cancel` | Cancel BPS run |
-| `stips bps list` | List recent BPS runs |
+| `stips refcat fetch\|status` | On-demand Gaia DR3 + PS1 refcat coverage for a target cone |
+| `stips bps submit\|status\|cancel\|list` | Submit and manage BPS cluster runs |
+| `stips provenance sync\|mark-deleted` | Maintain the run-provenance document (`provenance/runs.json`) |
 
 ### Multi-Target Workflows
 
@@ -189,6 +195,9 @@ The group-level `-c/--config` YAML is the sole config source. Its `env:` block s
 > `210.910750, 54.311694`). Rounding RA/Dec to 2 decimals is a ~5–17″ offset —
 > enough to miss a point source on Nickel's 0.37″/pixel scale, so forced
 > photometry measures galaxy background instead of the SN.
+
+> Each command still needs the group-level `-c <config.yaml>` (omitted below for
+> brevity; see the note under [Running Pipelines](#running-pipelines)).
 
 ```bash
 # 1. Ingest PS1 template for r-band
@@ -340,6 +349,11 @@ env:
 ---
 
 ## Running Pipelines
+
+> Every command needs the group-level `-c <config.yaml>` (its `env:` block is the
+> sole config source). It is shown on the bootstrap step below and omitted from
+> the later one-liners for brevity — prefix each with your config, e.g.
+> `stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml calibs 20230519`.
 
 ### Step 0: Bootstrap (Automatic)
 

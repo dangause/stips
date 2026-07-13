@@ -318,11 +318,16 @@ Each pipeline type defines its inputs, outputs, and data queries:
 
 **science.yaml**:
 ```yaml
-pipelineYaml: "{instrument_dir}/pipelines/DRP.yaml#calibrateImage"
-inputCollections: "Nickel/raw/{night}/*,Nickel/calib/current,refcats"
+pipelineYaml: "{stips_defaults}/pipelines/ProcessCcd.yaml#processCcd"
 outputRun: "Nickel/runs/{night}/processCcd/{timestamp}/run"
-dataQuery: "instrument='Nickel' AND exposure.observation_type='science'"
+dataQuery: "instrument='Nickel' AND exposure.observation_type='science'{object_filter}"
 ```
+
+The pipeline comes from the **framework defaults** dir (`{stips_defaults}` =
+`packages/obs_stips/instrument_defaults`), not the instrument dir — Nickel ships
+no `pipelines/` of its own. (DIA/fphot analogously reference
+`{stips_defaults}/pipelines/DIA.yaml#dia-full` and
+`{stips_defaults}/pipelines/ForcedPhotRaDec.yaml#diffim`.)
 
 **custom.yaml** (used by BPSExecutor for pre-built quantum graphs):
 ```yaml
@@ -331,7 +336,8 @@ qgraphFile: "{qgraph_file}"
 outputRun: "{output_run}"    # Preserves collection names from qgraph
 ```
 
-Variables like `{night}`, `{repo}`, `{instrument_dir}` (and `{obs_stips_dir}`) are substituted at submission time by `render_bps_config()`.
+Variables like `{night}`, `{repo}`, `{instrument_dir}`, `{obs_stips_dir}`, and
+`{stips_defaults}` are substituted at submission time by `render_bps_config()`.
 
 
 ## The Code: Key Modules
@@ -597,6 +603,7 @@ bps/
 └── sites/
     ├── docker-slurm.yaml        # Docker test cluster (conservative resources)
     ├── slurm.yaml               # Production HPC cluster
+    ├── singularity-slurm.yaml   # Production HPC via Singularity/Apptainer
     ├── local.yaml               # Parsl ThreadPool (development)
     └── htcondor.yaml            # HTCondor cluster
 

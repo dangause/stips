@@ -4,6 +4,80 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
 
 ## [Unreleased]
 
+A large documentation-and-correctness audit campaign. The grouped summary below
+is at user level; the finding-tagged subsections that follow it keep the detailed
+per-area notes.
+
+### Added
+- **Generic calibration tooling** as console scripts, so a fork produces its own
+  fitted assets instead of copying Nickel's: `stips-defects-build` (defect maps
+  from master calibs), `stips-colorterms-fit` (Landolt-fit color terms), and
+  `stips-tune-calibrate-image` (searches `calibrateImage` parameters to produce
+  `tuned_configs/`). Recipes under `instruments/nickel/{defects,colorterms,tuning}/README.md`.
+- **`stips measure-crosstalk`** and declarative `CrosstalkSpec` for multi-amp
+  cameras (detailed below).
+- **Shared framework modules** a fork builds on: `stips.fetch`
+  (`make_fetch_data` wrapper + `parse_night`; a fork's `fetch.py` implements only
+  `_fetch_night` + `build_kwargs`), `stips.make_exposure_id` (the reference
+  31-bit-safe exposure-id scheme), `stips.testing.instrument_contract` (the
+  auto-discovered contract-test harness — see `docs/instrument-contract.md`),
+  `core/dataset_types.py` (central Butler dataset-type constants, pinned by a
+  contract test), `core/download.py` (download orchestration), `core/query.py`
+  (a Butler string-literal sanitizer), and `core/pipeline.PipetaskStage` (shared
+  pipetask/butler choreography).
+- **Profile `ps1_band_map`** — declares which local science bands are
+  PS1-template eligible and the PS1 band each maps to (drives `template.type: auto`).
+- **New docs**: `docs/stack-bump-runbook.md`, `docs/instrument-contract.md`,
+  `docs/migrations.md`, and `packages/obs_stips/instrument_defaults/README.md`
+  (the tiering contract).
+
+### Changed
+- **Packaging is framework-only.** `packages/` now holds just `stips`,
+  `obs_stips`, and `refcats`; **all** Nickel assets moved under
+  `instruments/nickel/` (`obs_nickel_data`, `testdata`, `defects/`,
+  `colorterms/`, `tuning/`, and the vendored `lick_searchable_archive`, marked
+  with a `VENDORED.md`).
+- **`refcats` is now the `stips-refcats` distribution** (import `stips_refcats`);
+  the old `nickel_refcats` import remains as a thin re-export shim.
+- **`obs_data_package` resolution precedence** clarified: `package_dir` overrides
+  the location; otherwise STIPS looks under `<INSTRUMENT_DIR>/<obs_data_package>`
+  first, then the reference `packages/<name>` layout.
+- **CLI handlers thinned** — they delegate to core modules: `download`
+  orchestration lives in `core/download.py`, `clean` is a plan/execute flow,
+  lightcurve display options flow only through `LightcurveConfig`, and
+  `dashboard` requires and threads the `-c` config.
+- **Ops**: the scheduled stack canary runs the pipeline graph-build tests so
+  config-field breakage surfaces before the pin moves; CI validates pushes on the
+  active development branches. Supported release `v30_0_3`, CI weekly pinned at
+  `w_2025_32` (see `docs/stack-bump-runbook.md`).
+
+### Fixed
+- **Calibs success is verified against products**, not just the pipetask exit
+  code — a run that exits 0 but writes no bias/flat is now reported as a failure
+  (or partial), not a success.
+- **DIA and forced photometry query both UT `day_obs` values** a local observing
+  night can span (pre-/post-midnight), so exposures near UT midnight are no
+  longer silently dropped.
+- **Coadd template rebuild is build-then-swap** (F-009): a rebuild writes to a
+  fresh RUN and the parent chain is repointed only on success, so a failed
+  rebuild can't leave a half-built template in place.
+- **Provenance records the true LSST *pipelines* (EUPS) version and the profile's
+  instrument**, distinct from the conda/rubin-env name.
+- **`filter_map.py` covers CTIO 1.0m's uppercase `U`** physical filter
+  (previously a live KeyError for analysis tasks on U-band data).
+
+### Deprecated
+- The `nickel_refcats` import path — use `stips_refcats`; importing it emits a
+  `DeprecationWarning`.
+- The `nights: {YYYYMMDD: {band: [...]}}` mapping form in run configs — only its
+  night keys are read now; use the `science: nights: [...]` list.
+
+### Migration notes
+- **QA task labels renamed `...Nickel` → `...Visit`** (F-013): task labels become
+  Butler dataset-type names, so dashboards/queries referencing the old
+  `...Nickel_metadata`/`_log`/`_config` names must update. No data loss and
+  nothing to migrate on disk. See `docs/migrations.md`.
+
 ### Defaults tiering: Nickel-fitted science calibration moved out of the framework tier (F-012)
 - **Moved to `instruments/nickel/configs/`** (behavior for Nickel unchanged —
   instrument-dir-first resolution finds them there): the Landolt-fit
