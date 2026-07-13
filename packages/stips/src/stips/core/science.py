@@ -561,6 +561,18 @@ def _attempt_config(
                 "--config-file",
                 f"calibrateImage:{overlay_path}",
             ]
+            # The stage1 QA ref-match tasks default to MONSTER; in gaia_ps1
+            # mode redirect them to the same Gaia/PS1 catalogs used for
+            # calibration (otherwise fields outside local MONSTER shard
+            # coverage fail graph construction on a non-optional connection).
+            qa_astrom = ctx.config.resolve_config("refcats_gaia_ps1_qa_astrom.py")
+            qa_photom = ctx.config.resolve_config("refcats_gaia_ps1_qa_photom.py")
+            config_file_args += [
+                "--config-file",
+                f"makeAnalysisSingleVisitStarAstrometricRefMatchVisit:{qa_astrom}",
+                "--config-file",
+                f"makeAnalysisSingleVisitStarPhotometricRefMatchVisit:{qa_photom}",
+            ]
         config_file_args += [
             "--config-file",
             f"calibrateImage:{ctx.colorterms_config}",

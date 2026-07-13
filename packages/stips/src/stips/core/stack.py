@@ -135,6 +135,19 @@ def _build_setup_script(config: Config) -> tuple[str, dict[str, str]]:
     script_env["SKYMAP_CFG"] = str(config.resolve_config("makeSkyMap.py"))
     env_exports += 'export SKYMAP_CFG="$SKYMAP_CFG"\n'
 
+    # Profile ps1_band_map as JSON, for in-stack pex_config files
+    # (refcats_gaia_ps1*.py). They must NOT import the profile during config
+    # exec: pex_config records every module first imported while executing a
+    # config and replays those imports when a saved quantum graph is loaded --
+    # the path-loaded profile machinery (module name "fetch") is then
+    # unimportable and pipetask run dies at graph deserialization.
+    ps1_map = getattr(prof, "ps1_band_map", None)
+    if isinstance(ps1_map, dict):
+        import json as _json
+
+        script_env["STIPS_PS1_BAND_MAP"] = _json.dumps(ps1_map)
+        env_exports += 'export STIPS_PS1_BAND_MAP="$STIPS_PS1_BAND_MAP"\n'
+
     # Pass through RUN_ID so shell scripts log to the same directory. It is
     # already in os.environ (which run_with_stack merges), so only the export
     # line is needed here.
