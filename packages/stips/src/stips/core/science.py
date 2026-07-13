@@ -206,88 +206,39 @@ print(json.dumps(target_names))
         return None
 
 
-def run(
+def _failure(night: str, science_parent: str, error: str, **kwargs) -> ScienceResult:
+    """Build a failed ScienceResult (no coadd run)."""
+    return ScienceResult(
+        success=False,
+        night=night,
+        science_run=science_parent,
+        coadd_run=None,
+        error=error,
+        **kwargs,
+    )
+
+
+def _build_exclusions(
+    config: "Config",
     night: str,
-    config: Config,
+    prof,
     *,
-    jobs: int = 8,
-    bad_exposures: str | None = None,
-    bad_file: Path | None = None,
-    object_filter: str | None = None,
-    skip_coadds: bool = False,
-    science_config: Path | None = None,
-    science_cfg: ScienceConfig | None = None,
-    use_fallbacks: bool = True,
-    bands: list[str] | None = None,
-    target_ra: float | None = None,
-    target_dec: float | None = None,
-    log_file: Path | None = None,
-    executor=None,
-) -> ScienceResult:
-    """Run science processing for a night.
+    bad_exposures: str | None,
+    bad_file: Path | None,
+    object_filter: str | None,
+    target_ra: float | None,
+    target_dec: float | None,
+) -> tuple[str, str]:
+    """Build the object-filter and bad-exposure WHERE fragments for a night.
 
-    This performs:
-    1. Single-visit processing (ISR, source detection, WCS, photometry)
-    2. Optionally build coadds from the night's data
-
-    Args:
-        night: Observing night (YYYYMMDD)
-        config: Pipeline configuration
-        jobs: Number of parallel jobs
-        bad_exposures: Comma-separated exposure IDs to exclude
-        bad_file: File with exposure IDs to exclude
-        object_filter: Filter by OBJECT header value (case-insensitive, partial match)
-        skip_coadds: Skip coadd generation
-        science_config: Override calibrateImage config file (legacy, prefer science_cfg)
-        science_cfg: Full science configuration with fallbacks
-        use_fallbacks: Try fallback configs on failure
-        bands: Optional list of bands to process (e.g. ["r", "i"])
-        target_ra: Expected target RA in degrees (enables coordinate validation)
-        target_dec: Expected target Dec in degrees (enables coordinate validation)
-        log_file: Optional path to write LSST pipeline logs
+    Combines three exclusion sources: explicitly listed bad exposure IDs
+    (``bad_exposures``/``bad_file``), the resolved object filter, and
+    pre-flight coordinate validation against the expected target position.
 
     Returns:
-        ScienceResult with collection names and status
+        ``(object_expr, exclusion_expr)`` — each either ``""`` or an
+        ``" AND ..."`` fragment ready to append to the data query.
     """
-    from stips.core.executor import LocalExecutor
-
-    if executor is None:
-        executor = LocalExecutor()
-
-    prof = config.require_profile()
-    night = validate_night(night)
-    cols = CollectionNames(night, prefix=prof.collection_prefix)
-    repo = str(config.repo)
-
-    # Build config chain: explicit > legacy > default
-    if science_cfg is None:
-        science_cfg = ScienceConfig.default(config)
-    if science_config is not None:
-        science_cfg.calibrate_image = science_config
-
-    # Find the raw collection for this night (targeted query).
-    # Use the newest raw ingest — a re-ingest (e.g. after a header fix) appends
-    # a newer timestamp that supersedes the stale earlier one.
-    try:
-        raw_run = latest_raw_run(config, night)
-        if not raw_run:
-            return ScienceResult(
-                success=False,
-                night=night,
-                science_run=cols.science_parent,
-                coadd_run=None,
-                error=f"No raw collection found for night {night}",
-            )
-    except Exception as e:
-        return ScienceResult(
-            success=False,
-            night=night,
-            science_run=cols.science_parent,
-            coadd_run=None,
-            error=f"Failed to query collections: {e}",
-        )
-
-    # Build exclusion expression
     bad_ids = parse_bad_exposures(bad_exposures, bad_file)
 
     # Resolve object filter with flexible matching
@@ -342,28 +293,801 @@ def run(
             bad_ids.extend(coord_bad_ids)
             bad_ids = sorted(set(bad_ids))
 
-    # Optional band filter (LSST dimension key: "band")
-    band_expr = ""
-    if bands:
-        normalized_bands: list[str] = []
-        for band in bands:
-            b = str(band).strip().lower()
-            if not b:
-                continue
-            if not re.fullmatch(r"[A-Za-z0-9_]+", b):
-                raise ValueError(
-                    f"Invalid band value in science bands filter: {band!r}"
+    return object_expr, build_exclusion_expr(bad_ids)
+
+
+def _band_expr(bands: list[str] | None) -> str:
+    """Build the optional band-filter WHERE fragment (LSST dimension: "band").
+
+    Bands are normalized (stripped, lowercased), validated, and deduplicated
+    while preserving order. Raises ValueError on a malformed band value.
+    """
+    if not bands:
+        return ""
+
+    normalized_bands: list[str] = []
+    for band in bands:
+        b = str(band).strip().lower()
+        if not b:
+            continue
+        if not re.fullmatch(r"[A-Za-z0-9_]+", b):
+            raise ValueError(f"Invalid band value in science bands filter: {band!r}")
+        normalized_bands.append(b)
+
+    if not normalized_bands:
+        return ""
+
+    # Keep deterministic order while dropping duplicates.
+    unique_bands = list(dict.fromkeys(normalized_bands))
+    band_csv = ",".join(f"'{b}'" for b in unique_bands)
+    log.info(f"Filtering science processing to bands: {unique_bands}")
+    return f" AND band IN ({band_csv})"
+
+
+def _build_data_query(
+    config: "Config",
+    night: str,
+    prof,
+    *,
+    bad_exposures: str | None,
+    bad_file: Path | None,
+    object_filter: str | None,
+    target_ra: float | None,
+    target_dec: float | None,
+    bands: list[str] | None,
+) -> str:
+    """Assemble the Butler WHERE expression selecting this night's science data.
+
+    A single Lick observing night can span two UT days: exposures taken
+    before Pacific midnight have day_obs=night, and post-midnight exposures
+    have day_obs=night+1 (what night_to_day_obs returns). Query both, then
+    apply the object/band/exclusion fragments.
+    """
+    object_expr, exclusion_expr = _build_exclusions(
+        config,
+        night,
+        prof,
+        bad_exposures=bad_exposures,
+        bad_file=bad_file,
+        object_filter=object_filter,
+        target_ra=target_ra,
+        target_dec=target_dec,
+    )
+    band_expr = _band_expr(bands)
+    return (
+        f"instrument='{prof.name}' AND exposure.observation_type='science'"
+        f" AND {night_day_obs_expr(night, prof)}"
+        f"{object_expr}{band_expr}{exclusion_expr}"
+    )
+
+
+def _resolve_configs_to_try(
+    science_cfg: ScienceConfig, use_fallbacks: bool
+) -> list[Path]:
+    """Build the ordered list of calibrateImage configs to attempt.
+
+    The primary config comes first; fallbacks are appended (deduplicated)
+    only when ``use_fallbacks`` is set. Configs whose files do not exist
+    are dropped. An empty result means science processing cannot start.
+    """
+    configs_to_try: list[Path] = []
+    if science_cfg.calibrate_image and science_cfg.calibrate_image.exists():
+        configs_to_try.append(science_cfg.calibrate_image)
+    if use_fallbacks:
+        for fb in science_cfg.calibrate_image_fallbacks:
+            if fb.exists() and fb not in configs_to_try:
+                configs_to_try.append(fb)
+    return configs_to_try
+
+
+# F-042: known-fatal error patterns. When a config attempt raises and the error
+# text matches one of these, a different calibrateImage config cannot help
+# (missing repo inputs, repo-level definition conflicts, permission or disk
+# problems), so the fallback cascade stops. These are best-effort heuristics to
+# save time and log noise — NEVER correctness signals: an unmatched error
+# simply means the remaining fallbacks are still attempted, and a matched one
+# only skips work that would have failed identically.
+_FATAL_ERROR_PATTERNS: tuple[str, ...] = (
+    "MissingCollectionError",
+    "ConflictingDefinitionError",
+    "Permission denied",
+    "No space left on device",
+)
+
+
+def _is_fatal_error(error_str: str) -> bool:
+    """Return True when no calibrateImage fallback could fix this error.
+
+    The refcat-missing combination (FileNotFoundError + astrometry_ref_cat)
+    means the field has no reference-catalog shard at all; the generic
+    patterns are repo/environment failures. See _FATAL_ERROR_PATTERNS for
+    the heuristic caveat.
+    """
+    if "FileNotFoundError" in error_str and "astrometry_ref_cat" in error_str:
+        return True
+    lowered = error_str.lower()
+    return any(p.lower() in lowered for p in _FATAL_ERROR_PATTERNS)
+
+
+@dataclass
+class _AttemptOutcome:
+    """Raw facts from one calibrateImage config attempt.
+
+    ``rc`` is the pipetask exit code, or None when the attempt raised before
+    completing. Exactly one of ``raised``/``full_success``/``partial_success``/
+    ``total_failure`` holds for any outcome.
+    """
+
+    run_collection: str
+    rc: int | None = None
+    quanta_ok: int = 0
+    quanta_fail: int = 0
+    parse_failed: bool = False  # quanta summary could not be parsed
+    error: str | None = None  # exception text or pipetask output tail
+    failed_exposures: list[dict] = field(default_factory=list)
+    fatal: bool = False  # raised and matched a known-fatal pattern (F-042)
+
+    @property
+    def raised(self) -> bool:
+        return self.rc is None
+
+    @property
+    def full_success(self) -> bool:
+        return self.rc == 0
+
+    @property
+    def partial_success(self) -> bool:
+        return self.rc is not None and self.rc != 0 and self.quanta_ok > 0
+
+    @property
+    def total_failure(self) -> bool:
+        return self.rc is not None and self.rc != 0 and self.quanta_ok == 0
+
+    @property
+    def produced_outputs(self) -> bool:
+        """True when this attempt wrote at least some outputs to its RUN."""
+        return self.full_success or self.partial_success
+
+    def to_attempt(self, config_name: str, is_fallback: bool):
+        """Map this outcome onto a processing-log ConfigAttempt record.
+
+        Field semantics match the pre-decomposition loop exactly: honest
+        parsed counts, ``quanta_parse_failed`` markers instead of fabricated
+        counts (F-026), and ``error`` populated only for total failures and
+        raised attempts.
+        """
+        from stips.core import processing_log
+
+        attempt = processing_log.ConfigAttempt(
+            config=config_name, is_fallback=is_fallback
+        )
+        if self.raised:
+            # The attempt raised before any quanta could be counted, so the
+            # failure count is unknown, not 1. Leave quanta_failed at 0 and
+            # mark the parse failure; the populated ``error`` field carries
+            # the failure downstream.
+            attempt.error = self.error
+            attempt.quanta_parse_failed = True
+        elif self.full_success:
+            attempt.quanta_succeeded = self.quanta_ok
+            attempt.quanta_parse_failed = self.parse_failed
+        elif self.partial_success:
+            attempt.quanta_succeeded = self.quanta_ok
+            attempt.quanta_failed = self.quanta_fail
+            attempt.failed_exposures = self.failed_exposures
+        else:  # total failure
+            attempt.error = self.error
+            attempt.failed_exposures = self.failed_exposures
+            attempt.quanta_failed = self.quanta_fail
+            attempt.quanta_parse_failed = self.parse_failed
+        return attempt
+
+
+@dataclass
+class _AttemptContext:
+    """Loop-invariant inputs shared by every config attempt in one run()."""
+
+    config: "Config"
+    executor: object
+    night: str
+    cols: CollectionNames
+    prof: object
+    pipeline: Path
+    raw_run: str
+    data_query: str
+    colorterms_config: Path
+    refcat_mode: str
+    qg_dir: Path
+    jobs: int
+    log_file: Path | None
+
+
+def _attempt_config(
+    ctx: _AttemptContext,
+    index: int,
+    tuned_config: Path,
+    prior_runs: list[str],
+) -> _AttemptOutcome:
+    """Run one calibrateImage config attempt end-to-end.
+
+    Builds the quantum graph, executes the pipeline, parses the quanta
+    counts, and classifies the outcome. Never raises: exceptions are
+    captured into the returned outcome, with the known-fatal classification
+    of F-042 deciding whether the caller should stop the fallback cascade.
+    """
+    is_fallback = index > 0
+    config_label = "fallback" if is_fallback else "primary"
+
+    # Each config attempt gets its own RUN collection.
+    # Primary: .../run
+    # Fallbacks: .../run_fb1, .../run_fb2, .../run_fb3
+    if is_fallback:
+        output_run = f"{ctx.cols.science_parent}/run_fb{index}"
+    else:
+        output_run = ctx.cols.science_run
+
+    # Each attempt gets its own qgraph (different config = different plan)
+    qg_science = ctx.qg_dir / f"processCcd_{ctx.night}_{ctx.cols.run_ts}_cfg{index}.qg"
+    repo = str(ctx.config.repo)
+
+    try:
+        # calibrateImage config-file chain: tuned config, then (optionally)
+        # the Gaia/PS1 refcat overlay, then color terms. Order keeps color
+        # terms last so they see the final photometry_ref_cat.
+        config_file_args = ["--config-file", f"calibrateImage:{tuned_config}"]
+        overlay_name = refcat_overlay_config(ctx.refcat_mode)
+        if overlay_name:
+            overlay_path = ctx.config.resolve_config(overlay_name)
+            config_file_args += [
+                "--config-file",
+                f"calibrateImage:{overlay_path}",
+            ]
+        config_file_args += [
+            "--config-file",
+            f"calibrateImage:{ctx.colorterms_config}",
+        ]
+
+        # Build qgraph arguments
+        qgraph_args = [
+            "qgraph",
+            "-b",
+            repo,
+            "-p",
+            f"{ctx.pipeline}#stage1-single-visit",
+            "-i",
+            f"{ctx.raw_run},{ctx.cols.calib_chain},{REFCATS_CHAIN},{ctx.prof.skymap_collection}",
+            "-o",
+            ctx.cols.science_parent,
+            "--output-run",
+            output_run,
+            "--save-qgraph",
+            str(qg_science),
+            *config_file_args,
+            "-d",
+            ctx.data_query,
+        ]
+
+        # Profile-declared ISR overrides (e.g. doDefect=False for an
+        # instrument without curated defect maps, or parallel overscan).
+        # Applied as inline config so instruments need not fork the shared DRP
+        # pipeline; the same overrides feed the calib-build ISR (calibs.py).
+        qgraph_args.extend(isr_config_args(ctx.prof))
+
+        # For fallback attempts, build a qgraph that excludes quanta
+        # whose outputs already exist in any prior successful RUN.
+        # --skip-existing-in filters at graph-build time based on _metadata
+        # datasets, so the qgraph only contains the failed quanta that
+        # need retrying with a different config.
+        #
+        # Each fallback writes to its own RUN to avoid
+        # ConflictingDefinitionError (LSST enforces config consistency
+        # per task label within a single RUN collection).
+        if is_fallback and prior_runs:
+            for prior_run in prior_runs:
+                qgraph_args.extend(["--skip-existing-in", prior_run])
+            qgraph_args.append("--clobber-outputs")
+
+        # Build quantum graph
+        ctx.executor.run_pipetask(qgraph_args, ctx.config, log_file=ctx.log_file)
+
+        # Build run arguments
+        summary_file = qg_science.with_suffix(".summary.json")
+        run_args = [
+            "run",
+            "-b",
+            repo,
+            "-g",
+            str(qg_science),
+            "--output-run",
+            output_run,
+            "-j",
+            str(ctx.jobs),
+            "--register-dataset-types",
+            *quanta_report.summary_run_args(summary_file),
+        ]
+
+        # Fallback qgraphs are already reduced to unresolved quanta via
+        # --skip-existing-in at qgraph build time; execute directly.
+        log_start_pos = None
+        if ctx.log_file and ctx.log_file.exists():
+            try:
+                log_start_pos = ctx.log_file.stat().st_size
+            except OSError:
+                pass
+
+        # Run science processing
+        result = ctx.executor.run_pipetask(
+            run_args,
+            ctx.config,
+            capture_output=True,
+            check=False,
+            log_file=ctx.log_file,
+            output_run=output_run,
+        )
+
+        # Parse actual quanta counts. Prefer the structured --summary JSON;
+        # fall back to the stdout/log regex when it is absent (e.g. the BPS
+        # executor path, which does not run `pipetask run`).
+        combined_output = (result.stdout or "") + "\n" + (result.stderr or "")
+        if not combined_output.strip():
+            combined_output = read_log_delta(
+                ctx.log_file, log_start_pos=log_start_pos, max_chars=8000
+            )
+        counts = quanta_report.parse_summary_file(summary_file)
+        if counts is not None:
+            quanta_ok, quanta_fail = counts
+        else:
+            quanta_ok, quanta_fail = parse_quanta_summary(
+                combined_output,
+                ctx.log_file,
+                log_start_pos=log_start_pos,
+            )
+
+        if result.returncode == 0:
+            # Full success with this config (rc==0 => pipetask ran the
+            # planned quanta). Record the true parsed count. If quanta_ok
+            # is 0 here, the quanta summary could not be parsed — record
+            # the honest 0 plus an explicit parse-failure marker rather
+            # than fabricating a count. Success is still driven by rc==0.
+            parse_failed = quanta_ok == 0
+            if parse_failed:
+                log.warning(
+                    "Quanta summary could not be parsed (returncode=0); "
+                    "recording 0 succeeded with quanta_parse_failed=True. "
+                    "Reported counts may understate the work actually done."
                 )
-            normalized_bands.append(b)
+            return _AttemptOutcome(
+                run_collection=output_run,
+                rc=result.returncode,
+                quanta_ok=quanta_ok,
+                quanta_fail=quanta_fail,
+                parse_failed=parse_failed,
+            )
 
-        if normalized_bands:
-            # Keep deterministic order while dropping duplicates.
-            unique_bands = list(dict.fromkeys(normalized_bands))
-            band_csv = ",".join(f"'{b}'" for b in unique_bands)
-            band_expr = f" AND band IN ({band_csv})"
-            log.info(f"Filtering science processing to bands: {unique_bands}")
+        from stips.core import processing_log
 
-    exclusion_expr = build_exclusion_expr(bad_ids)
+        failed_exposures = processing_log.parse_pipetask_failures(
+            result.stderr or "", result.stdout or ""
+        )
+        if quanta_ok > 0:
+            # Partial success - some quanta succeeded, some failed
+            return _AttemptOutcome(
+                run_collection=output_run,
+                rc=result.returncode,
+                quanta_ok=quanta_ok,
+                quanta_fail=quanta_fail,
+                failed_exposures=failed_exposures,
+            )
+
+        # Total failure - no quanta succeeded. Record the honest parsed
+        # count. If the summary could not be parsed (quanta_fail == 0 despite
+        # the non-zero returncode), mark the parse failure instead of
+        # fabricating a count of 1.
+        return _AttemptOutcome(
+            run_collection=output_run,
+            rc=result.returncode,
+            quanta_fail=quanta_fail,
+            parse_failed=quanta_fail == 0,
+            error=(
+                combined_output.strip()[-500:]
+                if combined_output.strip()
+                else "Unknown error"
+            ),
+            failed_exposures=failed_exposures,
+        )
+
+    except Exception as e:
+        error_str = str(e)
+
+        # Log detailed error information
+        log.warning(f"{config_label.capitalize()} config failed: {tuned_config.name}")
+
+        # Surface key parts of the error for diagnostics
+        if "FileNotFoundError" in error_str and "astrometry_ref_cat" in error_str:
+            log.error(
+                "Reference catalog not found for this field - no refcat shard available"
+            )
+            log.error("This usually means the field is outside the refcat coverage")
+        elif "FileNotFoundError" in error_str:
+            # Extract the specific file/dataset that's missing
+            match = re.search(r"connection (\S+)", error_str)
+            if match:
+                log.error(f"Missing required dataset: {match.group(1)}")
+            log.error(f"Full error: {error_str[:200]}")
+        else:
+            log.error(f"Error: {error_str[:200]}")
+
+        # F-042: only a small set of known-fatal patterns stops the fallback
+        # cascade; anything else is presumed worth retrying with the next
+        # config. Best-effort heuristic, never a correctness signal.
+        fatal = _is_fatal_error(error_str)
+        if fatal:
+            if "astrometry_ref_cat" in error_str:
+                log.info("Refcat missing - skipping fallback (won't help)")
+            else:
+                log.info("Known-fatal error - skipping fallbacks (won't help)")
+
+        return _AttemptOutcome(
+            run_collection=output_run,
+            error=error_str[:500],
+            fatal=fatal,
+        )
+
+
+@dataclass
+class _AttemptsSummary:
+    """Folded result of the config-attempt cascade."""
+
+    successful_runs: list[str] = field(default_factory=list)
+    config_used: Path | None = None
+    fallback_used: bool = False
+    any_success: bool = False
+    cumulative_succeeded: int = 0  # unique successes across all configs
+
+
+def _run_config_attempts(
+    ctx: _AttemptContext,
+    configs_to_try: list[Path],
+    use_fallbacks: bool,
+    plog,
+) -> _AttemptsSummary:
+    """Try each calibrateImage config in order, folding attempt outcomes.
+
+    The primary config runs first; each fallback retries only the quanta that
+    are still unresolved (via --skip-existing-in on the prior RUNs). Every
+    attempt is recorded on ``plog``. The fold stops early on full success, on
+    an accepted partial result, or on a known-fatal exception (F-042).
+    """
+    summary = _AttemptsSummary()
+
+    for i, tuned_config in enumerate(configs_to_try):
+        is_fallback = i > 0
+        is_last = i == len(configs_to_try) - 1
+        config_label = "fallback" if is_fallback else "primary"
+        log.info(f"Trying {config_label} config: {tuned_config.name}")
+
+        outcome = _attempt_config(ctx, i, tuned_config, summary.successful_runs)
+        plog.add_attempt(outcome.to_attempt(tuned_config.name, is_fallback))
+
+        if outcome.produced_outputs:
+            summary.successful_runs.append(outcome.run_collection)
+            summary.any_success = True
+            summary.config_used = tuned_config
+            summary.fallback_used = is_fallback
+            # Fallback qgraphs only contain quanta that previously failed, so
+            # every fallback success is a new win — no double counting.
+            summary.cumulative_succeeded += outcome.quanta_ok
+
+        if outcome.full_success:
+            if is_fallback:
+                log.info(
+                    f"Fallback config {tuned_config.name} rescued all "
+                    f"{outcome.quanta_ok} remaining quanta"
+                )
+            else:
+                log.info(
+                    f"Science processing fully succeeded with {config_label} "
+                    f"config: {tuned_config.name} ({outcome.quanta_ok} quanta)"
+                )
+            break
+
+        elif outcome.partial_success:
+            if is_fallback:
+                log.warning(
+                    f"Fallback config {tuned_config.name}: "
+                    f"{outcome.quanta_ok} new quanta rescued, "
+                    f"{outcome.quanta_fail} still failing "
+                    f"(cumulative: {summary.cumulative_succeeded} succeeded)"
+                )
+            else:
+                log.warning(
+                    f"Partial success with primary config: {tuned_config.name} "
+                    f"({outcome.quanta_ok} quanta succeeded, "
+                    f"{outcome.quanta_fail} failed)"
+                )
+            # Don't stop yet - try fallback for the remaining failures
+            if not use_fallbacks or is_last:
+                log.info(
+                    f"Accepting partial result with {summary.cumulative_succeeded} "
+                    "successful quanta"
+                )
+                break
+            log.info(
+                f"Trying fallback config for {outcome.quanta_fail} remaining "
+                "failures..."
+            )
+
+        elif outcome.total_failure:
+            log.error(
+                f"No quanta succeeded with {config_label} config: "
+                f"{tuned_config.name}"
+            )
+            if not use_fallbacks or is_last:
+                if is_last:
+                    log.error(
+                        f"All {len(configs_to_try)} configs exhausted for "
+                        f"{ctx.night}"
+                    )
+            else:
+                log.warning(
+                    f"{config_label} config had total failure, trying fallback..."
+                )
+
+        else:  # raised
+            if outcome.fatal:
+                break
+
+    return summary
+
+
+def _register_instrument(config: "Config", prof, log_file: Path | None) -> None:
+    """Register the instrument in the Butler repo (idempotent).
+
+    check=False already tolerates the common "already registered" non-zero
+    exit, matching dia/calibs/coadd. No try/except here on purpose: the only
+    remaining raise path is a stack-activation/spawn failure, which must
+    surface rather than be silently swallowed.
+    """
+    run_butler(
+        ["register-instrument", str(config.repo), prof.instrument_class],
+        config,
+        check=False,
+        log_file=log_file,
+    )
+
+
+def _save_processing_log(plog, config: "Config", output_collection: str) -> None:
+    """Finalize and persist the processing log and provenance record."""
+    from stips.core import processing_log, provenance
+
+    plog.output_collection = output_collection
+    plog.finalize()
+    processing_log.save_log(plog, config)
+    provenance.upsert_from_log(plog, config)  # non-fatal; logs on failure
+
+
+def _final_counts(attempts: _AttemptsSummary, plog) -> tuple[int, int]:
+    """Compute ``(total_succeeded, last_attempt_failed)`` for the result.
+
+    ``cumulative_succeeded`` tracks unique successes across all configs.
+    Failures are NOT summed: because each fallback's qgraph is reduced (via
+    --skip-existing-in) to only the quanta that previously failed, the LAST
+    attempt's failure count is precisely the set of still-unresolved quanta.
+    Summing would double-count. Named honestly so callers know it is the last
+    attempt's remaining failures, not a total.
+    """
+    last_attempt_failed = (
+        plog.configs_tried[-1].quanta_failed if plog.configs_tried else 0
+    )
+    return attempts.cumulative_succeeded, last_attempt_failed
+
+
+def _verify_and_chain_runs(
+    config: "Config",
+    cols: CollectionNames,
+    successful_runs: list[str],
+    log_file: Path | None,
+) -> list[str]:
+    """Verify RUN collections exist, then chain them under the CHAINED parent.
+
+    Chain all successful RUN collections under the parent CHAINED collection
+    so downstream consumers (DIA, fphot) see a unified view. Order matters:
+    later runs (fallbacks) should be searched first so their outputs take
+    precedence over partial/failed primary outputs.
+
+    Each RUN is verified to actually exist in the Butler before chaining —
+    BPS may report success even when all quanta failed (no outputs written =
+    no RUN collection created).
+
+    Returns the verified RUNs; an empty list means nothing was written and
+    the caller should report failure. May raise on a Butler failure.
+    """
+    verified_runs: list[str] = []
+    for run_name in successful_runs:
+        if butler_query.collection_exists(config, run_name):
+            verified_runs.append(run_name)
+        else:
+            log.warning(
+                f"RUN collection {run_name} does not exist in Butler "
+                "(all quanta may have failed) — skipping"
+            )
+
+    if not verified_runs:
+        return []
+
+    chain_members = list(reversed(verified_runs))
+    run_butler(
+        [
+            "collection-chain",
+            str(config.repo),
+            cols.science_parent,
+            *chain_members,
+            "--mode",
+            "redefine",
+        ],
+        config,
+        log_file=log_file,
+    )
+    return verified_runs
+
+
+def _run_coadd_tail(
+    config: "Config",
+    cols: CollectionNames,
+    prof,
+    pipeline: Path,
+    qg_dir: Path,
+    night: str,
+    jobs: int,
+    log_file: Path | None,
+    executor,
+) -> str:
+    """Build coadds from the night's science outputs and chain the result.
+
+    Returns the coadd RUN collection name. May raise on pipeline failure
+    (the caller converts that into a failed ScienceResult).
+    """
+    repo = str(config.repo)
+    qg_coadd = qg_dir / f"coadds_{night}_{cols.run_ts}.qg"
+
+    executor.run_pipetask(
+        [
+            "qgraph",
+            "-b",
+            repo,
+            "-p",
+            f"{pipeline}#coadds-only",
+            "-i",
+            f"{cols.science_parent},{cols.calib_chain},{REFCATS_CHAIN},{prof.skymap_collection}",
+            "-o",
+            cols.coadd_parent,
+            "--output-run",
+            cols.coadd_run,
+            "--save-qgraph",
+            str(qg_coadd),
+            "-d",
+            f"instrument='{prof.name}' AND skymap='{prof.skymap_name}'",
+        ],
+        config,
+        log_file=log_file,
+    )
+
+    executor.run_pipetask(
+        [
+            "run",
+            "-b",
+            repo,
+            "-g",
+            str(qg_coadd),
+            "-j",
+            str(jobs),
+            "--register-dataset-types",
+        ],
+        config,
+        log_file=log_file,
+        output_run=cols.coadd_run,
+    )
+
+    run_butler(
+        [
+            "collection-chain",
+            repo,
+            cols.coadd_parent,
+            cols.coadd_run,
+            "--mode",
+            "redefine",
+        ],
+        config,
+        log_file=log_file,
+    )
+    return cols.coadd_run
+
+
+def run(
+    night: str,
+    config: Config,
+    *,
+    jobs: int = 8,
+    bad_exposures: str | None = None,
+    bad_file: Path | None = None,
+    object_filter: str | None = None,
+    skip_coadds: bool = False,
+    science_config: Path | None = None,
+    science_cfg: ScienceConfig | None = None,
+    use_fallbacks: bool = True,
+    bands: list[str] | None = None,
+    target_ra: float | None = None,
+    target_dec: float | None = None,
+    log_file: Path | None = None,
+    executor=None,
+) -> ScienceResult:
+    """Run science processing for a night.
+
+    This performs:
+    1. Single-visit processing (ISR, source detection, WCS, photometry)
+    2. Optionally build coadds from the night's data
+
+    Args:
+        night: Observing night (YYYYMMDD)
+        config: Pipeline configuration
+        jobs: Number of parallel jobs
+        bad_exposures: Comma-separated exposure IDs to exclude
+        bad_file: File with exposure IDs to exclude
+        object_filter: Filter by OBJECT header value (case-insensitive, partial match)
+        skip_coadds: Skip coadd generation
+        science_config: Override calibrateImage config file (legacy, prefer science_cfg)
+        science_cfg: Full science configuration with fallbacks
+        use_fallbacks: Try fallback configs on failure
+        bands: Optional list of bands to process (e.g. ["r", "i"])
+        target_ra: Expected target RA in degrees (enables coordinate validation)
+        target_dec: Expected target Dec in degrees (enables coordinate validation)
+        log_file: Optional path to write LSST pipeline logs
+
+    Returns:
+        ScienceResult with collection names and status
+    """
+    from stips.core.executor import LocalExecutor
+
+    if executor is None:
+        executor = LocalExecutor()
+
+    prof = config.require_profile()
+    night = validate_night(night)
+    cols = CollectionNames(night, prefix=prof.collection_prefix)
+
+    # Build config chain: explicit > legacy > default
+    if science_cfg is None:
+        science_cfg = ScienceConfig.default(config)
+    if science_config is not None:
+        science_cfg.calibrate_image = science_config
+
+    # Find the raw collection for this night (targeted query).
+    # Use the newest raw ingest — a re-ingest (e.g. after a header fix) appends
+    # a newer timestamp that supersedes the stale earlier one.
+    try:
+        raw_run = latest_raw_run(config, night)
+        if not raw_run:
+            return _failure(
+                night,
+                cols.science_parent,
+                f"No raw collection found for night {night}",
+            )
+    except Exception as e:
+        return _failure(night, cols.science_parent, f"Failed to query collections: {e}")
+
+    # Data selection: two-UT-day window, object filter, band filter, and
+    # bad-exposure/coordinate-validation exclusions.
+    data_query = _build_data_query(
+        config,
+        night,
+        prof,
+        bad_exposures=bad_exposures,
+        bad_file=bad_file,
+        object_filter=object_filter,
+        target_ra=target_ra,
+        target_dec=target_dec,
+        bands=bands,
+    )
 
     # Pipeline and config paths
     pipeline = config.resolve_pipeline("DRP.yaml")
@@ -372,537 +1096,109 @@ def run(
     )
 
     # Build list of configs to try (primary + fallbacks)
-    configs_to_try: list[Path] = []
-    if science_cfg.calibrate_image and science_cfg.calibrate_image.exists():
-        configs_to_try.append(science_cfg.calibrate_image)
-    if use_fallbacks:
-        for fb in science_cfg.calibrate_image_fallbacks:
-            if fb.exists() and fb not in configs_to_try:
-                configs_to_try.append(fb)
-
+    configs_to_try = _resolve_configs_to_try(science_cfg, use_fallbacks)
     if not configs_to_try:
-        return ScienceResult(
-            success=False,
-            night=night,
-            science_run=cols.science_parent,
-            coadd_run=None,
-            error=f"No valid config files found. Tried: {science_cfg.calibrate_image}",
+        return _failure(
+            night,
+            cols.science_parent,
+            f"No valid config files found. Tried: {science_cfg.calibrate_image}",
         )
-
-    # A single Lick observing night can span two UT days: exposures taken
-    # before Pacific midnight have day_obs=night, and post-midnight exposures
-    # have day_obs=night+1 (what night_to_day_obs returns). Query both.
-    data_query = (
-        f"instrument='{prof.name}' AND exposure.observation_type='science'"
-        f" AND {night_day_obs_expr(night, prof)}"
-        f"{object_expr}{band_expr}{exclusion_expr}"
-    )
 
     # Fail fast if this night has no matching exposures after filtering.
     match_count = _count_matching_exposures(config, data_query)
     if match_count == 0:
-        reason = (
+        return _failure(
+            night,
+            cols.science_parent,
             f"No science exposures matched selection for night {night} "
-            "(after object/coordinate/bad-exposure filtering)"
-        )
-        return ScienceResult(
-            success=False,
-            night=night,
-            science_run=cols.science_parent,
-            coadd_run=None,
-            error=reason,
+            "(after object/coordinate/bad-exposure filtering)",
         )
     if match_count is not None:
         log.info(f"Found {match_count} matching science exposures for {night}")
 
-    # Register instrument. check=False already tolerates the common
-    # "already registered" non-zero exit, matching dia/calibs/coadd. No
-    # try/except here on purpose: the only remaining raise path is a
-    # stack-activation/spawn failure, which must surface rather than be
-    # silently swallowed.
-    run_butler(
-        ["register-instrument", repo, prof.instrument_class],
-        config,
-        check=False,
-        log_file=log_file,
-    )
+    _register_instrument(config, prof, log_file)
 
-    # Build quantum graph for single-visit processing
     qg_dir = config.repo / "qgraphs"
     qg_dir.mkdir(parents=True, exist_ok=True)
 
-    # Import processing log for tracking
+    # Create processing log for this night
     from stips.core import processing_log
 
-    # Create processing log for this night
     plog = processing_log.create_log(night, "science")
 
-    # Primary output run — fallbacks get separate RUNs to avoid
-    # ConflictingDefinitionError (LSST enforces config consistency per RUN).
-    primary_run = cols.science_run
-    successful_runs: list[str] = []  # RUNs that produced at least one quantum
-
-    # Try each config in order, using --skip-existing-in for fallbacks
-    config_used: Path | None = None
-    fallback_used = False
-    any_success = False
-    cumulative_succeeded = 0  # Track total successes across all configs
-
-    for i, tuned_config in enumerate(configs_to_try):
-        is_fallback = i > 0
-        config_label = "fallback" if is_fallback else "primary"
-        log.info(f"Trying {config_label} config: {tuned_config.name}")
-
-        # Each config attempt gets its own RUN collection.
-        # Primary: .../run
-        # Fallbacks: .../run_fb1, .../run_fb2, .../run_fb3
-        if is_fallback:
-            output_run = f"{cols.science_parent}/run_fb{i}"
-        else:
-            output_run = primary_run
-
-        # Each attempt gets its own qgraph (different config = different plan)
-        qg_science = qg_dir / f"processCcd_{night}_{cols.run_ts}_cfg{i}.qg"
-
-        # Track this attempt
-        attempt = processing_log.ConfigAttempt(
-            config=tuned_config.name,
-            is_fallback=is_fallback,
-        )
-
-        try:
-            # calibrateImage config-file chain: tuned config, then (optionally)
-            # the Gaia/PS1 refcat overlay, then color terms. Order keeps color
-            # terms last so they see the final photometry_ref_cat.
-            config_file_args = ["--config-file", f"calibrateImage:{tuned_config}"]
-            overlay_name = refcat_overlay_config(science_cfg.refcat_mode)
-            if overlay_name:
-                overlay_path = config.resolve_config(overlay_name)
-                config_file_args += [
-                    "--config-file",
-                    f"calibrateImage:{overlay_path}",
-                ]
-            config_file_args += ["--config-file", f"calibrateImage:{colorterms_config}"]
-
-            # Build qgraph arguments
-            qgraph_args = [
-                "qgraph",
-                "-b",
-                repo,
-                "-p",
-                f"{pipeline}#stage1-single-visit",
-                "-i",
-                f"{raw_run},{cols.calib_chain},{REFCATS_CHAIN},{prof.skymap_collection}",
-                "-o",
-                cols.science_parent,
-                "--output-run",
-                output_run,
-                "--save-qgraph",
-                str(qg_science),
-                *config_file_args,
-                "-d",
-                data_query,
-            ]
-
-            # Profile-declared ISR overrides (e.g. doDefect=False for an
-            # instrument without curated defect maps, or parallel overscan).
-            # Applied as inline config so instruments need not fork the shared DRP
-            # pipeline; the same overrides feed the calib-build ISR (calibs.py).
-            qgraph_args.extend(isr_config_args(prof))
-
-            # For fallback attempts, build a qgraph that excludes quanta
-            # whose outputs already exist in any prior successful RUN.
-            # --skip-existing-in filters at graph-build time based on _metadata
-            # datasets, so the qgraph only contains the failed quanta that
-            # need retrying with a different config.
-            #
-            # Each fallback writes to its own RUN to avoid
-            # ConflictingDefinitionError (LSST enforces config consistency
-            # per task label within a single RUN collection).
-            if is_fallback and successful_runs:
-                for prior_run in successful_runs:
-                    qgraph_args.extend(["--skip-existing-in", prior_run])
-                qgraph_args.append("--clobber-outputs")
-
-            # Build quantum graph
-            executor.run_pipetask(qgraph_args, config, log_file=log_file)
-
-            # Build run arguments
-            summary_file = qg_science.with_suffix(".summary.json")
-            run_args = [
-                "run",
-                "-b",
-                repo,
-                "-g",
-                str(qg_science),
-                "--output-run",
-                output_run,
-                "-j",
-                str(jobs),
-                "--register-dataset-types",
-                *quanta_report.summary_run_args(summary_file),
-            ]
-
-            # Fallback qgraphs are already reduced to unresolved quanta via
-            # --skip-existing-in at qgraph build time; execute directly.
-            log_start_pos = None
-            if log_file and log_file.exists():
-                try:
-                    log_start_pos = log_file.stat().st_size
-                except OSError:
-                    pass
-
-            # Run science processing
-            result = executor.run_pipetask(
-                run_args,
-                config,
-                capture_output=True,
-                check=False,
-                log_file=log_file,
-                output_run=output_run,
-            )
-
-            # Parse actual quanta counts. Prefer the structured --summary JSON;
-            # fall back to the stdout/log regex when it is absent (e.g. the BPS
-            # executor path, which does not run `pipetask run`).
-            combined_output = (result.stdout or "") + "\n" + (result.stderr or "")
-            if not combined_output.strip():
-                combined_output = read_log_delta(
-                    log_file, log_start_pos=log_start_pos, max_chars=8000
-                )
-            counts = quanta_report.parse_summary_file(summary_file)
-            if counts is not None:
-                quanta_ok, quanta_fail = counts
-            else:
-                quanta_ok, quanta_fail = parse_quanta_summary(
-                    combined_output,
-                    log_file,
-                    log_start_pos=log_start_pos,
-                )
-
-            if result.returncode == 0:
-                # Full success with this config (rc==0 => pipetask ran the
-                # planned quanta). Record the true parsed count. If quanta_ok
-                # is 0 here, the quanta summary could not be parsed — record
-                # the honest 0 plus an explicit parse-failure marker rather
-                # than fabricating a count. Success is still driven by rc==0.
-                if quanta_ok == 0:
-                    attempt.quanta_parse_failed = True
-                    log.warning(
-                        "Quanta summary could not be parsed (returncode=0); "
-                        "recording 0 succeeded with quanta_parse_failed=True. "
-                        "Reported counts may understate the work actually done."
-                    )
-                attempt.quanta_succeeded = quanta_ok
-                cumulative_succeeded += quanta_ok
-                successful_runs.append(output_run)
-                any_success = True
-                config_used = tuned_config
-                fallback_used = is_fallback
-                if is_fallback:
-                    log.info(
-                        f"Fallback config {tuned_config.name} rescued all "
-                        f"{quanta_ok} remaining quanta"
-                    )
-                else:
-                    log.info(
-                        f"Science processing fully succeeded with {config_label} "
-                        f"config: {tuned_config.name} ({quanta_ok} quanta)"
-                    )
-                plog.add_attempt(attempt)
-                break
-            elif quanta_ok > 0:
-                # Partial success - some quanta succeeded, some failed
-                attempt.quanta_succeeded = quanta_ok
-                attempt.quanta_failed = quanta_fail
-                attempt.failed_exposures = processing_log.parse_pipetask_failures(
-                    result.stderr or "", result.stdout or ""
-                )
-                successful_runs.append(output_run)
-                any_success = True
-                config_used = tuned_config
-                fallback_used = is_fallback
-
-                # Determine how many NEW successes this config produced
-                if is_fallback:
-                    # Fallback qgraphs only contain quanta that previously
-                    # failed, so every success here is a new win. (quanta_ok
-                    # is > 0 in this branch, so there is no "rescued nothing"
-                    # case to guard — that path lands in the total-failure
-                    # branch below.)
-                    new_wins = quanta_ok
-                    cumulative_succeeded += new_wins
-                    log.warning(
-                        f"Fallback config {tuned_config.name}: "
-                        f"{new_wins} new quanta rescued, {quanta_fail} still failing "
-                        f"(cumulative: {cumulative_succeeded} succeeded)"
-                    )
-                else:
-                    cumulative_succeeded += quanta_ok
-                    log.warning(
-                        f"Partial success with primary config: {tuned_config.name} "
-                        f"({quanta_ok} quanta succeeded, {quanta_fail} failed)"
-                    )
-
-                plog.add_attempt(attempt)
-                # Don't break - try fallback for the remaining failures
-                if not use_fallbacks or i == len(configs_to_try) - 1:
-                    log.info(
-                        f"Accepting partial result with {cumulative_succeeded} "
-                        "successful quanta"
-                    )
-                    break
-                else:
-                    log.info(
-                        f"Trying fallback config for {quanta_fail} remaining "
-                        "failures..."
-                    )
-            else:
-                # Total failure - no quanta succeeded
-                attempt.error = (
-                    combined_output.strip()[-500:]
-                    if combined_output.strip()
-                    else "Unknown error"
-                )
-                attempt.failed_exposures = processing_log.parse_pipetask_failures(
-                    result.stderr or "", result.stdout or ""
-                )
-                # Record the honest parsed count. If the summary could not be
-                # parsed (quanta_fail == 0 despite the non-zero returncode),
-                # mark the parse failure instead of fabricating a count of 1.
-                attempt.quanta_failed = quanta_fail
-                if quanta_fail == 0:
-                    attempt.quanta_parse_failed = True
-                plog.add_attempt(attempt)
-
-                log.error(
-                    f"No quanta succeeded with {config_label} config: "
-                    f"{tuned_config.name}"
-                )
-                if not use_fallbacks or i == len(configs_to_try) - 1:
-                    if i == len(configs_to_try) - 1:
-                        log.error(
-                            f"All {len(configs_to_try)} configs exhausted for "
-                            f"{night}"
-                        )
-                else:
-                    log.warning(
-                        f"{config_label} config had total failure, trying "
-                        "fallback..."
-                    )
-
-        except Exception as e:
-            error_str = str(e)
-            attempt.error = error_str[:500]
-            # The attempt raised before any quanta could be counted, so the
-            # failure count is unknown, not 1. Leave quanta_failed at 0 and
-            # mark the parse failure; the populated ``error`` field (and the
-            # any_success flag) carry the failure downstream.
-            attempt.quanta_parse_failed = True
-            plog.add_attempt(attempt)
-
-            # Log detailed error information
-            log.warning(
-                f"{config_label.capitalize()} config failed: {tuned_config.name}"
-            )
-
-            # Surface key parts of the error for diagnostics
-            if "FileNotFoundError" in error_str and "astrometry_ref_cat" in error_str:
-                log.error(
-                    "Reference catalog not found for this field - no refcat shard available"
-                )
-                log.error("This usually means the field is outside the refcat coverage")
-            elif "FileNotFoundError" in error_str:
-                # Extract the specific file/dataset that's missing
-                match = re.search(r"connection (\S+)", error_str)
-                if match:
-                    log.error(f"Missing required dataset: {match.group(1)}")
-                log.error(f"Full error: {error_str[:200]}")
-            else:
-                log.error(f"Error: {error_str[:200]}")
-
-            # Check if this is a recoverable error that fallback might help with
-            recoverable_patterns = [
-                "astrometry",
-                "refcat",
-                "WCS",
-                "matches",
-                "Too few",
-                "not enough",
-                "PSF",
-                "converge",
-                "FAILED",  # pipetask quantum failures
-            ]
-            is_recoverable = any(
-                p.lower() in error_str.lower() for p in recoverable_patterns
-            )
-
-            # Don't try fallback if the issue is missing refcat
-            if "FileNotFoundError" in error_str and "astrometry_ref_cat" in error_str:
-                log.info("Refcat missing - skipping fallback (won't help)")
-                break
-
-            if not is_recoverable and use_fallbacks:
-                log.info(
-                    "Error doesn't appear to be config-related, skipping fallbacks"
-                )
-                break
-
-    # Finalize and save processing log
-    plog.output_collection = primary_run
-    plog.finalize()
-    processing_log.save_log(plog, config)
-    from stips.core import provenance
-
-    provenance.upsert_from_log(plog, config)  # non-fatal; logs on failure
-
-    # Use cumulative counts — cumulative_succeeded tracks unique successes
-    # across all configs. Failures are NOT summed: because each fallback's
-    # qgraph is reduced (via --skip-existing-in) to only the quanta that
-    # previously failed, the LAST attempt's failure count is precisely the set
-    # of still-unresolved quanta. Summing would double-count. Name it honestly
-    # so callers know it is the last attempt's remaining failures, not a total.
-    total_succeeded = cumulative_succeeded
-    last_attempt_failed = (
-        plog.configs_tried[-1].quanta_failed if plog.configs_tried else 0
+    # Try each config in order; fallbacks retry only the still-failed quanta,
+    # each in its own RUN collection (see _run_config_attempts).
+    ctx = _AttemptContext(
+        config=config,
+        executor=executor,
+        night=night,
+        cols=cols,
+        prof=prof,
+        pipeline=pipeline,
+        raw_run=raw_run,
+        data_query=data_query,
+        colorterms_config=colorterms_config,
+        refcat_mode=science_cfg.refcat_mode,
+        qg_dir=qg_dir,
+        jobs=jobs,
+        log_file=log_file,
     )
+    attempts = _run_config_attempts(ctx, configs_to_try, use_fallbacks, plog)
+
+    _save_processing_log(plog, config, cols.science_run)
+    total_succeeded, last_attempt_failed = _final_counts(attempts, plog)
 
     # Check if any config succeeded
-    if not any_success:
+    if not attempts.any_success:
         last_error = (
             plog.configs_tried[-1].error if plog.configs_tried else "No configs tried"
         )
-        return ScienceResult(
-            success=False,
-            night=night,
-            science_run=cols.science_parent,
-            coadd_run=None,
-            error=last_error or "All configs failed",
+        return _failure(
+            night,
+            cols.science_parent,
+            last_error or "All configs failed",
             quanta_succeeded=total_succeeded,
             quanta_failed=last_attempt_failed,
         )
 
+    config_used = str(attempts.config_used) if attempts.config_used else None
     try:
-        # Chain all successful RUN collections under the parent CHAINED
-        # collection so downstream consumers (DIA, fphot) see a unified view.
-        # Order matters: later runs (fallbacks) should be searched first so
-        # their outputs take precedence over partial/failed primary outputs.
-        #
-        # Verify each RUN collection actually exists in the Butler before
-        # chaining. BPS may report success even when all quanta failed
-        # (no outputs written = no RUN collection created).
-        verified_runs: list[str] = []
-        for run_name in successful_runs:
-            if butler_query.collection_exists(config, run_name):
-                verified_runs.append(run_name)
-            else:
-                log.warning(
-                    f"RUN collection {run_name} does not exist in Butler "
-                    "(all quanta may have failed) — skipping"
-                )
-
+        verified_runs = _verify_and_chain_runs(
+            config, cols, attempts.successful_runs, log_file
+        )
         if not verified_runs:
-            return ScienceResult(
-                success=False,
-                night=night,
-                science_run=cols.science_parent,
-                coadd_run=None,
-                error="No RUN collections were created (all quanta failed)",
+            return _failure(
+                night,
+                cols.science_parent,
+                "No RUN collections were created (all quanta failed)",
                 quanta_succeeded=0,
                 quanta_failed=last_attempt_failed,
             )
 
-        chain_members = list(reversed(verified_runs))
-        run_butler(
-            [
-                "collection-chain",
-                repo,
-                cols.science_parent,
-                *chain_members,
-                "--mode",
-                "redefine",
-            ],
-            config,
-            log_file=log_file,
-        )
-
         coadd_run = None
         if not skip_coadds:
-            # Build coadds
-            qg_coadd = qg_dir / f"coadds_{night}_{cols.run_ts}.qg"
-
-            executor.run_pipetask(
-                [
-                    "qgraph",
-                    "-b",
-                    repo,
-                    "-p",
-                    f"{pipeline}#coadds-only",
-                    "-i",
-                    f"{cols.science_parent},{cols.calib_chain},{REFCATS_CHAIN},{prof.skymap_collection}",
-                    "-o",
-                    cols.coadd_parent,
-                    "--output-run",
-                    cols.coadd_run,
-                    "--save-qgraph",
-                    str(qg_coadd),
-                    "-d",
-                    f"instrument='{prof.name}' AND skymap='{prof.skymap_name}'",
-                ],
-                config,
-                log_file=log_file,
+            coadd_run = _run_coadd_tail(
+                config, cols, prof, pipeline, qg_dir, night, jobs, log_file, executor
             )
-
-            executor.run_pipetask(
-                [
-                    "run",
-                    "-b",
-                    repo,
-                    "-g",
-                    str(qg_coadd),
-                    "-j",
-                    str(jobs),
-                    "--register-dataset-types",
-                ],
-                config,
-                log_file=log_file,
-                output_run=cols.coadd_run,
-            )
-
-            run_butler(
-                [
-                    "collection-chain",
-                    repo,
-                    cols.coadd_parent,
-                    cols.coadd_run,
-                    "--mode",
-                    "redefine",
-                ],
-                config,
-                log_file=log_file,
-            )
-            coadd_run = cols.coadd_run
 
         return ScienceResult(
             success=True,
             night=night,
             science_run=cols.science_parent,
             coadd_run=coadd_run,
-            config_used=str(config_used) if config_used else None,
-            fallback_used=fallback_used,
+            config_used=config_used,
+            fallback_used=attempts.fallback_used,
             quanta_succeeded=total_succeeded,
             quanta_failed=last_attempt_failed,
         )
 
     except Exception as e:
-        return ScienceResult(
-            success=False,
-            night=night,
-            science_run=cols.science_parent,
-            coadd_run=None,
-            error=str(e),
-            config_used=str(config_used) if config_used else None,
-            fallback_used=fallback_used,
+        return _failure(
+            night,
+            cols.science_parent,
+            str(e),
+            config_used=config_used,
+            fallback_used=attempts.fallback_used,
             quanta_succeeded=total_succeeded,
             quanta_failed=last_attempt_failed,
         )
