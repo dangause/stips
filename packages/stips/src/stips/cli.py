@@ -19,6 +19,7 @@ Configuration:
 
 from __future__ import annotations
 
+import functools
 import logging
 import sys
 from pathlib import Path
@@ -103,6 +104,45 @@ def _load_config(ctx: click.Context) -> cfg_module.Config:
         sys.exit(1)
 
 
+def _try_load_config(ctx: click.Context) -> cfg_module.Config | None:
+    """Load config, returning None on a missing/invalid ``-c`` instead of exiting.
+
+    For handlers where that is a soft, recoverable condition (e.g. the
+    dashboard). Never raises ``SystemExit``; the caller decides how to degrade.
+    """
+    config_path = ctx.obj.get("config_path")
+    if not config_path:
+        return None
+    try:
+        return cfg_module.load(config_path)
+    except ValueError:
+        return None
+
+
+def _report_result(result, *, success_msg: str, fail_msg: str, details=None) -> None:
+    """Report a ``*Result``: success prints ``success_msg`` + ``details`` lines;
+    failure prints ``fail_msg: {result.error}`` in red and exits 1."""
+    if result.success:
+        _print_success(success_msg)
+        for line in details or []:
+            click.echo(line)
+    else:
+        _print_error(f"{fail_msg}: {result.error}")
+        sys.exit(1)
+
+
+def pass_config(f):
+    """Decorator: load the group ``-c`` config (exiting via :func:`_load_config`
+    on error) and pass it to the handler as ``def handler(ctx, config, ...)``."""
+
+    @functools.wraps(f)
+    @click.pass_context
+    def wrapper(ctx: click.Context, *args, **kwargs):
+        return f(ctx, _load_config(ctx), *args, **kwargs)
+
+    return wrapper
+
+
 def _load_lightcurve_config(
     ctx: click.Context,
     repo: Path | None = None,
@@ -174,11 +214,9 @@ def _load_lightcurve_config(
 
 
 @cli.command()
-@click.pass_context
-def env(ctx: click.Context) -> None:
+@pass_config
+def env(ctx: click.Context, config: cfg_module.Config) -> None:
     """Show current configuration and validate paths."""
-    config = _load_config(ctx)
-
     click.echo("\nSTIPS Configuration")
     click.echo("=" * 40)
 
@@ -226,8 +264,10 @@ def env(ctx: click.Context) -> None:
 @cli.command()
 @click.argument("night")
 @click.option("-j", "--jobs", default=4, help="Parallel jobs (default: 4)")
-@click.pass_context
-def calibs(ctx: click.Context, night: str, jobs: int) -> None:
+@pass_config
+def calibs(
+    ctx: click.Context, config: cfg_module.Config, night: str, jobs: int
+) -> None:
     """Run nightly calibrations (bias, flat, defects).
 
     NIGHT is the observing date in YYYYMMDD format.
@@ -237,23 +277,23 @@ def calibs(ctx: click.Context, night: str, jobs: int) -> None:
         stips calibs 20240625
         stips calibs 20240625 --jobs 8
     """
-    config = _load_config(ctx)
-
     _print_info(f"Running calibrations for {night}...")
 
     from stips.core import calibs as calibs_module
 
     result = calibs_module.run(night, config, jobs=jobs)
 
-    if result.success:
-        _print_success(f"\n✓ Calibrations complete for {night}")
-        click.echo(f"  Raw collection: {result.raw_run}")
-        click.echo(f"  Bias: {result.cp_bias}")
-        click.echo(f"  Flat: {result.cp_flat}")
-        click.echo(f"  Calib chain: {result.calib_chain}")
-    else:
-        _print_error(f"Calibrations failed: {result.error}")
-        sys.exit(1)
+    _report_result(
+        result,
+        success_msg=f"\n✓ Calibrations complete for {night}",
+        fail_msg="Calibrations failed",
+        details=[
+            f"  Raw collection: {result.raw_run}",
+            f"  Bias: {result.cp_bias}",
+            f"  Flat: {result.cp_flat}",
+            f"  Calib chain: {result.calib_chain}",
+        ],
+    )
 
 
 # =============================================================================
@@ -269,9 +309,13 @@ def calibs(ctx: click.Context, night: str, jobs: int) -> None:
     type=click.Path(),
     help="Directory to export the measured matrix ECSV (default: REPO/crosstalk)",
 )
-@click.pass_context
+@pass_config
 def measure_crosstalk(
-    ctx: click.Context, nights: tuple[str, ...], jobs: int, export_dir: str | None
+    ctx: click.Context,
+    config: cfg_module.Config,
+    nights: tuple[str, ...],
+    jobs: int,
+    export_dir: str | None,
 ) -> None:
     """Measure intra-detector crosstalk from exposures (cp_pipe MeasureCrosstalk).
 
@@ -286,11 +330,9 @@ def measure_crosstalk(
 
     \b
     Example:
-        stips -p ctio1m measure-crosstalk 20070321 20070322
+        stips -c scripts/config/ctio1m/pipeline.yaml measure-crosstalk 20070321 20070322
     """
     from pathlib import Path
-
-    config = _load_config(ctx)
 
     prof = config.require_profile()
     if prof.crosstalk is None:
@@ -311,14 +353,15 @@ def measure_crosstalk(
         export_dir=Path(export_dir) if export_dir else None,
     )
 
-    if result.success:
-        _print_success("\n✓ Crosstalk measured and certified")
-        click.echo(f"  Calib collection: {result.calib_collection}")
-        if result.export_path:
-            click.echo(f"  Matrix exported:  {result.export_path}")
-    else:
-        _print_error(f"Crosstalk measurement failed: {result.error}")
-        sys.exit(1)
+    details = [f"  Calib collection: {result.calib_collection}"]
+    if result.success and result.export_path:
+        details.append(f"  Matrix exported:  {result.export_path}")
+    _report_result(
+        result,
+        success_msg="\n✓ Crosstalk measured and certified",
+        fail_msg="Crosstalk measurement failed",
+        details=details,
+    )
 
 
 # =============================================================================
@@ -349,9 +392,10 @@ def measure_crosstalk(
 @click.option(
     "--dec", type=float, help="Target Dec in degrees (enables coordinate validation)"
 )
-@click.pass_context
+@pass_config
 def science(
     ctx: click.Context,
+    config: cfg_module.Config,
     night: str,
     jobs: int,
     bad: str | None,
@@ -381,8 +425,6 @@ def science(
         _print_error("--ra and --dec must be provided together")
         sys.exit(1)
 
-    config = _load_config(ctx)
-
     _print_info(f"Running science processing for {night}...")
 
     from stips.core import science as science_module
@@ -400,14 +442,15 @@ def science(
         target_dec=dec,
     )
 
-    if result.success:
-        _print_success(f"\n✓ Science processing complete for {night}")
-        click.echo(f"  Science run: {result.science_run}")
-        if result.coadd_run:
-            click.echo(f"  Coadd run: {result.coadd_run}")
-    else:
-        _print_error(f"Science processing failed: {result.error}")
-        sys.exit(1)
+    details = [f"  Science run: {result.science_run}"]
+    if result.success and result.coadd_run:
+        details.append(f"  Coadd run: {result.coadd_run}")
+    _report_result(
+        result,
+        success_msg=f"\n✓ Science processing complete for {night}",
+        fail_msg="Science processing failed",
+        details=details,
+    )
 
 
 # =============================================================================
@@ -429,9 +472,10 @@ def science(
     type=click.Path(exists=True, path_type=Path),
     help="File with bad exposure IDs",
 )
-@click.pass_context
+@pass_config
 def dia(
     ctx: click.Context,
+    config: cfg_module.Config,
     night: str,
     jobs: int,
     template: str | None,
@@ -456,8 +500,6 @@ def dia(
         _print_error("Specify --template or --auto")
         sys.exit(1)
 
-    config = _load_config(ctx)
-
     _print_info(f"Running difference imaging for {night}...")
 
     from stips.core import dia as dia_module
@@ -475,15 +517,17 @@ def dia(
         bad_file=bad_file,
     )
 
-    if result.success:
-        _print_success(f"\n✓ Difference imaging complete for {night}")
-        click.echo(f"  Template: {result.template_collection}")
-        click.echo(f"  DIA run: {result.diff_run}")
-        click.echo(f"  Difference images: {result.diff_image_count}")
-        click.echo(f"  DIA sources: {result.dia_source_count}")
-    else:
-        _print_error(f"Difference imaging failed: {result.error}")
-        sys.exit(1)
+    _report_result(
+        result,
+        success_msg=f"\n✓ Difference imaging complete for {night}",
+        fail_msg="Difference imaging failed",
+        details=[
+            f"  Template: {result.template_collection}",
+            f"  DIA run: {result.diff_run}",
+            f"  Difference images: {result.diff_image_count}",
+            f"  DIA sources: {result.dia_source_count}",
+        ],
+    )
 
 
 # =============================================================================
@@ -502,9 +546,10 @@ def dia(
     is_flag=True,
     help="Only download nights with no FITS files in raw directory",
 )
-@click.pass_context
+@pass_config
 def download(
     ctx: click.Context,
+    config: cfg_module.Config,
     nights: tuple[str, ...],
     overwrite: bool,
     missing_only: bool,
@@ -527,7 +572,7 @@ def download(
         stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml download 20240625
         stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml download 20240416 20240429
     """
-    config = _load_config(ctx)
+    from stips.core import download as download_module
 
     prof = config.require_profile()
     if prof.fetch_data is None:
@@ -548,91 +593,59 @@ def download(
             )
             sys.exit(1)
 
-        import yaml
-
-        with open(config_path) as f:
-            yaml_config = yaml.safe_load(f) or {}
-
-        # Collect all nights from science and (coadd) template sections
-        science_nights = yaml_config.get("science", {}).get("nights", [])
-        template_config = yaml_config.get("template", {}) or {}
-        template_nights = (
-            template_config.get("nights", [])
-            if template_config.get("type") == "coadd"
-            else []
-        )
-
-        all_nights = set(str(n) for n in science_nights + template_nights)
-        nights_list = sorted(all_nights)
-
+        nights_list = download_module.nights_from_config(config_path)
         if not nights_list:
             _print_error(f"No nights found in config file: {config_path}")
             sys.exit(1)
 
         _print_info(f"Found {len(nights_list)} nights in config")
 
-    nights = tuple(nights_list)
-
-    # Filter to missing-only if requested
     if missing_only:
-        missing = []
-        for night in nights:
-            raw_dir = config.raw_parent_dir / night / "raw"
-            if not raw_dir.exists():
-                missing.append(night)
-            else:
-                fits_count = len(
-                    list(raw_dir.glob("*.fits")) + list(raw_dir.glob("*.fits.gz"))
-                )
-                if fits_count == 0:
-                    missing.append(night)
-        skipped = len(nights) - len(missing)
+        missing = download_module.missing_nights(nights_list, config)
+        skipped = len(nights_list) - len(missing)
         if skipped > 0:
             _print_info(f"Skipping {skipped} nights that already have data")
-        nights = missing
+        nights_list = missing
 
-    if not nights:
+    if not nights_list:
         _print_success("All nights already have data, nothing to download")
         return
 
-    _print_info(f"Downloading {len(nights)} nights...")
+    _print_info(f"Downloading {len(nights_list)} nights...")
 
-    failed = []
-    not_in_archive = []
-    succeeded = []
-
-    for night in nights:
-        _print_info(f"Downloading {night}...")
-        try:
-            status = prof.fetch_data(night, config, overwrite=overwrite)
-        except Exception as e:
-            _print_error(f"Failed to download {night}: {e}")
-            failed.append(night)
-            continue
-        if status == "ok":
+    def _on_event(night: str, status: str, error: str | None) -> None:
+        if status == "start":
+            _print_info(f"Downloading {night}...")
+        elif status == "ok":
             _print_success(f"✓ Downloaded {night}")
-            succeeded.append(night)
         elif status == "not_found":
             click.secho(f"⚠ {night}: not found in archive", fg="yellow")
-            not_in_archive.append(night)
+        elif error:
+            _print_error(f"Failed to download {night}: {error}")
         else:
             _print_error(f"Failed to download {night}")
-            failed.append(night)
+
+    result = download_module.fetch_nights(
+        nights_list, config, overwrite=overwrite, on_event=_on_event
+    )
 
     # Summary
     click.echo("")
-    if succeeded:
-        _print_success(f"Downloaded: {len(succeeded)} nights")
-    if not_in_archive:
+    if result.succeeded:
+        _print_success(f"Downloaded: {len(result.succeeded)} nights")
+    if result.not_in_archive:
         click.secho(
-            f"Not in archive: {len(not_in_archive)} nights ({', '.join(not_in_archive)})",
+            f"Not in archive: {len(result.not_in_archive)} nights "
+            f"({', '.join(result.not_in_archive)})",
             fg="yellow",
         )
-    if failed:
-        _print_error(f"Failed: {len(failed)} nights ({', '.join(failed)})")
+    if result.failed:
+        _print_error(
+            f"Failed: {len(result.failed)} nights ({', '.join(result.failed)})"
+        )
         sys.exit(1)
 
-    if not_in_archive and not succeeded:
+    if result.not_in_archive and not result.succeeded:
         click.secho(
             "\nNone of the requested nights were found in the archive. "
             "The data may not have been uploaded yet, or the dates may be incorrect.",
@@ -647,8 +660,8 @@ def download(
 
 
 @cli.command()
-@click.pass_context
-def bootstrap(ctx: click.Context) -> None:
+@pass_config
+def bootstrap(ctx: click.Context, config: cfg_module.Config) -> None:
     """Initialize a new Butler repository.
 
     Creates the Butler repo, registers the instrument, ingests reference
@@ -663,19 +676,17 @@ def bootstrap(ctx: click.Context) -> None:
     """
     from stips.core import bootstrap as bootstrap_module
 
-    config = _load_config(ctx)
-
     _print_info("Bootstrapping Butler repository...")
     _print_info(f"  Repo: {config.repo}")
 
     result = bootstrap_module.run(config)
 
-    if result.success:
-        _print_success("✓ Bootstrap complete")
-        click.echo(f"  Repository ready: {config.repo}")
-    else:
-        _print_error(f"Bootstrap failed: {result.error}")
-        sys.exit(1)
+    _report_result(
+        result,
+        success_msg="✓ Bootstrap complete",
+        fail_msg="Bootstrap failed",
+        details=[f"  Repository ready: {config.repo}"],
+    )
 
 
 # =============================================================================
@@ -706,9 +717,10 @@ def bootstrap(ctx: click.Context) -> None:
     is_flag=True,
     help="Skip confirmation prompt",
 )
-@click.pass_context
+@pass_config
 def clean(
     ctx: click.Context,
+    config: cfg_module.Config,
     nights: tuple[str, ...],
     steps: tuple[str, ...],
     dry_run: bool,
@@ -745,8 +757,6 @@ def clean(
     """
     from stips.core import clean as clean_module
 
-    config = _load_config(ctx)
-
     nights_list = list(nights) if nights else None
     steps_list = list(steps) if steps else None
 
@@ -757,20 +767,21 @@ def clean(
     if steps_list:
         _print_info(f"Steps: {', '.join(steps_list)}")
 
-    # Dry-run or preview
-    preview = clean_module.run(
-        config,
-        nights=nights_list,
-        steps=steps_list,
-        dry_run=True,
-    )
+    # Discover once. The confirmed plan is exactly what gets executed, so the
+    # user can never approve one set of collections and have a different set
+    # deleted (they cannot drift between a separate preview and delete pass).
+    plan = clean_module.plan(config, nights=nights_list, steps=steps_list)
 
-    if not preview.collections_removed:
+    if plan.error:
+        _print_error(plan.error)
+        sys.exit(1)
+
+    if plan.is_empty:
         _print_info("No collections found to remove")
         return
 
-    _print_info(f"\nFound {len(preview.collections_removed)} collections to remove:")
-    for col in preview.collections_removed:
+    _print_info(f"\nFound {len(plan.names)} collections to remove:")
+    for col in plan.names:
         click.echo(f"  {col}")
 
     if dry_run:
@@ -780,17 +791,12 @@ def clean(
     # Confirm
     if not yes:
         click.echo()
-        if not click.confirm(f"Remove {len(preview.collections_removed)} collections?"):
+        if not click.confirm(f"Remove {len(plan.names)} collections?"):
             click.echo("Cancelled")
             return
 
-    # Do the actual removal
-    result = clean_module.run(
-        config,
-        nights=nights_list,
-        steps=steps_list,
-        dry_run=False,
-    )
+    # Do the actual removal of THIS plan (no re-discovery).
+    result = clean_module.execute(config, plan)
 
     if result.success:
         _print_success(f"\n✓ Removed {len(result.collections_removed)} collections")
@@ -830,9 +836,10 @@ def clean(
 )
 @click.option("--degrade-seeing", type=float, help="Convolve to this FWHM in arcsec")
 @click.option("--overwrite", is_flag=True, help="Replace existing template")
-@click.pass_context
+@pass_config
 def ps1_template(
     ctx: click.Context,
+    config: cfg_module.Config,
     ra: float,
     dec: float,
     band: str,
@@ -852,8 +859,6 @@ def ps1_template(
         stips ps1-template --ra 210.91 --dec 54.32 --band r
         stips ps1-template --ra 210.91 --dec 54.32 --band i --degrade-seeing 2.0
     """
-    config = _load_config(ctx)
-
     from stips.core.pipeline import ps1_band_map
 
     eligible = ps1_band_map(config)
@@ -869,13 +874,8 @@ def ps1_template(
 
     from stips.core import ps1_template as ps1_module
 
-    # Check if already exists
-    target_collection = collection or f"templates/ps1/{band}"
-    if not overwrite and ps1_module.check_exists(band, config, target_collection):
-        _print_info(f"PS1 template already exists in {target_collection}")
-        _print_info("Use --overwrite to replace")
-        return
-
+    # The skip-if-exists policy (and the exists check itself) lives in
+    # ps1_module.run(); the handler just surfaces the result.
     result = ps1_module.run(
         ra=ra,
         dec=dec,
@@ -888,16 +888,22 @@ def ps1_template(
         overwrite=overwrite,
     )
 
-    if result.success:
-        _print_success("\n✓ PS1 template ingested")
-        click.echo(f"  Collection: {result.collection}")
-        if result.tract is not None:
-            click.echo(f"  Tract: {result.tract}, Patch: {result.patch}")
-        if result.fits_path:
-            click.echo(f"  FITS file: {result.fits_path}")
-    else:
-        _print_error(f"PS1 template ingestion failed: {result.error}")
-        sys.exit(1)
+    if result.skipped:
+        _print_info(f"PS1 template already exists in {result.collection}")
+        _print_info("Use --overwrite to replace")
+        return
+
+    details = [f"  Collection: {result.collection}"]
+    if result.tract is not None:
+        details.append(f"  Tract: {result.tract}, Patch: {result.patch}")
+    if result.fits_path:
+        details.append(f"  FITS file: {result.fits_path}")
+    _report_result(
+        result,
+        success_msg="\n✓ PS1 template ingested",
+        fail_msg="PS1 template ingestion failed",
+        details=details,
+    )
 
 
 # =============================================================================
@@ -916,9 +922,10 @@ def ps1_template(
     default="diffim",
     help="Image type for photometry (default: diffim)",
 )
-@click.pass_context
+@pass_config
 def fphot(
     ctx: click.Context,
+    config: cfg_module.Config,
     night: str,
     ra: float,
     dec: float,
@@ -934,8 +941,6 @@ def fphot(
         stips fphot 20230519 --ra 210.91 --dec 54.32
         stips fphot 20230519 --ra 210.91 --dec 54.32 --band r --image-type both
     """
-    config = _load_config(ctx)
-
     _print_info(
         f"Running forced photometry for {night} at RA={ra:.4f}, Dec={dec:.4f}..."
     )
@@ -951,13 +956,12 @@ def fphot(
         image_type=image_type,
     )
 
-    if result.success:
-        _print_success(f"\n✓ Forced photometry complete for {night}")
-        for coll in result.output_collections:
-            click.echo(f"  Collection: {coll}")
-    else:
-        _print_error(f"Forced photometry failed: {result.error}")
-        sys.exit(1)
+    _report_result(
+        result,
+        success_msg=f"\n✓ Forced photometry complete for {night}",
+        fail_msg="Forced photometry failed",
+        details=[f"  Collection: {coll}" for coll in result.output_collections],
+    )
 
 
 # =============================================================================
@@ -1104,31 +1108,32 @@ def lightcurve(
         distance_modulus=distance_modulus,
     )
 
+    # lc_config is the single source of truth for radius/min_snr/band/dataset_type
+    # and the display knobs; no redundant loose kwargs.
     result = lc_module.run(
         ra=ra,
         dec=dec,
         collections=collections,
         config=config,
-        radius=radius,
-        min_snr=min_snr,
-        band=band,
         name=name,
         output=output,
         plot=plot,
-        dataset_type=dataset_type,
         lc_config=lc_config,
     )
 
+    details = []
     if result.success:
-        _print_success("\n✓ Lightcurve extracted")
-        click.echo(f"  Detections: {result.n_detections}")
+        details.append(f"  Detections: {result.n_detections}")
         if result.csv_path:
-            click.echo(f"  CSV: {result.csv_path}")
+            details.append(f"  CSV: {result.csv_path}")
         if result.plot_path:
-            click.echo(f"  Plot: {result.plot_path}")
-    else:
-        _print_error(f"Lightcurve extraction failed: {result.error}")
-        sys.exit(1)
+            details.append(f"  Plot: {result.plot_path}")
+    _report_result(
+        result,
+        success_msg="\n✓ Lightcurve extracted",
+        fail_msg="Lightcurve extraction failed",
+        details=details,
+    )
 
 
 # =============================================================================
@@ -1161,9 +1166,10 @@ def lightcurve(
     default=False,
     help="Also pull single_visit_star_ref_match_{astrom,photom}_metrics (requires visit-quality pipeline)",
 )
-@click.pass_context
+@pass_config
 def calib_metrics(
     ctx: click.Context,
+    config: cfg_module.Config,
     collection: str | None,
     output: Path,
     night: str | None,
@@ -1193,8 +1199,6 @@ def calib_metrics(
     """
     from stips.core import calib_metrics as cm_module
 
-    config = _load_config(ctx)
-
     if collection is None:
         prof = config.require_profile()
         collection = f"{prof.collection_prefix}/runs/*/processCcd/*"
@@ -1212,11 +1216,11 @@ def calib_metrics(
         include_refcat_metrics=include_refcat_metrics,
     )
 
-    if result.success:
-        _print_success(f"\n✓ Wrote {result.n_rows} rows -> {result.csv_path}")
-    else:
-        _print_error(f"calib-metrics failed: {result.error}")
-        sys.exit(1)
+    _report_result(
+        result,
+        success_msg=f"\n✓ Wrote {result.n_rows} rows -> {result.csv_path}",
+        fail_msg="calib-metrics failed",
+    )
 
 
 # =============================================================================
@@ -1251,9 +1255,10 @@ def calib_metrics(
     default=False,
     help="Dry run: list matched stars per visit without extracting photometry",
 )
-@click.pass_context
+@pass_config
 def landolt_validate(
     ctx: click.Context,
+    config: cfg_module.Config,
     catalog: Path,
     collection: str | None,
     output: Path,
@@ -1279,8 +1284,6 @@ def landolt_validate(
     """
     from stips.core import landolt as landolt_module
 
-    config = _load_config(ctx)
-
     _print_info(f"Repo: {config.repo}")
     mode = "listing stars" if list_stars else "validating photometry"
     _print_info(f"Landolt validation: {mode}")
@@ -1293,16 +1296,16 @@ def landolt_validate(
         list_stars=list_stars,
     )
 
-    if result.success:
-        if list_stars:
-            _print_success("\n✓ Star listing complete")
-        else:
-            _print_success(
-                f"\n✓ {result.n_measurements} measurements -> {result.csv_path}"
-            )
-    else:
-        _print_error(f"landolt-validate failed: {result.error}")
-        sys.exit(1)
+    success_msg = (
+        "\n✓ Star listing complete"
+        if list_stars
+        else f"\n✓ {result.n_measurements} measurements -> {result.csv_path}"
+    )
+    _report_result(
+        result,
+        success_msg=success_msg,
+        fail_msg="landolt-validate failed",
+    )
 
 
 # =============================================================================
@@ -1324,9 +1327,10 @@ def landolt_validate(
     default=None,
     help="Max nights to process in parallel",
 )
-@click.pass_context
+@pass_config
 def run_pipeline(
     ctx: click.Context,
+    config: cfg_module.Config,
     dry_run: bool,
     site: str | None,
     concurrent: int | None,
@@ -1352,8 +1356,6 @@ def run_pipeline(
         stips -c pipeline.yaml run --dry-run
     """
     from stips.core import run as run_module
-
-    config = _load_config(ctx)
 
     config_file = ctx.obj["config_path"]
 
@@ -1424,9 +1426,10 @@ def refcat(ctx: click.Context) -> None:
     help="Refcat mode (default: gaia_ps1)",
 )
 @click.option("--force", is_flag=True, help="Re-fetch even if coverage exists")
-@click.pass_context
+@pass_config
 def refcat_fetch(
     ctx: click.Context,
+    config: cfg_module.Config,
     ra: float,
     dec: float,
     radius_deg: float,
@@ -1436,7 +1439,6 @@ def refcat_fetch(
     """Ensure Gaia/PS1 refcats cover a target cone (fetch+convert+ingest)."""
     from stips.core import refcat as refcat_mod
 
-    config = _load_config(ctx)
     result = refcat_mod.ensure_refcats(
         config, ra, dec, radius_deg=radius_deg, mode=mode, force=force
     )
@@ -1456,12 +1458,17 @@ def refcat_fetch(
 @click.option(
     "--radius", "radius_deg", type=float, default=0.3, help="Cone radius (deg)"
 )
-@click.pass_context
-def refcat_status(ctx: click.Context, ra: float, dec: float, radius_deg: float) -> None:
+@pass_config
+def refcat_status(
+    ctx: click.Context,
+    config: cfg_module.Config,
+    ra: float,
+    dec: float,
+    radius_deg: float,
+) -> None:
     """Report Gaia/PS1 coverage for a target cone without fetching."""
     from stips.core import refcat as refcat_mod
 
-    config = _load_config(ctx)
     needed = set(refcat_mod.cones_to_htm([(ra, dec, radius_deg)], depth=7))
     for name in (refcat_mod.GAIA_DATASET, refcat_mod.PS1_DATASET):
         present = refcat_mod.present_trixels(config, name)
@@ -1517,9 +1524,10 @@ def bps(ctx: click.Context) -> None:
     help="HPC project/account (default: the active instrument profile's name)",
 )
 @click.option("--dry-run", is_flag=True, help="Show what would be submitted")
-@click.pass_context
+@pass_config
 def bps_submit(
     ctx: click.Context,
+    config: cfg_module.Config,
     pipeline: str,
     night: str,
     site: str,
@@ -1545,8 +1553,6 @@ def bps_submit(
     if pipeline == "dia" and not band:
         _print_error("DIA pipeline requires --band option")
         sys.exit(1)
-
-    config = _load_config(ctx)
 
     from stips.core import bps as bps_module
 
@@ -1588,8 +1594,8 @@ def bps_submit(
 
 @bps.command("status")
 @click.argument("run_id")
-@click.pass_context
-def bps_status(ctx: click.Context, run_id: str) -> None:
+@pass_config
+def bps_status(ctx: click.Context, config: cfg_module.Config, run_id: str) -> None:
     """Check status of a BPS run.
 
     RUN_ID is the identifier returned by bps submit.
@@ -1598,8 +1604,6 @@ def bps_status(ctx: click.Context, run_id: str) -> None:
     Example:
         stips bps status 12345
     """
-    config = _load_config(ctx)
-
     from stips.core import bps as bps_module
 
     _print_info(f"Checking status of run {run_id}...")
@@ -1616,8 +1620,10 @@ def bps_status(ctx: click.Context, run_id: str) -> None:
 @bps.command("cancel")
 @click.argument("run_id")
 @click.option("--force", is_flag=True, help="Force cancellation")
-@click.pass_context
-def bps_cancel(ctx: click.Context, run_id: str, force: bool) -> None:
+@pass_config
+def bps_cancel(
+    ctx: click.Context, config: cfg_module.Config, run_id: str, force: bool
+) -> None:
     """Cancel a running BPS workflow.
 
     RUN_ID is the identifier returned by bps submit.
@@ -1626,8 +1632,6 @@ def bps_cancel(ctx: click.Context, run_id: str, force: bool) -> None:
     Example:
         stips bps cancel 12345
     """
-    config = _load_config(ctx)
-
     from stips.core import bps as bps_module
 
     if not force:
@@ -1645,16 +1649,14 @@ def bps_cancel(ctx: click.Context, run_id: str, force: bool) -> None:
 
 
 @bps.command("list")
-@click.pass_context
-def bps_list(ctx: click.Context) -> None:
+@pass_config
+def bps_list(ctx: click.Context, config: cfg_module.Config) -> None:
     """List recent BPS runs.
 
     \b
     Example:
         stips bps list
     """
-    config = _load_config(ctx)
-
     from stips.core import bps as bps_module
 
     runs = bps_module.list_runs(config)
@@ -1702,28 +1704,22 @@ def dashboard(
         stips dashboard --logs-dir ./logs --no-browser
         stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml dashboard
     """
-    # Determine logs directory and resolve the instrument name from the
-    # active profile (used to drive Butler dataset queries in the dashboard).
+    # A missing/invalid config is a soft condition here: _try_load_config returns
+    # None instead of raising SystemExit (never catch SystemExit — that would let
+    # an already-reported fatal error keep going, F-016).
     instrument_name = "STIPS"
-    config = None
-    try:
-        config = _load_config(ctx)
-    except (SystemExit, Exception):
-        config = None
+    config = _try_load_config(ctx)
 
     if config is not None:
         try:
             instrument_name = config.require_profile().name
-        except Exception:
+        except RuntimeError:
             instrument_name = "STIPS"
 
     if logs_dir is None:
         if config is not None:
-            try:
-                repo_root = config.instrument_dir.parent.parent
-                logs_dir = repo_root / "logs"
-            except Exception:
-                logs_dir = Path.cwd() / "logs"
+            # Pure Path arithmetic (no I/O) — cannot raise.
+            logs_dir = config.instrument_dir.parent.parent / "logs"
         else:
             # Fallback: look for logs/ in current directory
             logs_dir = Path.cwd() / "logs"

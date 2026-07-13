@@ -24,6 +24,8 @@ class PS1TemplateResult:
     patch: int | None = None
     fits_path: str | None = None
     error: str | None = None
+    #: True when an existing template was found and left untouched (overwrite=False).
+    skipped: bool = False
 
 
 def run(
@@ -81,6 +83,17 @@ def run(
 
     if collection is None:
         collection = f"templates/ps1/{band}"
+
+    # Skip-if-exists policy lives here (single source of truth) rather than in
+    # each caller: unless overwrite is requested, an already-ingested template
+    # is left in place and reported as a (successful) skip.
+    if not overwrite and check_exists(band, config, collection):
+        return PS1TemplateResult(
+            success=True,
+            band=band,
+            collection=collection,
+            skipped=True,
+        )
 
     if output_dir is None:
         output_dir = config.repo / "ps1_templates"
