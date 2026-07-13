@@ -1108,31 +1108,32 @@ def lightcurve(
         distance_modulus=distance_modulus,
     )
 
+    # lc_config is the single source of truth for radius/min_snr/band/dataset_type
+    # and the display knobs; no redundant loose kwargs.
     result = lc_module.run(
         ra=ra,
         dec=dec,
         collections=collections,
         config=config,
-        radius=radius,
-        min_snr=min_snr,
-        band=band,
         name=name,
         output=output,
         plot=plot,
-        dataset_type=dataset_type,
         lc_config=lc_config,
     )
 
+    details = []
     if result.success:
-        _print_success("\n✓ Lightcurve extracted")
-        click.echo(f"  Detections: {result.n_detections}")
+        details.append(f"  Detections: {result.n_detections}")
         if result.csv_path:
-            click.echo(f"  CSV: {result.csv_path}")
+            details.append(f"  CSV: {result.csv_path}")
         if result.plot_path:
-            click.echo(f"  Plot: {result.plot_path}")
-    else:
-        _print_error(f"Lightcurve extraction failed: {result.error}")
-        sys.exit(1)
+            details.append(f"  Plot: {result.plot_path}")
+    _report_result(
+        result,
+        success_msg="\n✓ Lightcurve extracted",
+        fail_msg="Lightcurve extraction failed",
+        details=details,
+    )
 
 
 # =============================================================================

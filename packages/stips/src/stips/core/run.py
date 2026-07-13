@@ -1148,8 +1148,6 @@ def _run_lightcurve_step(
             config=config,
             name=run_cfg.object_name,
             plot=True,
-            min_snr=run_cfg.lc_config.min_snr,
-            dataset_type=run_cfg.lc_config.dataset_type,
             log_file=lc_log,
             lc_config=run_cfg.lc_config,
         )
