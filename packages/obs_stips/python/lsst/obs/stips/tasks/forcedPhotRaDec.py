@@ -7,6 +7,12 @@ The tasks accept RA/Dec coordinates via an external catalog and perform
 PSF flux measurements at those positions, regardless of whether sources
 were detected there.
 
+Both tasks share a common base (:class:`_ForcedPhotRaDecBaseConfig` /
+:class:`_ForcedPhotRaDecBaseTask`) that owns coordinate loading, reference
+catalog / footprint construction, and forced measurement. Each concrete task
+subclasses only the image-specific bits (which exposure supplies the WCS, and
+how the measurement catalog is converted to an output table).
+
 Example usage in a pipeline:
     tasks:
       forcedPhotRaDec:
@@ -36,6 +42,7 @@ import lsst.afw.table as afwTable
 import lsst.geom as geom
 import lsst.meas.base as measBase
 import lsst.pex.config as pexConfig
+import lsst.pex.exceptions as pexExceptions
 import lsst.pipe.base as pipeBase
 import lsst.pipe.base.connectionTypes as connTypes
 import numpy as np
@@ -44,18 +51,21 @@ from lsst.pipe.base import PipelineTask, PipelineTaskConfig, PipelineTaskConnect
 _LOG = logging.getLogger(__name__)
 
 
-class ForcedPhotRaDecConnections(
+# ============================================================================
+# Shared configuration
+# ============================================================================
+
+
+class _ForcedPhotRaDecBaseConnections(
     PipelineTaskConnections,
     dimensions=("instrument", "visit", "detector"),
 ):
-    """Connections for ForcedPhotRaDecTask."""
+    """Shared connection + config-conditional input handling.
 
-    exposure = connTypes.Input(
-        doc="Calibrated exposure to measure",
-        name="preliminary_visit_image",
-        storageClass="ExposureF",
-        dimensions=("instrument", "visit", "detector"),
-    )
+    Both concrete connection classes subclass this to inherit the optional
+    ``inputCoordCatalog`` input and the ``useConfigCoords`` removal logic; they
+    add their own exposure inputs and output.
+    """
 
     inputCoordCatalog = connTypes.Input(
         doc="Input catalog with RA/Dec coordinates (FITS or Parquet with 'ra', 'dec' columns in degrees)",
@@ -65,13 +75,6 @@ class ForcedPhotRaDecConnections(
         minimum=0,  # Optional - can use config coordinates instead
     )
 
-    outputCatalog = connTypes.Output(
-        doc="Forced photometry measurements at input coordinates",
-        name="forced_phot_radec",
-        storageClass="ArrowAstropy",
-        dimensions=("instrument", "visit", "detector"),
-    )
-
     def __init__(self, *, config=None):
         super().__init__(config=config)
         # If using config coordinates only, remove the input catalog connection
@@ -79,11 +82,16 @@ class ForcedPhotRaDecConnections(
             self.inputs.remove("inputCoordCatalog")
 
 
-class ForcedPhotRaDecConfig(
+class _ForcedPhotRaDecBaseConfig(
     PipelineTaskConfig,
-    pipelineConnections=ForcedPhotRaDecConnections,
+    pipelineConnections=_ForcedPhotRaDecBaseConnections,
 ):
-    """Configuration for ForcedPhotRaDecTask."""
+    """Shared configuration fields for RA/Dec forced photometry tasks.
+
+    Concrete configs re-specify ``pipelineConnections`` for their own I/O; the
+    coordinate-selection fields and validation live here so the two tasks
+    cannot silently diverge (they did, historically — see audit finding F-029).
+    """
 
     useConfigCoords = pexConfig.Field(
         dtype=bool,
@@ -140,8 +148,8 @@ class ForcedPhotRaDecConfig(
 
     def setDefaults(self):
         super().setDefaults()
-        # Configure measurement plugins for forced photometry
-        # Note: Use only plugins available in ForcedMeasurementTask
+        # Configure measurement plugins for forced photometry.
+        # Note: Use only plugins available in ForcedMeasurementTask.
         self.measurement.plugins.names = [
             "base_TransformedCentroidFromCoord",
             "base_PsfFlux",
@@ -173,6 +181,8 @@ class ForcedPhotRaDecConfig(
                     self,
                     "ra and dec lists must have the same length",
                 )
+            # Guards _getCoordsFromConfig against an IndexError when a short
+            # sourceIds list is paired with useConfigCoords=True.
             if len(self.sourceIds) > 0 and len(self.sourceIds) != len(self.ra):
                 raise pexConfig.FieldValidationError(
                     self.__class__.sourceIds,
@@ -181,22 +191,20 @@ class ForcedPhotRaDecConfig(
                 )
 
 
-class ForcedPhotRaDecTask(PipelineTask):
-    """Perform forced photometry at specified RA/Dec coordinates.
+# ============================================================================
+# Shared task base
+# ============================================================================
 
-    This task measures PSF flux at user-specified sky coordinates on a
-    calibrated exposure, regardless of whether sources were detected there.
 
-    The coordinates can be provided either:
-    1. Via an input catalog with RA/Dec columns (recommended for many sources)
-    2. Via config parameters (convenient for a few specific targets)
+class _ForcedPhotRaDecBaseTask(PipelineTask):
+    """Shared implementation for forced photometry at RA/Dec coordinates.
 
-    The output is a catalog containing the measured fluxes and associated
-    errors for each input coordinate.
+    Owns the reference-schema setup, coordinate loading, and the reference
+    catalog / footprint / measurement machinery. Subclasses supply the concrete
+    ``run``/``runQuantum`` wiring (which exposure provides the WCS and which is
+    measured) and the ``_sourceCatalogToAstropy`` / ``_createEmptyOutputTable``
+    conversion appropriate to their output.
     """
-
-    ConfigClass = ForcedPhotRaDecConfig
-    _DefaultName = "forcedPhotRaDec"
 
     def __init__(self, schema=None, **kwargs):
         super().__init__(**kwargs)
@@ -241,26 +249,17 @@ class ForcedPhotRaDecTask(PipelineTask):
             doc="ID from input catalog",
         )
 
-    def runQuantum(self, butlerQC, inputRefs, outputRefs):
-        """Run the task on a single quantum."""
-        inputs = butlerQC.get(inputRefs)
+    # -- coordinate loading --------------------------------------------------
 
-        # Get coordinates either from config or input catalog
+    def _loadCoords(self, inputs: dict) -> list[dict[str, Any]]:
+        """Resolve coordinates from config or the optional input catalog."""
         if self.config.useConfigCoords:
-            coords = self._getCoordsFromConfig()
-        else:
-            if "inputCoordCatalog" not in inputs:
-                raise RuntimeError(
-                    "No input coordinate catalog provided and useConfigCoords=False"
-                )
-            coords = self._getCoordsFromCatalog(inputs["inputCoordCatalog"])
-
-        outputs = self.run(
-            exposure=inputs["exposure"],
-            coords=coords,
-        )
-
-        butlerQC.put(outputs, outputRefs)
+            return self._getCoordsFromConfig()
+        if "inputCoordCatalog" not in inputs:
+            raise RuntimeError(
+                "No input coordinate catalog provided and useConfigCoords=False"
+            )
+        return self._getCoordsFromCatalog(inputs["inputCoordCatalog"])
 
     def _getCoordsFromConfig(self) -> list[dict[str, Any]]:
         """Extract coordinates from config parameters."""
@@ -290,40 +289,40 @@ class ForcedPhotRaDecTask(PipelineTask):
             )
         return coords
 
-    def run(
+    # -- forced measurement --------------------------------------------------
+
+    def _runForcedMeasurement(
         self,
-        exposure: afwImage.ExposureF,
+        measExposure: afwImage.ExposureF,
+        wcs,
         coords: list[dict[str, Any]],
-    ) -> pipeBase.Struct:
-        """Perform forced photometry at specified coordinates.
+    ) -> tuple[afwTable.SourceCatalog | None, list[dict]]:
+        """Build the reference catalog, run forced measurement, and return it.
 
         Parameters
         ----------
-        exposure : `lsst.afw.image.ExposureF`
-            Calibrated exposure to measure.
+        measExposure : `lsst.afw.image.ExposureF`
+            Image the forced measurement is performed on (its bbox bounds the
+            valid coordinates). For difference imaging this is the difference
+            image; the WCS is passed separately.
+        wcs : `lsst.afw.geom.SkyWcs`
+            World coordinate system used to project the sky coordinates.
         coords : `list` of `dict`
-            List of coordinate dictionaries with 'id', 'ra', 'dec' keys.
-            RA and Dec should be in degrees.
+            Coordinate dictionaries with 'id', 'ra', 'dec' keys (deg).
 
         Returns
         -------
-        result : `lsst.pipe.base.Struct`
-            Result struct with:
-            - outputCatalog: Astropy table with forced photometry measurements
+        measCat : `lsst.afw.table.SourceCatalog` or `None`
+            Measurement catalog, or ``None`` when no coordinate fell within the
+            image bounds.
+        validCoords : `list` of `dict`
+            Per-source metadata (id, ra, dec, pixel_x, pixel_y) aligned with
+            ``measCat`` rows.
         """
-        wcs = exposure.getWcs()
-        if wcs is None:
-            _LOG.warning("Exposure has no WCS; skipping quantum")
-            raise pipeBase.NoWorkFound("Exposure has no WCS")
+        bbox = measExposure.getBBox()
 
-        photoCalib = exposure.getPhotoCalib()
-        bbox = exposure.getBBox()
-
-        # Create the reference catalog for forced measurement
         refCat = afwTable.SourceCatalog(self.refSchema)
-
-        # Track which input coords are within the image
-        validCoords = []
+        validCoords: list[dict] = []
 
         for coord in coords:
             ra_deg = coord["ra"]
@@ -383,11 +382,10 @@ class ForcedPhotRaDecTask(PipelineTask):
 
         if len(refCat) == 0:
             _LOG.warning("No valid coordinates within image bounds")
-            # Return empty table with proper columns
-            return pipeBase.Struct(outputCatalog=self._createEmptyOutputTable())
+            return None, []
 
         # Create the measurement catalog from the reference catalog
-        measCat = self.measurement.generateMeasCat(exposure, refCat, wcs)
+        measCat = self.measurement.generateMeasCat(measExposure, refCat, wcs)
 
         # Copy reference sources to measurement catalog with footprints
         for measRecord, refRecord, validCoord in zip(measCat, refCat, validCoords):
@@ -397,11 +395,134 @@ class ForcedPhotRaDecTask(PipelineTask):
             measRecord.set(self.decKey, np.radians(validCoord["dec"]))
 
         # Run forced measurement
-        self.measurement.run(measCat, exposure, refCat, wcs)
+        self.measurement.run(measCat, measExposure, refCat, wcs)
 
-        # Convert to Astropy table for output
+        return measCat, validCoords
+
+    @staticmethod
+    def _recordGet(record, column: str, missing: set, default=np.nan):
+        """Read ``column`` from ``record``, warning once per call on absence.
+
+        A missing column (renamed plugin output, disabled plugin) historically
+        produced silent NaN with zero log output — the hardest failure mode to
+        debug downstream (an all-NaN lightcurve). Only genuinely-missing-column
+        errors are caught; anything else propagates.
+        """
+        try:
+            return record.get(column)
+        except (KeyError, pexExceptions.NotFoundError):
+            if column not in missing:
+                _LOG.warning(
+                    "Column %r not found in forced measurement catalog; "
+                    "filling %s. Check the measurement plugin configuration.",
+                    column,
+                    default,
+                )
+                missing.add(column)
+            return default
+
+    @classmethod
+    def _flagsToString(cls, record, missing: set) -> str:
+        """Collect set pixel/PSF flags into a comma-joined string."""
+        flags = []
+        for column, label in (
+            ("base_PsfFlux_flag", "psfFlux_flag"),
+            ("base_PixelFlags_flag_edge", "edge"),
+            ("base_PixelFlags_flag_saturated", "saturated"),
+            ("base_PixelFlags_flag_bad", "bad"),
+        ):
+            if cls._recordGet(record, column, missing, default=False):
+                flags.append(label)
+        return ",".join(flags)
+
+
+# ============================================================================
+# Calibrated Visit Image Forced Photometry Task
+# ============================================================================
+
+
+class ForcedPhotRaDecConnections(_ForcedPhotRaDecBaseConnections):
+    """Connections for ForcedPhotRaDecTask."""
+
+    exposure = connTypes.Input(
+        doc="Calibrated exposure to measure",
+        name="preliminary_visit_image",
+        storageClass="ExposureF",
+        dimensions=("instrument", "visit", "detector"),
+    )
+
+    outputCatalog = connTypes.Output(
+        doc="Forced photometry measurements at input coordinates",
+        name="forced_phot_radec",
+        storageClass="ArrowAstropy",
+        dimensions=("instrument", "visit", "detector"),
+    )
+
+
+class ForcedPhotRaDecConfig(
+    _ForcedPhotRaDecBaseConfig,
+    pipelineConnections=ForcedPhotRaDecConnections,
+):
+    """Configuration for ForcedPhotRaDecTask."""
+
+
+class ForcedPhotRaDecTask(_ForcedPhotRaDecBaseTask):
+    """Perform forced photometry at specified RA/Dec coordinates.
+
+    This task measures PSF flux at user-specified sky coordinates on a
+    calibrated exposure, regardless of whether sources were detected there.
+
+    The coordinates can be provided either:
+    1. Via an input catalog with RA/Dec columns (recommended for many sources)
+    2. Via config parameters (convenient for a few specific targets)
+
+    The output is a catalog containing the measured fluxes and associated
+    errors for each input coordinate.
+    """
+
+    ConfigClass = ForcedPhotRaDecConfig
+    _DefaultName = "forcedPhotRaDec"
+
+    def runQuantum(self, butlerQC, inputRefs, outputRefs):
+        """Run the task on a single quantum."""
+        inputs = butlerQC.get(inputRefs)
+        coords = self._loadCoords(inputs)
+        outputs = self.run(exposure=inputs["exposure"], coords=coords)
+        butlerQC.put(outputs, outputRefs)
+
+    def run(
+        self,
+        exposure: afwImage.ExposureF,
+        coords: list[dict[str, Any]],
+    ) -> pipeBase.Struct:
+        """Perform forced photometry at specified coordinates.
+
+        Parameters
+        ----------
+        exposure : `lsst.afw.image.ExposureF`
+            Calibrated exposure to measure.
+        coords : `list` of `dict`
+            List of coordinate dictionaries with 'id', 'ra', 'dec' keys.
+            RA and Dec should be in degrees.
+
+        Returns
+        -------
+        result : `lsst.pipe.base.Struct`
+            Result struct with:
+            - outputCatalog: Astropy table with forced photometry measurements
+        """
+        wcs = exposure.getWcs()
+        if wcs is None:
+            _LOG.warning("Exposure has no WCS; skipping quantum")
+            raise pipeBase.NoWorkFound("Exposure has no WCS")
+
+        photoCalib = exposure.getPhotoCalib()
+
+        measCat, validCoords = self._runForcedMeasurement(exposure, wcs, coords)
+        if measCat is None:
+            return pipeBase.Struct(outputCatalog=self._createEmptyOutputTable())
+
         outputTable = self._sourceCatalogToAstropy(measCat, photoCalib, validCoords)
-
         return pipeBase.Struct(outputCatalog=outputTable)
 
     def _createEmptyOutputTable(self) -> astropy.table.Table:
@@ -451,6 +572,7 @@ class ForcedPhotRaDecTask(PipelineTask):
     ) -> astropy.table.Table:
         """Convert measurement catalog to Astropy table with calibrated magnitudes."""
         rows = []
+        missing: set = set()  # missing-column names, warned once per call
 
         for record, validCoord in zip(measCat, validCoords):
             row = {
@@ -463,66 +585,41 @@ class ForcedPhotRaDecTask(PipelineTask):
             }
 
             # Get PSF flux
-            try:
-                psfFlux = record.get("base_PsfFlux_instFlux")
-                psfFluxErr = record.get("base_PsfFlux_instFluxErr")
-                row["psfFlux"] = psfFlux
-                row["psfFluxErr"] = psfFluxErr
+            psfFlux = self._recordGet(record, "base_PsfFlux_instFlux", missing)
+            psfFluxErr = self._recordGet(record, "base_PsfFlux_instFluxErr", missing)
+            row["psfFlux"] = psfFlux
+            row["psfFluxErr"] = psfFluxErr
 
-                # Calibrate to magnitude if possible
-                if photoCalib is not None and psfFlux > 0:
-                    try:
-                        mag = photoCalib.instFluxToMagnitude(psfFlux, psfFluxErr)
-                        row["psfMag"] = mag.value
-                        row["psfMagErr"] = mag.error
-                    except Exception:
-                        row["psfMag"] = np.nan
-                        row["psfMagErr"] = np.nan
-                else:
+            # Calibrate to magnitude if possible
+            if photoCalib is not None and psfFlux > 0:
+                try:
+                    mag = photoCalib.instFluxToMagnitude(psfFlux, psfFluxErr)
+                    row["psfMag"] = mag.value
+                    row["psfMagErr"] = mag.error
+                except Exception:
                     row["psfMag"] = np.nan
                     row["psfMagErr"] = np.nan
-            except Exception:
-                row["psfFlux"] = np.nan
-                row["psfFluxErr"] = np.nan
+            else:
                 row["psfMag"] = np.nan
                 row["psfMagErr"] = np.nan
 
             # Get aperture flux
-            try:
-                row["apFlux_12_0"] = record.get(
-                    "base_CircularApertureFlux_12_0_instFlux"
-                )
-                row["apFluxErr_12_0"] = record.get(
-                    "base_CircularApertureFlux_12_0_instFluxErr"
-                )
-            except Exception:
-                row["apFlux_12_0"] = np.nan
-                row["apFluxErr_12_0"] = np.nan
+            row["apFlux_12_0"] = self._recordGet(
+                record, "base_CircularApertureFlux_12_0_instFlux", missing
+            )
+            row["apFluxErr_12_0"] = self._recordGet(
+                record, "base_CircularApertureFlux_12_0_instFluxErr", missing
+            )
 
             # Get local background
-            try:
-                row["localBackground"] = record.get("base_LocalBackground_instFlux")
-                row["localBackgroundErr"] = record.get(
-                    "base_LocalBackground_instFluxErr"
-                )
-            except Exception:
-                row["localBackground"] = np.nan
-                row["localBackgroundErr"] = np.nan
+            row["localBackground"] = self._recordGet(
+                record, "base_LocalBackground_instFlux", missing
+            )
+            row["localBackgroundErr"] = self._recordGet(
+                record, "base_LocalBackground_instFluxErr", missing
+            )
 
-            # Collect flags
-            flags = []
-            try:
-                if record.get("base_PsfFlux_flag"):
-                    flags.append("psfFlux_flag")
-                if record.get("base_PixelFlags_flag_edge"):
-                    flags.append("edge")
-                if record.get("base_PixelFlags_flag_saturated"):
-                    flags.append("saturated")
-                if record.get("base_PixelFlags_flag_bad"):
-                    flags.append("bad")
-            except Exception:
-                pass
-            row["flags"] = ",".join(flags)
+            row["flags"] = self._flagsToString(record, missing)
 
             rows.append(row)
 
@@ -534,10 +631,7 @@ class ForcedPhotRaDecTask(PipelineTask):
 # ============================================================================
 
 
-class ForcedPhotDiffimRaDecConnections(
-    PipelineTaskConnections,
-    dimensions=("instrument", "visit", "detector"),
-):
+class ForcedPhotDiffimRaDecConnections(_ForcedPhotRaDecBaseConnections):
     """Connections for ForcedPhotDiffimRaDecTask."""
 
     differenceExposure = connTypes.Input(
@@ -548,18 +642,10 @@ class ForcedPhotDiffimRaDecConnections(
     )
 
     scienceExposure = connTypes.Input(
-        doc="Science exposure (for WCS and photo calibration)",
+        doc="Science exposure (for WCS)",
         name="preliminary_visit_image",
         storageClass="ExposureF",
         dimensions=("instrument", "visit", "detector"),
-    )
-
-    inputCoordCatalog = connTypes.Input(
-        doc="Input catalog with RA/Dec coordinates (FITS or Parquet with 'ra', 'dec' columns in degrees)",
-        name="forced_phot_input_coords",
-        storageClass="ArrowAstropy",
-        dimensions=("instrument",),
-        minimum=0,
     )
 
     outputCatalog = connTypes.Output(
@@ -569,106 +655,15 @@ class ForcedPhotDiffimRaDecConnections(
         dimensions=("instrument", "visit", "detector"),
     )
 
-    def __init__(self, *, config=None):
-        super().__init__(config=config)
-        if config is not None and config.useConfigCoords:
-            self.inputs.remove("inputCoordCatalog")
-
 
 class ForcedPhotDiffimRaDecConfig(
-    PipelineTaskConfig,
+    _ForcedPhotRaDecBaseConfig,
     pipelineConnections=ForcedPhotDiffimRaDecConnections,
 ):
     """Configuration for ForcedPhotDiffimRaDecTask."""
 
-    useConfigCoords = pexConfig.Field(
-        dtype=bool,
-        default=False,
-        doc="If True, use coordinates from config instead of input catalog",
-    )
 
-    ra = pexConfig.ListField(
-        dtype=float,
-        default=[],
-        doc="List of RA coordinates in degrees",
-    )
-
-    dec = pexConfig.ListField(
-        dtype=float,
-        default=[],
-        doc="List of Dec coordinates in degrees",
-    )
-
-    sourceIds = pexConfig.ListField(
-        dtype=int,
-        default=[],
-        doc="Optional list of source IDs for config coordinates",
-    )
-
-    raColumn = pexConfig.Field(
-        dtype=str,
-        default="ra",
-        doc="Name of RA column in input catalog (degrees)",
-    )
-
-    decColumn = pexConfig.Field(
-        dtype=str,
-        default="dec",
-        doc="Name of Dec column in input catalog (degrees)",
-    )
-
-    idColumn = pexConfig.Field(
-        dtype=str,
-        default="id",
-        doc="Name of ID column in input catalog",
-    )
-
-    footprintRadius = pexConfig.Field(
-        dtype=float,
-        default=10.0,
-        doc="Radius of circular footprint in pixels",
-    )
-
-    measurement = pexConfig.ConfigurableField(
-        target=measBase.ForcedMeasurementTask,
-        doc="Subtask to perform forced measurement",
-    )
-
-    def setDefaults(self):
-        super().setDefaults()
-        # Note: Use only plugins available in ForcedMeasurementTask
-        self.measurement.plugins.names = [
-            "base_TransformedCentroidFromCoord",
-            "base_PsfFlux",
-            "base_LocalBackground",
-            "base_PixelFlags",
-        ]
-        self.measurement.slots.centroid = "base_TransformedCentroidFromCoord"
-        self.measurement.slots.shape = None
-        self.measurement.copyColumns = {
-            "id": "objectId",
-            "coord_ra": "coord_ra",
-            "coord_dec": "coord_dec",
-        }
-
-    def validate(self):
-        super().validate()
-        if self.useConfigCoords:
-            if len(self.ra) == 0 or len(self.dec) == 0:
-                raise pexConfig.FieldValidationError(
-                    self.__class__.ra,
-                    self,
-                    "ra and dec lists must be non-empty when useConfigCoords=True",
-                )
-            if len(self.ra) != len(self.dec):
-                raise pexConfig.FieldValidationError(
-                    self.__class__.ra,
-                    self,
-                    "ra and dec lists must have the same length",
-                )
-
-
-class ForcedPhotDiffimRaDecTask(PipelineTask):
+class ForcedPhotDiffimRaDecTask(_ForcedPhotRaDecBaseTask):
     """Perform forced photometry on difference images at specified RA/Dec.
 
     This task measures flux at user-specified sky coordinates on a difference
@@ -680,101 +675,24 @@ class ForcedPhotDiffimRaDecTask(PipelineTask):
     to the template. Positive flux indicates the source is brighter in the
     science image, negative flux indicates it was brighter in the template.
 
-    WARNING: Do not convert negative difference fluxes directly to magnitudes!
-    Use the flux values directly for light curve analysis.
+    Fluxes are reported uncalibrated (instrumental) by design: difference
+    fluxes can be negative and must not be converted to magnitudes here. Use
+    the flux values directly for light curve analysis.
     """
 
     ConfigClass = ForcedPhotDiffimRaDecConfig
     _DefaultName = "forcedPhotDiffimRaDec"
 
-    def __init__(self, schema=None, **kwargs):
-        super().__init__(**kwargs)
-
-        # Reference schema for forced measurement inputs
-        self.refSchema = afwTable.SourceTable.makeMinimalSchema()
-        self.refSchema.addField("centroid_x", type="D", doc="x pixel coordinate")
-        self.refSchema.addField("centroid_y", type="D", doc="y pixel coordinate")
-
-        self.measurement = measBase.ForcedMeasurementTask(
-            refSchema=self.refSchema,
-            config=self.config.measurement,
-        )
-
-        if schema is None:
-            self.schema = self.measurement.schema
-        else:
-            if not schema.contains(self.measurement.schema):
-                raise RuntimeError(
-                    "Provided schema does not include measurement schema"
-                )
-            self.schema = schema
-
-        self.raKey = self.schema.addField(
-            "coord_ra_input",
-            type="D",
-            doc="Input RA coordinate (radians)",
-            units="rad",
-        )
-        self.decKey = self.schema.addField(
-            "coord_dec_input",
-            type="D",
-            doc="Input Dec coordinate (radians)",
-            units="rad",
-        )
-        self.inputIdKey = self.schema.addField(
-            "input_id",
-            type="L",
-            doc="ID from input catalog",
-        )
-
     def runQuantum(self, butlerQC, inputRefs, outputRefs):
         """Run the task on a single quantum."""
         inputs = butlerQC.get(inputRefs)
-
-        if self.config.useConfigCoords:
-            coords = self._getCoordsFromConfig()
-        else:
-            if "inputCoordCatalog" not in inputs:
-                raise RuntimeError(
-                    "No input coordinate catalog provided and useConfigCoords=False"
-                )
-            coords = self._getCoordsFromCatalog(inputs["inputCoordCatalog"])
-
+        coords = self._loadCoords(inputs)
         outputs = self.run(
             differenceExposure=inputs["differenceExposure"],
             scienceExposure=inputs["scienceExposure"],
             coords=coords,
         )
-
         butlerQC.put(outputs, outputRefs)
-
-    def _getCoordsFromConfig(self) -> list[dict[str, Any]]:
-        """Extract coordinates from config parameters."""
-        coords = []
-        for i, (ra, dec) in enumerate(zip(self.config.ra, self.config.dec)):
-            source_id = self.config.sourceIds[i] if self.config.sourceIds else i + 1
-            coords.append({"id": source_id, "ra": ra, "dec": dec})
-        return coords
-
-    def _getCoordsFromCatalog(
-        self, catalog: astropy.table.Table
-    ) -> list[dict[str, Any]]:
-        """Extract coordinates from input catalog."""
-        ra_col = self.config.raColumn
-        dec_col = self.config.decColumn
-        id_col = self.config.idColumn
-
-        coords = []
-        for i, row in enumerate(catalog):
-            source_id = row[id_col] if id_col in catalog.colnames else i + 1
-            coords.append(
-                {
-                    "id": int(source_id),
-                    "ra": float(row[ra_col]),
-                    "dec": float(row[dec_col]),
-                }
-            )
-        return coords
 
     def run(
         self,
@@ -789,7 +707,8 @@ class ForcedPhotDiffimRaDecTask(PipelineTask):
         differenceExposure : `lsst.afw.image.ExposureF`
             Difference image to measure.
         scienceExposure : `lsst.afw.image.ExposureF`
-            Science exposure (for WCS and photometric calibration).
+            Science exposure (supplies the WCS; the difference image WCS should
+            match).
         coords : `list` of `dict`
             List of coordinate dictionaries with 'id', 'ra', 'dec' keys.
 
@@ -804,83 +723,13 @@ class ForcedPhotDiffimRaDecTask(PipelineTask):
             _LOG.warning("Science exposure has no WCS; skipping quantum")
             raise pipeBase.NoWorkFound("Science exposure has no WCS")
 
-        # Use photo calibration from science exposure for magnitude conversion
-        photoCalib = scienceExposure.getPhotoCalib()
-        bbox = differenceExposure.getBBox()
-
-        # Create reference catalog
-        refCat = afwTable.SourceCatalog(self.refSchema)
-
-        validCoords = []
-
-        for coord in coords:
-            ra_deg = coord["ra"]
-            dec_deg = coord["dec"]
-            source_id = coord["id"]
-
-            skyCoord = geom.SpherePoint(ra_deg * geom.degrees, dec_deg * geom.degrees)
-            try:
-                pixelCoord = wcs.skyToPixel(skyCoord)
-            except Exception as e:
-                _LOG.debug(f"Could not convert ({ra_deg}, {dec_deg}) to pixels: {e}")
-                continue
-
-            if not bbox.contains(geom.Point2I(pixelCoord)):
-                _LOG.debug(
-                    f"Coordinate ({ra_deg}, {dec_deg}) outside difference image bounds"
-                )
-                continue
-
-            refRecord = refCat.addNew()
-            refRecord.setId(source_id)
-            refRecord.set("centroid_x", pixelCoord.x)
-            refRecord.set("centroid_y", pixelCoord.y)
-            refRecord.setCoord(skyCoord)
-
-            footprint = afwDet.Footprint(
-                afwGeom.SpanSet.fromShape(
-                    int(self.config.footprintRadius),
-                    afwGeom.Stencil.CIRCLE,
-                    geom.Point2I(pixelCoord),
-                ),
-                bbox,
-            )
-            refRecord.setFootprint(footprint)
-
-            validCoords.append(
-                {
-                    "id": source_id,
-                    "ra": ra_deg,
-                    "dec": dec_deg,
-                    "pixel_x": pixelCoord.x,
-                    "pixel_y": pixelCoord.y,
-                }
-            )
-
-        _LOG.info(
-            f"Performing forced diffim photometry on {len(validCoords)} of "
-            f"{len(coords)} coordinates"
+        measCat, validCoords = self._runForcedMeasurement(
+            differenceExposure, wcs, coords
         )
-
-        if len(refCat) == 0:
-            _LOG.warning("No valid coordinates within difference image bounds")
+        if measCat is None:
             return pipeBase.Struct(outputCatalog=self._createEmptyOutputTable())
 
-        # Create measurement catalog from the reference catalog
-        measCat = self.measurement.generateMeasCat(differenceExposure, refCat, wcs)
-
-        for measRecord, refRecord, validCoord in zip(measCat, refCat, validCoords):
-            measRecord.setFootprint(refRecord.getFootprint())
-            measRecord.set(self.inputIdKey, validCoord["id"])
-            measRecord.set(self.raKey, np.radians(validCoord["ra"]))
-            measRecord.set(self.decKey, np.radians(validCoord["dec"]))
-
-        # Run measurement on difference image
-        self.measurement.run(measCat, differenceExposure, refCat, wcs)
-
-        # Convert to output table
-        outputTable = self._sourceCatalogToAstropy(measCat, photoCalib, validCoords)
-
+        outputTable = self._sourceCatalogToAstropy(measCat, validCoords)
         return pipeBase.Struct(outputCatalog=outputTable)
 
     def _createEmptyOutputTable(self) -> astropy.table.Table:
@@ -921,16 +770,16 @@ class ForcedPhotDiffimRaDecTask(PipelineTask):
     def _sourceCatalogToAstropy(
         self,
         measCat: afwTable.SourceCatalog,
-        photoCalib: Any,
         validCoords: list[dict],
     ) -> astropy.table.Table:
         """Convert measurement catalog to Astropy table.
 
-        Note: For difference images, we report flux values directly.
-        Magnitude conversion is not appropriate for difference fluxes
-        which can be negative.
+        Difference-image fluxes are reported directly (instrumental, uncalibrated):
+        magnitude conversion is deliberately not applied because difference
+        fluxes can be negative.
         """
         rows = []
+        missing: set = set()  # missing-column names, warned once per call
 
         for record, validCoord in zip(measCat, validCoords):
             row = {
@@ -943,49 +792,28 @@ class ForcedPhotDiffimRaDecTask(PipelineTask):
             }
 
             # Get PSF flux on difference image
-            try:
-                row["diffFlux"] = record.get("base_PsfFlux_instFlux")
-                row["diffFluxErr"] = record.get("base_PsfFlux_instFluxErr")
-            except Exception:
-                row["diffFlux"] = np.nan
-                row["diffFluxErr"] = np.nan
+            row["diffFlux"] = self._recordGet(record, "base_PsfFlux_instFlux", missing)
+            row["diffFluxErr"] = self._recordGet(
+                record, "base_PsfFlux_instFluxErr", missing
+            )
 
             # Get aperture flux
-            try:
-                row["apDiffFlux_12_0"] = record.get(
-                    "base_CircularApertureFlux_12_0_instFlux"
-                )
-                row["apDiffFluxErr_12_0"] = record.get(
-                    "base_CircularApertureFlux_12_0_instFluxErr"
-                )
-            except Exception:
-                row["apDiffFlux_12_0"] = np.nan
-                row["apDiffFluxErr_12_0"] = np.nan
+            row["apDiffFlux_12_0"] = self._recordGet(
+                record, "base_CircularApertureFlux_12_0_instFlux", missing
+            )
+            row["apDiffFluxErr_12_0"] = self._recordGet(
+                record, "base_CircularApertureFlux_12_0_instFluxErr", missing
+            )
 
             # Get local background
-            try:
-                row["localBackground"] = record.get("base_LocalBackground_instFlux")
-                row["localBackgroundErr"] = record.get(
-                    "base_LocalBackground_instFluxErr"
-                )
-            except Exception:
-                row["localBackground"] = np.nan
-                row["localBackgroundErr"] = np.nan
+            row["localBackground"] = self._recordGet(
+                record, "base_LocalBackground_instFlux", missing
+            )
+            row["localBackgroundErr"] = self._recordGet(
+                record, "base_LocalBackground_instFluxErr", missing
+            )
 
-            # Collect flags
-            flags = []
-            try:
-                if record.get("base_PsfFlux_flag"):
-                    flags.append("psfFlux_flag")
-                if record.get("base_PixelFlags_flag_edge"):
-                    flags.append("edge")
-                if record.get("base_PixelFlags_flag_saturated"):
-                    flags.append("saturated")
-                if record.get("base_PixelFlags_flag_bad"):
-                    flags.append("bad")
-            except Exception:
-                pass
-            row["flags"] = ",".join(flags)
+            row["flags"] = self._flagsToString(record, missing)
 
             rows.append(row)
 
