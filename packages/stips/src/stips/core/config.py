@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -137,11 +138,14 @@ def _discover_cp_pipe_dir(stack_dir: Path) -> Path | None:
         )
         return None
 
-    # Query eups for cp_pipe location
-    script = f"""
-source "{loader}" 2>/dev/null
+    # Query eups for cp_pipe location. The loader path is passed via the
+    # environment and referenced as "$STIPS_LOADER" rather than interpolated
+    # into the script text, so a path with shell metacharacters cannot expand
+    # or inject (F-018).
+    script = """
+source "$STIPS_LOADER" 2>/dev/null
 setup lsst_distrib 2>/dev/null
-eups list -d cp_pipe 2>/dev/null | head -1 | awk '{{print $1}}'
+eups list -d cp_pipe 2>/dev/null | head -1 | awk '{print $1}'
 """
     try:
         result = subprocess.run(
@@ -149,6 +153,7 @@ eups list -d cp_pipe 2>/dev/null | head -1 | awk '{{print $1}}'
             capture_output=True,
             text=True,
             timeout=30,
+            env={**os.environ, "STIPS_LOADER": str(loader)},
         )
         if result.returncode == 0 and result.stdout.strip():
             path = Path(result.stdout.strip())

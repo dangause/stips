@@ -24,6 +24,7 @@ from stips.core.pipeline import (
     template_ps1_glob,
     validate_night,
 )
+from stips.core.query import butler_str_literal
 from stips.core.stack import run_butler
 
 if TYPE_CHECKING:
@@ -219,11 +220,11 @@ def run(
 
     object_expr = ""
     if object_filter:
-        object_expr = f" AND exposure.target_name='{object_filter}'"
+        object_expr = f" AND exposure.target_name={butler_str_literal(object_filter)}"
 
     band_expr = ""
     if band:
-        band_expr = f" AND band='{band}'"
+        band_expr = f" AND band={butler_str_literal(band)}"
 
     data_query = (
         f"instrument='{prof.name}' AND exposure.observation_type='science' "

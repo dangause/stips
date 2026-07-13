@@ -22,6 +22,7 @@ from stips.core.pipeline import (
     read_log_delta,
     validate_night,
 )
+from stips.core.query import butler_str_literal
 from stips.core.refcat import refcat_overlay_config
 from stips.core.stack import (
     run_butler,
@@ -300,7 +301,7 @@ def run(
         if object_filter.lower() == "landolt_validation":
             names = _read_landolt_target_names()
             if names:
-                quoted = ", ".join(f"'{n}'" for n in names)
+                quoted = ", ".join(butler_str_literal(n) for n in names)
                 object_expr = f" AND exposure.target_name IN ({quoted})"
             else:
                 log.warning(
@@ -310,7 +311,9 @@ def run(
         else:
             resolved_object = resolve_object_filter(object_filter, config, night)
             if resolved_object:
-                object_expr = f" AND exposure.target_name='{resolved_object}'"
+                object_expr = (
+                    f" AND exposure.target_name={butler_str_literal(resolved_object)}"
+                )
             else:
                 # No match found - coordinate filtering (below) can still prune by target position.
                 log.warning(

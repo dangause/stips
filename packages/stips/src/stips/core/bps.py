@@ -26,6 +26,7 @@ from typing import TYPE_CHECKING
 
 from stips.collections import template_ps1
 from stips.core.config import resolve_data_package_dir
+from stips.core.query import butler_str_literal
 
 if TYPE_CHECKING:
     from stips.core.config import Config
@@ -234,7 +235,9 @@ def render_bps_config(
     # Build object filter string
     object_filter = ""
     if bps_cfg.object_filter:
-        object_filter = f" AND exposure.target_name='{bps_cfg.object_filter}'"
+        object_filter = (
+            f" AND exposure.target_name={butler_str_literal(bps_cfg.object_filter)}"
+        )
 
     # Variable substitutions
     variables = {
