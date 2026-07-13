@@ -65,7 +65,13 @@ function renderButlerTable(data) {
   }
   let html = '<table class="night-table butler-table"><thead><tr><th>Night</th>';
   for (const dt of dtypes) {
-    const short = dt.replace('goodSeeingDiff_', '').replace('forced_diff_', 'fphot_');
+    const shortNames = {
+      'preliminary_visit_image': 'visit_image',
+      'difference_image': 'difference',
+      'dia_source_unfiltered': 'dia_sources',
+      'forced_phot_diffim_radec': 'fphot_diffim',
+    };
+    const short = shortNames[dt] || dt;
     html += '<th>' + short + '</th>';
   }
   html += '</tr></thead><tbody>';

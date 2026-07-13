@@ -17,6 +17,7 @@
       <span>Duration: {{ run.duration or '-' }}</span>
       {% if run.bands %}<span>Bands: {{ run.bands | join(', ') }}</span>{% endif %}
       {% if run.is_bps %}<span>BPS: {{ run.bps_site }}</span>{% endif %}
+      {% if run.stack_version %}<span>Stack: <code>{{ run.stack_version }}</code></span>{% endif %}
     </div>
   </div>
 

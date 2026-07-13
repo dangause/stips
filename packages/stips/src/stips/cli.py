@@ -1761,7 +1761,10 @@ def dashboard(
             "Install it with: pip install 'stips[dashboard]'"
         ) from exc
 
-    app = create_app(logs_dir, instrument_name=instrument_name)
+    # Thread the launch Config through so all dashboard Butler queries run
+    # inside the activated LSST stack this config selects (F-023). Without a
+    # config, Butler-backed panels report unavailable; log browsing still works.
+    app = create_app(logs_dir, instrument_name=instrument_name, config=config)
     uvicorn.run(app, host=host, port=port, log_level="warning")
 
 
