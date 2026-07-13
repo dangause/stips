@@ -44,7 +44,7 @@
       </div>
       <div id="fits-panels" class="fits-panels" style="display:none">
         <div class="fits-panel">
-          <h4>Science (calexp)</h4>
+          <h4>Science (visit image)</h4>
           <div class="fits-img-container" id="fits-calexp">
             <p class="text-muted">Select night & band</p>
           </div>
@@ -372,9 +372,9 @@ function updateFitsViewer() {
 
   // Load images for each panel
   const panels = {
-    'fits-calexp': 'calexp',
-    'fits-template': 'goodSeeingDiff_templateExp',
-    'fits-difference': 'goodSeeingDiff_differenceExp',
+    'fits-calexp': 'preliminary_visit_image',
+    'fits-template': 'template_detector',
+    'fits-difference': 'difference_image',
   };
 
   for (const [panelId, dtype] of Object.entries(panels)) {

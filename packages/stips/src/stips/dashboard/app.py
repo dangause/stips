@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import html
 from pathlib import Path
-from typing import AsyncGenerator
+from typing import TYPE_CHECKING, AsyncGenerator
 
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
@@ -23,10 +23,18 @@ from stips.dashboard.collector import (
     get_slurm_jobs,
 )
 
+if TYPE_CHECKING:
+    from stips.core.config import Config
+
 _HERE = Path(__file__).parent
 
 
-def create_app(logs_dir: Path, *, instrument_name: str) -> FastAPI:
+def create_app(
+    logs_dir: Path,
+    *,
+    instrument_name: str,
+    config: "Config | None" = None,
+) -> FastAPI:
     """Create the FastAPI dashboard application.
 
     Args:
@@ -35,6 +43,11 @@ def create_app(logs_dir: Path, *, instrument_name: str) -> FastAPI:
             Required (no default): the launcher threads it from the active
             profile, so the dashboard never silently masquerades as Nickel
             (F-043).
+        config: Base STIPS Config from the launch ``-c`` YAML. All Butler
+            queries run in-stack via this config (F-023: no more bare
+            ``python3 -c``). When None (launched without ``-c``), Butler-backed
+            endpoints report ``available: False`` instead of silently zeroing;
+            log browsing still works.
 
     Returns:
         Configured FastAPI application.
@@ -227,10 +240,10 @@ def create_app(logs_dir: Path, *, instrument_name: str) -> FastAPI:
 
     @app.get("/api/butler-counts/{run_id}", response_class=JSONResponse)
     async def api_butler_counts(run_id: str):
-        """Query Butler for dataset counts (on-demand, cached)."""
-        from .butler_query import query_butler_counts
+        """Query Butler for dataset counts (on-demand, cached, in-stack)."""
+        from .queries import query_dataset_counts
 
-        data = query_butler_counts(run_id, logs_dir)
+        data = query_dataset_counts(config, run_id, logs_dir)
         return JSONResponse(data)
 
     @app.get("/api/fits-image/{run_id}")
@@ -239,28 +252,19 @@ def create_app(logs_dir: Path, *, instrument_name: str) -> FastAPI:
         from fastapi.responses import FileResponse
 
         from .image_renderer import get_cached_png, render_fits_image
+        from .queries import resolve_repo_path
 
         # Check cache first
         cached = get_cached_png(run_id, type, night, band)
         if cached:
             return FileResponse(cached, media_type="image/png")
 
-        # Find repo path
-        run_info_path = logs_dir / run_id / "run_info.txt"
-        if not run_info_path.exists():
-            return PlainTextResponse("Run info not found", status_code=404)
-
-        repo_path = None
-        for line in run_info_path.read_text().splitlines():
-            if line.startswith("Repository:"):
-                repo_path = line.split(":", 1)[1].strip()
-                break
-
-        if not repo_path:
+        repo_path = resolve_repo_path(logs_dir, run_id)
+        if repo_path is None:
             return PlainTextResponse("Repository not found", status_code=404)
 
         png_path = render_fits_image(
-            repo_path, run_id, type, night, band, instrument_name
+            config, repo_path, run_id, type, night, band, instrument_name
         )
         if png_path is None:
             return PlainTextResponse("Failed to render image", status_code=500)
@@ -271,21 +275,13 @@ def create_app(logs_dir: Path, *, instrument_name: str) -> FastAPI:
     async def api_fits_list(run_id: str):
         """List available FITS images for a run."""
         from .image_renderer import list_available_images
+        from .queries import resolve_repo_path
 
-        run_info_path = logs_dir / run_id / "run_info.txt"
-        if not run_info_path.exists():
-            return JSONResponse({"images": [], "error": "Run info not found"})
-
-        repo_path = None
-        for line in run_info_path.read_text().splitlines():
-            if line.startswith("Repository:"):
-                repo_path = line.split(":", 1)[1].strip()
-                break
-
-        if not repo_path:
+        repo_path = resolve_repo_path(logs_dir, run_id)
+        if repo_path is None:
             return JSONResponse({"images": [], "error": "Repository not found"})
 
-        images = list_available_images(repo_path)
+        images = list_available_images(config, repo_path)
         return JSONResponse({"images": images, "error": None})
 
     @app.get("/api/catalog/{run_id}/{catalog_type}", response_class=JSONResponse)
@@ -297,23 +293,15 @@ def create_app(logs_dir: Path, *, instrument_name: str) -> FastAPI:
         limit: int = 200,
         offset: int = 0,
     ):
-        """Query a Butler source catalog."""
-        from .catalog_query import query_catalog
+        """Query a Butler source catalog (in-stack)."""
+        from .queries import query_catalog, resolve_repo_path
 
-        run_info_path = logs_dir / run_id / "run_info.txt"
-        if not run_info_path.exists():
-            return JSONResponse({"available": False, "error": "Run info not found"})
-
-        repo_path = None
-        for line in run_info_path.read_text().splitlines():
-            if line.startswith("Repository:"):
-                repo_path = line.split(":", 1)[1].strip()
-                break
-
-        if not repo_path:
+        repo_path = resolve_repo_path(logs_dir, run_id)
+        if repo_path is None:
             return JSONResponse({"available": False, "error": "Repository not found"})
 
         data = query_catalog(
+            config,
             repo_path,
             catalog_type,
             night,
@@ -326,23 +314,14 @@ def create_app(logs_dir: Path, *, instrument_name: str) -> FastAPI:
 
     @app.get("/api/metrics/{run_id}", response_class=JSONResponse)
     async def api_metrics(run_id: str):
-        """Query pipeline quality metrics."""
-        from .catalog_query import query_metrics
+        """Query pipeline quality metrics (in-stack)."""
+        from .queries import query_metrics, resolve_repo_path
 
-        run_info_path = logs_dir / run_id / "run_info.txt"
-        if not run_info_path.exists():
-            return JSONResponse({"available": False, "error": "Run info not found"})
-
-        repo_path = None
-        for line in run_info_path.read_text().splitlines():
-            if line.startswith("Repository:"):
-                repo_path = line.split(":", 1)[1].strip()
-                break
-
-        if not repo_path:
+        repo_path = resolve_repo_path(logs_dir, run_id)
+        if repo_path is None:
             return JSONResponse({"available": False, "error": "Repository not found"})
 
-        data = query_metrics(repo_path)
+        data = query_metrics(config, repo_path)
         return JSONResponse(data)
 
     @app.get("/api/events/{run_id}")
