@@ -14,6 +14,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from stips.collections import CollectionNames
 from stips.core import butler_query
 from stips.core.stack import run_butler
 
@@ -28,9 +29,9 @@ log = logging.getLogger(__name__)
 def run_patterns(prefix: str) -> list[str]:
     """Processing-run glob patterns (safe to delete) for an instrument prefix."""
     return [
-        f"{prefix}/runs/*/processCcd/*",
+        CollectionNames.science_glob(prefix),
         f"{prefix}/runs/*/diff/*",
-        f"{prefix}/runs/*/forcedPhotRaDec/*",
+        CollectionNames.forced_phot_glob(prefix),
         f"{prefix}/runs/*/coadd/*",
     ]
 
@@ -60,7 +61,7 @@ def step_patterns(prefix: str) -> dict[str, list[str]]:
         "calibs": [f"{prefix}/cp/{{night}}/*", f"{prefix}/calib/{{night}}"],
         "science": [f"{prefix}/runs/{{night}}/processCcd/*"],
         "dia": [f"{prefix}/runs/{{night}}/diff/*"],
-        "fphot": [f"{prefix}/runs/{{night}}/forcedPhotRaDec/*"],
+        "fphot": [CollectionNames.forced_phot_glob(prefix, night="{night}")],
         "coadd": [f"{prefix}/runs/{{night}}/coadd/*"],
     }
 

@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 from stips.core import butler_query, dataset_types
 from stips.core.pipeline import (
     REFCATS_CHAIN,
+    CollectionNames,
     generate_run_timestamp,
     night_day_obs_expr,
     resolve_processccd_collections,
@@ -122,6 +123,7 @@ def run(
     prof = config.require_profile()
     night = validate_night(night)
     run_ts = generate_run_timestamp()
+    cols = CollectionNames(night, run_ts, prefix=prof.collection_prefix)
     repo = str(config.repo)
 
     output_collections: list[str] = []
@@ -155,12 +157,8 @@ def run(
     try:
         # Run on visit images
         if image_type in ("visit", "both"):
-            band_suffix = f"_{band}" if band else ""
-            output_coll = (
-                f"{prof.collection_prefix}/runs/{night}/forcedPhotRaDec/"
-                f"{run_ts}/visit{band_suffix}"
-            )
-            output_run = f"{output_coll}/run"
+            output_coll = cols.forced_phot_parent("visit", band)
+            output_run = cols.forced_phot_run("visit", band)
 
             visit_input = (
                 f"{processccd_coll},{prof.collection_prefix}/calib/current,"
@@ -233,12 +231,8 @@ def run(
                     f"{prof.collection_prefix}/calib/current,"
                     f"{REFCATS_CHAIN},{prof.skymap_collection}"
                 )
-                band_suffix = f"_{band}" if band else ""
-                output_coll = (
-                    f"{prof.collection_prefix}/runs/{night}/forcedPhotRaDec/"
-                    f"{run_ts}/diffim{band_suffix}"
-                )
-                output_run = f"{output_coll}/run"
+                output_coll = cols.forced_phot_parent("diffim", band)
+                output_run = cols.forced_phot_run("diffim", band)
 
                 log.info("Running forced photometry on difference images...")
                 log.info(f"  Input: {input_colls}")

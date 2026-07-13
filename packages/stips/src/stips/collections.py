@@ -10,6 +10,42 @@ def generate_run_timestamp() -> str:
     return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
 
+# Template collections are deliberately NOT prefix-parameterized: they are
+# shared across instruments (a PS1 cutout or a coadd of a given tract is the
+# same product regardless of which telescope's science it templates). These
+# module-level builders centralize the spelling without threading a prefix.
+
+
+def template_ps1(band: str) -> str:
+    """PS1 external-template collection for ``band`` (e.g. ``templates/ps1/r``)."""
+    return f"templates/ps1/{band}"
+
+
+def template_ps1_glob() -> str:
+    """Glob matching all PS1 template collections."""
+    return "templates/ps1/*"
+
+
+def template_deep(tract: int | str, band: str) -> str:
+    """Coadd (deep) template collection for ``tract``/``band``.
+
+    ``tract`` accepts an ``int`` (the usual case) or a string placeholder such
+    as ``"<TBD>"`` used by dry-run reporting when the real tract is not yet
+    computed.
+    """
+    return f"templates/deep/tract{tract}/{band}"
+
+
+def template_deep_run(tract: int | str, band: str, run_ts: str) -> str:
+    """Timestamped RUN collection under a coadd-template parent."""
+    return f"{template_deep(tract, band)}/{run_ts}"
+
+
+def template_deep_glob() -> str:
+    """Glob matching all coadd (deep) template collections."""
+    return "templates/deep/*/*"
+
+
 class CollectionNames:
     """Generate standard collection names for a pipeline run."""
 
@@ -95,3 +131,43 @@ class CollectionNames:
     @property
     def diff_run(self) -> str:
         return f"{self.diff_parent}/run"
+
+    # Forced photometry
+    def forced_phot_parent(self, image_type: str, band: str | None = None) -> str:
+        """CHAINED parent for forced photometry on ``image_type`` images.
+
+        ``image_type`` is ``"visit"`` or ``"diffim"``; ``band`` (optional)
+        suffixes the collection (e.g. ``diffim_r``) so per-band runs stay
+        separate, matching the per-night per-band fphot layout.
+        """
+        band_suffix = f"_{band}" if band else ""
+        return (
+            f"{self.prefix}/runs/{self.night}/forcedPhotRaDec/"
+            f"{self.run_ts}/{image_type}{band_suffix}"
+        )
+
+    def forced_phot_run(self, image_type: str, band: str | None = None) -> str:
+        """RUN collection under :meth:`forced_phot_parent`."""
+        return f"{self.forced_phot_parent(image_type, band)}/run"
+
+    # Differential photometry
+    @property
+    def differential_phot(self) -> str:
+        """Output collection for LSST differential photometry (no run timestamp)."""
+        return f"{self.prefix}/runs/{self.night}/differentialPhot"
+
+    # Glob patterns (for discovery / cleanup across nights and timestamps)
+    @classmethod
+    def science_glob(cls, prefix: str) -> str:
+        """Glob matching every science (processCcd) collection for ``prefix``."""
+        return f"{prefix}/runs/*/processCcd/*"
+
+    @classmethod
+    def forced_phot_glob(cls, prefix: str, *, night: str = "*", tail: str = "*") -> str:
+        """Glob over forced-photometry collections under ``runs/{night}``.
+
+        ``tail`` is the pattern after ``forcedPhotRaDec/`` (default ``*`` matches
+        the whole subtree). Callers pin ``night`` and/or a more specific ``tail``
+        such as ``"*/diffim*"`` or ``"*/run"``.
+        """
+        return f"{prefix}/runs/{night}/forcedPhotRaDec/{tail}"

@@ -22,6 +22,8 @@ from stips.core.pipeline import (
     REFCATS_CHAIN,
     generate_run_timestamp,
     resolve_processccd_collections,
+    template_deep,
+    template_deep_run,
 )
 from stips.core.stack import (
     run_butler,
@@ -105,7 +107,7 @@ def check_template_exists(
     Returns:
         Collection name if template exists, None otherwise
     """
-    collection = f"templates/deep/tract{tract}/{band}"
+    collection = template_deep(tract, band)
 
     try:
         if butler_query.has_datasets(
@@ -343,7 +345,7 @@ def run(
         else:
             # No template data found. Check if a stale CHAINED collection
             # exists from a previous failed attempt — if so, rebase to clean it up.
-            collection_name = f"templates/deep/tract{tract}/{band}"
+            collection_name = template_deep(tract, band)
             try:
                 if butler_query.collection_exists(config, collection_name):
                     log.info(
@@ -385,8 +387,8 @@ def run(
 
     repo = str(config.repo)
     run_ts = generate_run_timestamp()
-    template_parent = f"templates/deep/tract{tract}/{band}"
-    template_run = f"{template_parent}/{run_ts}"
+    template_parent = template_deep(tract, band)
+    template_run = template_deep_run(tract, band, run_ts)
     pipeline = config.resolve_pipeline("DRP.yaml")
 
     qg_dir = config.repo / "qgraphs"

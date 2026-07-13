@@ -1197,11 +1197,12 @@ def calib_metrics(
             --collection "<prefix>/runs/20230519/processCcd/*" \\
             -o calib_metrics_20230519.csv
     """
+    from stips.collections import CollectionNames
     from stips.core import calib_metrics as cm_module
 
     if collection is None:
         prof = config.require_profile()
-        collection = f"{prof.collection_prefix}/runs/*/processCcd/*"
+        collection = CollectionNames.science_glob(prof.collection_prefix)
 
     _print_info(f"Repo: {config.repo}")
     _print_info(f"Extracting calibration metrics from {collection}")
