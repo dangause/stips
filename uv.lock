@@ -1747,15 +1747,26 @@ source = { editable = "packages/obs_stips" }
 dependencies = [
     { name = "astro-metadata-translator" },
     { name = "astropy" },
+    { name = "numpy" },
+    { name = "pyyaml" },
     { name = "stips" },
+]
+
+[package.optional-dependencies]
+plotting = [
+    { name = "matplotlib" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "astro-metadata-translator", specifier = ">=0.11.0" },
     { name = "astropy" },
+    { name = "matplotlib", marker = "extra == 'plotting'" },
+    { name = "numpy" },
+    { name = "pyyaml" },
     { name = "stips", editable = "packages/stips" },
 ]
+provides-extras = ["plotting"]
 
 [[package]]
 name = "packaging"
