@@ -717,9 +717,10 @@ def bootstrap(ctx: click.Context, config: cfg_module.Config) -> None:
     is_flag=True,
     help="Skip confirmation prompt",
 )
-@click.pass_context
+@pass_config
 def clean(
     ctx: click.Context,
+    config: cfg_module.Config,
     nights: tuple[str, ...],
     steps: tuple[str, ...],
     dry_run: bool,
@@ -756,8 +757,6 @@ def clean(
     """
     from stips.core import clean as clean_module
 
-    config = _load_config(ctx)
-
     nights_list = list(nights) if nights else None
     steps_list = list(steps) if steps else None
 
@@ -768,20 +767,21 @@ def clean(
     if steps_list:
         _print_info(f"Steps: {', '.join(steps_list)}")
 
-    # Dry-run or preview
-    preview = clean_module.run(
-        config,
-        nights=nights_list,
-        steps=steps_list,
-        dry_run=True,
-    )
+    # Discover once. The confirmed plan is exactly what gets executed, so the
+    # user can never approve one set of collections and have a different set
+    # deleted (they cannot drift between a separate preview and delete pass).
+    plan = clean_module.plan(config, nights=nights_list, steps=steps_list)
 
-    if not preview.collections_removed:
+    if plan.error:
+        _print_error(plan.error)
+        sys.exit(1)
+
+    if plan.is_empty:
         _print_info("No collections found to remove")
         return
 
-    _print_info(f"\nFound {len(preview.collections_removed)} collections to remove:")
-    for col in preview.collections_removed:
+    _print_info(f"\nFound {len(plan.names)} collections to remove:")
+    for col in plan.names:
         click.echo(f"  {col}")
 
     if dry_run:
@@ -791,17 +791,12 @@ def clean(
     # Confirm
     if not yes:
         click.echo()
-        if not click.confirm(f"Remove {len(preview.collections_removed)} collections?"):
+        if not click.confirm(f"Remove {len(plan.names)} collections?"):
             click.echo("Cancelled")
             return
 
-    # Do the actual removal
-    result = clean_module.run(
-        config,
-        nights=nights_list,
-        steps=steps_list,
-        dry_run=False,
-    )
+    # Do the actual removal of THIS plan (no re-discovery).
+    result = clean_module.execute(config, plan)
 
     if result.success:
         _print_success(f"\n✓ Removed {len(result.collections_removed)} collections")
