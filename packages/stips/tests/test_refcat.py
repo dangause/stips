@@ -174,3 +174,46 @@ def test_ingest_refcat_runs_register_ingest_chain():
     # Timestamped RUN collection so re-fetches never collide on existing shards.
     assert run_collection == "refcats/gaia_dr3/20260625T000000Z"
     assert "refcats/gaia_dr3/20260625T000000Z" in joined
+
+
+# --- _cones_to_htm_ids: venv-safe HTM coverage (in-process, else in-stack) ---
+
+
+def test_cones_to_htm_ids_in_process(monkeypatch):
+    import stips.core.refcat as rc
+
+    monkeypatch.setattr(rc, "cones_to_htm", lambda cones, depth=7: [1, 2, 2])
+    assert rc._cones_to_htm_ids(mock.Mock(), [(10.0, 20.0, 0.3)]) == {1, 2}
+
+
+def test_cones_to_htm_ids_falls_back_to_stack(monkeypatch):
+    import stips.core.refcat as rc
+
+    def _no_lsst(cones, depth=7):
+        raise ModuleNotFoundError("No module named 'lsst.geom'")
+
+    captured = {}
+
+    def _fake_json(script, config):
+        captured["script"] = script
+        return [100, 101]
+
+    monkeypatch.setattr(rc, "cones_to_htm", _no_lsst)
+    monkeypatch.setattr(rc, "run_butler_python_json", _fake_json)
+    out = rc._cones_to_htm_ids(mock.Mock(), [(10.0, 20.0, 0.3)], depth=7)
+    assert out == {100, 101}
+    assert "HtmIndexer" in captured["script"]
+    assert "(10.0, 20.0, 0.3)" in captured["script"]
+
+
+def test_cones_to_htm_ids_raises_when_stack_helper_fails(monkeypatch):
+    import pytest
+    import stips.core.refcat as rc
+
+    def _no_lsst(cones, depth=7):
+        raise ModuleNotFoundError("No module named 'lsst.geom'")
+
+    monkeypatch.setattr(rc, "cones_to_htm", _no_lsst)
+    monkeypatch.setattr(rc, "run_butler_python_json", lambda script, config: None)
+    with pytest.raises(RuntimeError, match="HTM coverage"):
+        rc._cones_to_htm_ids(mock.Mock(), [(10.0, 20.0, 0.3)])

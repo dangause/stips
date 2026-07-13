@@ -9,7 +9,10 @@ No ``lsst.*`` or ``stips_refcats`` import happens at module load — stack
 access is confined to ``run_butler`` / the ``butler_query`` adapters (mocked in
 unit tests), and ``stips_refcats`` symbols are bound lazily on first use so
 importing this module (and hence the CLI) never fails just because
-``stips-refcats`` is broken or missing.
+``stips-refcats`` is broken or missing. The HTM cone-coverage math needs
+``lsst.geom`` at call time, so ``_cones_to_htm_ids`` computes it via an
+in-stack snippet when ``lsst`` is not importable in-process (the normal
+plain-venv case).
 """
 
 from __future__ import annotations
@@ -22,7 +25,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from stips.core import butler_query
-from stips.core.stack import run_butler
+from stips.core.stack import run_butler, run_butler_python_json
 
 if TYPE_CHECKING:
     # Static-analysis-only bindings for the lazily loaded names below.
@@ -277,6 +280,44 @@ def _ensure_one(
     return "fetched"
 
 
+def _cones_to_htm_ids(
+    config: "Config", cones: list[tuple[float, float, float]], *, depth: int = 7
+) -> set[int]:
+    """HTM trixel ids covering ``cones``, computed venv-safely.
+
+    ``stips_refcats.cones_to_htm`` needs ``lsst.geom``/``meas_algorithms`` at
+    call time, which the plain venv does not have. Try it in-process first (it
+    works inside the stack, and unit tests patch it), then fall back to running
+    the same computation in-stack via ``run_butler_python_json``.
+    """
+    _load_refcats()
+    try:
+        return set(cones_to_htm(cones, depth=depth))
+    except (ImportError, ModuleNotFoundError):
+        log.debug("lsst not importable in-process; computing HTM cones in-stack")
+    script = f"""
+import json
+import lsst.geom as geom
+from lsst.meas.algorithms.htmIndexer import HtmIndexer
+
+htm = HtmIndexer(depth={depth!r})
+ids = set()
+for ra, dec, rad_deg in {cones!r}:
+    center = geom.SpherePoint(ra * geom.degrees, dec * geom.degrees)
+    shards, _ = htm.getShardIds(center, rad_deg * geom.degrees)
+    ids.update(int(s) for s in shards)
+print(json.dumps(sorted(ids)))
+"""
+    result = run_butler_python_json(script, config)
+    if result is None:
+        raise RuntimeError(
+            "Could not compute HTM coverage for the refcat cone: the in-stack "
+            "helper failed (is STACK_DIR valid and the LSST stack installed?). "
+            "See WARNING logs above for the underlying error."
+        )
+    return {int(x) for x in result}
+
+
 def ensure_refcats(
     config: "Config",
     ra: float,
@@ -297,7 +338,7 @@ def ensure_refcats(
         return result
 
     _load_refcats()
-    needed = set(cones_to_htm([(ra, dec, radius_deg)], depth=7))
+    needed = _cones_to_htm_ids(config, [(ra, dec, radius_deg)], depth=7)
     result.needed_trixels = len(needed)
     stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
