@@ -49,9 +49,11 @@ def test_valid_aperture_radii():
 
 
 def test_lsst_classes_are_none_without_stack():
-    """Without the LSST stack, Task/Config/Connections should be None."""
-    assert _mod.DifferentialPhotTask is None or _mod.DifferentialPhotTask is not None
-    # Just verify the module loaded without error
+    """Task/Config/Connections are None exactly when the LSST stack is absent."""
+    has_lsst = _mod._HAS_LSST
+    assert (_mod.DifferentialPhotTask is None) == (not has_lsst)
+    assert (_mod.DifferentialPhotConfig is None) == (not has_lsst)
+    assert (_mod.DifferentialPhotConnections is None) == (not has_lsst)
 
 
 # ---------------------------------------------------------------------------

@@ -142,7 +142,7 @@ def build_yaml_camera(camera_file: str, binning: int = 1):
     """
     with open(camera_file) as fd:
         cameraParams = yaml.safe_load(fd)
-    if binning and binning > 1:
+    if binning > 1:
         cameraParams = _binned_camera_params(cameraParams, binning)
     return _make_camera(cameraParams)
 

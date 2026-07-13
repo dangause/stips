@@ -155,6 +155,13 @@ def _apply_stips_runtime_config(pipeline, yaml_name: str) -> None:
         # are arbitrary non-zero coords -- the task requires them to be set.
         pipeline.addConfigOverride("differentialPhot", "targetRa", 210.910750)
         pipeline.addConfigOverride("differentialPhot", "targetDec", 54.311694)
+    if "plotDiaLightcurve" in labels:
+        # analysis-dia-lightcurve.yaml (also imported by DIA.yaml/DRP.yaml)
+        # documents "Configure plotDiaLightcurve.ra/dec at runtime";
+        # DiaLightcurvePlotConfig.validate() enforces they are set. Guard by
+        # label (not yaml name) so every graph embedding the task builds.
+        pipeline.addConfigOverride("plotDiaLightcurve", "ra", 210.910750)
+        pipeline.addConfigOverride("plotDiaLightcurve", "dec", 54.311694)
 
 
 @pytest.mark.parametrize(

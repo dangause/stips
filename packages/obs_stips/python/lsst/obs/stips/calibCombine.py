@@ -18,13 +18,9 @@ combineHeaders changes, this fork may drift out of sync.
 
 __all__ = ["StipsCalibCombineTask", "StipsCalibCombineByFilterTask"]
 
-import logging
-
 import astropy.time
 import lsst.daf.base
 from lsst.cp.pipe.cpCombine import CalibCombineByFilterTask, CalibCombineTask
-
-log = logging.getLogger(__name__)
 
 
 class StipsCalibCombineTask(CalibCombineTask):
@@ -165,14 +161,14 @@ class StipsCalibCombineTask(CalibCombineTask):
             if date_beg is not None:
                 earliest = date_beg
                 newest = date_end if date_end is not None else date_beg
-                log.warning(
+                self.log.warning(
                     "VisitInfo dates unavailable for %s; using header DATE-BEG/DATE-END: %s to %s",
                     calibType,
                     earliest.iso,
                     newest.iso,
                 )
             else:
-                log.warning(
+                self.log.warning(
                     "No date information available for %s calibration; "
                     "using current time as placeholder.",
                     calibType,
