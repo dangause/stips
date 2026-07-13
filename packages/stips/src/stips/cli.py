@@ -1739,28 +1739,22 @@ def dashboard(
         stips dashboard --logs-dir ./logs --no-browser
         stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml dashboard
     """
-    # Determine logs directory and resolve the instrument name from the
-    # active profile (used to drive Butler dataset queries in the dashboard).
+    # A missing/invalid config is a soft condition here: _try_load_config returns
+    # None instead of raising SystemExit (never catch SystemExit — that would let
+    # an already-reported fatal error keep going, F-016).
     instrument_name = "STIPS"
-    config = None
-    try:
-        config = _load_config(ctx)
-    except (SystemExit, Exception):
-        config = None
+    config = _try_load_config(ctx)
 
     if config is not None:
         try:
             instrument_name = config.require_profile().name
-        except Exception:
+        except RuntimeError:
             instrument_name = "STIPS"
 
     if logs_dir is None:
         if config is not None:
-            try:
-                repo_root = config.instrument_dir.parent.parent
-                logs_dir = repo_root / "logs"
-            except Exception:
-                logs_dir = Path.cwd() / "logs"
+            # Pure Path arithmetic (no I/O) — cannot raise.
+            logs_dir = config.instrument_dir.parent.parent / "logs"
         else:
             # Fallback: look for logs/ in current directory
             logs_dir = Path.cwd() / "logs"
