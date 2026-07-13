@@ -6,7 +6,6 @@ out of the string literal or inject additional query terms.
 """
 
 import pytest
-
 from stips.core.query import butler_str_literal
 
 
