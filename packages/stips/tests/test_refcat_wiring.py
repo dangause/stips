@@ -78,6 +78,58 @@ def test_run_refcat_step_dry_run_skips(monkeypatch):
     assert called == []
 
 
+def test_run_refcat_step_failure_is_early_exit(monkeypatch):
+    """A failed ensure (e.g. missing astroquery) must abort the run loudly,
+    not fall through to science and die with MissingDatasetTypeError."""
+    from unittest import mock
+
+    import stips.core.run as run
+    from stips.core.refcat import RefcatResult
+
+    def fake_ensure(config, ra, dec, **k):
+        return RefcatResult(
+            mode="gaia_ps1",
+            gaia_status="failed",
+            ps1_status="failed",
+            error="gaia: No module named 'astroquery'",
+        )
+
+    monkeypatch.setattr(run, "ensure_refcats", fake_ensure)
+    cfg = run.RunConfig(
+        object_name="x", ra=210.9, dec=54.3, bands=["r"], refcat_mode="gaia_ps1"
+    )
+    result = mock.Mock()
+    early_exit = run._run_refcat_step(
+        cfg, config=mock.Mock(), result=result, dry_run=False
+    )
+    assert early_exit is result
+    assert result.success is False
+    assert "astroquery" in result.error
+    assert "reference catalogs" in result.error
+
+
+def test_run_refcat_step_success_returns_none(monkeypatch):
+    from unittest import mock
+
+    import stips.core.run as run
+    from stips.core.refcat import RefcatResult
+
+    monkeypatch.setattr(
+        run,
+        "ensure_refcats",
+        lambda *a, **k: RefcatResult(
+            mode="gaia_ps1", gaia_status="covered", ps1_status="covered"
+        ),
+    )
+    cfg = run.RunConfig(
+        object_name="x", ra=210.9, dec=54.3, bands=["r"], refcat_mode="gaia_ps1"
+    )
+    assert (
+        run._run_refcat_step(cfg, config=mock.Mock(), result=mock.Mock(), dry_run=False)
+        is None
+    )
+
+
 def test_cli_refcat_fetch_dispatches(monkeypatch):
     from unittest import mock
 

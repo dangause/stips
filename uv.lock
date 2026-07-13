@@ -2854,11 +2854,21 @@ name = "stips-refcats"
 version = "0.1.0"
 source = { editable = "packages/refcats" }
 dependencies = [
+    { name = "astropy" },
+    { name = "astroquery" },
+    { name = "numpy" },
+    { name = "pandas" },
     { name = "pyyaml" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "pyyaml" }]
+requires-dist = [
+    { name = "astropy" },
+    { name = "astroquery" },
+    { name = "numpy" },
+    { name = "pandas" },
+    { name = "pyyaml" },
+]
 
 [[package]]
 name = "structlog"

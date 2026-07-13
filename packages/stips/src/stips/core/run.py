@@ -1479,9 +1479,30 @@ def _run_refcat_step(run_cfg, config, result, dry_run):
         refcat_result.gaia_status,
         refcat_result.ps1_status,
     )
+    failed = [
+        name
+        for name, status in (
+            ("gaia", refcat_result.gaia_status),
+            ("ps1", refcat_result.ps1_status),
+        )
+        if status == "failed"
+    ]
+    if failed:
+        # Without reference catalogs, calibrateImage cannot build a quantum
+        # graph — every science night would fail downstream with an opaque
+        # MissingDatasetTypeError. Fail here, loudly, with the root cause.
+        result.success = False
+        result.error = (
+            f"Refcat ensure failed for {', '.join(failed)}: {refcat_result.error}. "
+            "Science calibration cannot proceed without reference catalogs — "
+            "fix the root cause above (e.g. missing astroquery, no network) "
+            "or rerun with refcat mode 'monster' if the repo already has refcats."
+        )
+        log.error(result.error)
+        return result
     if refcat_result.error:
         log.warning("Refcat issues: %s", refcat_result.error)
-    return refcat_result
+    return None
 
 
 def run(
@@ -1585,7 +1606,9 @@ def run(
 
     # Step 0b: Ensure reference catalogs (on-demand Gaia/PS1; no RSP/MONSTER).
     # Runs before templates because coadd templates also consume refcats.
-    _run_refcat_step(run_cfg, config, result, dry_run)
+    early_exit = _run_refcat_step(run_cfg, config, result, dry_run)
+    if early_exit is not None:
+        return early_exit
 
     # Step 1: Templates per band
     if run_cfg.template_type == "ps1":
