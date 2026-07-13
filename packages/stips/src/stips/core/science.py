@@ -91,6 +91,11 @@ class ScienceConfig:
         fallback = config.resolve_config(
             "calibrateImage/tuned_configs/2023ixf_relaxed_psfex_sparse.py"
         )
+        if not primary.exists():
+            # No instrument-tuned config: use the neutral schema-compat
+            # default (stock calibrateImage alone omits the aperture-flux
+            # columns the rest of stage1 requires).
+            primary = config.resolve_config("calibrateImage/neutral_default.py")
         return cls(
             calibrate_image=primary if primary.exists() else None,
             colorterms=config.resolve_config("apply_colorterms.py"),

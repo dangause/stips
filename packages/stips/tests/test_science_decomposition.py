@@ -693,6 +693,19 @@ class TestStockConfigDefault:
         assert sc.calibrate_image is None
         assert sc.calibrate_image_fallbacks == []
 
+    def test_default_uses_neutral_schema_config_when_no_tuned(self, tmp_path):
+        from unittest import mock
+
+        from stips.core.science import ScienceConfig
+
+        neutral = tmp_path / "calibrateImage" / "neutral_default.py"
+        neutral.parent.mkdir(parents=True)
+        neutral.write_text("# schema compat")
+        cfg = mock.Mock()
+        cfg.resolve_config = lambda name: tmp_path / name
+        sc = ScienceConfig.default(cfg)
+        assert sc.calibrate_image == neutral
+
     def test_resolve_configs_stock_fallback(self, caplog):
         import logging
 
