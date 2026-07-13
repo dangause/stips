@@ -1,6 +1,13 @@
 import unittest
 
-from stips.collections import CollectionNames
+from stips.collections import (
+    CollectionNames,
+    template_deep,
+    template_deep_glob,
+    template_deep_run,
+    template_ps1,
+    template_ps1_glob,
+)
 
 
 class TestCollectionNames(unittest.TestCase):
@@ -31,6 +38,85 @@ class TestCollectionNames(unittest.TestCase):
         # a required keyword-only arg. Omitting it must raise TypeError.
         with self.assertRaises(TypeError):
             CollectionNames("20230519", "ts1")
+
+    def test_forced_phot_collections(self):
+        c = CollectionNames("20230519", "ts1", prefix="Nickel")
+        # No-band variant (matches the legacy `visit`/`diffim` spelling).
+        self.assertEqual(
+            c.forced_phot_parent("visit"),
+            "Nickel/runs/20230519/forcedPhotRaDec/ts1/visit",
+        )
+        self.assertEqual(
+            c.forced_phot_run("visit"),
+            "Nickel/runs/20230519/forcedPhotRaDec/ts1/visit/run",
+        )
+        # Per-band variant suffixes the leaf (`diffim_r`).
+        self.assertEqual(
+            c.forced_phot_parent("diffim", "r"),
+            "Nickel/runs/20230519/forcedPhotRaDec/ts1/diffim_r",
+        )
+        self.assertEqual(
+            c.forced_phot_run("diffim", "r"),
+            "Nickel/runs/20230519/forcedPhotRaDec/ts1/diffim_r/run",
+        )
+
+    def test_differential_phot(self):
+        c = CollectionNames("20230519", prefix="Nickel")
+        self.assertEqual(c.differential_phot, "Nickel/runs/20230519/differentialPhot")
+
+    def test_science_glob(self):
+        self.assertEqual(
+            CollectionNames.science_glob("Nickel"), "Nickel/runs/*/processCcd/*"
+        )
+        self.assertEqual(
+            CollectionNames.science_glob("ctio1m"), "ctio1m/runs/*/processCcd/*"
+        )
+
+    def test_forced_phot_glob(self):
+        # Default matches the whole forced-phot subtree for every night.
+        self.assertEqual(
+            CollectionNames.forced_phot_glob("Nickel"),
+            "Nickel/runs/*/forcedPhotRaDec/*",
+        )
+        # Pinned night + a specific tail (as used by discovery / dry-run).
+        self.assertEqual(
+            CollectionNames.forced_phot_glob(
+                "Nickel", night="20230519", tail="*/diffim*"
+            ),
+            "Nickel/runs/20230519/forcedPhotRaDec/*/diffim*",
+        )
+        self.assertEqual(
+            CollectionNames.forced_phot_glob("Nickel", night="20230519", tail="*/run"),
+            "Nickel/runs/20230519/forcedPhotRaDec/*/run",
+        )
+        # A literal "{night}" placeholder passes through untouched (clean.py uses
+        # it and substitutes later).
+        self.assertEqual(
+            CollectionNames.forced_phot_glob("Nickel", night="{night}"),
+            "Nickel/runs/{night}/forcedPhotRaDec/*",
+        )
+
+
+class TestTemplateCollections(unittest.TestCase):
+    """Template collections are shared across instruments (no prefix)."""
+
+    def test_template_ps1(self):
+        self.assertEqual(template_ps1("r"), "templates/ps1/r")
+        self.assertEqual(template_ps1_glob(), "templates/ps1/*")
+
+    def test_template_deep(self):
+        self.assertEqual(template_deep(0, "r"), "templates/deep/tract0/r")
+        self.assertEqual(template_deep(12, "i"), "templates/deep/tract12/i")
+        self.assertEqual(template_deep_glob(), "templates/deep/*/*")
+
+    def test_template_deep_run(self):
+        self.assertEqual(
+            template_deep_run(3, "r", "ts9"), "templates/deep/tract3/r/ts9"
+        )
+
+    def test_template_deep_placeholder_tract(self):
+        # Dry-run reporting uses a string placeholder instead of a wrong literal.
+        self.assertEqual(template_deep("<TBD>", "r"), "templates/deep/tract<TBD>/r")
 
 
 if __name__ == "__main__":

@@ -439,7 +439,7 @@ def _run_ps1_templates(
 ) -> None:
     """Ingest PS1 templates for each band (defaults to all configured bands)."""
     from stips.core import ps1_template
-    from stips.core.pipeline import ps1_band_map
+    from stips.core.pipeline import ps1_band_map, template_ps1
 
     eligible = ps1_band_map(config)
     for band in bands if bands is not None else run_cfg.bands:
@@ -470,7 +470,7 @@ def _run_ps1_templates(
             log.info(
                 f"  [DRY RUN] ps1_template.run(ra={run_cfg.ra}, dec={run_cfg.dec}, band={band})"
             )
-            result.template_collections[band] = f"templates/ps1/{band}"
+            result.template_collections[band] = template_ps1(band)
 
 
 def _run_coadd_templates(
@@ -489,6 +489,7 @@ def _run_coadd_templates(
     """
     coadd_bands = bands if bands is not None else run_cfg.bands
     from stips.core import calibs, coadd, science
+    from stips.core.pipeline import template_deep
 
     if not run_cfg.template_nights:
         log.error("Coadd template type requires template.nights in YAML")
@@ -602,7 +603,10 @@ def _run_coadd_templates(
             log.info(
                 f"  [DRY RUN] coadd.run(nights={run_cfg.template_nights}, band={band})"
             )
-            result.template_collections[band] = f"templates/deep/tract0/{band}"
+            # The real tract is computed inside coadd.run() from the skymap; it
+            # is not known during a dry run, so report an honest placeholder
+            # rather than a hardcoded (and usually wrong) "tract0".
+            result.template_collections[band] = template_deep("<TBD>", band)
 
     return None
 
@@ -1239,6 +1243,7 @@ def _run_differential_phot_step(
     differential flux ratios.
     """
     from stips.core import butler_query
+    from stips.core.pipeline import CollectionNames
     from stips.core.stack import run_pipetask
 
     prof = config.require_profile()
@@ -1275,7 +1280,9 @@ def _run_differential_phot_step(
         f"{science_coll},{prof.collection_prefix}/calib/current,"
         f"refcats,{prof.skymap_collection}"
     )
-    output_coll = f"{prof.collection_prefix}/runs/{all_nights[0]}/differentialPhot"
+    output_coll = CollectionNames(
+        all_nights[0], prefix=prof.collection_prefix
+    ).differential_phot
 
     bands = run_cfg.bands
     band_filter = bands[0] if len(bands) == 1 else ""
@@ -1341,6 +1348,7 @@ def _discover_fphot_collections(
 ) -> list[str]:
     """Gather forced photometry collections for lightcurve extraction."""
     from stips.core import butler_query
+    from stips.core.pipeline import CollectionNames
 
     prof = config.require_profile()
     fphot_colls: list[str] = []
@@ -1363,8 +1371,11 @@ def _discover_fphot_collections(
                     fphot_colls.extend(
                         butler_query.list_collections(
                             config,
-                            f"{prof.collection_prefix}/runs/{night}"
-                            f"/forcedPhotRaDec/*/{fphot_suffix}*",
+                            CollectionNames.forced_phot_glob(
+                                prof.collection_prefix,
+                                night=night,
+                                tail=f"*/{fphot_suffix}*",
+                            ),
                             prefix=f"{prof.collection_prefix}/runs/",
                         )
                         or []
@@ -1376,7 +1387,9 @@ def _discover_fphot_collections(
     elif not fphot_colls and dry_run:
         for night in all_nights:
             fphot_colls.append(
-                f"{prof.collection_prefix}/runs/{night}/forcedPhotRaDec/*/run"
+                CollectionNames.forced_phot_glob(
+                    prof.collection_prefix, night=night, tail="*/run"
+                )
             )
 
     return sorted(set(fphot_colls))

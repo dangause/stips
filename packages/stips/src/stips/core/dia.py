@@ -19,6 +19,9 @@ from stips.core.pipeline import (
     parse_quanta_summary,
     ps1_band_map,
     resolve_processccd_collections,
+    template_deep_glob,
+    template_ps1,
+    template_ps1_glob,
     validate_night,
 )
 from stips.core.stack import run_butler
@@ -75,12 +78,12 @@ def find_template(
     # coadd for the rest.
     if strategy == "auto":
         if band in ps1_band_map(config) and butler_query.collection_exists(
-            config, f"templates/ps1/{band}"
+            config, template_ps1(band)
         ):
-            return f"templates/ps1/{band}"
+            return template_ps1(band)
         coadds = (
             butler_query.list_collections(
-                config, "templates/deep/*/*", prefix="templates/"
+                config, template_deep_glob(), prefix="templates/"
             )
             or []
         )
@@ -90,7 +93,7 @@ def find_template(
 
     # Query PS1 and coadd templates with targeted glob patterns
     candidates = []
-    for pattern in ["templates/ps1/*", "templates/deep/*/*"]:
+    for pattern in [template_ps1_glob(), template_deep_glob()]:
         candidates.extend(
             butler_query.list_collections(config, pattern, prefix="templates/") or []
         )

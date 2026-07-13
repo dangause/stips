@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from stips.collections import template_ps1
 from stips.core.stack import run_with_stack
 
 if TYPE_CHECKING:
@@ -74,7 +75,7 @@ def run(
         return PS1TemplateResult(
             success=False,
             band=band,
-            collection=collection or f"templates/ps1/{band}",
+            collection=collection or template_ps1(band),
             error=(
                 f"PS1 templates only available for bands: {eligible}; " f"got {band!r}"
             ),
@@ -82,7 +83,7 @@ def run(
     ps1_band = band_map[band]
 
     if collection is None:
-        collection = f"templates/ps1/{band}"
+        collection = template_ps1(band)
 
     # Skip-if-exists policy lives here (single source of truth) rather than in
     # each caller: unless overwrite is requested, an already-ingested template
@@ -202,7 +203,7 @@ def check_exists(
         True if template exists
     """
     if collection is None:
-        collection = f"templates/ps1/{band}"
+        collection = template_ps1(band)
 
     args = [
         "butler",

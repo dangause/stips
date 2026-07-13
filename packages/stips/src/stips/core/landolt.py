@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from stips.collections import CollectionNames
 from stips.core.stack import run_with_stack
 
 if TYPE_CHECKING:
@@ -49,7 +50,7 @@ def run(
     """
     if collection is None:
         prof = config.require_profile()
-        collection = f"{prof.collection_prefix}/runs/*/processCcd/*"
+        collection = CollectionNames.science_glob(prof.collection_prefix)
 
     output = Path(output).resolve()
     output.parent.mkdir(parents=True, exist_ok=True)

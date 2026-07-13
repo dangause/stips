@@ -11,6 +11,11 @@ from typing import TYPE_CHECKING
 # Re-exported for backwards compatibility; canonical home is stips.collections.
 from stips.collections import CollectionNames as CollectionNames
 from stips.collections import generate_run_timestamp as generate_run_timestamp
+from stips.collections import template_deep as template_deep
+from stips.collections import template_deep_glob as template_deep_glob
+from stips.collections import template_deep_run as template_deep_run
+from stips.collections import template_ps1 as template_ps1
+from stips.collections import template_ps1_glob as template_ps1_glob
 from stips.core import butler_query
 
 if TYPE_CHECKING:
@@ -498,55 +503,6 @@ def resolve_processccd_collections(
         return []
 
     return parents if all_parents else parents[:1]
-
-
-def parse_butler_query_output(
-    output: str,
-    *,
-    prefix_filter: str | None = None,
-) -> list[str]:
-    """Parse butler query-collections or query-datasets tabular output.
-
-    Extracts the first column (collection/dataset name) from butler CLI
-    tabular output, skipping headers and separator lines.
-
-    Args:
-        output: Raw stdout from butler query-collections/query-datasets
-        prefix_filter: Only return names starting with this prefix
-            (e.g. (Nickel) "Nickel/", or "templates/")
-
-    Returns:
-        List of collection/dataset names
-    """
-    names = []
-    for line in output.strip().splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        # Skip header/separator lines
-        if line.startswith(("-", "=")):
-            continue
-        # Skip column header lines (case-insensitive)
-        first_word = line.split()[0].lower() if line.split() else ""
-        if first_word in ("type", "name", "collection", "dataset"):
-            continue
-        # Extract first column
-        parts = line.split()
-        if not parts:
-            continue
-        name = parts[0]
-        if prefix_filter and not name.startswith(prefix_filter):
-            continue
-        names.append(name)
-    return names
-
-
-def butler_query_has_results(output: str) -> bool:
-    """Check if butler tabular output contains at least one data row.
-
-    Useful for checking if query-datasets or query-data-ids returned results.
-    """
-    return len(parse_butler_query_output(output)) > 0
 
 
 def parse_quanta_summary(

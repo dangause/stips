@@ -24,6 +24,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from stips.collections import template_ps1
 from stips.core.config import resolve_data_package_dir
 
 if TYPE_CHECKING:
@@ -266,7 +267,7 @@ def render_bps_config(
         "payload_prefix": payload_prefix,
         "band": default_band,
         "template_collection": bps_cfg.template_collection
-        or f"templates/ps1/{default_band}",
+        or template_ps1(default_band),
         "coord_collection": bps_cfg.coord_collection or "",
         "object_filter": object_filter,
         "pipeline": bps_cfg.pipeline,
