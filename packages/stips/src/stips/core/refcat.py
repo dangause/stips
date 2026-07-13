@@ -25,7 +25,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from stips.core import butler_query
-from stips.core.stack import run_butler, run_butler_python_json
+from stips.core.stack import run_butler, run_butler_python_json, run_with_stack
 
 if TYPE_CHECKING:
     # Static-analysis-only bindings for the lazily loaded names below.
@@ -268,8 +268,13 @@ def _ensure_one(
     out_dir = _refcat_out_dir(config, name, stamp)
     out_csv = out_dir / f"{name}.csv"
     fetch(out_csv)
-    ecsv = convert_catalog(
-        name, out_csv, _convert_config_path(convert_config), out_dir, force=force
+    ecsv = _convert_catalog_venv_safe(
+        config,
+        name,
+        out_csv,
+        _convert_config_path(convert_config),
+        out_dir,
+        force=force,
     )
     collection = _ingest_refcat(
         config=config, name=name, ecsv_map=str(ecsv), stamp=stamp
@@ -278,6 +283,47 @@ def _ensure_one(
     _record_requested(config, name, needed)
     result.collections.append(collection)
     return "fetched"
+
+
+def _convert_catalog_venv_safe(
+    config: "Config",
+    name: str,
+    source_csv: Path,
+    config_path: Path,
+    out_dir: Path,
+    *,
+    force: bool = False,
+) -> Path:
+    """Run ``convertReferenceCatalog`` venv-safely.
+
+    ``stips_refcats.convert_catalog`` shells out to the bare
+    ``convertReferenceCatalog`` CLI, which is only on PATH inside the LSST
+    stack. Try it first (works in-stack, and unit tests patch it); when the
+    binary is absent (the normal plain-venv case), rerun the identical
+    invocation through ``run_with_stack``.
+    """
+    try:
+        return convert_catalog(name, source_csv, config_path, out_dir, force=force)
+    except FileNotFoundError as exc:
+        if "convertReferenceCatalog" not in str(exc):
+            raise  # missing CSV / missing output map — a real error
+        log.debug("convertReferenceCatalog not on PATH; rerunning in-stack")
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    fmap = out_dir / "filename_to_htm.ecsv"
+    if fmap.exists() and not force:
+        return fmap
+    if not Path(source_csv).exists():
+        raise FileNotFoundError(f"[{name}] Missing input CSV: {source_csv}")
+    run_with_stack(
+        ["convertReferenceCatalog", str(out_dir), str(config_path), str(source_csv)],
+        config,
+    )
+    if not fmap.exists():
+        raise FileNotFoundError(
+            f"[{name}] Expected map not found after conversion: {fmap}"
+        )
+    return fmap
 
 
 def _cones_to_htm_ids(

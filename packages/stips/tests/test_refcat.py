@@ -217,3 +217,42 @@ def test_cones_to_htm_ids_raises_when_stack_helper_fails(monkeypatch):
     monkeypatch.setattr(rc, "run_butler_python_json", lambda script, config: None)
     with pytest.raises(RuntimeError, match="HTM coverage"):
         rc._cones_to_htm_ids(mock.Mock(), [(10.0, 20.0, 0.3)])
+
+
+def test_convert_catalog_venv_safe_falls_back_to_stack(monkeypatch, tmp_path):
+    import stips.core.refcat as rc
+
+    def _no_binary(name, csv, cfg, out, force=False):
+        raise FileNotFoundError(
+            "[Errno 2] No such file or directory: 'convertReferenceCatalog'"
+        )
+
+    calls = {}
+
+    def _fake_run_with_stack(cmd, config, **k):
+        calls["cmd"] = cmd
+        (tmp_path / "filename_to_htm.ecsv").write_text("map")
+
+    csv = tmp_path / "g.csv"
+    csv.write_text("data")
+    monkeypatch.setattr(rc, "convert_catalog", _no_binary)
+    monkeypatch.setattr(rc, "run_with_stack", _fake_run_with_stack)
+    out = rc._convert_catalog_venv_safe(
+        mock.Mock(), "GAIA", csv, tmp_path / "cfg.py", tmp_path
+    )
+    assert out == tmp_path / "filename_to_htm.ecsv"
+    assert calls["cmd"][0] == "convertReferenceCatalog"
+
+
+def test_convert_catalog_venv_safe_reraises_real_filenotfound(monkeypatch, tmp_path):
+    import pytest
+    import stips.core.refcat as rc
+
+    def _missing_csv(name, csv, cfg, out, force=False):
+        raise FileNotFoundError("[GAIA] Missing input CSV: /tmp/g.csv")
+
+    monkeypatch.setattr(rc, "convert_catalog", _missing_csv)
+    with pytest.raises(FileNotFoundError, match="Missing input CSV"):
+        rc._convert_catalog_venv_safe(
+            mock.Mock(), "GAIA", tmp_path / "g.csv", tmp_path / "cfg.py", tmp_path
+        )
