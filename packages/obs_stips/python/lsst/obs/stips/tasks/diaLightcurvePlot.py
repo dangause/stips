@@ -2,9 +2,10 @@
 
 WARNING: Photometric Calibration Issue
 ---------------------------------------
-The zeroPoint config (default 31.4) assumes flux is in nanojansky, but
-DIA source catalogs contain instrumental flux (ADU). This results in
-magnitudes ~10-11 mag fainter than correct values.
+The zeroPoint config (default :data:`DEFAULT_DIA_ZEROPOINT`) assumes flux is in
+nanojansky, but DIA source catalogs contain instrumental flux (ADU). This
+results in magnitudes ~10-11 mag fainter than correct values. When the default
+uncalibrated zeropoint is used, the task emits a runtime ``log.warning``.
 
 For scientifically accurate magnitudes, use the extract_lightcurve.py tool
 instead, which fetches photoCalib from the science exposure and applies
@@ -13,15 +14,27 @@ proper ADU → nJy → AB magnitude calibration.
 
 from __future__ import annotations
 
+import logging
+
 import astropy.coordinates as coord
 import astropy.units as u
 import lsst.pipe.base as pipeBase
-import matplotlib.pyplot as plt
 import numpy as np
 from astropy.table import Table
-from lsst.daf.butler import DeferredDatasetHandle
 from lsst.pex.config import Field, ListField
 from lsst.pipe.base import connectionTypes as ct
+
+from ._refload import load_ref
+
+_LOG = logging.getLogger(__name__)
+
+#: Uncalibrated placeholder zeropoint shared by the DIA lightcurve plot tasks.
+#: DIA source catalogs carry instrumental flux (ADU), not nanojansky, so
+#: magnitudes computed with this default are ~10-11 mag offset from calibrated
+#: values (see the module docstring). Its use triggers a runtime warning; supply
+#: a real per-image zeropoint (or use extract_lightcurve.py) for science-grade
+#: magnitudes.
+DEFAULT_DIA_ZEROPOINT = 31.4
 
 
 class DiaLightcurvePlotConnections(
@@ -78,8 +91,9 @@ class DiaLightcurvePlotConfig(
     )
     zeroPoint = Field(
         dtype=float,
-        default=31.4,
-        doc="Zero point for converting flux to magnitude.",
+        default=DEFAULT_DIA_ZEROPOINT,
+        doc="Zero point for converting flux to magnitude. The default is an "
+        "uncalibrated placeholder (see module docstring); its use logs a warning.",
     )
     useMagnitude = Field(
         dtype=bool,
@@ -139,6 +153,9 @@ class DiaLightcurvePlotConfig(
         super().validate()
         if len(self.fluxFields) != len(self.fluxErrFields):
             raise ValueError("fluxFields and fluxErrFields must have the same length.")
+        # Fail fast at config time rather than deep inside runQuantum.
+        if self.ra is None or self.dec is None:
+            raise ValueError("DiaLightcurvePlotTask requires config.ra and config.dec.")
 
 
 class DiaLightcurvePlotTask(pipeBase.PipelineTask):
@@ -146,6 +163,15 @@ class DiaLightcurvePlotTask(pipeBase.PipelineTask):
     _DefaultName = "diaLightcurvePlot"
 
     def runQuantum(self, butlerQC, inputRefs, outputRefs):
+        if self.config.useMagnitude and self.config.zeroPoint == DEFAULT_DIA_ZEROPOINT:
+            _LOG.warning(
+                "DiaLightcurvePlotTask: using the default uncalibrated "
+                "zeroPoint=%s. DIA fluxes are instrumental (ADU), so the "
+                "resulting magnitudes are ~10-11 mag offset from calibrated "
+                "values. Set config.zeroPoint or use extract_lightcurve.py "
+                "for science-grade magnitudes.",
+                DEFAULT_DIA_ZEROPOINT,
+            )
         visit_table = butlerQC.get(inputRefs.visitTable)
         rows, band = self._collect_detections(
             visit_table, inputRefs.diaSources, butlerQC
@@ -167,11 +193,7 @@ class DiaLightcurvePlotTask(pipeBase.PipelineTask):
         )
 
     def _collect_detections(self, visit_table, dia_source_refs, butlerQC):
-        if self.config.ra is None or self.config.dec is None:
-            raise RuntimeError(
-                "DiaLightcurvePlotTask requires config.ra and config.dec."
-            )
-
+        # config.ra/dec presence is enforced in DiaLightcurvePlotConfig.validate.
         target = coord.SkyCoord(ra=self.config.ra * u.deg, dec=self.config.dec * u.deg)
         search_radius = self.config.radiusArcsec * u.arcsec
 
@@ -184,12 +206,7 @@ class DiaLightcurvePlotTask(pipeBase.PipelineTask):
             visit_id = ref.dataId.get("visit")
             mjd = visit_mjd.get(visit_id, np.nan)
 
-            if hasattr(ref, "get"):
-                catalog = ref.get()
-            else:
-                catalog = butlerQC.get(ref)
-            if isinstance(catalog, DeferredDatasetHandle):
-                catalog = catalog.get()
+            catalog = load_ref(butlerQC, ref)
             if len(catalog) == 0:
                 continue
 
@@ -275,6 +292,9 @@ class DiaLightcurvePlotTask(pipeBase.PipelineTask):
         return np.nan, np.nan
 
     def _make_plot(self, table, band):
+        # Deferred: matplotlib is only needed when a plot is actually produced
+        # (keeps module import cheap and stackless-import friendly).
+        import matplotlib.pyplot as plt
         from lsst.obs.stips.plotting import (
             FIGURE_SIZE,
             format_lightcurve_axes,

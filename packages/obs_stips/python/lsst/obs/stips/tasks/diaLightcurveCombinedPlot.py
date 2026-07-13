@@ -7,9 +7,11 @@ multi-band figure, matching the style used by ``ForcedPhotLightcurveTask``.
 WARNING: Photometric Calibration Issue
 ---------------------------------------
 When falling back to flux-to-magnitude conversion (no 'mag' column), the
-hardcoded zeroPoint (31.4) assumes flux is in nanojansky, but DIA sources
-contain instrumental flux (ADU). This results in magnitudes ~10-11 mag
-fainter than correct values.
+zeroPoint config (default :data:`~.diaLightcurvePlot.DEFAULT_DIA_ZEROPOINT`)
+assumes flux is in nanojansky, but DIA sources contain instrumental flux
+(ADU). This results in magnitudes ~10-11 mag fainter than correct values.
+When the default uncalibrated zeropoint is actually used for this fallback
+conversion, the task emits a runtime ``log.warning``.
 
 For scientifically accurate magnitudes, use the extract_lightcurve.py tool
 instead, which fetches photoCalib from the science exposure and applies
@@ -21,12 +23,13 @@ from __future__ import annotations
 import logging
 
 import lsst.pipe.base as pipeBase
-import matplotlib.pyplot as plt
 import numpy as np
 from astropy.table import Table, vstack
-from lsst.daf.butler import DeferredDatasetHandle
 from lsst.pex.config import Field
 from lsst.pipe.base import connectionTypes as ct
+
+from ._refload import load_ref
+from .diaLightcurvePlot import DEFAULT_DIA_ZEROPOINT
 
 __all__ = [
     "DiaLightcurveCombinedPlotConfig",
@@ -85,6 +88,13 @@ class DiaLightcurveCombinedPlotConfig(
         default=True,
         doc="Plot magnitudes (True) or fluxes (False).",
     )
+    zeroPoint = Field(
+        dtype=float,
+        default=DEFAULT_DIA_ZEROPOINT,
+        doc="Zero point used only when falling back to flux-to-magnitude "
+        "conversion (input tables lacking a 'mag' column). The default is an "
+        "uncalibrated placeholder (see module docstring); its use logs a warning.",
+    )
 
 
 class DiaLightcurveCombinedPlotTask(pipeBase.PipelineTask):
@@ -96,12 +106,7 @@ class DiaLightcurveCombinedPlotTask(pipeBase.PipelineTask):
     def runQuantum(self, butlerQC, inputRefs, outputRefs):
         tables = []
         for ref in inputRefs.lightcurveTables:
-            if hasattr(ref, "get"):
-                tbl = ref.get()
-            else:
-                tbl = butlerQC.get(ref)
-            if isinstance(tbl, DeferredDatasetHandle):
-                tbl = tbl.get()
+            tbl = load_ref(butlerQC, ref)
             if tbl is not None and len(tbl) > 0:
                 tables.append(tbl)
 
@@ -121,6 +126,9 @@ class DiaLightcurveCombinedPlotTask(pipeBase.PipelineTask):
         )
 
     def _make_plot(self, table: Table):
+        # Deferred: matplotlib is only needed when a plot is actually produced
+        # (keeps module import cheap and stackless-import friendly).
+        import matplotlib.pyplot as plt
         from lsst.obs.stips.plotting import (
             FIGURE_SIZE,
             format_lightcurve_axes,
@@ -153,7 +161,23 @@ class DiaLightcurveCombinedPlotTask(pipeBase.PipelineTask):
                             else None
                         )
                     else:
-                        y = -2.5 * np.log10(table["flux"][valid]) + 31.4
+                        if self.config.zeroPoint == DEFAULT_DIA_ZEROPOINT:
+                            _LOG.warning(
+                                "DiaLightcurveCombinedPlotTask: band %r table "
+                                "has no 'mag' column; converting flux with the "
+                                "default uncalibrated zeroPoint=%s. DIA fluxes "
+                                "are instrumental (ADU), so these magnitudes "
+                                "are ~10-11 mag offset from calibrated values. "
+                                "Set config.zeroPoint or use "
+                                "extract_lightcurve.py for science-grade "
+                                "magnitudes.",
+                                b,
+                                DEFAULT_DIA_ZEROPOINT,
+                            )
+                        y = (
+                            -2.5 * np.log10(table["flux"][valid])
+                            + self.config.zeroPoint
+                        )
                         yerr = (
                             2.5
                             / np.log(10)
