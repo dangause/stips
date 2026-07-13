@@ -7,6 +7,7 @@ different filter set (e.g. Sloan ``{"g": "g"}``) gets PS1 templates for its own
 bands without editing the framework.
 """
 
+from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
@@ -98,6 +99,44 @@ def test_ps1_template_run_rejects_when_no_ps1_bands():
     res = ps1_template.run(ra=1.0, dec=2.0, band="r", config=_config({}))
     assert res.success is False
     assert "(none configured)" in res.error
+
+
+# ---------------------------------------------------------------------------
+# ps1_template.run skip-if-exists policy (F-041: single source of truth)
+# ---------------------------------------------------------------------------
+
+
+def test_ps1_template_run_skips_existing_without_overwrite(monkeypatch):
+    monkeypatch.setattr(
+        ps1_template, "check_exists", lambda band, config, collection: True
+    )
+    stack = mock.Mock(side_effect=AssertionError("must not reach the stack on skip"))
+    monkeypatch.setattr(ps1_template, "run_with_stack", stack)
+
+    res = ps1_template.run(ra=1.0, dec=2.0, band="r", config=_config(NICKEL_MAP))
+
+    assert res.success is True
+    assert res.skipped is True
+    assert res.collection == "templates/ps1/r"
+    stack.assert_not_called()
+
+
+def test_ps1_template_run_overwrite_bypasses_exists_check(monkeypatch):
+    exists = mock.Mock(return_value=True)
+    monkeypatch.setattr(ps1_template, "check_exists", exists)
+    monkeypatch.setattr(
+        ps1_template,
+        "run_with_stack",
+        mock.Mock(return_value=mock.Mock(returncode=0, stdout="", stderr="")),
+    )
+
+    cfg = _config(NICKEL_MAP)
+    cfg.repo = Path("/tmp/repo")  # output_dir default uses config.repo
+    res = ps1_template.run(ra=1.0, dec=2.0, band="r", config=cfg, overwrite=True)
+
+    assert res.success is True
+    assert res.skipped is False
+    exists.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

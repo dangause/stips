@@ -836,9 +836,10 @@ def clean(
 )
 @click.option("--degrade-seeing", type=float, help="Convolve to this FWHM in arcsec")
 @click.option("--overwrite", is_flag=True, help="Replace existing template")
-@click.pass_context
+@pass_config
 def ps1_template(
     ctx: click.Context,
+    config: cfg_module.Config,
     ra: float,
     dec: float,
     band: str,
@@ -858,8 +859,6 @@ def ps1_template(
         stips ps1-template --ra 210.91 --dec 54.32 --band r
         stips ps1-template --ra 210.91 --dec 54.32 --band i --degrade-seeing 2.0
     """
-    config = _load_config(ctx)
-
     from stips.core.pipeline import ps1_band_map
 
     eligible = ps1_band_map(config)
@@ -875,13 +874,8 @@ def ps1_template(
 
     from stips.core import ps1_template as ps1_module
 
-    # Check if already exists
-    target_collection = collection or f"templates/ps1/{band}"
-    if not overwrite and ps1_module.check_exists(band, config, target_collection):
-        _print_info(f"PS1 template already exists in {target_collection}")
-        _print_info("Use --overwrite to replace")
-        return
-
+    # The skip-if-exists policy (and the exists check itself) lives in
+    # ps1_module.run(); the handler just surfaces the result.
     result = ps1_module.run(
         ra=ra,
         dec=dec,
@@ -894,16 +888,22 @@ def ps1_template(
         overwrite=overwrite,
     )
 
-    if result.success:
-        _print_success("\n✓ PS1 template ingested")
-        click.echo(f"  Collection: {result.collection}")
-        if result.tract is not None:
-            click.echo(f"  Tract: {result.tract}, Patch: {result.patch}")
-        if result.fits_path:
-            click.echo(f"  FITS file: {result.fits_path}")
-    else:
-        _print_error(f"PS1 template ingestion failed: {result.error}")
-        sys.exit(1)
+    if result.skipped:
+        _print_info(f"PS1 template already exists in {result.collection}")
+        _print_info("Use --overwrite to replace")
+        return
+
+    details = [f"  Collection: {result.collection}"]
+    if result.tract is not None:
+        details.append(f"  Tract: {result.tract}, Patch: {result.patch}")
+    if result.fits_path:
+        details.append(f"  FITS file: {result.fits_path}")
+    _report_result(
+        result,
+        success_msg="\n✓ PS1 template ingested",
+        fail_msg="PS1 template ingestion failed",
+        details=details,
+    )
 
 
 # =============================================================================
