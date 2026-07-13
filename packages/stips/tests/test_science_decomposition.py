@@ -676,3 +676,42 @@ def test_run_chains_fallback_runs_first(tmp_path, monkeypatch):
     # Members after [cmd, repo, parent] and before --mode: fallback first.
     members = chain[3 : chain.index("--mode")]
     assert members == ["X/run_fb1", "X/run"]
+
+
+class TestStockConfigDefault:
+    """A fork with no instrument-tuned calibrateImage config runs on the
+    pipeline default instead of failing (found by CTIO E2E testing)."""
+
+    def test_default_tolerates_missing_tuned_configs(self, tmp_path):
+        from unittest import mock
+
+        from stips.core.science import ScienceConfig
+
+        cfg = mock.Mock()
+        cfg.resolve_config = lambda name: tmp_path / name  # nothing exists
+        sc = ScienceConfig.default(cfg)
+        assert sc.calibrate_image is None
+        assert sc.calibrate_image_fallbacks == []
+
+    def test_resolve_configs_stock_fallback(self, caplog):
+        import logging
+
+        from stips.core.science import ScienceConfig, _resolve_configs_to_try
+
+        sc = ScienceConfig(
+            calibrate_image=None, colorterms=None, calibrate_image_fallbacks=[]
+        )
+        with caplog.at_level(logging.INFO):
+            out = _resolve_configs_to_try(sc, use_fallbacks=True)
+        assert out == [None]
+        assert any("pipeline default" in r.message for r in caplog.records)
+
+    def test_resolve_configs_explicit_missing_still_fails(self, tmp_path):
+        from stips.core.science import ScienceConfig, _resolve_configs_to_try
+
+        sc = ScienceConfig(
+            calibrate_image=tmp_path / "typo.py",
+            colorterms=None,
+            calibrate_image_fallbacks=[],
+        )
+        assert _resolve_configs_to_try(sc, use_fallbacks=True) == []

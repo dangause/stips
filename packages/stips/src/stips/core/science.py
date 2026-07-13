@@ -77,17 +77,24 @@ class ScienceConfig:
 
     @classmethod
     def default(cls, config: "Config") -> "ScienceConfig":
-        """Create default config with standard paths (resolver-aware)."""
+        """Create default config with standard paths (resolver-aware).
+
+        Tuned calibrateImage configs are instrument-owned (they live under
+        ``instruments/<x>/configs/``); the legacy names below resolve on the
+        reference instrument but may not exist for a fork. When they don't,
+        ``calibrate_image`` is ``None`` and science runs with the pipeline's
+        stock calibrateImage config instead of failing.
+        """
+        primary = config.resolve_config(
+            "calibrateImage/tuned_configs/2023ixf_relaxed.py"
+        )
+        fallback = config.resolve_config(
+            "calibrateImage/tuned_configs/2023ixf_relaxed_psfex_sparse.py"
+        )
         return cls(
-            calibrate_image=config.resolve_config(
-                "calibrateImage/tuned_configs/2023ixf_relaxed.py"
-            ),
+            calibrate_image=primary if primary.exists() else None,
             colorterms=config.resolve_config("apply_colorterms.py"),
-            calibrate_image_fallbacks=[
-                config.resolve_config(
-                    "calibrateImage/tuned_configs/2023ixf_relaxed_psfex_sparse.py"
-                ),
-            ],
+            calibrate_image_fallbacks=[fallback] if fallback.exists() else [],
         )
 
 
@@ -362,20 +369,28 @@ def _build_data_query(
 
 def _resolve_configs_to_try(
     science_cfg: ScienceConfig, use_fallbacks: bool
-) -> list[Path]:
+) -> "list[Path | None]":
     """Build the ordered list of calibrateImage configs to attempt.
 
     The primary config comes first; fallbacks are appended (deduplicated)
     only when ``use_fallbacks`` is set. Configs whose files do not exist
     are dropped. An empty result means science processing cannot start.
     """
-    configs_to_try: list[Path] = []
+    configs_to_try: list[Path | None] = []
     if science_cfg.calibrate_image and science_cfg.calibrate_image.exists():
         configs_to_try.append(science_cfg.calibrate_image)
     if use_fallbacks:
         for fb in science_cfg.calibrate_image_fallbacks:
             if fb.exists() and fb not in configs_to_try:
                 configs_to_try.append(fb)
+    if not configs_to_try and science_cfg.calibrate_image is None:
+        # No instrument-tuned config exists (normal for a fork that has not
+        # tuned calibrateImage yet): run with the pipeline's stock config.
+        log.info(
+            "No instrument-tuned calibrateImage config found; "
+            "using the pipeline default"
+        )
+        configs_to_try.append(None)
     return configs_to_try
 
 
@@ -504,7 +519,7 @@ class _AttemptContext:
 def _attempt_config(
     ctx: _AttemptContext,
     index: int,
-    tuned_config: Path,
+    tuned_config: Path | None,
     prior_runs: list[str],
 ) -> _AttemptOutcome:
     """Run one calibrateImage config attempt end-to-end.
@@ -516,6 +531,7 @@ def _attempt_config(
     """
     is_fallback = index > 0
     config_label = "fallback" if is_fallback else "primary"
+    cfg_name = tuned_config.name if tuned_config is not None else "<pipeline-default>"
 
     # Each config attempt gets its own RUN collection.
     # Primary: .../run
@@ -533,7 +549,11 @@ def _attempt_config(
         # calibrateImage config-file chain: tuned config, then (optionally)
         # the Gaia/PS1 refcat overlay, then color terms. Order keeps color
         # terms last so they see the final photometry_ref_cat.
-        config_file_args = ["--config-file", f"calibrateImage:{tuned_config}"]
+        config_file_args = (
+            ["--config-file", f"calibrateImage:{tuned_config}"]
+            if tuned_config is not None
+            else []
+        )
         overlay_name = refcat_overlay_config(ctx.refcat_mode)
         if overlay_name:
             overlay_path = ctx.config.resolve_config(overlay_name)
@@ -678,7 +698,7 @@ def _attempt_config(
         error_str = str(e)
 
         # Log detailed error information
-        log.warning(f"{config_label.capitalize()} config failed: {tuned_config.name}")
+        log.warning(f"{config_label.capitalize()} config failed: {cfg_name}")
 
         # Surface key parts of the error for diagnostics
         if "FileNotFoundError" in error_str and "astrometry_ref_cat" in error_str:
@@ -739,13 +759,16 @@ def _run_config_attempts(
     summary = _AttemptsSummary()
 
     for i, tuned_config in enumerate(configs_to_try):
+        cfg_name = (
+            tuned_config.name if tuned_config is not None else "<pipeline-default>"
+        )
         is_fallback = i > 0
         is_last = i == len(configs_to_try) - 1
         config_label = "fallback" if is_fallback else "primary"
-        log.info(f"Trying {config_label} config: {tuned_config.name}")
+        log.info(f"Trying {config_label} config: {cfg_name}")
 
         outcome = _attempt_config(ctx, i, tuned_config, summary.successful_runs)
-        plog.add_attempt(outcome.to_attempt(tuned_config.name, is_fallback))
+        plog.add_attempt(outcome.to_attempt(cfg_name, is_fallback))
 
         if outcome.produced_outputs:
             summary.successful_runs.append(outcome.run_collection)
@@ -759,27 +782,27 @@ def _run_config_attempts(
         if outcome.full_success:
             if is_fallback:
                 log.info(
-                    f"Fallback config {tuned_config.name} rescued all "
+                    f"Fallback config {cfg_name} rescued all "
                     f"{outcome.quanta_ok} remaining quanta"
                 )
             else:
                 log.info(
                     f"Science processing fully succeeded with {config_label} "
-                    f"config: {tuned_config.name} ({outcome.quanta_ok} quanta)"
+                    f"config: {cfg_name} ({outcome.quanta_ok} quanta)"
                 )
             break
 
         elif outcome.partial_success:
             if is_fallback:
                 log.warning(
-                    f"Fallback config {tuned_config.name}: "
+                    f"Fallback config {cfg_name}: "
                     f"{outcome.quanta_ok} new quanta rescued, "
                     f"{outcome.quanta_fail} still failing "
                     f"(cumulative: {summary.cumulative_succeeded} succeeded)"
                 )
             else:
                 log.warning(
-                    f"Partial success with primary config: {tuned_config.name} "
+                    f"Partial success with primary config: {cfg_name} "
                     f"({outcome.quanta_ok} quanta succeeded, "
                     f"{outcome.quanta_fail} failed)"
                 )
@@ -796,10 +819,7 @@ def _run_config_attempts(
             )
 
         elif outcome.total_failure:
-            log.error(
-                f"No quanta succeeded with {config_label} config: "
-                f"{tuned_config.name}"
-            )
+            log.error(f"No quanta succeeded with {config_label} config: " f"{cfg_name}")
             if not use_fallbacks or is_last:
                 if is_last:
                     log.error(
