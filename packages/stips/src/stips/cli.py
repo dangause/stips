@@ -546,9 +546,10 @@ def dia(
     is_flag=True,
     help="Only download nights with no FITS files in raw directory",
 )
-@click.pass_context
+@pass_config
 def download(
     ctx: click.Context,
+    config: cfg_module.Config,
     nights: tuple[str, ...],
     overwrite: bool,
     missing_only: bool,
@@ -571,7 +572,7 @@ def download(
         stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml download 20240625
         stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml download 20240416 20240429
     """
-    config = _load_config(ctx)
+    from stips.core import download as download_module
 
     prof = config.require_profile()
     if prof.fetch_data is None:
@@ -592,91 +593,59 @@ def download(
             )
             sys.exit(1)
 
-        import yaml
-
-        with open(config_path) as f:
-            yaml_config = yaml.safe_load(f) or {}
-
-        # Collect all nights from science and (coadd) template sections
-        science_nights = yaml_config.get("science", {}).get("nights", [])
-        template_config = yaml_config.get("template", {}) or {}
-        template_nights = (
-            template_config.get("nights", [])
-            if template_config.get("type") == "coadd"
-            else []
-        )
-
-        all_nights = set(str(n) for n in science_nights + template_nights)
-        nights_list = sorted(all_nights)
-
+        nights_list = download_module.nights_from_config(config_path)
         if not nights_list:
             _print_error(f"No nights found in config file: {config_path}")
             sys.exit(1)
 
         _print_info(f"Found {len(nights_list)} nights in config")
 
-    nights = tuple(nights_list)
-
-    # Filter to missing-only if requested
     if missing_only:
-        missing = []
-        for night in nights:
-            raw_dir = config.raw_parent_dir / night / "raw"
-            if not raw_dir.exists():
-                missing.append(night)
-            else:
-                fits_count = len(
-                    list(raw_dir.glob("*.fits")) + list(raw_dir.glob("*.fits.gz"))
-                )
-                if fits_count == 0:
-                    missing.append(night)
-        skipped = len(nights) - len(missing)
+        missing = download_module.missing_nights(nights_list, config)
+        skipped = len(nights_list) - len(missing)
         if skipped > 0:
             _print_info(f"Skipping {skipped} nights that already have data")
-        nights = missing
+        nights_list = missing
 
-    if not nights:
+    if not nights_list:
         _print_success("All nights already have data, nothing to download")
         return
 
-    _print_info(f"Downloading {len(nights)} nights...")
+    _print_info(f"Downloading {len(nights_list)} nights...")
 
-    failed = []
-    not_in_archive = []
-    succeeded = []
-
-    for night in nights:
-        _print_info(f"Downloading {night}...")
-        try:
-            status = prof.fetch_data(night, config, overwrite=overwrite)
-        except Exception as e:
-            _print_error(f"Failed to download {night}: {e}")
-            failed.append(night)
-            continue
-        if status == "ok":
+    def _on_event(night: str, status: str, error: str | None) -> None:
+        if status == "start":
+            _print_info(f"Downloading {night}...")
+        elif status == "ok":
             _print_success(f"✓ Downloaded {night}")
-            succeeded.append(night)
         elif status == "not_found":
             click.secho(f"⚠ {night}: not found in archive", fg="yellow")
-            not_in_archive.append(night)
+        elif error:
+            _print_error(f"Failed to download {night}: {error}")
         else:
             _print_error(f"Failed to download {night}")
-            failed.append(night)
+
+    result = download_module.fetch_nights(
+        nights_list, config, overwrite=overwrite, on_event=_on_event
+    )
 
     # Summary
     click.echo("")
-    if succeeded:
-        _print_success(f"Downloaded: {len(succeeded)} nights")
-    if not_in_archive:
+    if result.succeeded:
+        _print_success(f"Downloaded: {len(result.succeeded)} nights")
+    if result.not_in_archive:
         click.secho(
-            f"Not in archive: {len(not_in_archive)} nights ({', '.join(not_in_archive)})",
+            f"Not in archive: {len(result.not_in_archive)} nights "
+            f"({', '.join(result.not_in_archive)})",
             fg="yellow",
         )
-    if failed:
-        _print_error(f"Failed: {len(failed)} nights ({', '.join(failed)})")
+    if result.failed:
+        _print_error(
+            f"Failed: {len(result.failed)} nights ({', '.join(result.failed)})"
+        )
         sys.exit(1)
 
-    if not_in_archive and not succeeded:
+    if result.not_in_archive and not result.succeeded:
         click.secho(
             "\nNone of the requested nights were found in the archive. "
             "The data may not have been uploaded yet, or the dates may be incorrect.",
