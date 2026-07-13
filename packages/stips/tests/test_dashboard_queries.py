@@ -203,9 +203,7 @@ class TestQueryDatasetCounts:
             "dataset_types": q.MONITORED_DATASET_TYPES,
             "nights": {"20230519": {"difference_image": {"r": 3}}},
         }
-        with patch.object(
-            q, "run_butler_python_json", return_value=payload
-        ) as mocked:
+        with patch.object(q, "run_butler_python_json", return_value=payload) as mocked:
             q._counts_cache.clear()
             out = q.query_dataset_counts(_cfg(), "run1", logs)
 
@@ -227,9 +225,7 @@ class TestQueryDatasetCounts:
         _write_run_info(logs, "run1", repo)
 
         payload = {"dataset_types": [], "nights": {}}
-        with patch.object(
-            q, "run_butler_python_json", return_value=payload
-        ) as mocked:
+        with patch.object(q, "run_butler_python_json", return_value=payload) as mocked:
             q._counts_cache.clear()
             q.query_dataset_counts(_cfg(), "run1", logs)
             q.query_dataset_counts(_cfg(), "run1", logs)
@@ -271,9 +267,7 @@ class TestQueryCatalog:
         import stips.dashboard.queries as q
 
         payload = {"columns": ["night", "band"], "rows": [{"night": "x"}], "total": 1}
-        with patch.object(
-            q, "run_butler_python_json", return_value=payload
-        ) as mocked:
+        with patch.object(q, "run_butler_python_json", return_value=payload) as mocked:
             out = q.query_catalog(
                 _cfg(),
                 str(tmp_path),
@@ -349,9 +343,8 @@ class TestAppRouting:
 
         pytest.importorskip("fastapi")
         pytest.importorskip("httpx")
-        from fastapi.testclient import TestClient
-
         import stips.dashboard.queries as q
+        from fastapi.testclient import TestClient
         from stips.dashboard.app import create_app
 
         seen = {}
@@ -376,9 +369,8 @@ class TestAppRouting:
 
         pytest.importorskip("fastapi")
         pytest.importorskip("httpx")
-        from fastapi.testclient import TestClient
-
         import stips.dashboard.queries as q
+        from fastapi.testclient import TestClient
         from stips.dashboard.app import create_app
 
         repo = tmp_path / "repo"

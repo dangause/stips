@@ -113,12 +113,8 @@ class TestProvenanceOverlay:
         save_store(
             store,
             [
-                _record(
-                    repo, "20230519", "failed", timestamp_end="20260630T000000Z"
-                ),
-                _record(
-                    repo, "20230519", "success", timestamp_end="20260701T120000Z"
-                ),
+                _record(repo, "20230519", "failed", timestamp_end="20260630T000000Z"),
+                _record(repo, "20230519", "success", timestamp_end="20260701T120000Z"),
             ],
         )
         _point_store_at(monkeypatch, store)
