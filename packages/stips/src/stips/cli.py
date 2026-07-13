@@ -19,6 +19,7 @@ Configuration:
 
 from __future__ import annotations
 
+import functools
 import logging
 import sys
 from pathlib import Path
@@ -103,6 +104,45 @@ def _load_config(ctx: click.Context) -> cfg_module.Config:
         sys.exit(1)
 
 
+def _try_load_config(ctx: click.Context) -> cfg_module.Config | None:
+    """Load config, returning None on a missing/invalid ``-c`` instead of exiting.
+
+    For handlers where that is a soft, recoverable condition (e.g. the
+    dashboard). Never raises ``SystemExit``; the caller decides how to degrade.
+    """
+    config_path = ctx.obj.get("config_path")
+    if not config_path:
+        return None
+    try:
+        return cfg_module.load(config_path)
+    except ValueError:
+        return None
+
+
+def _report_result(result, *, success_msg: str, fail_msg: str, details=None) -> None:
+    """Report a ``*Result``: success prints ``success_msg`` + ``details`` lines;
+    failure prints ``fail_msg: {result.error}`` in red and exits 1."""
+    if result.success:
+        _print_success(success_msg)
+        for line in details or []:
+            click.echo(line)
+    else:
+        _print_error(f"{fail_msg}: {result.error}")
+        sys.exit(1)
+
+
+def pass_config(f):
+    """Decorator: load the group ``-c`` config (exiting via :func:`_load_config`
+    on error) and pass it to the handler as ``def handler(ctx, config, ...)``."""
+
+    @functools.wraps(f)
+    @click.pass_context
+    def wrapper(ctx: click.Context, *args, **kwargs):
+        return f(ctx, _load_config(ctx), *args, **kwargs)
+
+    return wrapper
+
+
 def _load_lightcurve_config(
     ctx: click.Context,
     repo: Path | None = None,
@@ -174,11 +214,9 @@ def _load_lightcurve_config(
 
 
 @cli.command()
-@click.pass_context
-def env(ctx: click.Context) -> None:
+@pass_config
+def env(ctx: click.Context, config: cfg_module.Config) -> None:
     """Show current configuration and validate paths."""
-    config = _load_config(ctx)
-
     click.echo("\nSTIPS Configuration")
     click.echo("=" * 40)
 
@@ -226,8 +264,10 @@ def env(ctx: click.Context) -> None:
 @cli.command()
 @click.argument("night")
 @click.option("-j", "--jobs", default=4, help="Parallel jobs (default: 4)")
-@click.pass_context
-def calibs(ctx: click.Context, night: str, jobs: int) -> None:
+@pass_config
+def calibs(
+    ctx: click.Context, config: cfg_module.Config, night: str, jobs: int
+) -> None:
     """Run nightly calibrations (bias, flat, defects).
 
     NIGHT is the observing date in YYYYMMDD format.
@@ -237,23 +277,23 @@ def calibs(ctx: click.Context, night: str, jobs: int) -> None:
         stips calibs 20240625
         stips calibs 20240625 --jobs 8
     """
-    config = _load_config(ctx)
-
     _print_info(f"Running calibrations for {night}...")
 
     from stips.core import calibs as calibs_module
 
     result = calibs_module.run(night, config, jobs=jobs)
 
-    if result.success:
-        _print_success(f"\n✓ Calibrations complete for {night}")
-        click.echo(f"  Raw collection: {result.raw_run}")
-        click.echo(f"  Bias: {result.cp_bias}")
-        click.echo(f"  Flat: {result.cp_flat}")
-        click.echo(f"  Calib chain: {result.calib_chain}")
-    else:
-        _print_error(f"Calibrations failed: {result.error}")
-        sys.exit(1)
+    _report_result(
+        result,
+        success_msg=f"\n✓ Calibrations complete for {night}",
+        fail_msg="Calibrations failed",
+        details=[
+            f"  Raw collection: {result.raw_run}",
+            f"  Bias: {result.cp_bias}",
+            f"  Flat: {result.cp_flat}",
+            f"  Calib chain: {result.calib_chain}",
+        ],
+    )
 
 
 # =============================================================================
@@ -269,9 +309,13 @@ def calibs(ctx: click.Context, night: str, jobs: int) -> None:
     type=click.Path(),
     help="Directory to export the measured matrix ECSV (default: REPO/crosstalk)",
 )
-@click.pass_context
+@pass_config
 def measure_crosstalk(
-    ctx: click.Context, nights: tuple[str, ...], jobs: int, export_dir: str | None
+    ctx: click.Context,
+    config: cfg_module.Config,
+    nights: tuple[str, ...],
+    jobs: int,
+    export_dir: str | None,
 ) -> None:
     """Measure intra-detector crosstalk from exposures (cp_pipe MeasureCrosstalk).
 
@@ -286,11 +330,9 @@ def measure_crosstalk(
 
     \b
     Example:
-        stips -p ctio1m measure-crosstalk 20070321 20070322
+        stips -c scripts/config/ctio1m/pipeline.yaml measure-crosstalk 20070321 20070322
     """
     from pathlib import Path
-
-    config = _load_config(ctx)
 
     prof = config.require_profile()
     if prof.crosstalk is None:
@@ -311,14 +353,15 @@ def measure_crosstalk(
         export_dir=Path(export_dir) if export_dir else None,
     )
 
-    if result.success:
-        _print_success("\n✓ Crosstalk measured and certified")
-        click.echo(f"  Calib collection: {result.calib_collection}")
-        if result.export_path:
-            click.echo(f"  Matrix exported:  {result.export_path}")
-    else:
-        _print_error(f"Crosstalk measurement failed: {result.error}")
-        sys.exit(1)
+    details = [f"  Calib collection: {result.calib_collection}"]
+    if result.success and result.export_path:
+        details.append(f"  Matrix exported:  {result.export_path}")
+    _report_result(
+        result,
+        success_msg="\n✓ Crosstalk measured and certified",
+        fail_msg="Crosstalk measurement failed",
+        details=details,
+    )
 
 
 # =============================================================================
@@ -349,9 +392,10 @@ def measure_crosstalk(
 @click.option(
     "--dec", type=float, help="Target Dec in degrees (enables coordinate validation)"
 )
-@click.pass_context
+@pass_config
 def science(
     ctx: click.Context,
+    config: cfg_module.Config,
     night: str,
     jobs: int,
     bad: str | None,
@@ -381,8 +425,6 @@ def science(
         _print_error("--ra and --dec must be provided together")
         sys.exit(1)
 
-    config = _load_config(ctx)
-
     _print_info(f"Running science processing for {night}...")
 
     from stips.core import science as science_module
@@ -400,14 +442,15 @@ def science(
         target_dec=dec,
     )
 
-    if result.success:
-        _print_success(f"\n✓ Science processing complete for {night}")
-        click.echo(f"  Science run: {result.science_run}")
-        if result.coadd_run:
-            click.echo(f"  Coadd run: {result.coadd_run}")
-    else:
-        _print_error(f"Science processing failed: {result.error}")
-        sys.exit(1)
+    details = [f"  Science run: {result.science_run}"]
+    if result.success and result.coadd_run:
+        details.append(f"  Coadd run: {result.coadd_run}")
+    _report_result(
+        result,
+        success_msg=f"\n✓ Science processing complete for {night}",
+        fail_msg="Science processing failed",
+        details=details,
+    )
 
 
 # =============================================================================
@@ -429,9 +472,10 @@ def science(
     type=click.Path(exists=True, path_type=Path),
     help="File with bad exposure IDs",
 )
-@click.pass_context
+@pass_config
 def dia(
     ctx: click.Context,
+    config: cfg_module.Config,
     night: str,
     jobs: int,
     template: str | None,
@@ -456,8 +500,6 @@ def dia(
         _print_error("Specify --template or --auto")
         sys.exit(1)
 
-    config = _load_config(ctx)
-
     _print_info(f"Running difference imaging for {night}...")
 
     from stips.core import dia as dia_module
@@ -475,15 +517,17 @@ def dia(
         bad_file=bad_file,
     )
 
-    if result.success:
-        _print_success(f"\n✓ Difference imaging complete for {night}")
-        click.echo(f"  Template: {result.template_collection}")
-        click.echo(f"  DIA run: {result.diff_run}")
-        click.echo(f"  Difference images: {result.diff_image_count}")
-        click.echo(f"  DIA sources: {result.dia_source_count}")
-    else:
-        _print_error(f"Difference imaging failed: {result.error}")
-        sys.exit(1)
+    _report_result(
+        result,
+        success_msg=f"\n✓ Difference imaging complete for {night}",
+        fail_msg="Difference imaging failed",
+        details=[
+            f"  Template: {result.template_collection}",
+            f"  DIA run: {result.diff_run}",
+            f"  Difference images: {result.diff_image_count}",
+            f"  DIA sources: {result.dia_source_count}",
+        ],
+    )
 
 
 # =============================================================================
@@ -647,8 +691,8 @@ def download(
 
 
 @cli.command()
-@click.pass_context
-def bootstrap(ctx: click.Context) -> None:
+@pass_config
+def bootstrap(ctx: click.Context, config: cfg_module.Config) -> None:
     """Initialize a new Butler repository.
 
     Creates the Butler repo, registers the instrument, ingests reference
@@ -663,19 +707,17 @@ def bootstrap(ctx: click.Context) -> None:
     """
     from stips.core import bootstrap as bootstrap_module
 
-    config = _load_config(ctx)
-
     _print_info("Bootstrapping Butler repository...")
     _print_info(f"  Repo: {config.repo}")
 
     result = bootstrap_module.run(config)
 
-    if result.success:
-        _print_success("✓ Bootstrap complete")
-        click.echo(f"  Repository ready: {config.repo}")
-    else:
-        _print_error(f"Bootstrap failed: {result.error}")
-        sys.exit(1)
+    _report_result(
+        result,
+        success_msg="✓ Bootstrap complete",
+        fail_msg="Bootstrap failed",
+        details=[f"  Repository ready: {config.repo}"],
+    )
 
 
 # =============================================================================
@@ -916,9 +958,10 @@ def ps1_template(
     default="diffim",
     help="Image type for photometry (default: diffim)",
 )
-@click.pass_context
+@pass_config
 def fphot(
     ctx: click.Context,
+    config: cfg_module.Config,
     night: str,
     ra: float,
     dec: float,
@@ -934,8 +977,6 @@ def fphot(
         stips fphot 20230519 --ra 210.91 --dec 54.32
         stips fphot 20230519 --ra 210.91 --dec 54.32 --band r --image-type both
     """
-    config = _load_config(ctx)
-
     _print_info(
         f"Running forced photometry for {night} at RA={ra:.4f}, Dec={dec:.4f}..."
     )
@@ -951,13 +992,12 @@ def fphot(
         image_type=image_type,
     )
 
-    if result.success:
-        _print_success(f"\n✓ Forced photometry complete for {night}")
-        for coll in result.output_collections:
-            click.echo(f"  Collection: {coll}")
-    else:
-        _print_error(f"Forced photometry failed: {result.error}")
-        sys.exit(1)
+    _report_result(
+        result,
+        success_msg=f"\n✓ Forced photometry complete for {night}",
+        fail_msg="Forced photometry failed",
+        details=[f"  Collection: {coll}" for coll in result.output_collections],
+    )
 
 
 # =============================================================================
@@ -1161,9 +1201,10 @@ def lightcurve(
     default=False,
     help="Also pull single_visit_star_ref_match_{astrom,photom}_metrics (requires visit-quality pipeline)",
 )
-@click.pass_context
+@pass_config
 def calib_metrics(
     ctx: click.Context,
+    config: cfg_module.Config,
     collection: str | None,
     output: Path,
     night: str | None,
@@ -1193,8 +1234,6 @@ def calib_metrics(
     """
     from stips.core import calib_metrics as cm_module
 
-    config = _load_config(ctx)
-
     if collection is None:
         prof = config.require_profile()
         collection = f"{prof.collection_prefix}/runs/*/processCcd/*"
@@ -1212,11 +1251,11 @@ def calib_metrics(
         include_refcat_metrics=include_refcat_metrics,
     )
 
-    if result.success:
-        _print_success(f"\n✓ Wrote {result.n_rows} rows -> {result.csv_path}")
-    else:
-        _print_error(f"calib-metrics failed: {result.error}")
-        sys.exit(1)
+    _report_result(
+        result,
+        success_msg=f"\n✓ Wrote {result.n_rows} rows -> {result.csv_path}",
+        fail_msg="calib-metrics failed",
+    )
 
 
 # =============================================================================
@@ -1251,9 +1290,10 @@ def calib_metrics(
     default=False,
     help="Dry run: list matched stars per visit without extracting photometry",
 )
-@click.pass_context
+@pass_config
 def landolt_validate(
     ctx: click.Context,
+    config: cfg_module.Config,
     catalog: Path,
     collection: str | None,
     output: Path,
@@ -1279,8 +1319,6 @@ def landolt_validate(
     """
     from stips.core import landolt as landolt_module
 
-    config = _load_config(ctx)
-
     _print_info(f"Repo: {config.repo}")
     mode = "listing stars" if list_stars else "validating photometry"
     _print_info(f"Landolt validation: {mode}")
@@ -1293,16 +1331,16 @@ def landolt_validate(
         list_stars=list_stars,
     )
 
-    if result.success:
-        if list_stars:
-            _print_success("\n✓ Star listing complete")
-        else:
-            _print_success(
-                f"\n✓ {result.n_measurements} measurements -> {result.csv_path}"
-            )
-    else:
-        _print_error(f"landolt-validate failed: {result.error}")
-        sys.exit(1)
+    success_msg = (
+        "\n✓ Star listing complete"
+        if list_stars
+        else f"\n✓ {result.n_measurements} measurements -> {result.csv_path}"
+    )
+    _report_result(
+        result,
+        success_msg=success_msg,
+        fail_msg="landolt-validate failed",
+    )
 
 
 # =============================================================================
@@ -1324,9 +1362,10 @@ def landolt_validate(
     default=None,
     help="Max nights to process in parallel",
 )
-@click.pass_context
+@pass_config
 def run_pipeline(
     ctx: click.Context,
+    config: cfg_module.Config,
     dry_run: bool,
     site: str | None,
     concurrent: int | None,
@@ -1352,8 +1391,6 @@ def run_pipeline(
         stips -c pipeline.yaml run --dry-run
     """
     from stips.core import run as run_module
-
-    config = _load_config(ctx)
 
     config_file = ctx.obj["config_path"]
 
@@ -1424,9 +1461,10 @@ def refcat(ctx: click.Context) -> None:
     help="Refcat mode (default: gaia_ps1)",
 )
 @click.option("--force", is_flag=True, help="Re-fetch even if coverage exists")
-@click.pass_context
+@pass_config
 def refcat_fetch(
     ctx: click.Context,
+    config: cfg_module.Config,
     ra: float,
     dec: float,
     radius_deg: float,
@@ -1436,7 +1474,6 @@ def refcat_fetch(
     """Ensure Gaia/PS1 refcats cover a target cone (fetch+convert+ingest)."""
     from stips.core import refcat as refcat_mod
 
-    config = _load_config(ctx)
     result = refcat_mod.ensure_refcats(
         config, ra, dec, radius_deg=radius_deg, mode=mode, force=force
     )
@@ -1456,12 +1493,17 @@ def refcat_fetch(
 @click.option(
     "--radius", "radius_deg", type=float, default=0.3, help="Cone radius (deg)"
 )
-@click.pass_context
-def refcat_status(ctx: click.Context, ra: float, dec: float, radius_deg: float) -> None:
+@pass_config
+def refcat_status(
+    ctx: click.Context,
+    config: cfg_module.Config,
+    ra: float,
+    dec: float,
+    radius_deg: float,
+) -> None:
     """Report Gaia/PS1 coverage for a target cone without fetching."""
     from stips.core import refcat as refcat_mod
 
-    config = _load_config(ctx)
     needed = set(refcat_mod.cones_to_htm([(ra, dec, radius_deg)], depth=7))
     for name in (refcat_mod.GAIA_DATASET, refcat_mod.PS1_DATASET):
         present = refcat_mod.present_trixels(config, name)
@@ -1517,9 +1559,10 @@ def bps(ctx: click.Context) -> None:
     help="HPC project/account (default: the active instrument profile's name)",
 )
 @click.option("--dry-run", is_flag=True, help="Show what would be submitted")
-@click.pass_context
+@pass_config
 def bps_submit(
     ctx: click.Context,
+    config: cfg_module.Config,
     pipeline: str,
     night: str,
     site: str,
@@ -1545,8 +1588,6 @@ def bps_submit(
     if pipeline == "dia" and not band:
         _print_error("DIA pipeline requires --band option")
         sys.exit(1)
-
-    config = _load_config(ctx)
 
     from stips.core import bps as bps_module
 
@@ -1588,8 +1629,8 @@ def bps_submit(
 
 @bps.command("status")
 @click.argument("run_id")
-@click.pass_context
-def bps_status(ctx: click.Context, run_id: str) -> None:
+@pass_config
+def bps_status(ctx: click.Context, config: cfg_module.Config, run_id: str) -> None:
     """Check status of a BPS run.
 
     RUN_ID is the identifier returned by bps submit.
@@ -1598,8 +1639,6 @@ def bps_status(ctx: click.Context, run_id: str) -> None:
     Example:
         stips bps status 12345
     """
-    config = _load_config(ctx)
-
     from stips.core import bps as bps_module
 
     _print_info(f"Checking status of run {run_id}...")
@@ -1616,8 +1655,10 @@ def bps_status(ctx: click.Context, run_id: str) -> None:
 @bps.command("cancel")
 @click.argument("run_id")
 @click.option("--force", is_flag=True, help="Force cancellation")
-@click.pass_context
-def bps_cancel(ctx: click.Context, run_id: str, force: bool) -> None:
+@pass_config
+def bps_cancel(
+    ctx: click.Context, config: cfg_module.Config, run_id: str, force: bool
+) -> None:
     """Cancel a running BPS workflow.
 
     RUN_ID is the identifier returned by bps submit.
@@ -1626,8 +1667,6 @@ def bps_cancel(ctx: click.Context, run_id: str, force: bool) -> None:
     Example:
         stips bps cancel 12345
     """
-    config = _load_config(ctx)
-
     from stips.core import bps as bps_module
 
     if not force:
@@ -1645,16 +1684,14 @@ def bps_cancel(ctx: click.Context, run_id: str, force: bool) -> None:
 
 
 @bps.command("list")
-@click.pass_context
-def bps_list(ctx: click.Context) -> None:
+@pass_config
+def bps_list(ctx: click.Context, config: cfg_module.Config) -> None:
     """List recent BPS runs.
 
     \b
     Example:
         stips bps list
     """
-    config = _load_config(ctx)
-
     from stips.core import bps as bps_module
 
     runs = bps_module.list_runs(config)
