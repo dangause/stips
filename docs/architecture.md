@@ -116,15 +116,23 @@ instruments/nickel/
 ├── fetch.py               # Optional co-located hook (raw-data fetch)
 ├── camera/
 │   └── nickel.yaml        # Camera geometry (1024×1024 CCD)
+├── configs/               # Instrument-FITTED science calibration (colorterms.py,
+│                          #   calibrateImage/tuned_configs/, refcats_gaia_ps1.py)
+├── obs_nickel_data/       # Curated calibrations (defect maps) — EUPS data package
 ├── template_metadata.json # Coadd-template bookkeeping
 ├── README.md
 └── tests/                 # Reference translation/camera golden tests
 ```
 
-Nickel ships **no** `pipelines/` or `configs/` dirs — it inherits the framework
-reference pipelines and configs from `packages/obs_stips/instrument_defaults/`.
-A fork adds its own `instruments/<x>/pipelines/` or `configs/` only to override
-individual files (resolved instrument-dir-first, else framework default).
+Nickel ships **no** `pipelines/` dir — it inherits the framework reference
+pipelines from `packages/obs_stips/instrument_defaults/`. It *does* ship a
+`configs/` dir, but only for its **instrument-fitted** photometric calibration
+(Landolt color terms, `calibrateImage` tunings, the Nickel-band PS1 overlay),
+which is deliberately excluded from the neutral framework tier. Everything else
+(DIA/coadd/skymap tunings, the neutral empty colorterms) is inherited. A fork
+adds its own `instruments/<x>/pipelines/` or `configs/` only to override
+individual files (resolved instrument-dir-first, else framework default); see
+`packages/obs_stips/instrument_defaults/README.md` for the tiering contract.
 
 There are no instrument/translator/formatter subclasses here — `obs_stips` synthesizes those from `profile.py` at import time (see `active.py` above). The instrument and translator quirks that used to live in a `lsst.obs.nickel` package are expressed declaratively via the `InstrumentProfile` fields and `@hook`s in `profile.py`.
 

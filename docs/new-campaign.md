@@ -122,24 +122,25 @@ template:
 
 ### Nights Section
 
-Add all observation nights with their available bands:
+List all observation nights as a simple list of `YYYYMMDD` local dates under
+`science:`:
 
 ```yaml
-nights:
-  # Night in YYYYMMDD format (local date at start of night)
-  20230519:
-    r: []  # Empty list = process all visits in this band
-    i: []
-
-  20230521:
-    r: []
-    i: []
-
-  # Can specify individual visit IDs if needed
-  20230525:
-    r: [12345, 12346, 12347]  # Only these visits
-    i: []
+science:
+  nights:
+    # Night in YYYYMMDD format (local date at start of night)
+    - 20230519
+    - 20230521
+    - 20230525
 ```
+
+All bands from your top-level `bands:` are processed for every night. To exclude
+specific bad exposures, don't list them here — use `stips science --bad` (see
+[Exclude Bad Exposures](#exclude-bad-exposures) below).
+
+> The older `nights: {20230519: {r: [], i: []}, ...}` mapping form is still
+> accepted for backward compatibility, but only its night *keys* are read — the
+> per-band/per-visit values are ignored. Prefer the list form above.
 
 ### Options Section
 
@@ -284,17 +285,20 @@ Common refinements:
 
 ### Add More Nights
 
-Edit `nights:` section and re-run. Use `skip_calibs: true` and `skip_science: true` for nights already processed.
+Edit the `science: nights:` list and re-run. Use `skip_calibs: true` and `skip_science: true` for nights already processed.
 
 ### Exclude Bad Exposures
 
-If certain exposures have issues (tracking, clouds, etc.):
+If certain exposures have issues (tracking, clouds, etc.), exclude them by
+exposure ID when processing that night standalone — the `science: nights:` list
+takes whole nights only:
 
-```yaml
-nights:
-  20230519:
-    r: [12345, 12347]  # Explicitly list good visits, excluding 12346
+```bash
+stips -c scripts/config/my_target/pipeline.yaml science 20230519 --bad 12345,12346
 ```
+
+(Exposures whose headers place them far from the target RA/Dec are excluded
+automatically during `stips run`; `--bad` is for the rest.)
 
 ### Try Different Template
 
@@ -337,19 +341,12 @@ template:
   type: ps1
   degrade_seeing: 2.0
 
-nights:
-  20240115:
-    r: []
-    i: []
-  20240118:
-    r: []
-    i: []
-  20240122:
-    r: []
-    i: []
-  20240130:
-    r: []
-    i: []
+science:
+  nights:
+    - 20240115
+    - 20240118
+    - 20240122
+    - 20240130
 
 configs:
   science:

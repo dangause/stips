@@ -57,9 +57,15 @@ nothing to rename in Python, no metadata files to edit — it is pure data:
 ```bash
 cp -r instruments/nickel instruments/<x>
 rm -rf instruments/<x>/tests   # optional: keep & adapt, or start fresh
+
+# Nickel's configs/ hold Nickel-FITTED photometric calibration (§6) — they must
+# NOT carry over to another telescope. Clear them and start from the neutral
+# framework defaults:
+rm -rf instruments/<x>/configs instruments/<x>/obs_nickel_data \
+       instruments/<x>/{colorterms,tuning,defects,testdata,vendor}
 ```
 
-Resulting layout:
+Resulting layout (of a minimal fork):
 
 ```
 instruments/<x>/
@@ -68,14 +74,19 @@ instruments/<x>/
 │   └── <x>.yaml               # LSST yamlCamera geometry (detectors, plate scale)
 ├── fetch.py                   # OPTIONAL: a data-fetch hook (delete if you place raws by hand)
 ├── template_metadata.json     # OPTIONAL: coadd-template bookkeeping
+├── configs/                   # OPTIONAL: your instrument-fitted calibration (see §6) — add once you have it
 ├── README.md
 └── tests/                     # OPTIONAL: reference tests, adapt to your golden values
 ```
 
-`nickel` deliberately ships **no** `pipelines/` or `configs/` dirs — it inherits
-the framework reference set from `packages/obs_stips/instrument_defaults/`
-(see §6). Add your own `instruments/<x>/pipelines/` or `configs/` **only** to
-override individual files; a minimal fork carries none.
+`nickel` deliberately ships **no** `pipelines/` dir — it inherits every reference
+pipeline from `packages/obs_stips/instrument_defaults/`. It *does* ship a
+`configs/` dir, but only for its **instrument-fitted** photometric calibration
+(Landolt color terms, `calibrateImage/tuned_configs/`, the Nickel-band PS1
+overlay) — which is exactly what a fork must **not** inherit (§6). So a fresh fork
+starts with **no** `pipelines/` and **no** `configs/`, inheriting the neutral
+framework defaults, and adds its own `instruments/<x>/pipelines/` or `configs/`
+only to override individual files.
 
 That's the whole fork. No `python/lsst/obs/<x>/`, no bindings, no
 `pyproject.toml`, no `ups/` table — `obs_stips` builds the LSST instrument
@@ -213,10 +224,24 @@ These are the real `InstrumentProfile` fields (from
   `resolve_data_package_dir()` finds `<INSTRUMENT_DIR>/<obs_data_package>`
   automatically, and the stack activation sets it up by name. Omit if you have
   none — and disable the ISR steps that would need its products via
-  `isr_overrides`.
+  `isr_overrides`. To build the defect maps this package ships, run the generic
+  `stips-defects-build` tool against master calibs (recipe:
+  `instruments/nickel/defects/README.md`).
 - **`package_dir`** — Optional filesystem path to the instrument package root,
   for profiles that need to resolve their own bundled resources. Normally left
-  unset (the loader already knows `INSTRUMENT_DIR`); Nickel omits it.
+  unset (the loader already knows `INSTRUMENT_DIR`); Nickel omits it. When
+  `obs_data_package` is set, `package_dir` is the explicit override for where it
+  lives on disk (absolute path, or a name resolved under the instrument dir);
+  when unset, STIPS looks for `<INSTRUMENT_DIR>/<obs_data_package>` first, then
+  the reference `packages/<obs_data_package>` layout (see
+  `stips.core.config.resolve_data_package_dir` for the full precedence).
+- **`ps1_band_map`** — PS1-template policy: maps a **local science band → the PS1
+  band** to download for it. The map's *keys* are the local bands eligible for
+  external PS1 templates; in `template.type: auto`, every other band falls back
+  to a coadd template. PS1 serves *grizy*, so a Johnson–Cousins instrument like
+  Nickel maps only its `{"r": "r", "i": "i"}`; a Sloan fork could add
+  `{"g": "g"}`. The default (empty dict) means **no PS1 templates** — the safe
+  choice for an unknown fork, which then uses coadd templates for every band.
 - **`fetch_data`** — Optional callable hook: `fetch_data(night, config, *,
   overwrite=False) -> "ok" | "not_found" | "failed"`, used by `stips download`.
   Wire it from a co-located module (Nickel's `profile.py` does `from fetch import
