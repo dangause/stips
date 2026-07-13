@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 from stips.collections import CollectionNames as CollectionNames
 from stips.collections import generate_run_timestamp as generate_run_timestamp
 from stips.core import butler_query
+from stips.core.query import butler_str_literal
 
 if TYPE_CHECKING:
     from stips.core.config import Config
@@ -302,16 +303,18 @@ def find_bad_coord_exposures(
         f" AND {day_obs_expr}"
     )
     if object_filter:
-        where += f" AND exposure.target_name='{object_filter}'"
+        where += f" AND exposure.target_name={butler_str_literal(object_filter)}"
 
+    # Embed the repo path and WHERE expression as Python literals (!r) so they
+    # cannot break out of the generated snippet's string literals (F-018).
     script = f"""
 import json
 from lsst.daf.butler import Butler
 
-butler = Butler("{config.repo}")
+butler = Butler({str(config.repo)!r})
 records = list(butler.registry.queryDimensionRecords(
     "exposure",
-    where="{where}",
+    where={where!r},
 ))
 
 results = []

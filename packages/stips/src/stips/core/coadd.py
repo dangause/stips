@@ -23,6 +23,7 @@ from stips.core.pipeline import (
     generate_run_timestamp,
     resolve_processccd_collections,
 )
+from stips.core.query import butler_str_literal
 from stips.core.stack import (
     run_butler,
     run_butler_python,
@@ -72,8 +73,8 @@ def find_tract_for_coords(
 import lsst.daf.butler as dafButler
 from lsst.geom import SpherePoint, degrees
 
-butler = dafButler.Butler('{config.repo}')
-skymap = butler.get('skyMap', skymap='{skymap}', collections='{prof.skymap_collection}')
+butler = dafButler.Butler({str(config.repo)!r})
+skymap = butler.get('skyMap', skymap={str(skymap)!r}, collections={str(prof.skymap_collection)!r})
 coord = SpherePoint({ra}, {dec}, degrees)
 tract_info = skymap.findTract(coord)
 print(tract_info.getId())
@@ -109,7 +110,10 @@ def check_template_exists(
 
     try:
         if butler_query.has_datasets(
-            config, dataset_types.TEMPLATE_COADD, collection, where=f"band='{band}'"
+            config,
+            dataset_types.TEMPLATE_COADD,
+            collection,
+            where=f"band={butler_str_literal(band)}",
         ):
             return collection
     except Exception as e:
@@ -145,7 +149,7 @@ def find_science_collections_for_nights(
                 night,
                 verify_datasets=True,
                 dataset_type=dataset_types.PRELIMINARY_VISIT_IMAGE,
-                where=f"band='{band}'",
+                where=f"band={butler_str_literal(band)}",
             )
             if resolved:
                 coll = resolved[0]
@@ -189,6 +193,10 @@ def find_degenerate_wcs_visits(
     # Threshold in arcsec: degenerate fits produce ~1e-11, real fits produce >= ~0.002
     DEGEN_THRESHOLD = 1e-6
 
+    # Validate the band and embed the WHERE expression as a Python literal (!r)
+    # so it cannot break out of the generated snippet's string (F-018).
+    band_where = f"band={butler_str_literal(band)}"
+
     script = f"""
 import json
 import sys
@@ -204,7 +212,7 @@ for coll in collections:
         refs = list(butler.registry.queryDatasets(
             'preliminary_visit_summary',
             collections=[coll],
-            where="band='{band}'"
+            where={band_where!r}
         ))
         for ref in refs:
             visit_id = ref.dataId['visit']
@@ -493,7 +501,10 @@ def run(
         # touching the existing template. On failure, leave the old template in
         # place and report the build as failed.
         if not butler_query.has_datasets(
-            config, dataset_types.TEMPLATE_COADD, template_run, where=f"band='{band}'"
+            config,
+            dataset_types.TEMPLATE_COADD,
+            template_run,
+            where=f"band={butler_str_literal(band)}",
         ):
             return CoaddResult(
                 success=False,

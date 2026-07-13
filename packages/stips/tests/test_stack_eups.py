@@ -39,7 +39,7 @@ class TestStackSetup(unittest.TestCase):
             "_find_stack_loader",
             return_value=Path("/tmp/stack/loadLSST.sh"),
         ):
-            script = stack_module._build_setup_script(_config())
+            script, _env = stack_module._build_setup_script(_config())
         self.assertNotIn('/tmp/pkgs/obs_demo" obs_demo', script)
         self.assertNotIn("export OBS_DEMO=", script)
 
@@ -49,51 +49,55 @@ class TestStackSetup(unittest.TestCase):
         with mock.patch.object(
             stack_module, "_find_stack_loader", return_value=Path("/x/loadLSST.sh")
         ):
-            script = stack_module._build_setup_script(
+            script, _env = stack_module._build_setup_script(
                 _config(data="obs_nickel_data", instr=str(_NICKEL_DIR))
             )
         self.assertIn("obs_nickel_data", script)
 
     def test_instrument_dir_export_fixed_name(self):
-        # INSTRUMENT_DIR is the fixed export name (pipelines use $INSTRUMENT_DIR)
+        # INSTRUMENT_DIR is the fixed export name (pipelines use $INSTRUMENT_DIR);
+        # the value travels via env (F-018), not interpolated into the script.
         with mock.patch.object(
             stack_module, "_find_stack_loader", return_value=Path("/x/loadLSST.sh")
         ):
-            script = stack_module._build_setup_script(_config())
-        self.assertIn('export INSTRUMENT_DIR="/tmp/pkgs/obs_demo"', script)
+            script, env = stack_module._build_setup_script(_config())
+        self.assertIn('export INSTRUMENT_DIR="$INSTRUMENT_DIR"', script)
+        self.assertEqual(env["INSTRUMENT_DIR"], "/tmp/pkgs/obs_demo")
 
     def test_obs_stips_sibling_set_up(self):
         with mock.patch.object(
             stack_module, "_find_stack_loader", return_value=Path("/x/loadLSST.sh")
         ):
-            script = stack_module._build_setup_script(_config())
+            script, env = stack_module._build_setup_script(_config())
         self.assertIn("obs_stips", script)
+        self.assertIn("obs_stips", env["OBS_STIPS"])
 
     def test_sibling_from_packages_dir_data_from_instrument_dir(self):
         # The framework-sibling (obs_stips) path derives from the REAL
         # _PACKAGES_DIR (from __file__), independent of INSTRUMENT_DIR. The
         # co-located data package (precedence (2)) resolves UNDER the instrument
         # dir, not _PACKAGES_DIR — the reference fork layout after repackaging.
+        # F-018: these paths now travel via env, not the script text.
         with mock.patch.object(
             stack_module, "_find_stack_loader", return_value=Path("/x/loadLSST.sh")
         ):
-            script = stack_module._build_setup_script(
+            script, env = stack_module._build_setup_script(
                 _config(data="obs_nickel_data", instr=str(_NICKEL_DIR))
             )
         pkgs = str(stack_module._PACKAGES_DIR)
         self.assertTrue(pkgs.endswith("/packages"), pkgs)
         # obs_stips sibling path uses the real framework packages dir
-        self.assertIn(f"{pkgs}/obs_stips", script)
+        self.assertEqual(env["OBS_STIPS"], f"{pkgs}/obs_stips")
         # data-package setup path uses the co-located instrument-dir location
-        self.assertIn(f"{_NICKEL_DIR}/obs_nickel_data", script)
+        self.assertEqual(env["STIPS_DATA_DIR"], f"{_NICKEL_DIR}/obs_nickel_data")
         # NOT the framework packages dir (obs_nickel_data no longer lives there)
-        self.assertNotIn(f"{pkgs}/obs_nickel_data", script)
+        self.assertNotIn(f"{pkgs}/obs_nickel_data", env["STIPS_DATA_DIR"])
 
     def test_no_data_package_skips_setup(self):
         with mock.patch.object(
             stack_module, "_find_stack_loader", return_value=Path("/x/loadLSST.sh")
         ):
-            script = stack_module._build_setup_script(_config(data=None))
+            script, _env = stack_module._build_setup_script(_config(data=None))
         self.assertNotIn(
             "# Check for", script
         )  # no data-package setup block when unset
@@ -105,7 +109,7 @@ class TestStackSetup(unittest.TestCase):
         with mock.patch.object(
             stack_module, "_find_stack_loader", return_value=Path("/s/loadLSST.sh")
         ):
-            script = stack_module._build_setup_script(
+            script, env = stack_module._build_setup_script(
                 _config(
                     data="obs_nickel_data",
                     instr=str(_NICKEL_DIR),
@@ -114,6 +118,7 @@ class TestStackSetup(unittest.TestCase):
         self.assertIn("obs_nickel_data", script)
         self.assertIn("obs_stips", script)  # framework sibling still set up
         self.assertIn(
-            f'export INSTRUMENT_DIR="{_NICKEL_DIR}"', script
+            'export INSTRUMENT_DIR="$INSTRUMENT_DIR"', script
         )  # fixed export always present
+        self.assertEqual(env["INSTRUMENT_DIR"], str(_NICKEL_DIR))
         self.assertNotIn("export OBS_NICKEL=", script)  # no dynamic OBS_* export
