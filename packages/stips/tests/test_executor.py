@@ -537,6 +537,65 @@ class TestExecutorWiring:
         sig = inspect.signature(fphot.run)
         assert "executor" in sig.parameters
 
+    def test_coadd_accepts_executor(self):
+        # F-048 item 6: coadd must accept an injectable executor like its peers
+        # (previously it bypassed it via module-level run_pipetask, so it could
+        # not run under the BPS executor).
+        import inspect
+
+        from stips.core import coadd
+
+        sig = inspect.signature(coadd.run)
+        assert "executor" in sig.parameters
+
+    def test_coadd_uses_injected_executor_for_qgraph_and_run(
+        self, monkeypatch, tmp_path
+    ):
+        # The qgraph + run pipetask calls must go through the injected executor,
+        # not a module-level run_pipetask.
+        from types import SimpleNamespace
+
+        from stips.core import coadd
+        from stips.core import pipeline as pipeline_mod
+
+        seen = []
+
+        class _Rec:
+            def run_pipetask(self, args, config, **kw):
+                seen.append(args[0])
+                return SimpleNamespace(returncode=0)
+
+        prof = SimpleNamespace(
+            name="Nickel",
+            collection_prefix="Nickel",
+            skymap_name="x",
+            skymap_collection="skymaps/x",
+            instrument_class="lsst.obs.stips.active.Instrument",
+        )
+        config = SimpleNamespace(
+            repo=tmp_path,
+            require_profile=lambda: prof,
+            resolve_pipeline=lambda name: "DRP.yaml",
+        )
+        monkeypatch.setattr(pipeline_mod, "run_butler", lambda *a, **k: None)
+        monkeypatch.setattr(
+            coadd,
+            "find_science_collections_for_nights",
+            lambda nights, band, config: ["Nickel/runs/N/processCcd/ts"],
+        )
+        monkeypatch.setattr(
+            coadd, "find_degenerate_wcs_visits", lambda band, colls, config: []
+        )
+        monkeypatch.setattr(coadd, "generate_run_timestamp", lambda: "TS")
+        monkeypatch.setattr(coadd.butler_query, "has_datasets", lambda *a, **k: True)
+        monkeypatch.setattr(coadd.butler_query, "list_collections", lambda *a, **k: [])
+
+        result = coadd.run(
+            ["20230101"], "r", config, tract=100, overwrite=True, executor=_Rec()
+        )
+        assert result.success is True
+        assert seen == ["qgraph", "run"]
+
 
 class TestDispatchConcurrent:
     def test_runs_all_items(self):

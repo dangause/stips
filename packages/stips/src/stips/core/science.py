@@ -12,21 +12,20 @@ from stips.core import butler_query, quanta_report
 from stips.core.pipeline import (
     REFCATS_CHAIN,
     CollectionNames,
+    PipetaskStage,
     build_exclusion_expr,
+    ensure_instrument_registered,
     find_bad_coord_exposures,
     isr_config_args,
     latest_raw_run,
     night_day_obs_expr,
     parse_bad_exposures,
-    parse_quanta_summary,
     read_log_delta,
+    redefine_chain,
     validate_night,
 )
 from stips.core.query import butler_str_literal
 from stips.core.refcat import refcat_overlay_config
-from stips.core.stack import (
-    run_butler,
-)
 
 if TYPE_CHECKING:
     from stips.core.config import Config
@@ -547,31 +546,11 @@ def _attempt_config(
             f"calibrateImage:{ctx.colorterms_config}",
         ]
 
-        # Build qgraph arguments
-        qgraph_args = [
-            "qgraph",
-            "-b",
-            repo,
-            "-p",
-            f"{ctx.pipeline}#stage1-single-visit",
-            "-i",
-            f"{ctx.raw_run},{ctx.cols.calib_chain},{REFCATS_CHAIN},{ctx.prof.skymap_collection}",
-            "-o",
-            ctx.cols.science_parent,
-            "--output-run",
-            output_run,
-            "--save-qgraph",
-            str(qg_science),
-            *config_file_args,
-            "-d",
-            ctx.data_query,
-        ]
-
         # Profile-declared ISR overrides (e.g. doDefect=False for an
         # instrument without curated defect maps, or parallel overscan).
         # Applied as inline config so instruments need not fork the shared DRP
         # pipeline; the same overrides feed the calib-build ISR (calibs.py).
-        qgraph_args.extend(isr_config_args(ctx.prof))
+        post_query_args = list(isr_config_args(ctx.prof))
 
         # For fallback attempts, build a qgraph that excludes quanta
         # whose outputs already exist in any prior successful RUN.
@@ -584,27 +563,30 @@ def _attempt_config(
         # per task label within a single RUN collection).
         if is_fallback and prior_runs:
             for prior_run in prior_runs:
-                qgraph_args.extend(["--skip-existing-in", prior_run])
-            qgraph_args.append("--clobber-outputs")
+                post_query_args.extend(["--skip-existing-in", prior_run])
+            post_query_args.append("--clobber-outputs")
+
+        summary_file = qg_science.with_suffix(".summary.json")
+        stage = PipetaskStage(
+            repo=repo,
+            pipeline=f"{ctx.pipeline}#stage1-single-visit",
+            inputs=f"{ctx.raw_run},{ctx.cols.calib_chain},{REFCATS_CHAIN},{ctx.prof.skymap_collection}",
+            output_parent=ctx.cols.science_parent,
+            output_run=output_run,
+            qgraph_path=str(qg_science),
+            data_query=ctx.data_query,
+            # calibrateImage config-file chain goes BEFORE -d (science-specific).
+            pre_query_args=config_file_args,
+            post_query_args=post_query_args,
+            jobs=ctx.jobs,
+            run_includes_output_run=True,
+            summary_file=str(summary_file),
+        )
 
         # Build quantum graph
-        ctx.executor.run_pipetask(qgraph_args, ctx.config, log_file=ctx.log_file)
-
-        # Build run arguments
-        summary_file = qg_science.with_suffix(".summary.json")
-        run_args = [
-            "run",
-            "-b",
-            repo,
-            "-g",
-            str(qg_science),
-            "--output-run",
-            output_run,
-            "-j",
-            str(ctx.jobs),
-            "--register-dataset-types",
-            *quanta_report.summary_run_args(summary_file),
-        ]
+        ctx.executor.run_pipetask(
+            stage.qgraph_args(), ctx.config, log_file=ctx.log_file
+        )
 
         # Fallback qgraphs are already reduced to unresolved quanta via
         # --skip-existing-in at qgraph build time; execute directly.
@@ -617,7 +599,7 @@ def _attempt_config(
 
         # Run science processing
         result = ctx.executor.run_pipetask(
-            run_args,
+            stage.run_args(),
             ctx.config,
             capture_output=True,
             check=False,
@@ -625,23 +607,19 @@ def _attempt_config(
             output_run=output_run,
         )
 
-        # Parse actual quanta counts. Prefer the structured --summary JSON;
-        # fall back to the stdout/log regex when it is absent (e.g. the BPS
-        # executor path, which does not run `pipetask run`).
+        # Parse actual quanta counts (structured --summary JSON preferred,
+        # stdout/log regex fallback).
         combined_output = (result.stdout or "") + "\n" + (result.stderr or "")
         if not combined_output.strip():
             combined_output = read_log_delta(
                 ctx.log_file, log_start_pos=log_start_pos, max_chars=8000
             )
-        counts = quanta_report.parse_summary_file(summary_file)
-        if counts is not None:
-            quanta_ok, quanta_fail = counts
-        else:
-            quanta_ok, quanta_fail = parse_quanta_summary(
-                combined_output,
-                ctx.log_file,
-                log_start_pos=log_start_pos,
-            )
+        quanta_ok, quanta_fail = quanta_report.counts(
+            summary_file,
+            combined_output,
+            log_file=ctx.log_file,
+            log_start_pos=log_start_pos,
+        )
 
         if result.returncode == 0:
             # Full success with this config (rc==0 => pipetask ran the
@@ -840,22 +818,6 @@ def _run_config_attempts(
     return summary
 
 
-def _register_instrument(config: "Config", prof, log_file: Path | None) -> None:
-    """Register the instrument in the Butler repo (idempotent).
-
-    check=False already tolerates the common "already registered" non-zero
-    exit, matching dia/calibs/coadd. No try/except here on purpose: the only
-    remaining raise path is a stack-activation/spawn failure, which must
-    surface rather than be silently swallowed.
-    """
-    run_butler(
-        ["register-instrument", str(config.repo), prof.instrument_class],
-        config,
-        check=False,
-        log_file=log_file,
-    )
-
-
 def _save_processing_log(plog, config: "Config", output_collection: str) -> None:
     """Finalize and persist the processing log and provenance record."""
     from stips.core import processing_log, provenance
@@ -916,18 +878,7 @@ def _verify_and_chain_runs(
         return []
 
     chain_members = list(reversed(verified_runs))
-    run_butler(
-        [
-            "collection-chain",
-            str(config.repo),
-            cols.science_parent,
-            *chain_members,
-            "--mode",
-            "redefine",
-        ],
-        config,
-        log_file=log_file,
-    )
+    redefine_chain(config, cols.science_parent, chain_members, log_file=log_file)
     return verified_runs
 
 
@@ -950,56 +901,27 @@ def _run_coadd_tail(
     repo = str(config.repo)
     qg_coadd = qg_dir / f"coadds_{night}_{cols.run_ts}.qg"
 
-    executor.run_pipetask(
-        [
-            "qgraph",
-            "-b",
-            repo,
-            "-p",
-            f"{pipeline}#coadds-only",
-            "-i",
-            f"{cols.science_parent},{cols.calib_chain},{REFCATS_CHAIN},{prof.skymap_collection}",
-            "-o",
-            cols.coadd_parent,
-            "--output-run",
-            cols.coadd_run,
-            "--save-qgraph",
-            str(qg_coadd),
-            "-d",
-            f"instrument='{prof.name}' AND skymap='{prof.skymap_name}'",
-        ],
-        config,
-        log_file=log_file,
+    stage = PipetaskStage(
+        repo=repo,
+        pipeline=f"{pipeline}#coadds-only",
+        inputs=f"{cols.science_parent},{cols.calib_chain},{REFCATS_CHAIN},{prof.skymap_collection}",
+        output_parent=cols.coadd_parent,
+        output_run=cols.coadd_run,
+        qgraph_path=str(qg_coadd),
+        data_query=f"instrument='{prof.name}' AND skymap='{prof.skymap_name}'",
+        jobs=jobs,
     )
 
+    executor.run_pipetask(stage.qgraph_args(), config, log_file=log_file)
+
     executor.run_pipetask(
-        [
-            "run",
-            "-b",
-            repo,
-            "-g",
-            str(qg_coadd),
-            "-j",
-            str(jobs),
-            "--register-dataset-types",
-        ],
+        stage.run_args(),
         config,
         log_file=log_file,
         output_run=cols.coadd_run,
     )
 
-    run_butler(
-        [
-            "collection-chain",
-            repo,
-            cols.coadd_parent,
-            cols.coadd_run,
-            "--mode",
-            "redefine",
-        ],
-        config,
-        log_file=log_file,
-    )
+    redefine_chain(config, cols.coadd_parent, cols.coadd_run, log_file=log_file)
     return cols.coadd_run
 
 
@@ -1116,7 +1038,7 @@ def run(
     if match_count is not None:
         log.info(f"Found {match_count} matching science exposures for {night}")
 
-    _register_instrument(config, prof, log_file)
+    ensure_instrument_registered(config, log_file)
 
     qg_dir = config.repo / "qgraphs"
     qg_dir.mkdir(parents=True, exist_ok=True)

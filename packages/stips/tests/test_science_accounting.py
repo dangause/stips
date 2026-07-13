@@ -54,8 +54,12 @@ def test_science_rc0_unparseable_records_honest_zero(tmp_path, monkeypatch, capl
 
     executor = SimpleNamespace(run_pipetask=fake_run_pipetask)
 
-    # Stub out the stack/butler touchpoints.
-    monkeypatch.setattr(science, "run_butler", lambda *a, **k: SimpleNamespace())
+    # Stub out the stack/butler touchpoints. register-instrument and the
+    # post-run chain redefine now go through the hoisted pipeline helpers, which
+    # call pipeline.run_butler.
+    from stips.core import pipeline
+
+    monkeypatch.setattr(pipeline, "run_butler", lambda *a, **k: SimpleNamespace())
     monkeypatch.setattr(
         science.butler_query,
         "list_collections",
@@ -64,8 +68,9 @@ def test_science_rc0_unparseable_records_honest_zero(tmp_path, monkeypatch, capl
     monkeypatch.setattr(science.butler_query, "collection_exists", lambda *a, **k: True)
     monkeypatch.setattr(science, "_count_matching_exposures", lambda *a, **k: 3)
     # Summary file never written -> parse_summary_file returns None; force the
-    # stdout/log regex fallback to also find nothing.
-    monkeypatch.setattr(science, "parse_quanta_summary", lambda *a, **k: (0, 0))
+    # stdout/log regex fallback (reached via quanta_report.counts ->
+    # pipeline.parse_quanta_summary) to also find nothing.
+    monkeypatch.setattr(pipeline, "parse_quanta_summary", lambda *a, **k: (0, 0))
 
     captured: dict[str, object] = {}
 

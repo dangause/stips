@@ -15,7 +15,6 @@ Covers the pieces extracted from the former ~690-line run():
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -82,13 +81,14 @@ class _FakeExecutor:
 
 def _patch_counts(monkeypatch, counts):
     """Force the parsed quanta counts for an attempt."""
-    from stips.core import science
+    from stips.core import pipeline, science
 
     monkeypatch.setattr(
         science.quanta_report, "parse_summary_file", lambda path: counts
     )
     # Regex fallback (used when the summary file is "absent") returns (0, 0).
-    monkeypatch.setattr(science, "parse_quanta_summary", lambda *a, **k: (0, 0))
+    # quanta_report.counts() reaches it via stips.core.pipeline.parse_quanta_summary.
+    monkeypatch.setattr(pipeline, "parse_quanta_summary", lambda *a, **k: (0, 0))
 
 
 # ---------------------------------------------------------------------------
@@ -117,9 +117,7 @@ class TestAttemptConfig:
         assert outcome.parse_failed is False
         assert outcome.run_collection.endswith("/run")
 
-    def test_rc0_unparseable_records_parse_failure(
-        self, tmp_path, monkeypatch, caplog
-    ):
+    def test_rc0_unparseable_records_parse_failure(self, tmp_path, monkeypatch, caplog):
         from stips.core import science
 
         executor = _FakeExecutor(
@@ -174,9 +172,7 @@ class TestAttemptConfig:
         assert outcome.parse_failed is False
         assert "it broke" in outcome.error
 
-    def test_total_failure_unparseable_marks_parse_failed(
-        self, tmp_path, monkeypatch
-    ):
+    def test_total_failure_unparseable_marks_parse_failed(self, tmp_path, monkeypatch):
         from stips.core import science
 
         executor = _FakeExecutor(
@@ -263,8 +259,7 @@ class TestAttemptConfig:
         qgraph_args = executor.calls[0]
         i = qgraph_args.index("--skip-existing-in")
         assert (
-            qgraph_args[i + 1]
-            == "Nickel/runs/20230519/processCcd/20230519T000000Z/run"
+            qgraph_args[i + 1] == "Nickel/runs/20230519/processCcd/20230519T000000Z/run"
         )
         assert "--clobber-outputs" in qgraph_args
 
@@ -405,18 +400,14 @@ class TestRunConfigAttempts:
 
     def test_partial_on_last_config_is_accepted(self, tmp_path, monkeypatch):
         cfgs = self._configs(tmp_path, n=1)
-        summary, plog = _fold(
-            tmp_path, monkeypatch, [_partial("X/run", 3, 2)], cfgs
-        )
+        summary, plog = _fold(tmp_path, monkeypatch, [_partial("X/run", 3, 2)], cfgs)
         assert summary.any_success is True
         assert summary.cumulative_succeeded == 3
         # last_attempt_failed semantics: remaining failures come from the
         # final attempt, never summed across attempts.
         assert plog.configs_tried[-1].quanta_failed == 2
 
-    def test_partial_not_use_fallbacks_accepts_immediately(
-        self, tmp_path, monkeypatch
-    ):
+    def test_partial_not_use_fallbacks_accepts_immediately(self, tmp_path, monkeypatch):
         cfgs = self._configs(tmp_path)
         summary, plog = _fold(
             tmp_path,
@@ -428,9 +419,7 @@ class TestRunConfigAttempts:
         assert summary.successful_runs == ["X/run"]
         assert len(plog.configs_tried) == 1  # fallback never attempted
 
-    def test_total_failure_cascades_then_fallback_rescues(
-        self, tmp_path, monkeypatch
-    ):
+    def test_total_failure_cascades_then_fallback_rescues(self, tmp_path, monkeypatch):
         cfgs = self._configs(tmp_path)
         summary, plog = _fold(
             tmp_path,
@@ -465,9 +454,7 @@ class TestRunConfigAttempts:
         assert summary.any_success is False
         assert len(plog.configs_tried) == 1  # fallback skipped
 
-    def test_recoverable_exception_continues_to_fallback(
-        self, tmp_path, monkeypatch
-    ):
+    def test_recoverable_exception_continues_to_fallback(self, tmp_path, monkeypatch):
         cfgs = self._configs(tmp_path)
         summary, plog = _fold(
             tmp_path,
@@ -647,9 +634,14 @@ def test_run_chains_fallback_runs_first(tmp_path, monkeypatch):
         lambda ctx, index, tuned_config, prior_runs: outcomes[index],
     )
 
+    # register-instrument + collection-chain now run through the hoisted
+    # pipeline helpers (ensure_instrument_registered / redefine_chain), which
+    # call pipeline.run_butler — patch there to capture the argv.
+    from stips.core import pipeline as pipeline_mod
+
     butler_calls: list[list[str]] = []
     monkeypatch.setattr(
-        science,
+        pipeline_mod,
         "run_butler",
         lambda args, cfg, **k: butler_calls.append(list(args)),
     )
@@ -660,7 +652,9 @@ def test_run_chains_fallback_runs_first(tmp_path, monkeypatch):
     )
     monkeypatch.setattr(science.butler_query, "collection_exists", lambda *a, **k: True)
     monkeypatch.setattr(science, "_count_matching_exposures", lambda *a, **k: 5)
-    monkeypatch.setattr(processing_log, "save_log", lambda plog, cfg: tmp_path / "l.json")
+    monkeypatch.setattr(
+        processing_log, "save_log", lambda plog, cfg: tmp_path / "l.json"
+    )
     monkeypatch.setattr(provenance, "upsert_from_log", lambda *a, **k: None)
 
     result = science.run(

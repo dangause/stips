@@ -20,7 +20,10 @@ from typing import TYPE_CHECKING
 from stips.core import butler_query, dataset_types
 from stips.core.pipeline import (
     REFCATS_CHAIN,
+    PipetaskStage,
+    ensure_instrument_registered,
     generate_run_timestamp,
+    redefine_chain,
     resolve_processccd_collections,
     template_deep,
     template_deep_run,
@@ -30,7 +33,6 @@ from stips.core.stack import (
     run_butler,
     run_butler_python,
     run_butler_python_json,
-    run_pipetask,
 )
 
 if TYPE_CHECKING:
@@ -287,6 +289,7 @@ def run(
     overwrite: bool = False,
     config_files: list[str] | None = None,
     log_file: Path | None = None,
+    executor=None,
 ) -> CoaddResult:
     """Build coadd template from multiple nights of Nickel observations.
 
@@ -304,10 +307,18 @@ def run(
         overwrite: Replace existing template if present
         config_files: Config override files for pipetask (e.g., ["makeDirectWarp:path/to/config.py"])
         log_file: Optional path to write LSST pipeline logs
+        executor: Pipetask execution backend (defaults to LocalExecutor).
+            Passing the shared executor lets coadds run under BPS like the
+            other stages; None preserves standalone local execution.
 
     Returns:
         CoaddResult with collection and status
     """
+    from stips.core.executor import LocalExecutor
+
+    if executor is None:
+        executor = LocalExecutor()
+
     if not nights:
         return CoaddResult(
             success=False,
@@ -432,12 +443,7 @@ def run(
                 old_runs = [c for c in existing_runs if c != template_run]
 
         # Register instrument (idempotent)
-        run_butler(
-            ["register-instrument", repo, prof.instrument_class],
-            config,
-            check=False,
-            log_file=log_file,
-        )
+        ensure_instrument_registered(config, log_file)
 
         # Build input chain
         input_chain = ",".join(input_collections)
@@ -463,40 +469,28 @@ def run(
                 config_args.extend(["--config-file", cf])
 
         # Build quantum graph into the new RUN only. No --output CHAINED
-        # collection is passed: the existing template chain is left untouched
-        # until the new outputs are built and verified below.
-        qgraph_args = [
-            "qgraph",
-            "-b",
-            repo,
-            "-p",
-            f"{pipeline}#coadds-only",
-            "-i",
-            full_input,
-            "--output-run",
-            template_run,
-            "--save-qgraph",
-            str(qg_file),
-            "-d",
-            data_query,
-        ] + config_args
+        # collection is passed (output_parent=None): the existing template chain
+        # is left untouched until the new outputs are built and verified below.
+        stage = PipetaskStage(
+            repo=repo,
+            pipeline=f"{pipeline}#coadds-only",
+            inputs=full_input,
+            output_parent=None,
+            output_run=template_run,
+            qgraph_path=str(qg_file),
+            data_query=data_query,
+            post_query_args=config_args,
+            jobs=jobs,
+        )
 
-        run_pipetask(qgraph_args, config, log_file=log_file)
+        executor.run_pipetask(stage.qgraph_args(), config, log_file=log_file)
 
         # Run coadd pipeline
-        run_pipetask(
-            [
-                "run",
-                "-b",
-                repo,
-                "-g",
-                str(qg_file),
-                "-j",
-                str(jobs),
-                "--register-dataset-types",
-            ],
+        executor.run_pipetask(
+            stage.run_args(),
             config,
             log_file=log_file,
+            output_run=template_run,
         )
 
         # Verify the NEW run actually produced template_coadd datasets BEFORE
@@ -523,18 +517,7 @@ def run(
         # Verified: atomically swap the parent chain to point at the new run.
         # In a rebase this also drops the old runs from the chain, which must
         # happen before they can be removed.
-        run_butler(
-            [
-                "collection-chain",
-                repo,
-                template_parent,
-                template_run,
-                "--mode",
-                "redefine",
-            ],
-            config,
-            log_file=log_file,
-        )
+        redefine_chain(config, template_parent, template_run, log_file=log_file)
 
         # Now that the old runs are no longer chain members, clean them up
         # (best-effort — failures are logged, never fatal).

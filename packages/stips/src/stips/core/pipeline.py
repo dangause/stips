@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import re
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -18,6 +19,7 @@ from stips.collections import template_ps1 as template_ps1
 from stips.collections import template_ps1_glob as template_ps1_glob
 from stips.core import butler_query
 from stips.core.query import butler_str_literal
+from stips.core.stack import run_butler
 
 if TYPE_CHECKING:
     from stips.core.config import Config
@@ -581,3 +583,122 @@ def read_log_delta(
 def is_empty_qgraph(output: str) -> bool:
     """Check if pipetask output indicates an empty quantum graph."""
     return "QuantumGraph contains no quanta" in output
+
+
+def ensure_instrument_registered(
+    config: "Config",
+    log_file: Path | None = None,
+) -> None:
+    """Register the active instrument in the Butler repo (idempotent).
+
+    Hoisted from the five identical copies that lived in science/dia/calibs
+    (×2)/coadd. ``check=False`` tolerates the common "already registered"
+    non-zero exit. No try/except here on purpose: the only remaining raise path
+    is a stack-activation/spawn failure, which must surface rather than be
+    silently swallowed.
+    """
+    prof = config.require_profile()
+    run_butler(
+        ["register-instrument", str(config.repo), prof.instrument_class],
+        config,
+        check=False,
+        log_file=log_file,
+    )
+
+
+def redefine_chain(
+    config: "Config",
+    parent: str,
+    members: str | list[str],
+    *,
+    log_file: Path | None = None,
+) -> None:
+    """Redefine a CHAINED collection's members (``collection-chain --mode redefine``).
+
+    Hoisted from the identical post-run chain redefinitions in science
+    (``_verify_and_chain_runs`` + coadd tail), dia, calibs (bias + flat), and
+    coadd. ``members`` may be a single collection name or an ordered list
+    (search order is preserved). The calibs *final* calib-chain update is NOT
+    routed through here: it uses ``--mode prepend`` with ``check=False`` (a
+    different, tolerant semantic) and is deliberately left inline.
+    """
+    if isinstance(members, str):
+        members = [members]
+    run_butler(
+        ["collection-chain", str(config.repo), parent, *members, "--mode", "redefine"],
+        config,
+        log_file=log_file,
+    )
+
+
+@dataclass
+class PipetaskStage:
+    """Declarative description of one ``qgraph``-then-``run`` pipetask invocation.
+
+    Collapses the copy-pasted ``["qgraph", "-b", repo, "-p", ...]`` +
+    ``["run", "-b", repo, "-g", ...]`` argv construction shared by every stage
+    module (science attempt + science coadd tail, dia, calibs bias + flat,
+    coadd) into one builder. Field values and ordering are chosen to reproduce
+    each site's *exact* argv (pinned by ``test_pipetask_stage.py``), so wiring a
+    site through this dataclass is a pure behavior-preserving refactor.
+
+    Args:
+        repo: Butler repo path (``-b``).
+        pipeline: Pipeline expression, already including any ``#subset`` (``-p``);
+            may be a bare pipeline path (calibs).
+        inputs: Comma-joined input collections (``-i``).
+        output_run: RUN collection (``--output-run`` on the qgraph).
+        qgraph_path: Where the built qgraph is saved (``--save-qgraph``) and read
+            back for the run (``-g``).
+        data_query: Butler data-selection expression (``-d``).
+        output_parent: CHAINED output parent (``-o``); omitted when ``None``
+            (coadd builds into a bare RUN and swaps the chain afterward).
+        pre_query_args: Extra qgraph args emitted between ``--save-qgraph`` and
+            ``-d`` (science's ``--config-file`` chain).
+        post_query_args: Extra qgraph args emitted after ``-d`` (profile ISR
+            overrides, per-stage ``--config-file`` / ``-c``, and science's
+            ``--skip-existing-in`` / ``--clobber-outputs``).
+        jobs: Parallel jobs (``-j``) for the run.
+        register_dataset_types: Emit ``--register-dataset-types`` on the run.
+        run_includes_output_run: Emit ``--output-run`` inline on the run args
+            (science attempt + dia; the other sites pass ``output_run`` only as
+            an executor kwarg).
+        summary_file: When set, emit ``--summary <file>`` on the run args.
+    """
+
+    repo: str
+    pipeline: str
+    inputs: str
+    output_run: str
+    qgraph_path: str
+    data_query: str
+    output_parent: str | None = None
+    pre_query_args: list[str] = field(default_factory=list)
+    post_query_args: list[str] = field(default_factory=list)
+    jobs: int = 8
+    register_dataset_types: bool = True
+    run_includes_output_run: bool = False
+    summary_file: str | None = None
+
+    def qgraph_args(self) -> list[str]:
+        """Build the ``pipetask qgraph`` argv for this stage."""
+        args = ["qgraph", "-b", self.repo, "-p", self.pipeline, "-i", self.inputs]
+        if self.output_parent is not None:
+            args += ["-o", self.output_parent]
+        args += ["--output-run", self.output_run, "--save-qgraph", self.qgraph_path]
+        args += list(self.pre_query_args)
+        args += ["-d", self.data_query]
+        args += list(self.post_query_args)
+        return args
+
+    def run_args(self) -> list[str]:
+        """Build the ``pipetask run`` argv for this stage."""
+        args = ["run", "-b", self.repo, "-g", self.qgraph_path]
+        if self.run_includes_output_run:
+            args += ["--output-run", self.output_run]
+        args += ["-j", str(self.jobs)]
+        if self.register_dataset_types:
+            args.append("--register-dataset-types")
+        if self.summary_file is not None:
+            args += ["--summary", str(self.summary_file)]
+        return args

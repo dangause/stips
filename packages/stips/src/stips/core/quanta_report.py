@@ -69,6 +69,31 @@ def parse_summary_file(path: "Path | str") -> tuple[int, int] | None:
     return succeeded, failed
 
 
+def counts(
+    summary_file: "Path | str",
+    output: str,
+    *,
+    log_file: "Path | None" = None,
+    log_start_pos: int | None = None,
+) -> tuple[int, int]:
+    """Return ``(succeeded, failed)`` quanta counts, preferring the summary JSON.
+
+    Hoisted from the identical preference block in science and dia: prefer the
+    structured ``pipetask run --summary`` JSON; fall back to the stdout/log regex
+    (``pipeline.parse_quanta_summary``) when it is absent (e.g. the BPS executor
+    path, which does not run ``pipetask run``). A missing/unparseable summary is
+    reported by :func:`parse_summary_file` as ``None``.
+    """
+    parsed = parse_summary_file(summary_file)
+    if parsed is not None:
+        return parsed
+    # Imported lazily to avoid a module-load cycle (pipeline imports this module
+    # indirectly via the stage modules).
+    from stips.core.pipeline import parse_quanta_summary
+
+    return parse_quanta_summary(output, log_file, log_start_pos=log_start_pos)
+
+
 def write_summary_file(path: "Path | str", succeeded: int, failed: int) -> None:
     """Write a minimal ``pipetask run --summary``-shaped JSON with these counts.
 

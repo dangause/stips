@@ -65,6 +65,21 @@ class _Recorder:
         return [a for (_k, s, a) in self.calls if s == sub]
 
 
+class _RecordingExecutor:
+    """Executor stub that records qgraph/run argv into the shared recorder."""
+
+    def __init__(self, recorder, pipetask_raises_on=None):
+        self._recorder = recorder
+        self._raises_on = pipetask_raises_on
+
+    def run_pipetask(self, args, config, **kw):
+        sub = args[0]
+        self._recorder.calls.append(("pipetask", sub, list(args)))
+        if self._raises_on == sub:
+            raise RuntimeError(f"simulated pipetask {sub} failure")
+        return SimpleNamespace(returncode=0)
+
+
 def _install(
     monkeypatch,
     coadd,
@@ -74,8 +89,7 @@ def _install(
     verify_has_datasets=True,
     old_runs=None,
 ):
-    """Wire up all mocks used by coadd.run() and return the recorder."""
-    template_run_holder: dict[str, str] = {}
+    """Wire up all mocks used by coadd.run() and return the recording executor."""
 
     def fake_run_butler(args, config, *, check=True, log_file=None, **kw):
         sub = args[0]
@@ -83,15 +97,13 @@ def _install(
         rc = recorder.butler_returncodes.get(sub, 0)
         return SimpleNamespace(returncode=rc)
 
-    def fake_run_pipetask(args, config, *, log_file=None, **kw):
-        sub = args[0]
-        recorder.calls.append(("pipetask", sub, list(args)))
-        if pipetask_raises_on == sub:
-            raise RuntimeError(f"simulated pipetask {sub} failure")
-        return SimpleNamespace(returncode=0)
+    # coadd.run_butler handles remove-collections; the hoisted pipeline helpers
+    # (ensure_instrument_registered / redefine_chain) call pipeline.run_butler
+    # for register-instrument + collection-chain — patch both to one recorder.
+    from stips.core import pipeline as pipeline_mod
 
     monkeypatch.setattr(coadd, "run_butler", fake_run_butler)
-    monkeypatch.setattr(coadd, "run_pipetask", fake_run_pipetask)
+    monkeypatch.setattr(pipeline_mod, "run_butler", fake_run_butler)
     monkeypatch.setattr(coadd, "generate_run_timestamp", lambda: "20260710T000000Z")
     monkeypatch.setattr(
         coadd,
@@ -110,7 +122,7 @@ def _install(
 
     monkeypatch.setattr(coadd.butler_query, "list_collections", fake_list_collections)
     monkeypatch.setattr(coadd.butler_query, "has_datasets", fake_has_datasets)
-    return template_run_holder
+    return _RecordingExecutor(recorder, pipetask_raises_on=pipetask_raises_on)
 
 
 TRACT = 100
@@ -128,12 +140,17 @@ def test_failed_build_leaves_old_template_untouched(
 ):
     """A build that raises must not have redefined/removed the old template first."""
     rec = _Recorder()
-    _install(
+    executor = _install(
         monkeypatch, coadd_module, rec, pipetask_raises_on="run", old_runs=OLD_RUNS
     )
 
     result = coadd_module.run(
-        ["20230101"], BAND, _config(tmp_path), tract=TRACT, overwrite=True
+        ["20230101"],
+        BAND,
+        _config(tmp_path),
+        tract=TRACT,
+        overwrite=True,
+        executor=executor,
     )
 
     assert result.success is False
@@ -149,7 +166,7 @@ def test_verified_empty_build_leaves_old_template_untouched(
 ):
     """A build that produces no template_coadd must not touch the old template."""
     rec = _Recorder()
-    _install(
+    executor = _install(
         monkeypatch,
         coadd_module,
         rec,
@@ -158,7 +175,12 @@ def test_verified_empty_build_leaves_old_template_untouched(
     )
 
     result = coadd_module.run(
-        ["20230101"], BAND, _config(tmp_path), tract=TRACT, overwrite=True
+        ["20230101"],
+        BAND,
+        _config(tmp_path),
+        tract=TRACT,
+        overwrite=True,
+        executor=executor,
     )
 
     assert result.success is False
@@ -172,10 +194,15 @@ def test_successful_rebuild_swaps_chain_then_removes_old_runs(
 ):
     """Success path: redefine parent -> new RUN, then remove the old RUNs, in order."""
     rec = _Recorder()
-    _install(monkeypatch, coadd_module, rec, old_runs=OLD_RUNS)
+    executor = _install(monkeypatch, coadd_module, rec, old_runs=OLD_RUNS)
 
     result = coadd_module.run(
-        ["20230101"], BAND, _config(tmp_path), tract=TRACT, overwrite=True
+        ["20230101"],
+        BAND,
+        _config(tmp_path),
+        tract=TRACT,
+        overwrite=True,
+        executor=executor,
     )
 
     assert result.success is True
@@ -210,11 +237,16 @@ def test_old_run_removal_failure_is_logged_but_still_succeeds(
     """A failure removing a superseded RUN is a WARNING, not a failed result."""
     rec = _Recorder()
     rec.butler_returncodes["remove-collections"] = 1  # every removal "fails"
-    _install(monkeypatch, coadd_module, rec, old_runs=OLD_RUNS)
+    executor = _install(monkeypatch, coadd_module, rec, old_runs=OLD_RUNS)
 
     with caplog.at_level(logging.WARNING):
         result = coadd_module.run(
-            ["20230101"], BAND, _config(tmp_path), tract=TRACT, overwrite=True
+            ["20230101"],
+            BAND,
+            _config(tmp_path),
+            tract=TRACT,
+            overwrite=True,
+            executor=executor,
         )
 
     assert result.success is True
