@@ -36,7 +36,9 @@ class TestParseNight(unittest.TestCase):
         for bad in ("2023-05-19", "abc", "202305"):
             with self.assertRaises(ValueError) as ctx:
                 parse_night(bad)
-            self.assertEqual(str(ctx.exception), f"Invalid night '{bad}' (use YYYYMMDD)")
+            self.assertEqual(
+                str(ctx.exception), f"Invalid night '{bad}' (use YYYYMMDD)"
+            )
 
 
 # Module-level backend so ``_fetch_night.__globals__`` is this test module's
@@ -62,7 +64,12 @@ class TestMakeFetchData(unittest.TestCase):
     def test_signature_and_status_mapping(self):
         cfg = _Cfg({})
         this = sys.modules[__name__]
-        for code, expected in ((0, "ok"), (2, "not_found"), (1, "failed"), (7, "failed")):
+        for code, expected in (
+            (0, "ok"),
+            (2, "not_found"),
+            (1, "failed"),
+            (7, "failed"),
+        ):
             with mock.patch.object(this, "_fetch_night", return_value=code):
                 self.assertEqual(_fetch_data("20230519", cfg, overwrite=True), expected)
 
