@@ -156,7 +156,7 @@ def _capture_auto_split(monkeypatch, bands, ps1_band_map, template_nights):
     monkeypatch.setattr(
         run,
         "_run_coadd_templates",
-        lambda run_cfg, config, result, science_cfg, dry_run, bands=None: built.append(
+        lambda run_cfg, config, result, science_cfg, dry_run, bands=None, executor=None: built.append(
             ("coadd", tuple(bands))
         ),
     )

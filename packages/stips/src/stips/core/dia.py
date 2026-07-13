@@ -11,13 +11,15 @@ from stips.core import butler_query, dataset_types, quanta_report
 from stips.core.pipeline import (
     REFCATS_CHAIN,
     CollectionNames,
+    PipetaskStage,
     build_exclusion_expr,
+    ensure_instrument_registered,
     is_empty_qgraph,
     latest_raw_run,
     night_day_obs_expr,
     parse_bad_exposures,
-    parse_quanta_summary,
     ps1_band_map,
+    redefine_chain,
     resolve_processccd_collections,
     template_deep_glob,
     template_ps1,
@@ -25,7 +27,6 @@ from stips.core.pipeline import (
     validate_night,
 )
 from stips.core.query import butler_str_literal
-from stips.core.stack import run_butler
 
 if TYPE_CHECKING:
     from stips.core.config import Config
@@ -242,12 +243,7 @@ def run(
 
     try:
         # Register instrument
-        run_butler(
-            ["register-instrument", repo, prof.instrument_class],
-            config,
-            check=False,
-            log_file=log_file,
-        )
+        ensure_instrument_registered(config, log_file)
 
         # Build quantum graph
         qg_dir = config.repo / "qgraphs"
@@ -262,33 +258,33 @@ def run(
         if raw_run:
             input_collections = f"{sci_parents},{raw_run},{cols.calib_chain},{REFCATS_CHAIN},{prof.skymap_collection},{template_collection}"
 
-        qgraph_args = [
-            "qgraph",
-            "-b",
-            repo,
-            "-p",
-            f"{pipeline}#dia-full",
-            "-i",
-            input_collections,
-            "-o",
-            cols.diff_parent,
-            "--output-run",
-            cols.diff_run,
-            "--save-qgraph",
-            str(qg_file),
-            "-d",
-            data_query,
-        ]
-
+        # Per-stage --config-file overrides go after -d (see PipetaskStage).
+        dia_config_args: list[str] = []
         if subtract_config.exists():
-            qgraph_args.extend(["--config-file", f"subtractImages:{subtract_config}"])
+            dia_config_args += ["--config-file", f"subtractImages:{subtract_config}"]
         if detect_config.exists():
-            qgraph_args.extend(
-                ["--config-file", f"detectAndMeasureDiaSource:{detect_config}"]
-            )
+            dia_config_args += [
+                "--config-file",
+                f"detectAndMeasureDiaSource:{detect_config}",
+            ]
+
+        summary_file = qg_file.with_suffix(".summary.json")
+        stage = PipetaskStage(
+            repo=repo,
+            pipeline=f"{pipeline}#dia-full",
+            inputs=input_collections,
+            output_parent=cols.diff_parent,
+            output_run=cols.diff_run,
+            qgraph_path=str(qg_file),
+            data_query=data_query,
+            post_query_args=dia_config_args,
+            jobs=jobs,
+            run_includes_output_run=True,
+            summary_file=str(summary_file),
+        )
 
         qg_result = executor.run_pipetask(
-            qgraph_args,
+            stage.qgraph_args(),
             config,
             capture_output=True,
             check=False,
@@ -329,21 +325,8 @@ def run(
 
         # Run DIA. --summary writes a machine-readable quanta report (preferred
         # over the stdout "Executed N quanta..." regex; see below).
-        summary_file = qg_file.with_suffix(".summary.json")
         dia_result = executor.run_pipetask(
-            [
-                "run",
-                "-b",
-                repo,
-                "-g",
-                str(qg_file),
-                "--output-run",
-                cols.diff_run,
-                "-j",
-                str(jobs),
-                "--register-dataset-types",
-                *quanta_report.summary_run_args(summary_file),
-            ],
+            stage.run_args(),
             config,
             capture_output=True,
             check=False,
@@ -351,15 +334,11 @@ def run(
             output_run=cols.diff_run,
         )
 
-        # Parse quanta counts to handle partial success. Prefer the structured
-        # --summary JSON; fall back to the stdout/log regex when it is absent
-        # (e.g. the BPS executor path, which does not run `pipetask run`).
+        # Parse quanta counts to handle partial success.
         combined_output = (dia_result.stdout or "") + (dia_result.stderr or "")
-        counts = quanta_report.parse_summary_file(summary_file)
-        if counts is not None:
-            quanta_ok, quanta_fail = counts
-        else:
-            quanta_ok, quanta_fail = parse_quanta_summary(combined_output, log_file)
+        quanta_ok, quanta_fail = quanta_report.counts(
+            summary_file, combined_output, log_file=log_file
+        )
 
         if dia_result.returncode != 0 and quanta_ok == 0:
             return DIAResult(
@@ -389,18 +368,7 @@ def run(
             )
 
         # Update collection chain
-        run_butler(
-            [
-                "collection-chain",
-                repo,
-                cols.diff_parent,
-                cols.diff_run,
-                "--mode",
-                "redefine",
-            ],
-            config,
-            log_file=log_file,
-        )
+        redefine_chain(config, cols.diff_parent, cols.diff_run, log_file=log_file)
 
         # Count outputs via the Butler Python query API (structured JSON) instead
         # of parsing query-datasets tabular stdout. A failed query yields None,

@@ -480,12 +480,16 @@ def _run_coadd_templates(
     science_cfg: "ScienceConfig",
     dry_run: bool,
     bands: list[str] | None = None,
+    *,
+    executor=None,
 ) -> RunResult | None:
     """Build coadd templates: process template nights, then coadd per band.
 
     ``bands`` restricts which bands get coadded (defaults to all configured).
     Returns a RunResult early-exit if continue_on_error is False and a step fails,
-    or None to continue normally.
+    or None to continue normally. ``executor`` is threaded to the template
+    science and coadd steps so they run under the same backend (BPS/local) as the
+    main pipeline; None keeps them local.
     """
     coadd_bands = bands if bands is not None else run_cfg.bands
     from stips.core import calibs, coadd, science
@@ -548,6 +552,7 @@ def _run_coadd_templates(
                     target_ra=run_cfg.ra,
                     target_dec=run_cfg.dec,
                     log_file=sci_log,
+                    executor=executor,
                 )
                 _maybe_split_log(sci_log)
                 template_science_ran = True
@@ -592,6 +597,7 @@ def _run_coadd_templates(
                 overwrite=force_rebuild_templates,
                 config_files=coadd_config_files or None,
                 log_file=coadd_log,
+                executor=executor,
             )
             _maybe_split_log(coadd_log)
             if coadd_result.success:
@@ -617,6 +623,8 @@ def _run_auto_templates(
     result: RunResult,
     science_cfg: "ScienceConfig",
     dry_run: bool,
+    *,
+    executor=None,
 ) -> RunResult | None:
     """Auto template strategy: PS1 for the profile's PS1-eligible bands, coadd
     for the rest.
@@ -640,7 +648,13 @@ def _run_auto_templates(
             )
         else:
             early_exit = _run_coadd_templates(
-                run_cfg, config, result, science_cfg, dry_run, bands=bv
+                run_cfg,
+                config,
+                result,
+                science_cfg,
+                dry_run,
+                bands=bv,
+                executor=executor,
             )
             if early_exit is not None:
                 return early_exit
@@ -1578,13 +1592,17 @@ def run(
         _run_ps1_templates(run_cfg, config, result, dry_run)
         _log_template_summary(run_cfg, result)
     elif run_cfg.template_type == "coadd":
-        early_exit = _run_coadd_templates(run_cfg, config, result, science_cfg, dry_run)
+        early_exit = _run_coadd_templates(
+            run_cfg, config, result, science_cfg, dry_run, executor=executor
+        )
         if early_exit is not None:
             log.error(f"Coadd template build failed: {early_exit.error}")
             return early_exit
         _log_template_summary(run_cfg, result)
     elif run_cfg.template_type == "auto":
-        early_exit = _run_auto_templates(run_cfg, config, result, science_cfg, dry_run)
+        early_exit = _run_auto_templates(
+            run_cfg, config, result, science_cfg, dry_run, executor=executor
+        )
         if early_exit is not None:
             log.error(f"Auto template build failed: {early_exit.error}")
             return early_exit

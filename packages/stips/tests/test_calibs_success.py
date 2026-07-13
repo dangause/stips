@@ -17,7 +17,7 @@ from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from stips.core import calibs  # noqa: E402
+from stips.core import calibs, pipeline  # noqa: E402
 
 NIGHT = "20230519"
 
@@ -77,6 +77,10 @@ def _invoke(tmp_path, *, run_rc, counts, ingest_rc=0, ingest_stderr=""):
 
     with (
         patch.object(calibs, "run_butler", run_butler),
+        # register-instrument + bias/flat chain redefines run through the hoisted
+        # pipeline helpers, which call pipeline.run_butler — same mock so the
+        # certify-calibrations assertions still see every relevant call.
+        patch.object(pipeline, "run_butler", run_butler),
         patch.object(calibs, "butler_query", bq),
         patch.object(calibs, "get_raw_dir", return_value=raw_dir),
     ):

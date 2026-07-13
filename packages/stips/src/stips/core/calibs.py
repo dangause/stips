@@ -10,9 +10,12 @@ from typing import TYPE_CHECKING
 from stips.core import butler_query
 from stips.core.pipeline import (
     CollectionNames,
+    PipetaskStage,
+    ensure_instrument_registered,
     get_raw_dir,
     isr_config_args,
     night_to_date_range,
+    redefine_chain,
     validate_night,
 )
 from stips.core.stack import run_butler
@@ -74,12 +77,7 @@ def write_curated_calibrations(
     # Ingest raws for this night first (needed for write-curated-calibrations)
     raw_dir = get_raw_dir(config, night)
     if raw_dir.exists():
-        run_butler(
-            ["register-instrument", repo, prof.instrument_class],
-            config,
-            check=False,
-            log_file=log_file,
-        )
+        ensure_instrument_registered(config, log_file)
         run_butler(
             [
                 "ingest-raws",
@@ -218,12 +216,7 @@ def run(
 
     try:
         # Register instrument (idempotent)
-        run_butler(
-            ["register-instrument", repo, prof.instrument_class],
-            config,
-            check=False,
-            log_file=log_file,
-        )
+        ensure_instrument_registered(config, log_file)
 
         # Ingest raws. check=False because a re-run of an already-ingested
         # night legitimately returns non-zero (the raw datasets already exist).
@@ -284,40 +277,27 @@ def run(
         bias_ok = False
 
         try:
+            bias_stage = PipetaskStage(
+                repo=repo,
+                pipeline=str(config.resolve_pipeline("CpBias.yaml")),
+                inputs=f"{cols.curated_chain},{cols.raw_run}",
+                output_parent=cols.cp_bias,
+                output_run=cols.cp_bias_run,
+                qgraph_path=str(qg_bias),
+                data_query=(
+                    f"instrument='{prof.name}' " "AND exposure.observation_type='bias'"
+                ),
+                post_query_args=isr_config_args(prof, "cpBiasIsr"),
+                jobs=jobs,
+            )
             executor.run_pipetask(
-                [
-                    "qgraph",
-                    "-b",
-                    repo,
-                    "-p",
-                    str(config.resolve_pipeline("CpBias.yaml")),
-                    "-i",
-                    f"{cols.curated_chain},{cols.raw_run}",
-                    "-o",
-                    cols.cp_bias,
-                    "--output-run",
-                    cols.cp_bias_run,
-                    "--save-qgraph",
-                    str(qg_bias),
-                    "-d",
-                    f"instrument='{prof.name}' AND exposure.observation_type='bias'",
-                ]
-                + isr_config_args(prof, "cpBiasIsr"),
+                bias_stage.qgraph_args(),
                 config,
                 log_file=log_file,
             )
 
             result = executor.run_pipetask(
-                [
-                    "run",
-                    "-b",
-                    repo,
-                    "-g",
-                    str(qg_bias),
-                    "-j",
-                    str(jobs),
-                    "--register-dataset-types",
-                ],
+                bias_stage.run_args(),
                 config,
                 check=False,
                 log_file=log_file,
@@ -338,17 +318,8 @@ def run(
                 butler_query.count_datasets(config, "bias", cols.cp_bias_run) or 0
             )
             if bias_count > 0:
-                run_butler(
-                    [
-                        "collection-chain",
-                        repo,
-                        cols.cp_bias,
-                        cols.cp_bias_run,
-                        "--mode",
-                        "redefine",
-                    ],
-                    config,
-                    log_file=log_file,
+                redefine_chain(
+                    config, cols.cp_bias, cols.cp_bias_run, log_file=log_file
                 )
 
                 # Certify bias (check=False to handle already-certified case)
@@ -382,44 +353,33 @@ def run(
         flat_ok = False
 
         try:
-            executor.run_pipetask(
-                [
-                    "qgraph",
-                    "-b",
-                    repo,
-                    "-p",
-                    str(config.resolve_pipeline("CpFlat.yaml")),
-                    "-i",
-                    f"{cols.curated_chain},{cols.raw_run},{cols.calib_out},{cols.cp_bias_run}",
-                    "-o",
-                    cols.cp_flat,
-                    "--output-run",
-                    cols.cp_flat_run,
-                    "--save-qgraph",
-                    str(qg_flat),
-                    "-d",
-                    f"instrument='{prof.name}' AND exposure.observation_type='flat'",
+            flat_stage = PipetaskStage(
+                repo=repo,
+                pipeline=str(config.resolve_pipeline("CpFlat.yaml")),
+                inputs=f"{cols.curated_chain},{cols.raw_run},{cols.calib_out},{cols.cp_bias_run}",
+                output_parent=cols.cp_flat,
+                output_run=cols.cp_flat_run,
+                qgraph_path=str(qg_flat),
+                data_query=(
+                    f"instrument='{prof.name}' " "AND exposure.observation_type='flat'"
+                ),
+                post_query_args=[
                     "-c",
                     "cpFlatIsr:doDark=False",
                     "-c",
                     "cpFlatIsr:doOverscan=True",
                 ]
                 + isr_config_args(prof, "cpFlatIsr"),
+                jobs=jobs,
+            )
+            executor.run_pipetask(
+                flat_stage.qgraph_args(),
                 config,
                 log_file=log_file,
             )
 
             result = executor.run_pipetask(
-                [
-                    "run",
-                    "-b",
-                    repo,
-                    "-g",
-                    str(qg_flat),
-                    "-j",
-                    str(jobs),
-                    "--register-dataset-types",
-                ],
+                flat_stage.run_args(),
                 config,
                 check=False,
                 log_file=log_file,
@@ -438,17 +398,8 @@ def run(
                 butler_query.count_datasets(config, "flat", cols.cp_flat_run) or 0
             )
             if flat_count > 0:
-                run_butler(
-                    [
-                        "collection-chain",
-                        repo,
-                        cols.cp_flat,
-                        cols.cp_flat_run,
-                        "--mode",
-                        "redefine",
-                    ],
-                    config,
-                    log_file=log_file,
+                redefine_chain(
+                    config, cols.cp_flat, cols.cp_flat_run, log_file=log_file
                 )
 
                 # Certify flat
