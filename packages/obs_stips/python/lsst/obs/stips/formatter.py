@@ -12,5 +12,8 @@ class StipsRawFormatter(FitsRawFormatterBase):
     instrumentClass = None  # set by binding
     translatorClass = None  # set by binding
 
-    def getDetector(self, id):
-        return self.instrumentClass().getCamera()[id]
+    def getDetector(self, detectorId):
+        # getCamera() is cached at the instrument level (see instrument.py),
+        # so per-detector fetches during bulk ingest don't rebuild the camera
+        # (and re-parse its yaml) every time.
+        return self.instrumentClass().getCamera()[detectorId]

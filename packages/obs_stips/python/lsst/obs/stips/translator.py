@@ -73,7 +73,12 @@ class StipsTranslator(FitsTranslator):
             lon=s.longitude, lat=s.latitude, height=s.elevation
         )
 
+    @cache_translation
     def to_physical_filter(self):
+        # Caching is safe here despite the `unknown_filter` hook: the cache is
+        # per-translator-instance and the instance's header is immutable, so
+        # the hook sees identical inputs on every call — exactly like the other
+        # hook-backed to_* methods above, which already cache.
         raw = str(self._header.get(self.profile.filter_key, "UNKNOWN")).strip()
         aliases = self.profile.filter_aliases
         if raw in aliases:
