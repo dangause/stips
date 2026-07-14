@@ -56,11 +56,19 @@ site:
       # The instrument is declarative (loaded by path from INSTRUMENT_DIR).
       setup -r /opt/stips/packages/obs_stips obs_stips 2>/dev/null || true
       export PYTHONPATH=/opt/stips/packages/stips/src:${PYTHONPATH:-}
-      if [[ -d /opt/stips/instruments/nickel/obs_nickel_data ]]; then
-          setup -r /opt/stips/instruments/nickel/obs_nickel_data obs_nickel_data 2>/dev/null || true
-      fi
-      export REPO=/data/repo
       export INSTRUMENT_DIR=/opt/stips/instruments/nickel
+      # Set up the active instrument's EUPS packages (curated calibration data,
+      # etc.): any subdir of INSTRUMENT_DIR with a ups/<name>.table is an
+      # instrument-owned product, set up by its table (product) name. Generic:
+      # a fork points INSTRUMENT_DIR elsewhere and its packages are picked up.
+      for pkg_dir in "$INSTRUMENT_DIR"/*/; do
+          [[ -d "${pkg_dir}ups" ]] || continue
+          for tbl in "${pkg_dir}ups/"*.table; do
+              [[ -e "$tbl" ]] || continue
+              setup -r "${pkg_dir%/}" "$(basename "$tbl" .table)" 2>/dev/null || true
+          done
+      done
+      export REPO=/data/repo
       export STIPS_DEFAULTS=/opt/stips/packages/obs_stips/instrument_defaults
       export RAW_PARENT_DIR=/data/raw
       export REFCAT_REPO=/data/refcats

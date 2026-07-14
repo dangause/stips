@@ -52,9 +52,25 @@ OBS_STIPS_DIR="${OBS_STIPS_DIR:-$REPO_ROOT/packages/obs_stips}"
 if [ -d "$OBS_STIPS_DIR" ]; then
   setup -r "$OBS_STIPS_DIR" obs_stips 2>/dev/null || true
 fi
-OBS_NICKEL_DATA="${OBS_NICKEL_DATA:-$REPO_ROOT/instruments/nickel/obs_nickel_data}"
-if [ -d "$OBS_NICKEL_DATA" ]; then
-  setup -r "$OBS_NICKEL_DATA" obs_nickel_data || true
+# Instrument data package (curated calibrations). When this script is invoked
+# via `stips`/run_with_stack (the normal path), the generated preamble already
+# exported INSTRUMENT_DIR and set up the active instrument's data package,
+# exporting STIPS_DATA_DIR (see core/stack.py:_build_setup_script). In that case
+# there is nothing to do here. The loop below is a fallback for STANDALONE use
+# (e.g. `make bootstrap` or running this script directly): discover every
+# instrument-owned EUPS package under INSTRUMENT_DIR -- a subdir containing a
+# ups/<name>.table -- and set it up by its table (product) name. INSTRUMENT_DIR
+# defaults to the reference Nickel instrument dir.
+if [ -z "${STIPS_DATA_DIR:-}" ]; then
+  INSTRUMENT_DIR="${INSTRUMENT_DIR:-$REPO_ROOT/instruments/nickel}"
+  for pkg_dir in "$INSTRUMENT_DIR"/*/; do
+    [ -d "${pkg_dir}ups" ] || continue
+    for tbl in "${pkg_dir}ups/"*.table; do
+      [ -e "$tbl" ] || continue
+      pkg="$(basename "$tbl" .table)"
+      setup -r "${pkg_dir%/}" "$pkg" 2>/dev/null || true
+    done
+  done
 fi
 # Re-sourcing loadLSST above can reset PYTHONPATH, dropping the src-layout
 # `stips` core package (NOT an EUPS product) that lsst.obs.stips.active imports

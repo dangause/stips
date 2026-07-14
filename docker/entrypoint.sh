@@ -3,7 +3,8 @@
 #
 # This script:
 # 1. Sources the LSST stack
-# 2. Sets up obs_stips and obs_nickel_data (instrument is declarative, by path)
+# 2. Sets up obs_stips + the active instrument's EUPS packages discovered under
+#    INSTRUMENT_DIR (instrument itself is declarative, loaded by path)
 # 3. Loads environment from mounted config if present
 # 4. Executes the provided command
 
@@ -29,10 +30,23 @@ if [[ -d "${OBS_STIPS}" ]]; then
     setup -r "${OBS_STIPS}" obs_stips 2>/dev/null || true
 fi
 
-# Setup obs_nickel_data
-if [[ -d "${OBS_NICKEL_DATA}" ]]; then
-    echo "[STIPS] Setting up obs_nickel_data from ${OBS_NICKEL_DATA}"
-    setup -r "${OBS_NICKEL_DATA}" obs_nickel_data 2>/dev/null || true
+# Set up the active instrument's EUPS packages (curated calibration data, test
+# fixtures, ...). Any subdirectory of INSTRUMENT_DIR that contains a
+# ups/<name>.table is an instrument-owned EUPS product; declare/setup it by its
+# table (product) name -- which comes from the table filename, not the directory
+# (e.g. dir `testdata/` ships product `testdata_nickel`). This is generic: a fork
+# sets INSTRUMENT_DIR (baked as an image ENV) and its co-located packages are
+# picked up with no per-instrument edits here.
+if [[ -d "${INSTRUMENT_DIR}" ]]; then
+    for pkg_dir in "${INSTRUMENT_DIR}"/*/; do
+        [[ -d "${pkg_dir}ups" ]] || continue
+        for tbl in "${pkg_dir}ups/"*.table; do
+            [[ -e "$tbl" ]] || continue
+            pkg="$(basename "$tbl" .table)"
+            echo "[STIPS] Setting up ${pkg} from ${pkg_dir%/}"
+            setup -r "${pkg_dir%/}" "$pkg" 2>/dev/null || true
+        done
+    done
 fi
 
 # Add stips to PYTHONPATH

@@ -2,6 +2,24 @@
 
 All notable changes to STIPS (the Small Telescope Image Processing Suite) are documented here.
 
+## [2.0.1] — 2026-07-14
+
+### Fixed
+- Singularity release publication works end-to-end: fuse build deps on current
+  runners, v-less image tag, ORAS publication to `ghcr.io/<owner>/stips-sif`
+  (the 3.2 GB .sif exceeds GitHub's 2 GiB release-asset cap), `registry login`
+  for Singularity 4.x, and `packages: write` job permissions. A
+  `test-singularity` PR label runs the publish end-to-end inside a PR.
+- `make test` stack harness: `packages/refcats/src` was missing from
+  PYTHONPATH (refcats tests could not import outside with-stack.sh).
+
+### Changed
+- Shared exec tooling (Makefile, with-stack.sh, bootstrap, docker images, BPS
+  sites) discovers instrument data packages generically under
+  `$INSTRUMENT_DIR` (any `ups/`-bearing subdir) instead of hardcoding
+  `obs_nickel_data`/`testdata_nickel`; retired stale `obs_nickel` references
+  (CI step name, fitter guidance strings, test mock paths).
+
 ## [2.0.0] — 2026-07-14
 
 A large documentation-and-correctness audit campaign. The grouped summary below
