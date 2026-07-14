@@ -52,7 +52,7 @@ OBS_STIPS_DIR="${OBS_STIPS_DIR:-$REPO_ROOT/packages/obs_stips}"
 if [ -d "$OBS_STIPS_DIR" ]; then
   setup -r "$OBS_STIPS_DIR" obs_stips 2>/dev/null || true
 fi
-OBS_NICKEL_DATA="${OBS_NICKEL_DATA:-$REPO_ROOT/packages/obs_nickel_data}"
+OBS_NICKEL_DATA="${OBS_NICKEL_DATA:-$REPO_ROOT/instruments/nickel/obs_nickel_data}"
 if [ -d "$OBS_NICKEL_DATA" ]; then
   setup -r "$OBS_NICKEL_DATA" obs_nickel_data || true
 fi
@@ -98,7 +98,7 @@ if [[ ! -s "$MON_MAP" ]]; then
   log_info "Will build map: $MON_MAP"
   # If dir is read-only, redirect to temp
   if ! touch "$MON_DIR/.write_test" 2>/dev/null; then
-    INGEST_MAP="/tmp/nps_refcat_ecsv/filename_to_htm.ecsv"
+    INGEST_MAP="/tmp/stips_refcat_ecsv/filename_to_htm.ecsv"
     mkdir -p "$(dirname "$INGEST_MAP")"
     log_info "Refcat dir is read-only; writing ECSV to $INGEST_MAP"
   else
@@ -117,7 +117,7 @@ else
       log_warn "ECSV contains stale paths (e.g. $FIRST_PATH); rebuilding for current environment"
       # If original ECSV dir is read-only (mounted volume), write to temp
       if ! touch "$MON_DIR/.write_test" 2>/dev/null; then
-        INGEST_MAP="/tmp/nps_refcat_ecsv/filename_to_htm.ecsv"
+        INGEST_MAP="/tmp/stips_refcat_ecsv/filename_to_htm.ecsv"
         mkdir -p "$(dirname "$INGEST_MAP")"
         log_info "Refcat dir is read-only; writing corrected ECSV to $INGEST_MAP"
       else
@@ -182,11 +182,12 @@ log_section "SkyMap Registration"
 # SKYMAP_CFG (geometry), SKYMAP_NAME, and SKYMAP_COLLECTION are exported by
 # core/stack.py from the active profile, with SKYMAP_CFG resolved instrument-dir
 # first (a fork's own configs/makeSkyMap.py shadows the framework geometry under
-# obs_stips/instrument_defaults/). The fallbacks below cover a direct invocation
-# without those exports (Nickel reference values).
+# obs_stips/instrument_defaults/). SKYMAP_NAME/SKYMAP_COLLECTION MUST come from
+# the profile: rather than silently assuming Nickel values (F-043), fail loud if
+# they are unset (INSTRUMENT_DIR unset or the profile failed to load).
 SKYMAP_CFG="${SKYMAP_CFG:-${STIPS_DEFAULTS:-$REPO_ROOT/packages/obs_stips/instrument_defaults}/configs/makeSkyMap.py}"
-SKYMAP_NAME="${SKYMAP_NAME:-nickelRings-v1}"
-SKYMAP_COLLECTION="${SKYMAP_COLLECTION:-skymaps/nickelRings}"
+: "${SKYMAP_NAME:?SKYMAP_NAME not exported — is INSTRUMENT_DIR set and the instrument profile loaded? Set it in your config env: block.}"
+: "${SKYMAP_COLLECTION:?SKYMAP_COLLECTION not exported — is INSTRUMENT_DIR set and the instrument profile loaded? Set it in your config env: block.}"
 log_info "Registering SkyMap '${SKYMAP_NAME}' (config: ${SKYMAP_CFG})"
 SKYMAP_LOG="${LOG_DIR}/register_skymap_${TS}.log"
 if ! butler register-skymap "$REPO" -C "$SKYMAP_CFG" -c "name=${SKYMAP_NAME}" > "$SKYMAP_LOG" 2>&1; then

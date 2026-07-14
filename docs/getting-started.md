@@ -1,13 +1,17 @@
-# Getting Started with NPS
+# Getting Started with STIPS
 
-This guide walks you through setting up the Nickel Processing Suite and running your first pipeline.
+This guide walks you through setting up the Small Telescope Image Processing Suite and running your first pipeline.
 
 ## Prerequisites
 
 Before you begin, ensure you have:
 
 1. **Python 3.12+** installed
-2. **LSST Science Pipelines** (v30.0.3 or later) installed
+2. **LSST Science Pipelines** — supported release **`v30_0_3`** (the version the
+   Docker images build on and the docs are validated against). CI additionally
+   pins the weekly **`w_2025_32`**; newer weeklies usually work but are validated
+   only by the scheduled `w_latest` canary. Before upgrading the stack, follow
+   the [stack-bump runbook](stack-bump-runbook.md).
 3. **UV package manager** installed:
    ```bash
    pip install uv
@@ -22,8 +26,8 @@ Before you begin, ensure you have:
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/lick-observatory/nickel_processing_suite.git
-cd nickel_processing_suite
+git clone https://github.com/dangause/stips.git
+cd stips
 ```
 
 ### 2. Install Dependencies
@@ -50,7 +54,7 @@ python -c "from lsst.daf.butler import Butler; print('OK')"
 
 ## Quick Start: Your First Pipeline
 
-The fastest way to run NPS is using a YAML configuration file.
+The fastest way to run STIPS is using a YAML configuration file.
 
 ### Option A: Use an Existing Campaign Config
 
@@ -71,7 +75,7 @@ Create a file `my_pipeline.yaml`:
 env:
   REPO: "/path/to/my/butler_repo"
   STACK_DIR: "/path/to/lsst_stack"
-  INSTRUMENT_DIR: "/path/to/nickel_processing_suite/instruments/nickel"
+  INSTRUMENT_DIR: "/path/to/stips/instruments/nickel"
   RAW_PARENT_DIR: "/path/to/raw/data"
   REFCAT_REPO: "/path/to/refcats"
 
@@ -88,11 +92,10 @@ template:
   type: ps1
   degrade_seeing: 2.0
 
-# Nights to process (empty list = all visits)
-nights:
-  20240101:
-    r: []
-    i: []
+# Science nights to process (simple list of YYYYMMDD local dates)
+science:
+  nights:
+    - 20240101
 
 # Processing options
 options:
@@ -116,7 +119,7 @@ stips -c my_pipeline.yaml run
 
 ## Understanding What Happens
 
-When you run `stips -c pipeline.yaml run`, NPS automatically:
+When you run `stips -c pipeline.yaml run`, STIPS automatically:
 
 1. **Bootstraps** the Butler repository (if it doesn't exist)
 2. **Ingests PS1 templates** for the specified bands
@@ -129,32 +132,40 @@ When you run `stips -c pipeline.yaml run`, NPS automatically:
 
 ## Step-by-Step Alternative
 
-If you prefer more control, run each step individually:
+If you prefer more control, run each step individually. Give `ps1-template`,
+`fphot`, and `lightcurve` your target's **full-precision** RA/Dec (6+ decimal
+places — the placeholders below are illustrative). Rounding to 2 decimals
+offsets the aperture by ~5–17″ on Nickel's 0.37″/pixel scale, so forced
+photometry measures galaxy background instead of the source.
+
+Every command takes the group-level `-c my_pipeline.yaml` (its `env:` block is the
+sole config source), so bare `stips calibs ...` with no `-c` exits with "No config
+provided".
 
 ```bash
 # 1. Check your configuration
-stips env
+stips -c my_pipeline.yaml env
 
 # 2. Bootstrap the repository
 stips -c my_pipeline.yaml bootstrap
 
 # 3. Process calibrations for a night
-stips calibs 20240101
+stips -c my_pipeline.yaml calibs 20240101
 
 # 4. Process science frames (--ra/--dec enables coordinate validation)
-stips science 20240101 --object my_target --ra 123.456 --dec 45.678
+stips -c my_pipeline.yaml science 20240101 --object my_target --ra 123.456 --dec 45.678
 
 # 5. Ingest PS1 template
-stips ps1-template --ra 123.456 --dec 45.678 --band r
+stips -c my_pipeline.yaml ps1-template --ra 123.456 --dec 45.678 --band r
 
 # 6. Run difference imaging
-stips dia 20240101 --auto --band r
+stips -c my_pipeline.yaml dia 20240101 --auto --band r
 
 # 7. Run forced photometry
-stips fphot 20240101 --ra 123.456 --dec 45.678
+stips -c my_pipeline.yaml fphot 20240101 --ra 123.456 --dec 45.678
 
 # 8. Extract light curve
-stips lightcurve --ra 123.456 --dec 45.678 \
+stips -c my_pipeline.yaml lightcurve --ra 123.456 --dec 45.678 \
     --collections "Nickel/runs/*/forcedPhotRaDec/*/run" \
     --dataset-type forced_phot_diffim_radec \
     --name "My Target" \
@@ -196,10 +207,10 @@ RAW_PARENT_DIR/
 
 ### "Bootstrap failed"
 
-Run from the nickel_processing_suite directory:
+Run from the stips directory:
 
 ```bash
-cd /path/to/nickel_processing_suite
+cd /path/to/stips
 stips -c my_pipeline.yaml bootstrap
 ```
 
@@ -208,14 +219,28 @@ stips -c my_pipeline.yaml bootstrap
 This usually means some exposures have incorrect coordinates in their FITS headers (a known Nickel telescope issue where the DEC keyword gets stuck). When using `stips run` with a pipeline YAML, coordinate validation is automatic. For standalone commands, pass `--ra` and `--dec` to enable it:
 
 ```bash
-stips science 20230519 --object 2023ixf --ra 210.91 --dec 54.32
+stips science 20230519 --object 2023ixf --ra 210.910750 --dec 54.311694
+```
+
+The other cause is missing reference catalogs. In `gaia_ps1` refcat mode, `stips run` now **aborts early** with the root cause if the on-demand Gaia/PS1 fetch fails (e.g. no network, or `stips-refcats` fetch dependencies not installed) — rather than continuing into science where every night fails with an opaque missing-dataset error. Fix the reported cause, or set `refcat.mode: monster` if the repo already holds refcats.
+
+### `ModuleNotFoundError` or stale paths after moving/renaming the checkout
+
+The `.venv` is an editable install: it records **absolute** paths to the
+packages (via `.pth` files) at install time. If you move, rename, or copy the
+repository checkout to a new location, a `.venv` carried over from the old path
+points at packages that no longer exist there, producing import errors or
+picking up a stale copy. Rebuild the environment from scratch:
+
+```bash
+rm -rf .venv && uv sync --group dev
 ```
 
 
 ## Next Steps
 
 - See [Starting a New Campaign](new-campaign.md) for new transient targets
-- Explore [Architecture Overview](architecture.md) to understand how NPS works
+- Explore [Architecture Overview](architecture.md) to understand how STIPS works
 
 ## Getting Help
 

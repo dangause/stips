@@ -33,46 +33,27 @@ import argparse
 import datetime as dt
 import subprocess
 import sys
+from importlib.resources import files
 from pathlib import Path
 
+# Real conversion logic now lives in the importable library so the orchestrator
+# (stips.core.refcat) and this CLI share one implementation.
+from stips_refcats.convert import convert_catalog
 
-def _run(cmd: list[str]) -> None:
-    print("+", " ".join(cmd), flush=True)
-    subprocess.run(cmd, check=True)
+
+def _default_config(config_name: str) -> str:
+    """Path to a convertReferenceCatalog config shipped as stips_refcats data."""
+    return str(files("stips_refcats").joinpath("configs", config_name))
 
 
 def convert_one(
     name: str, out_base: Path, config: Path, source_csv: Path, force: bool
 ) -> Path:
+    """Thin shim over :func:`stips_refcats.convert.convert_catalog`.
+
+    Returns the path to filename_to_htm.ecsv produced by the conversion.
     """
-    Run convertReferenceCatalog for one catalog if needed.
-
-    Returns
-    -------
-    Path : the path to filename_to_htm.ecsv produced by the conversion.
-    """
-    out_base.mkdir(parents=True, exist_ok=True)
-    fmap = out_base / "filename_to_htm.ecsv"
-
-    if fmap.exists() and not force:
-        print(f"[{name}] Using existing map: {fmap}")
-        return fmap
-
-    if not source_csv.exists():
-        raise SystemExit(f"[{name}] Missing input CSV: {source_csv}")
-
-    print(f"[{name}] Converting → {out_base}")
-    _run(
-        [
-            "convertReferenceCatalog",
-            str(out_base),
-            str(config),
-            str(source_csv),
-        ]
-    )
-    if not fmap.exists():
-        raise SystemExit(f"[{name}] Expected map not found after conversion: {fmap}")
-    return fmap
+    return convert_catalog(name, source_csv, config, out_base, force=force)
 
 
 def parse_args() -> argparse.Namespace:
@@ -102,9 +83,9 @@ def parse_args() -> argparse.Namespace:
     )
     ap.add_argument("--ps1-csv", default="./data/ps1_all_cones/merged_ps1_cones.csv")
 
-    # Configs
-    ap.add_argument("--gaia-config", default="scripts/gaia_dr3_config.py")
-    ap.add_argument("--ps1-config", default="scripts/ps1_config.py")
+    # Configs (shipped as stips_refcats package data)
+    ap.add_argument("--gaia-config", default=_default_config("gaia_dr3_config.py"))
+    ap.add_argument("--ps1-config", default=_default_config("ps1_config.py"))
     return ap.parse_args()
 
 

@@ -2,13 +2,15 @@
 
 A binding subclass sets ``profile`` (and optionally ``translatorClass`` /
 ``rawFormatterClass``); everything instrument-specific is resolved from the
-profile. The body of :meth:`register` is ported verbatim from the legacy
-single-CCD ``Nickel`` instrument (raft ``R00`` / slot ``S00``).
+profile. The body of :meth:`register` derives from the legacy single-CCD
+``Nickel`` instrument (one synthetic raft ``R00``; slots numbered by detector
+order, so a single-CCD camera keeps its legacy ``S00`` label).
 """
 
 from __future__ import annotations
 
 import os
+from functools import lru_cache
 
 from lsst.obs.base import (
     DefineVisitsTask,
@@ -23,6 +25,47 @@ from lsst.utils.introspection import get_full_type_name
 from .formatter import StipsRawFormatter
 
 __all__ = ["StipsInstrument"]
+
+
+# Camera construction is expensive (YAML parsing + cameraGeom assembly) and the
+# result is used read-only, so cache it. Every environment knob that affects
+# the geometry (INSTRUMENT_DIR via camera_file, CCD_BINNING via binning) is
+# part of the cache key, so changing the env mid-process yields a fresh build.
+@lru_cache(maxsize=None)
+def _cached_spec_camera(instrument_class):
+    """Build (once per binding class) the camera for a CameraSpec profile."""
+    from .camera_builder import build_camera
+
+    profile = instrument_class.profile
+    return build_camera(profile.camera, profile.name)
+
+
+@lru_cache(maxsize=None)
+def _cached_yaml_camera(camera_file: str, binning: int):
+    """Build (once per (file, binning)) the camera from a yaml definition."""
+    if binning > 1:
+        from .camera_builder import build_yaml_camera
+
+        return build_yaml_camera(camera_file, binning=binning)
+    return yamlCamera.makeCamera(camera_file)
+
+
+def _get_ccd_binning() -> int:
+    """Parse and validate the CCD_BINNING environment variable."""
+    raw = os.environ.get("CCD_BINNING", "1")
+    try:
+        binning = int(raw)
+    except ValueError:
+        raise RuntimeError(
+            f"Invalid CCD_BINNING={raw!r}: must be a positive integer "
+            "(1 = unbinned, 2 = 2x2 on-chip binning, ...)."
+        ) from None
+    if binning < 1:
+        raise RuntimeError(
+            f"Invalid CCD_BINNING={binning}: must be >= 1 "
+            "(1 = unbinned, 2 = 2x2 on-chip binning, ...)."
+        )
+    return binning
 
 
 class StipsInstrument(Instrument):
@@ -65,9 +108,7 @@ class StipsInstrument(Instrument):
 
         cam = self.profile.camera
         if isinstance(cam, CameraSpec):
-            from .camera_builder import build_camera
-
-            return build_camera(cam, self.profile.name)
+            return _cached_spec_camera(type(self))
         instrument_dir = os.environ.get("INSTRUMENT_DIR")
         if not instrument_dir:
             raise RuntimeError(
@@ -78,12 +119,8 @@ class StipsInstrument(Instrument):
         # On-chip binning: CCD_BINNING (from the config env: block) scales the
         # camera geometry to match binned raws. Default 1 == unbinned, which
         # reproduces yamlCamera.makeCamera exactly.
-        binning = int(os.environ.get("CCD_BINNING", "1"))
-        if binning > 1:
-            from .camera_builder import build_yaml_camera
-
-            return build_yaml_camera(camera_file, binning=binning)
-        return yamlCamera.makeCamera(camera_file)
+        binning = _get_ccd_binning()
+        return _cached_yaml_camera(camera_file, binning)
 
     def register(self, registry, update: bool = False):
         camera = self.getCamera()
@@ -94,7 +131,7 @@ class StipsInstrument(Instrument):
                 {
                     "name": self.getName(),
                     "class_name": get_full_type_name(type(self)),
-                    "detector_max": len(camera),  # single-CCD camera
+                    "detector_max": len(camera),
                     "visit_max": obsMax,
                     "visit_system": VisitSystem.ONE_TO_ONE.value,
                     "exposure_max": obsMax,
@@ -102,16 +139,19 @@ class StipsInstrument(Instrument):
                 update=update,
             )
 
-            # Single-CCD camera; choose stable raft/slot labels
-            for det in camera:
+            # Small telescopes have no physical raft structure; use one
+            # synthetic raft "R00" with slots numbered by detector order.
+            # Detector 0 -> "S00", preserving the legacy single-CCD labels
+            # while remaining unique for multi-detector forks.
+            for i, det in enumerate(camera):
                 registry.syncDimensionData(
                     "detector",
                     {
                         "instrument": self.getName(),
                         "id": int(det.getId()),
                         "full_name": det.getName(),
-                        "name_in_raft": "S00",  # no raft, but need something stable
-                        "raft": "R00",  # no raft, but need something stable
+                        "name_in_raft": f"S{i:02d}",
+                        "raft": "R00",
                         "purpose": det.getType().name,
                     },
                     update=update,

@@ -1,17 +1,29 @@
-"""Data collection and log parsing for the pipeline dashboard.
+"""Data collection for the pipeline dashboard.
 
-Scans log directories, parses run_info.txt / summary.txt / pipeline.log,
-and provides data models for rendering the dashboard UI.
+Structured sources first, logs second (F-023 / modernization D2):
+
+* ``provenance/runs.json`` (maintained by ``stips.core.provenance``) is the
+  structured source of truth for per-night **science** step status — the
+  dashboard overlays it onto whatever the logs suggested (``_apply_provenance``).
+  It also supplies the run's LSST stack version and a target-name fallback.
+* ``run_info.txt`` / ``summary.txt`` / ``pipeline.log`` are still parsed for the
+  data that exists nowhere else in structured form: live phase detection while a
+  run is executing, bands, calibs/DIA/fphot/lightcurve step outcomes (only the
+  science step writes ``processing_log`` records today), per-run_id historical
+  counts, and BPS execution detection.
 """
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 class RunStatus(str, Enum):
@@ -33,6 +45,30 @@ class Phase(str, Enum):
 
 
 PHASE_ORDER = list(Phase)
+
+# Sentinel band list used when neither a run's log nor the active profile can
+# supply the bands. Renders as an explicit "unknown" column in the night grid
+# rather than fabricating Nickel's r/i default (F-043).
+UNKNOWN_BANDS: list[str] = ["?"]
+
+
+def _profile_bands() -> list[str]:
+    """Bands (dedup, order-preserving) from the active instrument profile.
+
+    Returns [] when the profile is unavailable so callers fall back to the
+    explicit-unknown sentinel instead of pretending r/i. Used only as a
+    fallback when a run's log lacks a ``Bands: [...]`` line.
+    """
+    try:
+        from stips.core.config import load_active_profile
+
+        seen: dict[str, None] = {}
+        for band in load_active_profile().filters.values():
+            if band:
+                seen.setdefault(band, None)
+        return list(seen)
+    except Exception:
+        return []
 
 
 @dataclass
@@ -68,10 +104,25 @@ class RunInfo:
     bps_site: str = ""
     slurm_jobs: list[dict[str, str]] = field(default_factory=list)
     duration: str = ""
+    # From provenance/runs.json (structured; F-023/D2). Empty when no
+    # provenance records exist for this run's repo.
+    stack_version: str = ""
+    provenance_backed: bool = False
 
     @property
     def status_class(self) -> str:
         return self.status.value
+
+    @property
+    def display_bands(self) -> list[str]:
+        """Bands for the night grid: the run's parsed bands, else the active
+        profile's filters, else the explicit-unknown sentinel.
+
+        Never fabricates Nickel's r/i default (F-043); when neither the run log
+        nor a loadable profile supplies bands, the UI shows an explicit unknown
+        column rather than silently pretending r/i.
+        """
+        return self.bands or _profile_bands() or UNKNOWN_BANDS
 
 
 class LogTailer:
@@ -206,12 +257,110 @@ def _parse_run(run_dir: Path) -> RunInfo | None:
     # Scan per-night subdirectories for status
     _scan_night_logs(run_dir, info)
 
+    # Overlay structured provenance (runs.json) onto the log-derived picture
+    _apply_provenance(info)
+
     # Check for BPS
     pipeline_log = run_dir / "pipeline.log"
     if pipeline_log.exists():
         _detect_bps(pipeline_log, info)
 
     return info
+
+
+# --------------------------------------------------------------------------- #
+# Structured provenance overlay (F-023 / modernization D2)
+# --------------------------------------------------------------------------- #
+
+# Map a provenance record's final_status onto night-grid cell statuses.
+_PROV_STATUS_MAP = {
+    "success": "success",
+    "partial": "partial",
+    "failed": "failed",
+}
+
+
+def _provenance_store_path() -> Path:
+    """Path to ``provenance/runs.json`` at the STIPS repo root.
+
+    Mirrors ``core.provenance.upsert_from_log``'s own location logic (which has
+    no public path helper yet — a ``default_store_path()`` in core is flagged
+    for follow-up).
+    """
+    import stips.core.provenance as _prov
+
+    return Path(_prov.__file__).resolve().parents[5] / "provenance" / "runs.json"
+
+
+def _provenance_science_by_night(repo_path: str) -> dict:
+    """Latest science-step RunRecord per night for ``repo_path``, from runs.json.
+
+    Returns ``{night: RunRecord}`` (latest ``timestamp_end`` wins), or ``{}``
+    when the store is absent/unreadable or has no records for this repo. Uses
+    ``core.provenance.load_store`` — never reimplements the parsing.
+    """
+    if not repo_path:
+        return {}
+    try:
+        from stips.core import provenance
+
+        records = provenance.load_store(_provenance_store_path())
+    except Exception:
+        logger.debug("provenance store unavailable", exc_info=True)
+        return {}
+
+    by_night: dict = {}
+    for rec in records:
+        if rec.repo_path != repo_path or rec.step != "science":
+            continue
+        prev = by_night.get(rec.night)
+        if prev is None or (rec.timestamp_end or "") >= (prev.timestamp_end or ""):
+            by_night[rec.night] = rec
+    return by_night
+
+
+def _apply_provenance(info: RunInfo) -> None:
+    """Overlay ``provenance/runs.json`` onto log-derived run state.
+
+    Structured records win over log inference for the data they carry:
+
+    * per-night science status (except while the run is actively in the
+      science phase — a live "running" cell is never clobbered);
+    * run-level science ok/total counts, but only when provenance covers
+      every night in this run's grid (records are keyed per repo+night, not
+      per run_id, so partial coverage would misstate a run's totals);
+    * the LSST stack version and a target-name fallback.
+
+    Everything provenance does not carry (calibs/DIA/fphot/lightcurve outcomes,
+    bands, live phase) keeps its log-derived value.
+    """
+    prov = _provenance_science_by_night(info.repo)
+    if not prov:
+        return
+
+    covered = 0
+    ok = 0
+    for ns in info.nights:
+        rec = prov.get(ns.night)
+        if rec is None:
+            continue
+        covered += 1
+        if rec.final_status != "failed":
+            ok += 1
+        if ns.science != "running":
+            ns.science = _PROV_STATUS_MAP.get(rec.final_status, ns.science)
+
+    if info.nights and covered == len(info.nights):
+        info.science_total = covered
+        info.science_ok = ok
+
+    latest = max(prov.values(), key=lambda r: r.timestamp_end or "")
+    info.stack_version = (
+        latest.lsst_pipelines_version or latest.lsst_stack_version or ""
+    )
+    if not info.object_name and latest.target:
+        info.object_name = latest.target
+    info.provenance_backed = True
 
 
 def _parse_run_info(path: Path, info: RunInfo) -> None:
@@ -428,6 +577,11 @@ def _scan_night_logs(run_dir: Path, info: RunInfo) -> None:
     failed_dia = set(getattr(info, "_failed_dia", []))
     failed_fphot = set(getattr(info, "_failed_fphot", []))
 
+    # Bands for the per-band DIA/fphot columns: the run's parsed bands, else the
+    # active profile's filters, else the explicit-unknown sentinel — never a
+    # fabricated Nickel r/i default (F-043).
+    grid_bands = info.bands or _profile_bands() or UNKNOWN_BANDS
+
     nights_list = []
     for night in sorted(night_set):
         ns = NightStatus(night=night)
@@ -448,7 +602,7 @@ def _scan_night_logs(run_dir: Path, info: RunInfo) -> None:
         run_done = info.current_phase == Phase.COMPLETE
         dia_dir = run_dir / "dia"
         if dia_dir.is_dir():
-            for band in info.bands or ["r", "i"]:
+            for band in grid_bands:
                 key = f"{night}/{band}"
                 if _has_log(dia_dir, f"{night}_{band}"):
                     ns.dia[band] = "failed" if key in failed_dia else "success"
@@ -459,13 +613,13 @@ def _scan_night_logs(run_dir: Path, info: RunInfo) -> None:
                 else:
                     ns.dia[band] = "pending"
         else:
-            for band in info.bands or ["r", "i"]:
+            for band in grid_bands:
                 ns.dia[band] = "skipped" if run_done else "pending"
 
         # Fphot status per band
         fphot_dir = run_dir / "fphot"
         if fphot_dir.is_dir():
-            for band in info.bands or ["r", "i"]:
+            for band in grid_bands:
                 if _has_log(fphot_dir, f"{night}_{band}"):
                     ns.fphot[band] = "failed" if night in failed_fphot else "success"
                 elif info.current_phase == Phase.FPHOT:
@@ -475,7 +629,7 @@ def _scan_night_logs(run_dir: Path, info: RunInfo) -> None:
                 else:
                     ns.fphot[band] = "pending"
         else:
-            for band in info.bands or ["r", "i"]:
+            for band in grid_bands:
                 ns.fphot[band] = "skipped" if run_done else "pending"
 
         nights_list.append(ns)

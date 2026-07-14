@@ -69,7 +69,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_SCRIPTS_DIR="${SCRIPT_DIR%/utilities}"
 # shellcheck source=/dev/null
 source "$REPO_SCRIPTS_DIR/utilities/repo_paths.sh"
-TESTDATA_NICKEL_DIR="${TESTDATA_NICKEL_DIR:-$REPO_ROOT/packages/testdata}"
+TESTDATA_NICKEL_DIR="${TESTDATA_NICKEL_DIR:-$REPO_ROOT/instruments/nickel/testdata}"
 
 # --------- Activate LSST stack (prefer bash variant) ----------
 if [[ -f "${STACK_DIR}/loadLSST.bash" ]]; then
@@ -124,7 +124,7 @@ fi
 export INSTRUMENT_DIR="${INSTRUMENT_DIR:-${REPO_ROOT}/instruments/nickel}"
 
 # Declare + setup the instrument data package (curated calibrations), if present.
-OBS_NICKEL_DATA_DIR="${REPO_ROOT}/packages/obs_nickel_data"
+OBS_NICKEL_DATA_DIR="${REPO_ROOT}/instruments/nickel/obs_nickel_data"
 if [[ -d "$OBS_NICKEL_DATA_DIR" ]]; then
   eups declare -r "$OBS_NICKEL_DATA_DIR" obs_nickel_data -t current 2>/dev/null || true
   setup obs_nickel_data 2>/dev/null || setup -r "$OBS_NICKEL_DATA_DIR" obs_nickel_data

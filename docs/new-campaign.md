@@ -1,6 +1,6 @@
 # Starting a New Observing Campaign
 
-This guide walks you through setting up NPS for a new transient target (supernova, nova, or other variable source).
+This guide walks you through setting up STIPS for a new transient target (supernova, nova, or other variable source).
 
 ## Overview
 
@@ -74,7 +74,7 @@ env:
   STACK_DIR: "/path/to/lsst_stack"
 
   # Declarative instrument directory (instruments/<name>/)
-  INSTRUMENT_DIR: "/path/to/nickel_processing_suite/instruments/nickel"
+  INSTRUMENT_DIR: "/path/to/stips/instruments/nickel"
 
   # Parent directory containing YYYYMMDD/raw/ subdirectories
   RAW_PARENT_DIR: "/path/to/nickel/raw_data"
@@ -122,24 +122,25 @@ template:
 
 ### Nights Section
 
-Add all observation nights with their available bands:
+List all observation nights as a simple list of `YYYYMMDD` local dates under
+`science:`:
 
 ```yaml
-nights:
-  # Night in YYYYMMDD format (local date at start of night)
-  20230519:
-    r: []  # Empty list = process all visits in this band
-    i: []
-
-  20230521:
-    r: []
-    i: []
-
-  # Can specify individual visit IDs if needed
-  20230525:
-    r: [12345, 12346, 12347]  # Only these visits
-    i: []
+science:
+  nights:
+    # Night in YYYYMMDD format (local date at start of night)
+    - 20230519
+    - 20230521
+    - 20230525
 ```
+
+All bands from your top-level `bands:` are processed for every night. To exclude
+specific bad exposures, don't list them here — use `stips science --bad` (see
+[Exclude Bad Exposures](#exclude-bad-exposures) below).
+
+> The older `nights: {20230519: {r: [], i: []}, ...}` mapping form is still
+> accepted for backward compatibility, but only its night *keys* are read — the
+> per-band/per-visit values are ignored. Prefer the list form above.
 
 ### Options Section
 
@@ -284,17 +285,20 @@ Common refinements:
 
 ### Add More Nights
 
-Edit `nights:` section and re-run. Use `skip_calibs: true` and `skip_science: true` for nights already processed.
+Edit the `science: nights:` list and re-run. Use `skip_calibs: true` and `skip_science: true` for nights already processed.
 
 ### Exclude Bad Exposures
 
-If certain exposures have issues (tracking, clouds, etc.):
+If certain exposures have issues (tracking, clouds, etc.), exclude them by
+exposure ID when processing that night standalone — the `science: nights:` list
+takes whole nights only:
 
-```yaml
-nights:
-  20230519:
-    r: [12345, 12347]  # Explicitly list good visits, excluding 12346
+```bash
+stips -c scripts/config/my_target/pipeline.yaml science 20230519 --bad 12345,12346
 ```
+
+(Exposures whose headers place them far from the target RA/Dec are excluded
+automatically during `stips run`; `--bad` is for the rest.)
 
 ### Try Different Template
 
@@ -324,7 +328,7 @@ configs:
 env:
   REPO: "/data/nickel/2024abc_repo"
   STACK_DIR: "/opt/lsst/stack"
-  INSTRUMENT_DIR: "/home/user/nickel_processing_suite/instruments/nickel"
+  INSTRUMENT_DIR: "/home/user/stips/instruments/nickel"
   RAW_PARENT_DIR: "/data/nickel/raw"
   REFCAT_REPO: "/data/refcats"
 
@@ -337,19 +341,12 @@ template:
   type: ps1
   degrade_seeing: 2.0
 
-nights:
-  20240115:
-    r: []
-    i: []
-  20240118:
-    r: []
-    i: []
-  20240122:
-    r: []
-    i: []
-  20240130:
-    r: []
-    i: []
+science:
+  nights:
+    - 20240115
+    - 20240118
+    - 20240122
+    - 20240130
 
 configs:
   science:
@@ -394,6 +391,8 @@ If running `stips science` standalone, pass `--ra` and `--dec`:
 stips -c scripts/config/my_target/pipeline.yaml science 20230519 \
     --object 2023ixf --ra 210.910750 --dec 54.311694
 ```
+
+If instead the whole run aborts before science with a refcat error, the on-demand Gaia/PS1 fetch failed. In `gaia_ps1` mode `stips run` fails fast with the root cause (no network, missing fetch dependencies, or a southern field with no PS1 coverage) rather than continuing into opaque per-night science failures. Fix the cause, or set `refcat.mode: monster` if the repo already holds reference catalogs.
 
 ### Astrometry failures
 

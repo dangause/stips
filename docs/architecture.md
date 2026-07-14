@@ -116,16 +116,29 @@ instruments/nickel/
 ├── fetch.py               # Optional co-located hook (raw-data fetch)
 ├── camera/
 │   └── nickel.yaml        # Camera geometry (1024×1024 CCD)
-├── pipelines/             # DRP.yaml, DIA.yaml, ForcedPhotRaDec.yaml, ...
-├── configs/               # calibrateImage/, dia/, coadds/
-└── template_metadata.json # Coadd-template bookkeeping
+├── configs/               # Instrument-FITTED science calibration (colorterms.py,
+│                          #   calibrateImage/tuned_configs/, refcats_gaia_ps1.py)
+├── obs_nickel_data/       # Curated calibrations (defect maps) — EUPS data package
+├── template_metadata.json # Coadd-template bookkeeping
+├── README.md
+└── tests/                 # Reference translation/camera golden tests
 ```
+
+Nickel ships **no** `pipelines/` dir — it inherits the framework reference
+pipelines from `packages/obs_stips/instrument_defaults/`. It *does* ship a
+`configs/` dir, but only for its **instrument-fitted** photometric calibration
+(Landolt color terms, `calibrateImage` tunings, the Nickel-band PS1 overlay),
+which is deliberately excluded from the neutral framework tier. Everything else
+(DIA/coadd/skymap tunings, the neutral empty colorterms) is inherited. A fork
+adds its own `instruments/<x>/pipelines/` or `configs/` only to override
+individual files (resolved instrument-dir-first, else framework default); see
+`packages/obs_stips/instrument_defaults/README.md` for the tiering contract.
 
 There are no instrument/translator/formatter subclasses here — `obs_stips` synthesizes those from `profile.py` at import time (see `active.py` above). The instrument and translator quirks that used to live in a `lsst.obs.nickel` package are expressed declaratively via the `InstrumentProfile` fields and `@hook`s in `profile.py`.
 
 ### 4. obs_nickel_data (Curated Calibrations)
 
-A standalone EUPS data package (unaffected by the instrument collapse — it stays a real package, `setup -r packages/obs_nickel_data obs_nickel_data`). Pre-built calibration products following LSST conventions:
+A standalone EUPS data package co-located under the instrument tree at `instruments/nickel/obs_nickel_data` (`setup -r instruments/nickel/obs_nickel_data obs_nickel_data`), resolved at runtime via the profile's `obs_data_package` field. Pre-built calibration products following LSST conventions:
 
 ```
 obs_nickel_data/
@@ -212,7 +225,9 @@ All LSST commands run through `stack.py`:
 def run_with_stack(cmd: list[str], config: Config, **kwargs) -> subprocess.CompletedProcess:
     """Execute command with LSST stack activated."""
     # Sources loadLSST.bash
-    # Sets up lsst_distrib and obs_stips; exports INSTRUMENT_DIR
+    # Sets up lsst_distrib and obs_stips; exports INSTRUMENT_DIR,
+    #   STIPS_DEFAULTS, and STIPS_PS1_BAND_MAP (profile ps1_band_map as JSON,
+    #   read by in-stack pex_config files that must not import the profile)
     # Exports config as environment variables
     # Runs the command
 ```

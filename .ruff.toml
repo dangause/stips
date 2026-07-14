@@ -2,11 +2,28 @@
 target-version = "py312"
 line-length = 110
 
-# Keep vendored/upstream code out of linting.
+# Keep vendored/upstream code out of linting. For the vendored Lick archive we
+# exclude the SERVER subtree but keep the client (lick_archive/client/) — the
+# only part STIPS depends on — lint-visible (F-035). Ruff has no exclude
+# negation, so the server dirs are listed explicitly; a re-import that adds a
+# new server dir must add it here.
 extend-exclude = [
-    "packages/lick_searchable_archive",
+    "instruments/nickel/vendor/lick_searchable_archive/deploy",
+    "instruments/nickel/vendor/lick_searchable_archive/doc",
+    "instruments/nickel/vendor/lick_searchable_archive/frontend",
+    "instruments/nickel/vendor/lick_searchable_archive/scripts",
+    "instruments/nickel/vendor/lick_searchable_archive/test",
+    "instruments/nickel/vendor/lick_searchable_archive/lick_archive/apps",
+    "instruments/nickel/vendor/lick_searchable_archive/lick_archive/authorization",
+    "instruments/nickel/vendor/lick_searchable_archive/lick_archive/config",
+    "instruments/nickel/vendor/lick_searchable_archive/lick_archive/db",
+    "instruments/nickel/vendor/lick_searchable_archive/lick_archive/external",
+    "instruments/nickel/vendor/lick_searchable_archive/lick_archive/job_queue",
+    "instruments/nickel/vendor/lick_searchable_archive/lick_archive/lick_archive_site",
+    "instruments/nickel/vendor/lick_searchable_archive/lick_archive/metadata",
+    "instruments/nickel/vendor/lick_searchable_archive/lick_archive/utils",
     "packages/refcats/upstream",
-    "packages/testdata/upstream",
+    "instruments/nickel/testdata/upstream",
 ]
 force-exclude = true
 

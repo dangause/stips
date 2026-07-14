@@ -46,21 +46,7 @@ from pathlib import Path
 from lsst.daf.butler import Butler
 from lsst.daf.butler.registry import MissingDatasetTypeError
 
-from stips.core.config import load_active_profile
-
-
-def _resolve_instrument(instrument: str | None) -> str:
-    """Resolve the instrument name from a CLI arg or the active profile.
-
-    Stays robust if INSTRUMENT_DIR/profile.py is unavailable (falls back to "Nickel").
-    """
-    if instrument:
-        return instrument
-    try:
-        return load_active_profile().name
-    except Exception:
-        return "Nickel"
-
+from stips.pipeline_tools._profile_resolve import resolve_instrument_name
 
 # ---------------------------------------------------------------------------
 # Columns
@@ -408,7 +394,7 @@ def main():
 
     butler = Butler(args.repo)
 
-    instrument = _resolve_instrument(args.instrument)
+    instrument = resolve_instrument_name(args.instrument)
 
     print(f"[info] querying collection: {args.collection}", file=sys.stderr)
     if args.night:

@@ -1,0 +1,491 @@
+import json
+
+from stips.core.provenance import RunRecord
+
+
+def test_runrecord_roundtrip():
+    rec = RunRecord(
+        repo="extended_objects_repo",
+        repo_path="/x/extended_objects_repo",
+        target="extended_objects",
+        instrument="nickel",
+        night="20230815",
+        step="science",
+        final_status="partial",
+        configs_tried=[
+            {
+                "config": "dense_strict.py",
+                "is_fallback": False,
+                "quanta_succeeded": 14,
+                "quanta_failed": 28,
+            }
+        ],
+        total_exposures=0,
+        successful_exposures=25,
+        output_collection="Nickel/runs/...",
+        timestamp_end="20260313T185937Z",
+    )
+    assert RunRecord.from_dict(rec.to_dict()) == rec
+
+    # key() is stable and identifies a run uniquely
+    assert rec.key() == (
+        "extended_objects_repo",
+        "20230815",
+        "science",
+        "20260313T185937Z",
+    )
+
+
+def test_record_from_log_file(tmp_path):
+    from stips.core.provenance import record_from_log_file
+
+    repo = tmp_path / "lsst" / "data" / "nickel" / "extended_objects_repo"
+    plog_dir = repo / "processing_log"
+    plog_dir.mkdir(parents=True)
+    (plog_dir / "20230815_science.json").write_text(
+        json.dumps(
+            {
+                "night": "20230815",
+                "step": "science",
+                "timestamp": "20260313T185937Z",
+                "configs_tried": [
+                    {
+                        "config": "dense_strict.py",
+                        "is_fallback": False,
+                        "quanta_succeeded": 14,
+                        "quanta_failed": 28,
+                    }
+                ],
+                "final_status": "partial",
+                "output_collection": "Nickel/runs/x",
+                "total_exposures": 0,
+                "successful_exposures": 25,
+            }
+        )
+    )
+    # No instrument passed and no CTIO marker in the path -> explicit "unknown"
+    # sentinel (never silently assumes the reference "nickel" profile).
+    rec = record_from_log_file(plog_dir / "20230815_science.json", repo)
+    assert rec.target == "extended_objects"
+    assert rec.instrument == "unknown"
+    assert rec.night == "20230815"
+    assert rec.final_status == "partial"
+    assert rec.timestamp_end == "20260313T185937Z"
+
+    # An explicit instrument (e.g. from the active profile) is authoritative.
+    rec2 = record_from_log_file(
+        plog_dir / "20230815_science.json", repo, instrument="nickel"
+    )
+    assert rec2.instrument == "nickel"
+
+
+def test_rerun_recipe_and_duration():
+    from stips.core.provenance import build_rerun_recipe, duration_from_stamps
+
+    rec_recipe = build_rerun_recipe(
+        instrument="nickel",
+        step="science",
+        night="20230815",
+        config="dense_strict.py",
+        sha="abc1234",
+    )
+    assert "nickel" in rec_recipe and "science" in rec_recipe
+    assert (
+        "20230815" in rec_recipe
+        and "dense_strict.py" in rec_recipe
+        and "abc1234" in rec_recipe
+    )
+
+    # passing lsst_version embeds it in the recipe
+    recipe_with_env = build_rerun_recipe(
+        instrument="nickel",
+        step="science",
+        night="20230815",
+        config="dense_strict.py",
+        sha="abc1234",
+        lsst_version="lsst-scipipe-12.1.0",
+    )
+    assert "lsst-scipipe-12.1.0" in recipe_with_env
+
+    # duration from matching UTC stamps
+    assert duration_from_stamps("20260313T185500Z", "20260313T185937Z") == 277
+    assert duration_from_stamps(None, "20260313T185937Z") is None
+
+
+def test_upsert_is_idempotent_and_never_removes(tmp_path):
+    from stips.core.provenance import RunRecord, load_store, save_store, upsert_records
+
+    store = tmp_path / "runs.json"
+    a = RunRecord(
+        repo="r1",
+        repo_path="/r1",
+        target="t",
+        instrument="nickel",
+        night="20230815",
+        step="science",
+        final_status="success",
+        timestamp_end="T1",
+    )
+    save_store(store, upsert_records(load_store(store), [a]))
+    save_store(store, upsert_records(load_store(store), [a]))  # again
+    recs = load_store(store)
+    assert len(recs) == 1  # idempotent on key()
+
+    # a record already in the store but not in this batch is preserved
+    b = RunRecord(
+        repo="r2",
+        repo_path="/r2",
+        target="t",
+        instrument="nickel",
+        night="20230816",
+        step="science",
+        final_status="success",
+        timestamp_end="T2",
+    )
+    save_store(store, upsert_records(load_store(store), [b]))
+    assert {r.repo for r in load_store(store)} == {"r1", "r2"}
+
+
+def test_render_markdown_groups_and_totals():
+    from stips.core.provenance import RunRecord, render_markdown
+
+    recs = [
+        RunRecord(
+            repo="r1",
+            repo_path="/r1",
+            target="ixf",
+            instrument="nickel",
+            night="20230815",
+            step="science",
+            final_status="partial",
+            successful_exposures=25,
+            timestamp_end="T1",
+            repo_size_bytes=33_000_000_000,
+            repo_status="present",
+        ),
+        RunRecord(
+            repo="r2",
+            repo_path="/r2",
+            target="ixf",
+            instrument="nickel",
+            night="20230816",
+            step="dia",
+            final_status="success",
+            timestamp_end="T2",
+            repo_status="deleted",
+        ),
+    ]
+    md = render_markdown(recs)
+    assert "## ixf" in md
+    assert "deleted" in md
+    assert (
+        "| night | step | status |" in md.replace("  ", " ").lower()
+        or "night" in md.lower()
+    )
+
+
+def test_sync_end_to_end(tmp_path):
+    from stips.core.provenance import load_store, sync
+
+    root = tmp_path / "nickel"
+    repo = root / "alpha_repo" / "processing_log"
+    repo.mkdir(parents=True)
+    (repo / "20230815_science.json").write_text(
+        json.dumps(
+            {
+                "night": "20230815",
+                "step": "science",
+                "timestamp": "20260313T185937Z",
+                "final_status": "success",
+                "successful_exposures": 10,
+                "configs_tried": [{"config": "dense_strict.py", "is_fallback": False}],
+            }
+        )
+    )
+    out_dir = tmp_path / "provenance"
+    summary = sync(roots=[root], out_dir=out_dir, repo_root=tmp_path, dry_run=False)
+    assert summary["records"] == 1
+    assert (out_dir / "runs.json").exists()
+    assert (out_dir / "RUNS.md").exists()
+    assert load_store(out_dir / "runs.json")[0].target == "alpha"
+
+
+def test_cli_provenance_sync(tmp_path):
+    from click.testing import CliRunner
+    from stips.cli import cli
+
+    root = tmp_path / "nickel"
+    pl = root / "a_repo" / "processing_log"
+    pl.mkdir(parents=True)
+    (pl / "20230815_science.json").write_text(
+        json.dumps(
+            {
+                "night": "20230815",
+                "step": "science",
+                "timestamp": "T",
+                "final_status": "success",
+            }
+        )
+    )
+    out = tmp_path / "provenance"
+    res = CliRunner().invoke(
+        cli,
+        [
+            "provenance",
+            "sync",
+            "--roots",
+            str(root),
+            "--out-dir",
+            str(out),
+            "--repo-root",
+            str(tmp_path),
+        ],
+    )
+    assert res.exit_code == 0, res.output
+    assert (out / "RUNS.md").exists()
+
+
+def test_repro_fields_enriched(tmp_path):
+    """Unit tests for the new environment-reproducibility helpers."""
+    from stips.core.provenance import (
+        RunRecord,
+        build_rerun_recipe,
+        git_describe,
+        lsst_version_from_repo,
+        render_markdown,
+    )
+
+    # git_describe returns None when sha is None — no subprocess needed
+    assert git_describe(tmp_path, None) is None
+
+    # build_rerun_recipe includes lsst version when provided
+    recipe = build_rerun_recipe(
+        instrument="nickel",
+        step="science",
+        night="20230815",
+        config=None,
+        sha="deadbeef12",
+        git_describe="v1.2.3-5-gdeadbeef",
+        lsst_version="lsst-scipipe-12.1.0",
+    )
+    assert "lsst-scipipe-12.1.0" in recipe
+    assert "v1.2.3-5-gdeadbeef" in recipe
+    assert "lsst-scipipe-12.1.0" not in build_rerun_recipe(
+        instrument="nickel", step="science", night="20230815", config=None, sha="abc"
+    )
+
+    # lsst_version_from_repo finds the marker in a file in a tmp dir
+    marker_file = tmp_path / "installed_packages.txt"
+    marker_file.write_text("lsst-scipipe-12.1.0\nsomething-else\n")
+    result = lsst_version_from_repo(tmp_path)
+    assert result == "lsst-scipipe-12.1.0"
+
+    # lsst_version_from_repo returns None for a dir without any marker
+    empty_dir = tmp_path / "empty"
+    empty_dir.mkdir()
+    assert lsst_version_from_repo(empty_dir) is None
+
+    # RunRecord carries the three new fields and round-trips cleanly
+    rec = RunRecord(
+        repo="r1",
+        repo_path="/r1",
+        target="t",
+        instrument="nickel",
+        night="20230815",
+        step="science",
+        final_status="success",
+        stips_git_sha="deadbeef12",
+        stips_git_describe="v1.2.3-5-gdeadbeef",
+        lsst_stack_version="lsst-scipipe-12.1.0",
+        lsst_stack_version_source="repo-scan",
+    )
+    assert RunRecord.from_dict(rec.to_dict()) == rec
+
+    # render_markdown surfaces env column
+    md = render_markdown([rec])
+    assert "env" in md.lower()
+    assert "lsst-scipipe-12.1.0" in md
+    assert "v1.2.3-5-gdeadbeef" in md
+
+
+# --------------------------------------------------------------------------- #
+# F-019: instrument-from-profile, unknown fallback, true pipelines version,
+# config-derived data roots.
+# --------------------------------------------------------------------------- #
+
+
+class _FakeProfile:
+    def __init__(self, name):
+        self.name = name
+
+
+class _FakeConfig:
+    def __init__(self, name=None, repo=None):
+        self.profile = _FakeProfile(name) if name is not None else None
+        self.repo = repo
+
+
+def test_instrument_from_config_uses_profile_name_lowercased():
+    from stips.core.provenance import instrument_from_config
+
+    assert instrument_from_config(_FakeConfig(name="CTIO1m")) == "ctio1m"
+    assert instrument_from_config(_FakeConfig(name="Nickel")) == "nickel"
+    # No profile / empty name -> None (caller falls back to path-sniff/unknown).
+    assert instrument_from_config(_FakeConfig(name=None)) is None
+    assert instrument_from_config(_FakeConfig(name="")) is None
+
+
+def test_instrument_from_path_defaults_to_unknown():
+    from pathlib import Path
+
+    from stips.core.provenance import _instrument_from_path
+
+    # CTIO markers still recognised...
+    assert _instrument_from_path(Path("/x/data_ctio/foo_repo")) == "ctio1m"
+    assert _instrument_from_path(Path("/x/ctio1m/foo_repo")) == "ctio1m"
+    # ...but anything else is the explicit "unknown" sentinel, not "nickel".
+    assert _instrument_from_path(Path("/x/data/nickel/foo_repo")) == "unknown"
+    assert _instrument_from_path(Path("/somewhere/else/foo_repo")) == "unknown"
+
+
+def test_default_roots_precedence(tmp_path, monkeypatch, caplog):
+    import logging
+
+    # 1. STIPS_DATA_ROOTS wins (os.pathsep-separated).
+    import os as _os
+    from pathlib import Path
+
+    from stips.core.provenance import default_roots
+
+    monkeypatch.setenv("STIPS_DATA_ROOTS", f"/a{_os.pathsep}/b")
+    assert default_roots() == [Path("/a"), Path("/b")]
+    assert default_roots(_FakeConfig(repo="/ignored")) == [Path("/a"), Path("/b")]
+
+    # 2. No env, but a config -> repo's parent dir.
+    monkeypatch.delenv("STIPS_DATA_ROOTS", raising=False)
+    repo = tmp_path / "roots" / "my_repo"
+    assert default_roots(_FakeConfig(repo=repo)) == [repo.parent]
+
+    # 3. Neither env nor config -> empty list + a WARNING explaining why.
+    caplog.clear()
+    with caplog.at_level(logging.WARNING):
+        assert default_roots() == []
+    assert any("no data roots" in r.message.lower() for r in caplog.records)
+
+
+def test_record_uses_profile_instrument_and_renders_pipelines_version(tmp_path):
+    """A record built like the live hook: profile instrument + pipelines ver."""
+    from stips.core import provenance as prov
+
+    repo = tmp_path / "ctio_target_repo"
+    plog_dir = repo / "processing_log"
+    plog_dir.mkdir(parents=True)
+    (plog_dir / "20230815_science.json").write_text(
+        json.dumps(
+            {
+                "night": "20230815",
+                "step": "science",
+                "timestamp": "20260313T185937Z",
+                "final_status": "success",
+                "successful_exposures": 3,
+            }
+        )
+    )
+
+    cfg = _FakeConfig(name="CTIO1m", repo=repo)
+    rec = prov.record_from_log_file(
+        plog_dir / "20230815_science.json",
+        repo,
+        instrument=prov.instrument_from_config(cfg),
+    )
+    rec.lsst_pipelines_version = "gf03f954c0e+3d14ea8aaf"
+    assert rec.instrument == "ctio1m"
+
+    # Rendered markdown prefers the true pipelines version over any conda env.
+    rec.lsst_stack_version = "lsst-scipipe-12.1.0"
+    md = prov.render_markdown([rec])
+    assert "gf03f954c0e+3d14ea8aaf" in md
+
+
+def test_old_record_deserializes_without_new_field():
+    """Records written before lsst_pipelines_version existed still load."""
+    from stips.core.provenance import RunRecord
+
+    legacy = {
+        "repo": "r1",
+        "repo_path": "/r1",
+        "target": "t",
+        "instrument": "nickel",
+        "night": "20230815",
+        "step": "science",
+        "final_status": "success",
+        "timestamp_end": "T1",
+        "lsst_stack_version": "lsst-scipipe-12.1.0",
+        # note: no "lsst_pipelines_version" key
+    }
+    rec = RunRecord.from_dict(legacy)
+    assert rec.lsst_pipelines_version is None
+    assert rec.lsst_stack_version == "lsst-scipipe-12.1.0"
+    # round-trips with the new field present-but-None
+    assert "lsst_pipelines_version" in rec.to_dict()
+    assert RunRecord.from_dict(rec.to_dict()) == rec
+
+
+def test_stack_pipelines_version_parses_snippet(monkeypatch):
+    """stack_pipelines_version returns the version from the in-stack JSON."""
+    from stips.core import stack
+
+    monkeypatch.setattr(
+        stack,
+        "run_butler_python_json",
+        lambda script, config: {"version": "gf03f954c0e+3d14ea8aaf"},
+    )
+    assert stack.stack_pipelines_version(object()) == "gf03f954c0e+3d14ea8aaf"
+
+    # Snippet failure (None) or empty version -> None, not a crash.
+    monkeypatch.setattr(stack, "run_butler_python_json", lambda script, config: None)
+    assert stack.stack_pipelines_version(object()) is None
+    monkeypatch.setattr(
+        stack, "run_butler_python_json", lambda script, config: {"version": None}
+    )
+    assert stack.stack_pipelines_version(object()) is None
+
+
+def test_sync_preserves_prior_pipelines_version(tmp_path):
+    """A re-scan must not clobber a live-captured pipelines version."""
+    from stips.core.provenance import RunRecord, load_store, save_store, sync
+
+    root = tmp_path / "data"
+    repo = root / "alpha_repo" / "processing_log"
+    repo.mkdir(parents=True)
+    (repo / "20230815_science.json").write_text(
+        json.dumps(
+            {
+                "night": "20230815",
+                "step": "science",
+                "timestamp": "20260313T185937Z",
+                "final_status": "success",
+            }
+        )
+    )
+    out_dir = tmp_path / "provenance"
+    out_dir.mkdir()
+
+    # Seed the store as if a live upsert had recorded the pipelines version.
+    seeded = RunRecord(
+        repo="alpha_repo",
+        repo_path=str(root / "alpha_repo"),
+        target="alpha",
+        instrument="unknown",
+        night="20230815",
+        step="science",
+        final_status="success",
+        timestamp_end="20260313T185937Z",
+        lsst_pipelines_version="gf03f954c0e+3d14ea8aaf",
+    )
+    save_store(out_dir / "runs.json", [seeded])
+
+    sync(roots=[root], out_dir=out_dir, repo_root=tmp_path, dry_run=False)
+    recs = load_store(out_dir / "runs.json")
+    assert len(recs) == 1
+    assert recs[0].lsst_pipelines_version == "gf03f954c0e+3d14ea8aaf"

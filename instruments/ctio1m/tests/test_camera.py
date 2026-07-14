@@ -17,10 +17,23 @@ machinery (``lsst.obs.stips.active.Instrument`` synthesized from
 has exactly one detector with FOUR amplifiers.
 """
 
+import functools
 import unittest
+from pathlib import Path
 
-import lsst.utils.tests
-from conftest import active_instrument_dir
+import pytest
+
+pytest.importorskip("lsst.utils.tests")
+
+import lsst.utils.tests  # noqa: E402
+from stips.testing.instrument_contract import (  # noqa: E402
+    active_instrument_dir as _active_instrument_dir,
+)
+
+# instruments/ctio1m/tests/test_camera.py -> parents[1] == instruments/ctio1m
+active_instrument_dir = functools.partial(
+    _active_instrument_dir, Path(__file__).resolve().parents[1]
+)
 
 
 class TestY4KCamCamera(unittest.TestCase):

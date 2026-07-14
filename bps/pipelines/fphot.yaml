@@ -1,9 +1,9 @@
-# Nickel Processing Suite - Forced Photometry BPS Pipeline
+# Small Telescope Image Processing Suite - Forced Photometry BPS Pipeline
 #
 # Perform forced photometry at specified coordinates.
 #
 # Usage:
-#   nickel bps submit fphot 20230519 --site slurm
+#   stips bps submit fphot 20230519 --site slurm
 #
 # Variables:
 #   {night}             - Observing night (YYYYMMDD)
@@ -11,6 +11,7 @@
 #   {instrument_dir}    - Path to the declarative instrument package
 #   {stips_defaults}    - Path to framework reference pipelines/configs
 #   {coord_collection}  - Collection containing coordinate table
+#   {payload_prefix}    - BPS payload name prefix (active profile name)
 
 # Inherit site-specific settings
 includeConfigs:
@@ -20,7 +21,7 @@ includeConfigs:
 # Payload Configuration
 # =============================================================================
 payload:
-  payloadName: nickel-fphot-{night}
+  payloadName: "{payload_prefix}-fphot-{night}"
   butlerConfig: "{repo}"
 
   # Input collections (comma-separated, no spaces)

@@ -7,11 +7,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from stips.core import butler_query
 from stips.core.pipeline import (
     CollectionNames,
+    PipetaskStage,
+    ensure_instrument_registered,
     get_raw_dir,
     isr_config_args,
     night_to_date_range,
+    redefine_chain,
     validate_night,
 )
 from stips.core.stack import run_butler
@@ -27,7 +31,10 @@ class CalibsResult:
     """Result of nightly calibration processing.
 
     Attributes:
-        success: Whether at least one of bias/flat succeeded.
+        success: True iff at least one of bias/flat was verified to have
+            produced (and certified) calibration products. A pipeline that
+            exits non-zero but still built some products counts as a partial
+            success; zero products for both means failure.
         night: Observing night (YYYYMMDD).
         raw_run: Butler RUN collection for ingested raw frames.
         calib_chain: Unified calibration CHAINED collection.
@@ -70,12 +77,7 @@ def write_curated_calibrations(
     # Ingest raws for this night first (needed for write-curated-calibrations)
     raw_dir = get_raw_dir(config, night)
     if raw_dir.exists():
-        run_butler(
-            ["register-instrument", repo, prof.instrument_class],
-            config,
-            check=False,
-            log_file=log_file,
-        )
+        ensure_instrument_registered(config, log_file)
         run_butler(
             [
                 "ingest-raws",
@@ -92,6 +94,28 @@ def write_curated_calibrations(
         )
         run_butler(["define-visits", repo, prof.name], config, log_file=log_file)
 
+    _write_curated_and_chain(night, config, cols, log_file=log_file)
+
+
+def _write_curated_and_chain(
+    night: str,
+    config: Config,
+    cols: CollectionNames,
+    *,
+    log_file: Path | None = None,
+) -> None:
+    """Write curated calibs (defects), build+certify declarative crosstalk, chain.
+
+    The curated chain is redefined to ``[crosstalk_calib, curated_run]`` when the
+    profile declares crosstalk (so ISR resolves the ``crosstalk`` prerequisite),
+    otherwise just ``[curated_run]``. Shared by ``write_curated_calibrations``
+    (orchestrator one-time) and standalone ``run_calibs``.
+    """
+    from stips.core.crosstalk import build_and_certify_crosstalk
+
+    prof = config.require_profile()
+    repo = str(config.repo)
+
     run_butler(
         [
             "write-curated-calibrations",
@@ -104,12 +128,21 @@ def write_curated_calibrations(
         config,
         log_file=log_file,
     )
+
+    curated_children = [cols.curated_run]
+    if prof.crosstalk is not None:
+        ct_result = build_and_certify_crosstalk(night, config, log_file=log_file)
+        if ct_result.success:
+            curated_children = [cols.crosstalk_calib, cols.curated_run]
+        else:
+            log.warning("Crosstalk calib not certified: %s", ct_result.error)
+
     run_butler(
         [
             "collection-chain",
             repo,
             cols.curated_chain,
-            cols.curated_run,
+            *curated_children,
             "--mode",
             "redefine",
         ],
@@ -183,15 +216,14 @@ def run(
 
     try:
         # Register instrument (idempotent)
-        run_butler(
-            ["register-instrument", repo, prof.instrument_class],
-            config,
-            check=False,
-            log_file=log_file,
-        )
+        ensure_instrument_registered(config, log_file)
 
-        # Ingest raws
-        run_butler(
+        # Ingest raws. check=False because a re-run of an already-ingested
+        # night legitimately returns non-zero (the raw datasets already exist).
+        # But that same non-zero also covers real failures (disk full,
+        # permissions, corrupt FITS), so on failure we verify that raws for the
+        # night are actually present before continuing.
+        ingest_result = run_butler(
             [
                 "ingest-raws",
                 repo,
@@ -203,38 +235,41 @@ def run(
             ],
             config,
             check=False,  # May fail if already ingested
+            capture_output=True,
             log_file=log_file,
         )
+        if ingest_result.returncode != 0:
+            stderr = (ingest_result.stderr or "").strip()
+            log.warning(
+                "ingest-raws returned %s for %s: %s",
+                ingest_result.returncode,
+                night,
+                stderr,
+            )
+            raw_pattern = f"{cols.prefix}/raw/{night}/*"
+            raw_count = butler_query.count_datasets(config, "raw", raw_pattern) or 0
+            if raw_count == 0:
+                return CalibsResult(
+                    success=False,
+                    night=night,
+                    raw_run=cols.raw_run,
+                    calib_chain=cols.calib_chain,
+                    cp_bias=cols.cp_bias,
+                    cp_flat=cols.cp_flat,
+                    error=(
+                        f"ingest-raws failed for {night} and no raws are present "
+                        f"for the night: {stderr}"
+                    ),
+                )
 
         # Define visits
         run_butler(["define-visits", repo, prof.name], config, log_file=log_file)
 
         # Write curated calibrations (skip if already done by orchestrator)
         if not skip_curated:
-            run_butler(
-                [
-                    "write-curated-calibrations",
-                    repo,
-                    prof.name,
-                    cols.raw_run,
-                    "--collection",
-                    cols.curated_run,
-                ],
-                config,
-                log_file=log_file,
-            )
-            run_butler(
-                [
-                    "collection-chain",
-                    repo,
-                    cols.curated_chain,
-                    cols.curated_run,
-                    "--mode",
-                    "redefine",
-                ],
-                config,
-                log_file=log_file,
-            )
+            _write_curated_and_chain(night, config, cols, log_file=log_file)
+
+        begin_iso, end_iso = night_to_date_range(night)
 
         # Build bias
         qg_bias = config.repo / "qgraphs" / f"cp_bias_{night}_{cols.run_ts}.qg"
@@ -242,45 +277,27 @@ def run(
         bias_ok = False
 
         try:
-            executor.run_pipetask(
-                [
-                    "qgraph",
-                    "-b",
-                    repo,
-                    "-p",
-                    str(config.resolve_pipeline("CpBias.yaml")),
-                    "-i",
-                    f"{cols.curated_chain},{cols.raw_run}",
-                    "-o",
-                    cols.cp_bias,
-                    "--output-run",
-                    cols.cp_bias_run,
-                    "--save-qgraph",
-                    str(qg_bias),
-                    "-d",
-                    f"instrument='{prof.name}' AND exposure.observation_type='bias'",
-                ]
-                + isr_config_args(prof, "cpBiasIsr")
-                + (
-                    ["--qgraph-datastore-records"]
-                    if executor.needs_datastore_records
-                    else []
+            bias_stage = PipetaskStage(
+                repo=repo,
+                pipeline=str(config.resolve_pipeline("CpBias.yaml")),
+                inputs=f"{cols.curated_chain},{cols.raw_run}",
+                output_parent=cols.cp_bias,
+                output_run=cols.cp_bias_run,
+                qgraph_path=str(qg_bias),
+                data_query=(
+                    f"instrument='{prof.name}' " "AND exposure.observation_type='bias'"
                 ),
+                post_query_args=isr_config_args(prof, "cpBiasIsr"),
+                jobs=jobs,
+            )
+            executor.run_pipetask(
+                bias_stage.qgraph_args(),
                 config,
                 log_file=log_file,
             )
 
             result = executor.run_pipetask(
-                [
-                    "run",
-                    "-b",
-                    repo,
-                    "-g",
-                    str(qg_bias),
-                    "-j",
-                    str(jobs),
-                    "--register-dataset-types",
-                ],
+                bias_stage.run_args(),
                 config,
                 check=False,
                 log_file=log_file,
@@ -290,95 +307,79 @@ def run(
                 log.warning(
                     f"Bias pipeline had partial failures for {night} "
                     f"(exit code {result.returncode}). "
-                    "Certifying successfully-built products."
+                    "Verifying any successfully-built products."
                 )
-            bias_ok = True
+
+            # A non-zero return code (or even a zero one, when every quantum
+            # failed) can leave an empty RUN. Verify the pipeline actually wrote
+            # bias products before chaining + certifying: zero products means
+            # this night's bias did NOT succeed, regardless of exit code.
+            bias_count = (
+                butler_query.count_datasets(config, "bias", cols.cp_bias_run) or 0
+            )
+            if bias_count > 0:
+                redefine_chain(
+                    config, cols.cp_bias, cols.cp_bias_run, log_file=log_file
+                )
+
+                # Certify bias (check=False to handle already-certified case)
+                run_butler(
+                    [
+                        "certify-calibrations",
+                        repo,
+                        cols.cp_bias,
+                        cols.calib_out,
+                        "bias",
+                        "--begin-date",
+                        begin_iso,
+                        "--end-date",
+                        end_iso,
+                    ],
+                    config,
+                    check=False,
+                    log_file=log_file,
+                )
+                bias_ok = True
+            else:
+                log.warning(
+                    f"Bias pipeline produced no bias products for {night}; "
+                    "not certifying."
+                )
         except Exception as e:
             log.warning(f"Bias qgraph/setup failed for {night}: {e}")
-
-        if bias_ok:
-            run_butler(
-                [
-                    "collection-chain",
-                    repo,
-                    cols.cp_bias,
-                    cols.cp_bias_run,
-                    "--mode",
-                    "redefine",
-                ],
-                config,
-                log_file=log_file,
-            )
-
-            # Certify bias (check=False to handle already-certified case)
-            begin_iso, end_iso = night_to_date_range(night)
-            run_butler(
-                [
-                    "certify-calibrations",
-                    repo,
-                    cols.cp_bias,
-                    cols.calib_out,
-                    "bias",
-                    "--begin-date",
-                    begin_iso,
-                    "--end-date",
-                    end_iso,
-                ],
-                config,
-                check=False,
-                log_file=log_file,
-            )
-        else:
-            begin_iso, end_iso = night_to_date_range(night)
 
         # Build flat (continue even if bias had issues — certify what succeeds)
         qg_flat = config.repo / "qgraphs" / f"cp_flat_{night}_{cols.run_ts}.qg"
         flat_ok = False
 
         try:
-            executor.run_pipetask(
-                [
-                    "qgraph",
-                    "-b",
-                    repo,
-                    "-p",
-                    str(config.resolve_pipeline("CpFlat.yaml")),
-                    "-i",
-                    f"{cols.curated_chain},{cols.raw_run},{cols.calib_out},{cols.cp_bias_run}",
-                    "-o",
-                    cols.cp_flat,
-                    "--output-run",
-                    cols.cp_flat_run,
-                    "--save-qgraph",
-                    str(qg_flat),
-                    "-d",
-                    f"instrument='{prof.name}' AND exposure.observation_type='flat'",
+            flat_stage = PipetaskStage(
+                repo=repo,
+                pipeline=str(config.resolve_pipeline("CpFlat.yaml")),
+                inputs=f"{cols.curated_chain},{cols.raw_run},{cols.calib_out},{cols.cp_bias_run}",
+                output_parent=cols.cp_flat,
+                output_run=cols.cp_flat_run,
+                qgraph_path=str(qg_flat),
+                data_query=(
+                    f"instrument='{prof.name}' " "AND exposure.observation_type='flat'"
+                ),
+                post_query_args=[
                     "-c",
                     "cpFlatIsr:doDark=False",
                     "-c",
                     "cpFlatIsr:doOverscan=True",
                 ]
-                + isr_config_args(prof, "cpFlatIsr")
-                + (
-                    ["--qgraph-datastore-records"]
-                    if executor.needs_datastore_records
-                    else []
-                ),
+                + isr_config_args(prof, "cpFlatIsr"),
+                jobs=jobs,
+            )
+            executor.run_pipetask(
+                flat_stage.qgraph_args(),
                 config,
                 log_file=log_file,
             )
 
             result = executor.run_pipetask(
-                [
-                    "run",
-                    "-b",
-                    repo,
-                    "-g",
-                    str(qg_flat),
-                    "-j",
-                    str(jobs),
-                    "--register-dataset-types",
-                ],
+                flat_stage.run_args(),
                 config,
                 check=False,
                 log_file=log_file,
@@ -388,43 +389,44 @@ def run(
                 log.warning(
                     f"Flat pipeline had partial failures for {night} "
                     f"(exit code {result.returncode}). "
-                    "Certifying successfully-built products."
+                    "Verifying any successfully-built products."
                 )
-            flat_ok = True
+
+            # Verify the pipeline actually wrote flat products before chaining +
+            # certifying; zero products means this night's flat did NOT succeed.
+            flat_count = (
+                butler_query.count_datasets(config, "flat", cols.cp_flat_run) or 0
+            )
+            if flat_count > 0:
+                redefine_chain(
+                    config, cols.cp_flat, cols.cp_flat_run, log_file=log_file
+                )
+
+                # Certify flat
+                run_butler(
+                    [
+                        "certify-calibrations",
+                        repo,
+                        cols.cp_flat,
+                        cols.calib_out,
+                        "flat",
+                        "--begin-date",
+                        begin_iso,
+                        "--end-date",
+                        end_iso,
+                    ],
+                    config,
+                    check=False,
+                    log_file=log_file,
+                )
+                flat_ok = True
+            else:
+                log.warning(
+                    f"Flat pipeline produced no flat products for {night}; "
+                    "not certifying."
+                )
         except Exception as e:
             log.warning(f"Flat qgraph/setup failed for {night}: {e}")
-
-        if flat_ok:
-            run_butler(
-                [
-                    "collection-chain",
-                    repo,
-                    cols.cp_flat,
-                    cols.cp_flat_run,
-                    "--mode",
-                    "redefine",
-                ],
-                config,
-                log_file=log_file,
-            )
-
-            # Certify flat
-            run_butler(
-                [
-                    "certify-calibrations",
-                    repo,
-                    cols.cp_flat,
-                    cols.calib_out,
-                    "flat",
-                    "--begin-date",
-                    begin_iso,
-                    "--end-date",
-                    end_iso,
-                ],
-                config,
-                check=False,
-                log_file=log_file,
-            )
 
         # Always update unified calib chain (certify what we have)
         run_butler(
@@ -450,7 +452,10 @@ def run(
                 calib_chain=cols.calib_chain,
                 cp_bias=cols.cp_bias,
                 cp_flat=cols.cp_flat,
-                error=f"Both bias and flat pipelines failed for {night}",
+                error=(
+                    f"Neither bias nor flat produced verified calibration "
+                    f"products for {night}"
+                ),
             )
 
         return CalibsResult(

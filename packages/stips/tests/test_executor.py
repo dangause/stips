@@ -52,6 +52,55 @@ class TestLocalExecutor:
             ["run", "-b", "/repo"], mock_config, log_file=log_path, check=False
         )
 
+    def test_local_does_not_inject_datastore_records(self):
+        # LocalExecutor.needs_datastore_records is False -> flag never added
+        from stips.core.executor import LocalExecutor
+
+        with patch(
+            "stips.core.executor.run_pipetask",
+            return_value=subprocess.CompletedProcess(args=["pipetask"], returncode=0),
+        ) as mrp:
+            LocalExecutor().run_pipetask(
+                ["qgraph", "-b", "/repo"], MagicMock(), check=False
+            )
+        passed_args = mrp.call_args[0][0]
+        assert "--qgraph-datastore-records" not in passed_args
+
+
+class TestWithDatastoreRecords:
+    def test_appends_for_qgraph_when_needed(self):
+        from stips.core.executor import _with_datastore_records
+
+        out = _with_datastore_records(["qgraph", "-b", "/r"], True)
+        assert out == ["qgraph", "-b", "/r", "--qgraph-datastore-records"]
+
+    def test_noop_when_not_needed(self):
+        from stips.core.executor import _with_datastore_records
+
+        assert _with_datastore_records(["qgraph", "-b"], False) == ["qgraph", "-b"]
+
+    def test_noop_for_non_qgraph(self):
+        from stips.core.executor import _with_datastore_records
+
+        assert _with_datastore_records(["run", "-g", "x"], True) == ["run", "-g", "x"]
+
+    def test_idempotent(self):
+        from stips.core.executor import _with_datastore_records
+
+        args = ["qgraph", "--qgraph-datastore-records"]
+        assert _with_datastore_records(args, True) == args
+
+    def test_bps_injects_on_qgraph(self):
+        from stips.core.executor import BPSExecutor
+
+        with patch(
+            "stips.core.executor.run_pipetask",
+            return_value=subprocess.CompletedProcess(args=["pipetask"], returncode=0),
+        ) as mrp:
+            # qgraph subcommand runs locally even under BPS; flag must be injected
+            BPSExecutor().run_pipetask(["qgraph", "-b", "/r"], MagicMock(), check=False)
+        assert "--qgraph-datastore-records" in mrp.call_args[0][0]
+
 
 class TestParsePipetaskArgs:
     def test_parses_qgraph_file(self):
@@ -162,8 +211,6 @@ class TestTranslateBpsResult:
         status = {"state": "SUCCEEDED", "succeeded": 10, "failed": 0}
         result = _translate_bps_to_completed_process(status)
         assert result.returncode == 0
-        assert "10" in result.stdout
-        assert "0 failed" in result.stdout
 
     def test_failed_maps_to_returncode_one(self):
         from stips.core.executor import (
@@ -173,8 +220,6 @@ class TestTranslateBpsResult:
         status = {"state": "FAILED", "succeeded": 7, "failed": 3}
         result = _translate_bps_to_completed_process(status)
         assert result.returncode == 1
-        assert "7" in result.stdout
-        assert "3 failed" in result.stdout
 
     def test_unknown_maps_to_returncode_one(self):
         from stips.core.executor import (
@@ -185,16 +230,30 @@ class TestTranslateBpsResult:
         result = _translate_bps_to_completed_process(status)
         assert result.returncode == 1
 
-    def test_stdout_matches_quanta_summary_format(self):
-        """Verify stdout format is parseable by pipeline.parse_quanta_summary()."""
-        from stips.core.executor import (
-            _translate_bps_to_completed_process,
+    def test_counts_written_to_summary_file_not_fabricated_stdout(self, tmp_path):
+        """F-028: counts flow through the structured --summary channel.
+
+        science.py reads quanta counts via quanta_report.parse_summary_file, not
+        by regex-parsing stdout. The translated result must populate that file,
+        and its stdout must NOT match the old fabricated pattern that the real
+        quanta regex never accepted.
+        """
+        from stips.core import quanta_report
+        from stips.core.executor import _translate_bps_to_completed_process
+        from stips.core.pipeline import parse_quanta_summary
+
+        summary_file = tmp_path / "science.summary.json"
+        status = {"state": "FAILED", "succeeded": 5, "failed": 2}
+        result = _translate_bps_to_completed_process(
+            status, summary_file=str(summary_file)
         )
 
-        status = {"state": "FAILED", "succeeded": 5, "failed": 2}
-        result = _translate_bps_to_completed_process(status)
-        assert "5 quanta successfully" in result.stdout
-        assert "2 failed" in result.stdout
+        # Structured channel carries the real counts.
+        assert quanta_report.parse_summary_file(summary_file) == (5, 2)
+        # No dead-link fabricated stdout: the old "out of total" string is gone,
+        # and the human-readable regex finds nothing to parse.
+        assert "out of total" not in result.stdout
+        assert parse_quanta_summary(result.stdout) == (0, 0)
 
 
 class TestBPSExecutor:
@@ -220,11 +279,16 @@ class TestBPSExecutor:
 
         assert result.returncode == 0
 
-    def test_run_submits_to_bps(self):
-        """Pipeline execution routes through BPS submit + poll."""
+    def test_run_submits_to_bps(self, tmp_path):
+        """Pipeline execution routes through BPS submit + poll.
+
+        The async poll resolves SUCCEEDED and the quanta counts are conveyed via
+        the structured --summary file (F-028), not a fabricated stdout string.
+        """
+        from stips.core import quanta_report
         from stips.core.executor import BPSExecutor
 
-        executor = BPSExecutor(site="local", poll_interval=0.01, timeout=1.0)
+        executor = BPSExecutor(site="htcondor", poll_interval=0.01, timeout=1.0)
         mock_config = MagicMock()
         mock_config.repo = Path("/repo")
         mock_config.instrument_dir = Path("/obs_nickel")
@@ -244,23 +308,126 @@ class TestBPSExecutor:
         )
         mock_status = {"success": True, "output": succeeded_report}
 
-        with patch("stips.core.executor.bps") as mock_bps_mod:
+        summary_file = tmp_path / "science.summary.json"
+
+        with patch("stips.core.executor.bps") as mock_bps_mod, patch(
+            "stips.core.executor.bps_report"
+        ) as mock_report_mod:
             mock_bps_mod.submit.return_value = mock_bps_result
             mock_bps_mod.status.return_value = mock_status
+            mock_bps_mod.is_synchronous_site.return_value = False
             mock_bps_mod.BPSConfig = MagicMock()
             mock_bps_mod.render_bps_config = MagicMock(
                 return_value=Path("/rendered.yaml")
             )
+            # Force the text-table fallback path (structured API "unavailable").
+            mock_report_mod.summary_for_run.return_value = None
 
             result = executor.run_pipetask(
-                ["run", "-b", "/repo", "-g", "/path/to/graph.qg", "-j", "4"],
+                [
+                    "run",
+                    "-b",
+                    "/repo",
+                    "-g",
+                    "/path/to/graph.qg",
+                    "-j",
+                    "4",
+                    "--summary",
+                    str(summary_file),
+                ],
                 mock_config,
                 capture_output=True,
                 check=False,
             )
 
         assert result.returncode == 0
-        assert "4 quanta successfully" in result.stdout
+        assert quanta_report.parse_summary_file(summary_file) == (4, 0)
+
+    def test_sync_site_no_run_id_is_legitimate(self, tmp_path, caplog):
+        """Parsl (synchronous) site with no run id: expected, not degraded.
+
+        Verifies the collection-probe path and that no degraded WARNING naming
+        WMS polling is emitted, and that counts flow through the --summary file.
+        """
+        import logging
+
+        from stips.core import quanta_report
+        from stips.core.executor import BPSExecutor
+
+        executor = BPSExecutor(site="local", poll_interval=0.01, timeout=1.0)
+        mock_config = MagicMock()
+        summary_file = tmp_path / "s.summary.json"
+
+        mock_bps_result = MagicMock()
+        mock_bps_result.success = True
+        mock_bps_result.run_id = None
+        mock_bps_result.stderr = ""
+
+        with patch("stips.core.executor.bps") as mock_bps_mod, patch(
+            "stips.core.executor._check_output_collection", return_value=True
+        ), caplog.at_level(logging.WARNING, logger="stips.core.executor"):
+            mock_bps_mod.submit.return_value = mock_bps_result
+            mock_bps_mod.is_synchronous_site.return_value = True
+            mock_bps_mod.BPSConfig = MagicMock()
+
+            result = executor.run_pipetask(
+                [
+                    "run",
+                    "-b",
+                    "/repo",
+                    "-g",
+                    "/g.qg",
+                    "--output-run",
+                    "r/run",
+                    "--summary",
+                    str(summary_file),
+                ],
+                mock_config,
+                check=False,
+            )
+
+        assert result.returncode == 0
+        assert quanta_report.parse_summary_file(summary_file) == (1, 0)
+        # No "cannot poll WMS" degraded warning on the legitimate sync path.
+        assert not any(
+            "cannot poll wms" in r.getMessage().lower() for r in caplog.records
+        )
+
+    def test_async_site_no_run_id_is_degraded(self, tmp_path, caplog):
+        """HTCondor (async) site with no run id: loud degraded mode, not silent.
+
+        This is F-015: previously misclassified as a finished synchronous
+        backend. Now it warns that WMS polling is unavailable and names the
+        output-collection-probe fallback.
+        """
+        import logging
+
+        from stips.core.executor import BPSExecutor
+
+        executor = BPSExecutor(site="htcondor", poll_interval=0.01, timeout=1.0)
+        mock_config = MagicMock()
+
+        mock_bps_result = MagicMock()
+        mock_bps_result.success = True
+        mock_bps_result.run_id = None
+        mock_bps_result.stderr = ""
+
+        with patch("stips.core.executor.bps") as mock_bps_mod, patch(
+            "stips.core.executor._check_output_collection", return_value=False
+        ), caplog.at_level(logging.WARNING, logger="stips.core.executor"):
+            mock_bps_mod.submit.return_value = mock_bps_result
+            mock_bps_mod.is_synchronous_site.return_value = False
+            mock_bps_mod.BPSConfig = MagicMock()
+
+            result = executor.run_pipetask(
+                ["run", "-b", "/repo", "-g", "/g.qg", "--output-run", "r/run"],
+                mock_config,
+                check=False,
+            )
+
+        assert result.returncode == 1
+        # Loud, explicit about the consequence.
+        assert any("cannot poll wms" in r.getMessage().lower() for r in caplog.records)
 
     def test_run_returns_failure_on_bps_submit_error(self):
         """If BPS submit fails, return non-zero CompletedProcess."""
@@ -312,13 +479,16 @@ class TestBPSExecutor:
         )
         mock_status = {"success": True, "output": running_report}
 
-        with patch("stips.core.executor.bps") as mock_bps_mod:
+        with patch("stips.core.executor.bps") as mock_bps_mod, patch(
+            "stips.core.executor.bps_report"
+        ) as mock_report_mod:
             mock_bps_mod.submit.return_value = mock_bps_result
             mock_bps_mod.status.return_value = mock_status
             mock_bps_mod.BPSConfig = MagicMock()
             mock_bps_mod.render_bps_config = MagicMock(
                 return_value=Path("/rendered.yaml")
             )
+            mock_report_mod.summary_for_run.return_value = None
 
             result = executor.run_pipetask(
                 ["run", "-b", "/repo", "-g", "/graph.qg"],
@@ -366,6 +536,65 @@ class TestExecutorWiring:
 
         sig = inspect.signature(fphot.run)
         assert "executor" in sig.parameters
+
+    def test_coadd_accepts_executor(self):
+        # F-048 item 6: coadd must accept an injectable executor like its peers
+        # (previously it bypassed it via module-level run_pipetask, so it could
+        # not run under the BPS executor).
+        import inspect
+
+        from stips.core import coadd
+
+        sig = inspect.signature(coadd.run)
+        assert "executor" in sig.parameters
+
+    def test_coadd_uses_injected_executor_for_qgraph_and_run(
+        self, monkeypatch, tmp_path
+    ):
+        # The qgraph + run pipetask calls must go through the injected executor,
+        # not a module-level run_pipetask.
+        from types import SimpleNamespace
+
+        from stips.core import coadd
+        from stips.core import pipeline as pipeline_mod
+
+        seen = []
+
+        class _Rec:
+            def run_pipetask(self, args, config, **kw):
+                seen.append(args[0])
+                return SimpleNamespace(returncode=0)
+
+        prof = SimpleNamespace(
+            name="Nickel",
+            collection_prefix="Nickel",
+            skymap_name="x",
+            skymap_collection="skymaps/x",
+            instrument_class="lsst.obs.stips.active.Instrument",
+        )
+        config = SimpleNamespace(
+            repo=tmp_path,
+            require_profile=lambda: prof,
+            resolve_pipeline=lambda name: "DRP.yaml",
+        )
+        monkeypatch.setattr(pipeline_mod, "run_butler", lambda *a, **k: None)
+        monkeypatch.setattr(
+            coadd,
+            "find_science_collections_for_nights",
+            lambda nights, band, config: ["Nickel/runs/N/processCcd/ts"],
+        )
+        monkeypatch.setattr(
+            coadd, "find_degenerate_wcs_visits", lambda band, colls, config: []
+        )
+        monkeypatch.setattr(coadd, "generate_run_timestamp", lambda: "TS")
+        monkeypatch.setattr(coadd.butler_query, "has_datasets", lambda *a, **k: True)
+        monkeypatch.setattr(coadd.butler_query, "list_collections", lambda *a, **k: [])
+
+        result = coadd.run(
+            ["20230101"], "r", config, tract=100, overwrite=True, executor=_Rec()
+        )
+        assert result.success is True
+        assert seen == ["qgraph", "run"]
 
 
 class TestDispatchConcurrent:

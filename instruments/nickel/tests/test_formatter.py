@@ -3,12 +3,16 @@ import os
 import unittest
 from pathlib import Path
 
-import lsst.afw.fits
-import lsst.afw.geom
-import lsst.afw.image
-import lsst.utils
-import lsst.utils.tests
-from lsst.daf.butler import (
+import pytest
+
+pytest.importorskip("lsst.afw.fits")
+
+import lsst.afw.fits  # noqa: E402
+import lsst.afw.geom  # noqa: E402
+import lsst.afw.image  # noqa: E402
+import lsst.utils  # noqa: E402
+import lsst.utils.tests  # noqa: E402
+from lsst.daf.butler import (  # noqa: E402
     DataCoordinate,
     DatasetRef,
     DatasetType,

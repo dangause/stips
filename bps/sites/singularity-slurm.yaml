@@ -1,4 +1,4 @@
-# Nickel Processing Suite - Singularity/Apptainer + Slurm Site Configuration
+# Small Telescope Image Processing Suite - Singularity/Apptainer + Slurm Site Configuration
 #
 # BPS configuration for HPC clusters where compute nodes run inside
 # Singularity/Apptainer containers. The commandPrefix wraps each pipetask
@@ -6,7 +6,7 @@
 # nodes without native installation.
 #
 # Two-layer execution model:
-#   1. Login node: User runs `apptainer exec nps.sif nickel run config.yaml`
+#   1. Login node: User runs `apptainer exec stips.sif nickel run config.yaml`
 #      The orchestrator runs inside the container where the LSST stack exists.
 #   2. Compute nodes: BPS/Parsl submits Slurm jobs. The commandPrefix below
 #      wraps each `pipetask` call in `apptainer exec` so compute-node commands
@@ -73,11 +73,11 @@ site:
     # are all bind-mounted into the container so pipetask can access them.
     commandPrefix: |
       module load apptainer 2>/dev/null || module load singularity 2>/dev/null || true
-      _NPS_IMAGE="{container_image}"
-      _NPS_BIND="{repo},{raw_parent_dir},{refcat_repo},{run_dir}"
+      _STIPS_IMAGE="{container_image}"
+      _STIPS_BIND="{repo},{raw_parent_dir},{refcat_repo},{run_dir}"
       pipetask() {
-          apptainer exec --bind "$_NPS_BIND" "$_NPS_IMAGE" \
-            bash -c 'source /opt/lsst/software/stack/loadLSST.bash && setup lsst_distrib && setup -r /opt/nps/packages/obs_stips obs_stips 2>/dev/null; setup -r /opt/nps/packages/obs_nickel_data obs_nickel_data 2>/dev/null; export PYTHONPATH=/opt/nps/packages/stips/src:${PYTHONPATH:-}; export INSTRUMENT_DIR=/opt/nps/instruments/nickel; export STIPS_DEFAULTS=/opt/nps/packages/obs_stips/instrument_defaults; export NUMEXPR_MAX_THREADS=1; command pipetask "$@"' _ "$@"
+          apptainer exec --bind "$_STIPS_BIND" "$_STIPS_IMAGE" \
+            bash -c 'source /opt/lsst/software/stack/loadLSST.bash && setup lsst_distrib && setup -r /opt/stips/packages/obs_stips obs_stips 2>/dev/null; setup -r /opt/stips/instruments/nickel/obs_nickel_data obs_nickel_data 2>/dev/null; export PYTHONPATH=/opt/stips/packages/stips/src:${PYTHONPATH:-}; export INSTRUMENT_DIR=/opt/stips/instruments/nickel; export STIPS_DEFAULTS=/opt/stips/packages/obs_stips/instrument_defaults; export NUMEXPR_MAX_THREADS=1; command pipetask "$@"' _ "$@"
       }
 
     # Run directory for Parsl (must be on shared filesystem)

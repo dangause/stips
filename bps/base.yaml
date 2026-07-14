@@ -1,4 +1,4 @@
-# Nickel Processing Suite - Base BPS Configuration
+# Small Telescope Image Processing Suite - Base BPS Configuration
 #
 # This file contains shared settings for all BPS pipelines.
 # Pipeline-specific configs inherit from this via includeConfigs.

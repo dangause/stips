@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from stips.collections import template_ps1
 from stips.core.stack import run_with_stack
 
 if TYPE_CHECKING:
@@ -24,6 +25,8 @@ class PS1TemplateResult:
     patch: int | None = None
     fits_path: str | None = None
     error: str | None = None
+    #: True when an existing template was found and left untouched (overwrite=False).
+    skipped: bool = False
 
 
 def run(
@@ -49,7 +52,8 @@ def run(
     Args:
         ra: Right ascension in degrees
         dec: Declination in degrees
-        band: Nickel band (r or i only - PS1 doesn't cover b/v)
+        band: Local science band; must be PS1-eligible per the active profile's
+            ``ps1_band_map`` (e.g. r or i for Nickel — PS1 doesn't cover b/v)
         config: Pipeline configuration
         collection: Output collection (default: templates/ps1/{band})
         tract: Tract number (auto-determined if None)
@@ -63,16 +67,34 @@ def run(
     Returns:
         PS1TemplateResult with collection and status
     """
-    if band not in ("r", "i"):
+    from stips.core.pipeline import ps1_band_map
+
+    band_map = ps1_band_map(config)
+    if band not in band_map:
+        eligible = ", ".join(sorted(band_map)) or "(none configured)"
         return PS1TemplateResult(
             success=False,
             band=band,
-            collection=collection or f"templates/ps1/{band}",
-            error=f"PS1 templates only available for r/i bands, not {band}",
+            collection=collection or template_ps1(band),
+            error=(
+                f"PS1 templates only available for bands: {eligible}; " f"got {band!r}"
+            ),
         )
+    ps1_band = band_map[band]
 
     if collection is None:
-        collection = f"templates/ps1/{band}"
+        collection = template_ps1(band)
+
+    # Skip-if-exists policy lives here (single source of truth) rather than in
+    # each caller: unless overwrite is requested, an already-ingested template
+    # is left in place and reported as a (successful) skip.
+    if not overwrite and check_exists(band, config, collection):
+        return PS1TemplateResult(
+            success=True,
+            band=band,
+            collection=collection,
+            skipped=True,
+        )
 
     if output_dir is None:
         output_dir = config.repo / "ps1_templates"
@@ -97,6 +119,12 @@ def run(
         "--output-dir",
         str(output_dir),
     ]
+
+    # Only pass --ps1-band when the profile maps the local band to a different
+    # PS1 band; for an identity map (e.g. Nickel r->r, i->i) the ingest tool's
+    # own default (ps1_band = band) reproduces today's argument list exactly.
+    if ps1_band != band:
+        args.extend(["--ps1-band", ps1_band])
 
     if tract is not None:
         args.extend(["--tract", str(tract)])
@@ -175,7 +203,7 @@ def check_exists(
         True if template exists
     """
     if collection is None:
-        collection = f"templates/ps1/{band}"
+        collection = template_ps1(band)
 
     args = [
         "butler",

@@ -7,18 +7,26 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from stips.core import butler_query, dataset_types, quanta_report
 from stips.core.pipeline import (
     REFCATS_CHAIN,
     CollectionNames,
+    PipetaskStage,
     build_exclusion_expr,
+    ensure_instrument_registered,
     is_empty_qgraph,
-    night_to_day_obs,
+    latest_raw_run,
+    night_day_obs_expr,
     parse_bad_exposures,
-    parse_butler_query_output,
-    parse_quanta_summary,
+    ps1_band_map,
+    redefine_chain,
+    resolve_processccd_collections,
+    template_deep_glob,
+    template_ps1,
+    template_ps1_glob,
     validate_night,
 )
-from stips.core.stack import run_butler, run_butler_query
+from stips.core.query import butler_str_literal
 
 if TYPE_CHECKING:
     from stips.core.config import Config
@@ -53,32 +61,44 @@ def find_template(
     config: Config,
     band: str | None = None,
     prefer_ps1: bool = False,
+    strategy: str | None = None,
 ) -> str | None:
     """Auto-discover the best template collection.
 
     Args:
         config: Pipeline configuration
         band: Filter by band (b/v/r/i)
-        prefer_ps1: Prefer PS1 templates over internal
+        prefer_ps1: Prefer PS1 templates over internal (legacy flag)
+        strategy: "auto" picks per band — PS1 for the profile's PS1-eligible
+            bands (if ingested), coadd otherwise. None/"ps1"/"coadd" use the
+            legacy preference-based discovery.
 
     Returns:
         Template collection name, or None if not found
     """
-    repo = str(config.repo)
+    # Per-band auto: PS1 for the profile's PS1-eligible bands when available,
+    # coadd for the rest.
+    if strategy == "auto":
+        if band in ps1_band_map(config) and butler_query.collection_exists(
+            config, template_ps1(band)
+        ):
+            return template_ps1(band)
+        coadds = (
+            butler_query.list_collections(
+                config, template_deep_glob(), prefix="templates/"
+            )
+            or []
+        )
+        if band:
+            coadds = [c for c in coadds if c.endswith(f"/{band}")]
+        return coadds[0] if coadds else None
 
     # Query PS1 and coadd templates with targeted glob patterns
     candidates = []
-    for pattern in ["templates/ps1/*", "templates/deep/*/*"]:
-        try:
-            result = run_butler_query(
-                ["query-collections", repo, pattern], config, check=False
-            )
-            if result.returncode == 0:
-                candidates.extend(
-                    parse_butler_query_output(result.stdout, prefix_filter="templates/")
-                )
-        except Exception as e:
-            log.debug(f"Failed to query template pattern {pattern}: {e}")
+    for pattern in [template_ps1_glob(), template_deep_glob()]:
+        candidates.extend(
+            butler_query.list_collections(config, pattern, prefix="templates/") or []
+        )
 
     if not candidates:
         return None
@@ -147,7 +167,9 @@ def run(
     night = validate_night(night)
     cols = CollectionNames(night, prefix=prof.collection_prefix)
     repo = str(config.repo)
-    day_obs = night_to_day_obs(night, offset_days=prof.night_to_dayobs_offset_days)
+    # A Lick observing night spans two UT days (pre-/post-midnight); include
+    # both so pre-midnight exposures are not dropped from difference imaging.
+    day_obs_expr = night_day_obs_expr(night, prof)
 
     # Resolve template
     template_collection = template
@@ -167,31 +189,14 @@ def run(
     # Prefer the CHAINED parent over individual RUN collections, since the
     # CHAINED parent includes results from both primary and fallback configs.
     try:
-        result = run_butler_query(
-            [
-                "query-collections",
-                repo,
-                f"{prof.collection_prefix}/runs/{night}/processCcd/*",
-            ],
-            config,
-            check=False,
+        # Prefer CHAINED parents over individual RUNs, and join ALL CHAINED
+        # parents so DIA sees science outputs from every band group (broadband +
+        # narrowband are processed separately). Band groups are disjoint by
+        # filter, so no duplicate datasets across parents.
+        parent_collections = resolve_processccd_collections(
+            config, night, all_parents=True
         )
-        sci_collections = parse_butler_query_output(
-            result.stdout, prefix_filter=f"{prof.collection_prefix}/"
-        )
-        # Prefer CHAINED parents (no /run or /run_fb suffix) over individual RUNs.
-        # Join ALL CHAINED parents so DIA sees science outputs from every
-        # band group (broadband + narrowband are processed separately).
-        # sorted() gives deterministic order; band groups are disjoint by filter
-        # so no duplicate datasets across parents.
-        chained = [
-            c for c in sci_collections if not c.endswith("/run") and "/run_fb" not in c
-        ]
-        sci_parents = (
-            ",".join(sorted(chained))
-            if chained
-            else sci_collections[-1] if sci_collections else None
-        )
+        sci_parents = ",".join(parent_collections) if parent_collections else None
 
         if not sci_parents:
             return DIAResult(
@@ -216,15 +221,15 @@ def run(
 
     object_expr = ""
     if object_filter:
-        object_expr = f" AND exposure.target_name='{object_filter}'"
+        object_expr = f" AND exposure.target_name={butler_str_literal(object_filter)}"
 
     band_expr = ""
     if band:
-        band_expr = f" AND band='{band}'"
+        band_expr = f" AND band={butler_str_literal(band)}"
 
     data_query = (
         f"instrument='{prof.name}' AND exposure.observation_type='science' "
-        f"AND day_obs={day_obs}{object_expr}{exclusion_expr}{band_expr}"
+        f"AND {day_obs_expr}{object_expr}{exclusion_expr}{band_expr}"
     )
 
     # Pipeline and config paths
@@ -238,74 +243,64 @@ def run(
 
     try:
         # Register instrument
-        run_butler(
-            ["register-instrument", repo, prof.instrument_class],
-            config,
-            check=False,
-            log_file=log_file,
-        )
+        ensure_instrument_registered(config, log_file)
 
         # Build quantum graph
         qg_dir = config.repo / "qgraphs"
         qg_dir.mkdir(parents=True, exist_ok=True)
         qg_file = qg_dir / f"diff_{night}_{cols.run_ts}.qg"
 
-        # Find raw collection (optional for DIA, targeted query)
-        raw_run = ""
-        raw_result = run_butler_query(
-            ["query-collections", repo, f"{prof.collection_prefix}/raw/{night}/*"],
-            config,
-            check=False,
-        )
-        raw_collections = parse_butler_query_output(
-            raw_result.stdout, prefix_filter=f"{prof.collection_prefix}/"
-        )
-        if raw_collections:
-            raw_run = raw_collections[0]
+        # Find raw collection (optional for DIA, targeted query). Use the newest
+        # raw ingest so a re-ingest supersedes a stale earlier one.
+        raw_run = latest_raw_run(config, night) or ""
 
         input_collections = f"{sci_parents},{cols.calib_chain},{REFCATS_CHAIN},{prof.skymap_collection},{template_collection}"
         if raw_run:
             input_collections = f"{sci_parents},{raw_run},{cols.calib_chain},{REFCATS_CHAIN},{prof.skymap_collection},{template_collection}"
 
-        qgraph_args = [
-            "qgraph",
-            "-b",
-            repo,
-            "-p",
-            f"{pipeline}#dia-full",
-            "-i",
-            input_collections,
-            "-o",
-            cols.diff_parent,
-            "--output-run",
-            cols.diff_run,
-            "--save-qgraph",
-            str(qg_file),
-            "-d",
-            data_query,
-        ]
-
-        if executor.needs_datastore_records:
-            qgraph_args.append("--qgraph-datastore-records")
-
+        # Per-stage --config-file overrides go after -d (see PipetaskStage).
+        dia_config_args: list[str] = []
         if subtract_config.exists():
-            qgraph_args.extend(["--config-file", f"subtractImages:{subtract_config}"])
+            dia_config_args += ["--config-file", f"subtractImages:{subtract_config}"]
         if detect_config.exists():
-            qgraph_args.extend(
-                ["--config-file", f"detectAndMeasureDiaSource:{detect_config}"]
-            )
+            dia_config_args += [
+                "--config-file",
+                f"detectAndMeasureDiaSource:{detect_config}",
+            ]
+
+        summary_file = qg_file.with_suffix(".summary.json")
+        stage = PipetaskStage(
+            repo=repo,
+            pipeline=f"{pipeline}#dia-full",
+            inputs=input_collections,
+            output_parent=cols.diff_parent,
+            output_run=cols.diff_run,
+            qgraph_path=str(qg_file),
+            data_query=data_query,
+            post_query_args=dia_config_args,
+            jobs=jobs,
+            run_includes_output_run=True,
+            summary_file=str(summary_file),
+        )
 
         qg_result = executor.run_pipetask(
-            qgraph_args,
+            stage.qgraph_args(),
             config,
             capture_output=True,
             check=False,
             log_file=log_file,
         )
 
-        # Check for empty quantum graph (no matching data for this night/band)
+        # Check for empty quantum graph (no matching data for this night/band).
+        # Prefer a structural check on the saved qgraph (len(qg) == 0) over
+        # grepping the human-readable "QuantumGraph contains no quanta" log line,
+        # which is not a stable API. Fall back to the stdout grep only if the
+        # structural check could not run (e.g. file missing / older stack).
         combined_qg_output = (qg_result.stdout or "") + (qg_result.stderr or "")
-        if is_empty_qgraph(combined_qg_output):
+        empty_qg = butler_query.quantum_graph_is_empty(config, qg_file)
+        if empty_qg is None:
+            empty_qg = is_empty_qgraph(combined_qg_output)
+        if empty_qg:
             log.warning(
                 f"Empty quantum graph for {night}/{band or 'all'} — "
                 f"no matching science data found for DIA"
@@ -328,20 +323,10 @@ def run(
                 error=f"QGraph build failed: {qg_result.stderr or qg_result.stdout}",
             )
 
-        # Run DIA
+        # Run DIA. --summary writes a machine-readable quanta report (preferred
+        # over the stdout "Executed N quanta..." regex; see below).
         dia_result = executor.run_pipetask(
-            [
-                "run",
-                "-b",
-                repo,
-                "-g",
-                str(qg_file),
-                "--output-run",
-                cols.diff_run,
-                "-j",
-                str(jobs),
-                "--register-dataset-types",
-            ],
+            stage.run_args(),
             config,
             capture_output=True,
             check=False,
@@ -349,9 +334,11 @@ def run(
             output_run=cols.diff_run,
         )
 
-        # Parse quanta counts to handle partial success
+        # Parse quanta counts to handle partial success.
         combined_output = (dia_result.stdout or "") + (dia_result.stderr or "")
-        quanta_ok, quanta_fail = parse_quanta_summary(combined_output, log_file)
+        quanta_ok, quanta_fail = quanta_report.counts(
+            summary_file, combined_output, log_file=log_file
+        )
 
         if dia_result.returncode != 0 and quanta_ok == 0:
             return DIAResult(
@@ -371,14 +358,7 @@ def run(
         # Verify the RUN collection exists before chaining.
         # BPS may report success even when all quanta failed, leaving
         # no RUN collection in the Butler.
-        verify_result = run_butler_query(
-            ["query-collections", repo, cols.diff_run],
-            config,
-            check=False,
-        )
-        if verify_result.returncode != 0 or cols.diff_run not in (
-            verify_result.stdout or ""
-        ):
+        if not butler_query.collection_exists(config, cols.diff_run):
             return DIAResult(
                 success=False,
                 night=night,
@@ -388,57 +368,27 @@ def run(
             )
 
         # Update collection chain
-        run_butler(
-            [
-                "collection-chain",
-                repo,
-                cols.diff_parent,
-                cols.diff_run,
-                "--mode",
-                "redefine",
-            ],
-            config,
-            log_file=log_file,
+        redefine_chain(config, cols.diff_parent, cols.diff_run, log_file=log_file)
+
+        # Count outputs via the Butler Python query API (structured JSON) instead
+        # of parsing query-datasets tabular stdout. A failed query yields None,
+        # which we treat as 0 to preserve the prior best-effort behavior.
+        where = f"instrument='{prof.name}' AND {day_obs_expr}"
+        diff_count = (
+            butler_query.count_datasets(
+                config, dataset_types.DIFFERENCE_IMAGE, cols.diff_run, where=where
+            )
+            or 0
         )
-
-        # Count outputs
-        diff_count = 0
-        src_count = 0
-        try:
-            result = run_butler_query(
-                [
-                    "query-datasets",
-                    repo,
-                    "difference_image",
-                    "--collections",
-                    cols.diff_run,
-                    "--where",
-                    f"instrument='{prof.name}' AND day_obs={day_obs}",
-                ],
+        src_count = (
+            butler_query.count_datasets(
                 config,
-                check=False,
+                dataset_types.DIA_SOURCE_UNFILTERED,
+                cols.diff_run,
+                where=where,
             )
-            diff_count = len(parse_butler_query_output(result.stdout))
-        except Exception:
-            pass
-
-        try:
-            result = run_butler_query(
-                [
-                    "query-datasets",
-                    repo,
-                    "dia_source_unfiltered",
-                    "--collections",
-                    cols.diff_run,
-                    "--where",
-                    f"instrument='{prof.name}' AND day_obs={day_obs}",
-                ],
-                config,
-                check=False,
-            )
-            src_count = len(parse_butler_query_output(result.stdout))
-        except Exception:
-            pass
+            or 0
+        )
 
         # If pipeline "succeeded" but produced no difference images, report failure.
         # This commonly happens when rewarpTemplate finds no template overlap for

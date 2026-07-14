@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from stips.core import dataset_types
 from stips.core.stack import run_with_stack
 
 if TYPE_CHECKING:
@@ -19,7 +20,7 @@ class LightcurveConfig:
     enabled: bool = True
 
     # Data selection
-    dataset_type: str = "dia_source_unfiltered"
+    dataset_type: str = dataset_types.DIA_SOURCE_UNFILTERED
     min_snr: float = 3.0
     max_mag_err: float | None = None
     radius: float = 1.0
@@ -75,7 +76,10 @@ class LightcurveConfig:
             enabled=lc.get("enabled", opts.get("lightcurve", True)),
             dataset_type=lc.get(
                 "dataset_type",
-                opts.get("lightcurve_dataset_type", "dia_source_unfiltered"),
+                opts.get(
+                    "lightcurve_dataset_type",
+                    dataset_types.DIA_SOURCE_UNFILTERED,
+                ),
             ),
             min_snr=float(lc.get("min_snr", opts.get("lightcurve_min_snr", 3.0))),
             max_mag_err=(
@@ -117,13 +121,9 @@ def run(
     collections: str,
     config: Config,
     *,
-    radius: float = 1.0,
-    min_snr: float = 3.0,
-    band: str | None = None,
     name: str | None = None,
     output: Path | None = None,
     plot: bool = True,
-    dataset_type: str = "dia_source_unfiltered",
     log_file: Path | None = None,
     lc_config: LightcurveConfig | None = None,
 ) -> LightcurveResult:
@@ -132,23 +132,27 @@ def run(
     Queries source catalogs for detections near the specified coordinates
     and generates a lightcurve CSV and optional plot.
 
+    All data-selection and display knobs (radius, min_snr, band, dataset_type,
+    y/x axis, explosion MJD, distance modulus, magnitude-error cut) come from
+    ``lc_config`` — the single source of truth. When omitted, defaults from a
+    fresh :class:`LightcurveConfig` apply.
+
     Args:
         ra: Right ascension in degrees
         dec: Declination in degrees
         collections: Comma-separated collection patterns to search
         config: Pipeline configuration
-        radius: Match radius in arcseconds (default: 1.0)
-        min_snr: Minimum S/N filter (default: 3.0)
-        band: Restrict to single band (default: all)
         name: Target name for plot title
         output: Output CSV file path
         plot: Generate plot (default: True)
-        dataset_type: Dataset type to query (default: dia_source_unfiltered)
         log_file: Optional path to write LSST pipeline logs
+        lc_config: Data-selection and display configuration (single source of truth)
 
     Returns:
         LightcurveResult with output paths and statistics
     """
+    lc = lc_config or LightcurveConfig()
+
     # Set default output path in Butler repo under lightcurves/
     if output is None:
         name_part = name.replace(" ", "_") if name else f"ra{ra:.4f}_dec{dec:.4f}"
@@ -180,32 +184,31 @@ def run(
         "--dec",
         str(dec),
         "--radius",
-        str(radius),
+        str(lc.radius),
         "--min-snr",
-        str(min_snr),
+        str(lc.min_snr),
         "--output",
         str(output),
     ]
 
-    if band:
-        args.extend(["--band", band])
+    if lc.band:
+        args.extend(["--band", lc.band])
 
     if name:
         args.extend(["--name", name])
 
-    if dataset_type != "dia_source_unfiltered":
-        args.extend(["--dataset-type", dataset_type])
+    if lc.dataset_type != dataset_types.DIA_SOURCE_UNFILTERED:
+        args.extend(["--dataset-type", lc.dataset_type])
 
-    # Display configuration (new lightcurve config options)
-    if lc_config:
-        args.extend(["--y-axis", lc_config.y_axis])
-        args.extend(["--x-axis", lc_config.x_axis])
-        if lc_config.explosion_mjd is not None:
-            args.extend(["--explosion-mjd", str(lc_config.explosion_mjd)])
-        if lc_config.distance_modulus is not None:
-            args.extend(["--distance-modulus", str(lc_config.distance_modulus)])
-        if lc_config.max_mag_err is not None:
-            args.extend(["--max-mag-err", str(lc_config.max_mag_err)])
+    # Display configuration
+    args.extend(["--y-axis", lc.y_axis])
+    args.extend(["--x-axis", lc.x_axis])
+    if lc.explosion_mjd is not None:
+        args.extend(["--explosion-mjd", str(lc.explosion_mjd)])
+    if lc.distance_modulus is not None:
+        args.extend(["--distance-modulus", str(lc.distance_modulus)])
+    if lc.max_mag_err is not None:
+        args.extend(["--max-mag-err", str(lc.max_mag_err)])
 
     if plot:
         args.append("--plot")

@@ -35,7 +35,7 @@
 #     -d "instrument='Nickel' AND visit=12345"
 #
 # For lightcurve extraction from forced photometry outputs, use:
-#   nickel lightcurve --collections <fphot_collection> --ra <ra> --dec <dec>
+#   stips lightcurve --collections <fphot_collection> --ra <ra> --dec <dec>
 
 description: |
   Forced photometry at user-specified RA/Dec coordinates.

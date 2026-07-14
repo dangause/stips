@@ -3,9 +3,9 @@
 # Single-night test to verify the pipeline works inside the Docker Slurm cluster.
 # Uses container paths (not host paths).
 #
-# Usage (inside NPS container):
-#   nickel run /opt/nps/scripts/config/2023ixf/pipeline_docker_test.yaml
-#   nickel run /opt/nps/scripts/config/2023ixf/pipeline_docker_test.yaml --dry-run
+# Usage (inside STIPS container):
+#   nickel run /opt/stips/scripts/config/2023ixf/pipeline_docker_test.yaml
+#   nickel run /opt/stips/scripts/config/2023ixf/pipeline_docker_test.yaml --dry-run
 
 # =============================================================================
 # Environment Configuration (container paths)
@@ -13,7 +13,7 @@
 env:
   REPO: "/data/repo"
   STACK_DIR: "/opt/lsst/software/stack"
-  INSTRUMENT_DIR: "/opt/nps/instruments/nickel"
+  INSTRUMENT_DIR: "/opt/stips/instruments/nickel"
   RAW_PARENT_DIR: "/data/raw"
   REFCAT_REPO: "/data/refcats"
 

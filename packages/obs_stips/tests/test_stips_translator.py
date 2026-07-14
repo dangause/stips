@@ -1,8 +1,12 @@
 import unittest
 
 import astropy.units as u
-from lsst.obs.stips.translator import StipsTranslator
-from stips import Field, InstrumentProfile, Site, hook
+import pytest
+
+pytest.importorskip("lsst.obs.stips")
+
+from lsst.obs.stips.translator import StipsTranslator  # noqa: E402
+from stips import Field, InstrumentProfile, Site, hook  # noqa: E402
 
 PROFILE = InstrumentProfile(
     name="Demo",

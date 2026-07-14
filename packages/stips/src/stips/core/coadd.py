@@ -17,18 +17,22 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from stips.core import butler_query, dataset_types
 from stips.core.pipeline import (
     REFCATS_CHAIN,
-    butler_query_has_results,
+    PipetaskStage,
+    ensure_instrument_registered,
     generate_run_timestamp,
-    parse_butler_query_output,
+    redefine_chain,
+    resolve_processccd_collections,
+    template_deep,
+    template_deep_run,
 )
+from stips.core.query import butler_str_literal
 from stips.core.stack import (
     run_butler,
     run_butler_python,
     run_butler_python_json,
-    run_butler_query,
-    run_pipetask,
 )
 
 if TYPE_CHECKING:
@@ -73,8 +77,8 @@ def find_tract_for_coords(
 import lsst.daf.butler as dafButler
 from lsst.geom import SpherePoint, degrees
 
-butler = dafButler.Butler('{config.repo}')
-skymap = butler.get('skyMap', skymap='{skymap}', collections='{prof.skymap_collection}')
+butler = dafButler.Butler({str(config.repo)!r})
+skymap = butler.get('skyMap', skymap={str(skymap)!r}, collections={str(prof.skymap_collection)!r})
 coord = SpherePoint({ra}, {dec}, degrees)
 tract_info = skymap.findTract(coord)
 print(tract_info.getId())
@@ -106,23 +110,15 @@ def check_template_exists(
     Returns:
         Collection name if template exists, None otherwise
     """
-    collection = f"templates/deep/tract{tract}/{band}"
+    collection = template_deep(tract, band)
 
     try:
-        result = run_butler_query(
-            [
-                "query-datasets",
-                str(config.repo),
-                "template_coadd",
-                "--collections",
-                collection,
-                "--where",
-                f"band='{band}'",
-            ],
+        if butler_query.has_datasets(
             config,
-            check=False,
-        )
-        if result.returncode == 0 and butler_query_has_results(result.stdout):
+            dataset_types.TEMPLATE_COADD,
+            collection,
+            where=f"band={butler_str_literal(band)}",
+        ):
             return collection
     except Exception as e:
         log.debug(f"Failed to check template existence for {collection}: {e}")
@@ -145,74 +141,25 @@ def find_science_collections_for_nights(
     Returns:
         List of collection names with science outputs for this band
     """
-    prof = config.require_profile()
     collections = []
-    repo = str(config.repo)
 
     for night in nights:
         try:
-            result = run_butler_query(
-                [
-                    "query-collections",
-                    repo,
-                    f"{prof.collection_prefix}/runs/{night}/processCcd/*",
-                ],
+            # Prefer the newest CHAINED parent over individual RUN collections
+            # (the parent aggregates the primary and any fallback configs), and
+            # verify it actually holds data for the requested band.
+            resolved = resolve_processccd_collections(
                 config,
-                check=False,
+                night,
+                verify_datasets=True,
+                dataset_type=dataset_types.PRELIMINARY_VISIT_IMAGE,
+                where=f"band={butler_str_literal(band)}",
             )
-            if result.returncode != 0:
-                log.warning(f"  No processCcd collections found for {night}")
-                continue
-
-            night_colls = parse_butler_query_output(
-                result.stdout, prefix_filter=f"{prof.collection_prefix}/"
-            )
-            if not night_colls:
-                log.info(
-                    f"  No processCcd collections found for {night} "
-                    "(likely no successful science run)"
-                )
-                continue
-
-            # Prefer the CHAINED parent collection over individual RUN
-            # collections — the CHAINED collection includes results from
-            # both the primary config and any fallback configs.
-            # Within each group, sort descending to pick the newest timestamp.
-            night_colls.sort(
-                key=lambda c: (
-                    1 if not c.endswith("/run") and "/run_fb" not in c else 0,
-                    c,
-                ),
-                reverse=True,
-            )
-
-            found = False
-            for coll in night_colls:
-                # Verify this collection has data for the requested band
-                check_result = run_butler_query(
-                    [
-                        "query-datasets",
-                        repo,
-                        "preliminary_visit_image",
-                        "--collections",
-                        coll,
-                        "--where",
-                        f"band='{band}'",
-                        "--limit",
-                        "1",
-                    ],
-                    config,
-                    check=False,
-                )
-                if check_result.returncode == 0 and butler_query_has_results(
-                    check_result.stdout
-                ):
-                    collections.append(coll)
-                    log.info(f"  Found {night} -> {coll}")
-                    found = True
-                    break
-
-            if not found:
+            if resolved:
+                coll = resolved[0]
+                collections.append(coll)
+                log.info(f"  Found {night} -> {coll}")
+            else:
                 log.info(f"  Night {night} has no {band}-band data (skipping)")
 
         except Exception as e:
@@ -250,6 +197,10 @@ def find_degenerate_wcs_visits(
     # Threshold in arcsec: degenerate fits produce ~1e-11, real fits produce >= ~0.002
     DEGEN_THRESHOLD = 1e-6
 
+    # Validate the band and embed the WHERE expression as a Python literal (!r)
+    # so it cannot break out of the generated snippet's string (F-018).
+    band_where = f"band={butler_str_literal(band)}"
+
     script = f"""
 import json
 import sys
@@ -265,7 +216,7 @@ for coll in collections:
         refs = list(butler.registry.queryDatasets(
             'preliminary_visit_summary',
             collections=[coll],
-            where="band='{band}'"
+            where={band_where!r}
         ))
         for ref in refs:
             visit_id = ref.dataId['visit']
@@ -295,6 +246,37 @@ print(json.dumps(sorted(bad_visits)))
     return []
 
 
+def _remove_run_collections(
+    runs: list[str],
+    repo: str,
+    config: Config,
+    log_file: Path | None,
+) -> None:
+    """Remove orphaned template RUN collections, logging (never raising) on failure.
+
+    Called only AFTER a replacement template has been built, verified, and the
+    parent chain redefined to point at the new run — so these runs are no longer
+    chain members and deleting them cannot destroy the live template. Leaving an
+    old run orphaned is acceptable; aborting an already-successful rebuild
+    because cleanup failed is not, so every failure is downgraded to a WARNING.
+    """
+    for old_run in runs:
+        try:
+            result = run_butler(
+                ["remove-collections", repo, old_run, "--no-confirm"],
+                config,
+                check=False,
+                log_file=log_file,
+            )
+            if result.returncode != 0:
+                log.warning(
+                    f"Failed to remove superseded template run {old_run} "
+                    f"(exit {result.returncode}); leaving it orphaned"
+                )
+        except Exception as e:  # noqa: BLE001 - cleanup must never abort a success
+            log.warning(f"Failed to remove superseded template run {old_run}: {e}")
+
+
 def run(
     nights: list[str],
     band: str,
@@ -307,6 +289,7 @@ def run(
     overwrite: bool = False,
     config_files: list[str] | None = None,
     log_file: Path | None = None,
+    executor=None,
 ) -> CoaddResult:
     """Build coadd template from multiple nights of Nickel observations.
 
@@ -324,10 +307,18 @@ def run(
         overwrite: Replace existing template if present
         config_files: Config override files for pipetask (e.g., ["makeDirectWarp:path/to/config.py"])
         log_file: Optional path to write LSST pipeline logs
+        executor: Pipetask execution backend (defaults to LocalExecutor).
+            Passing the shared executor lets coadds run under BPS like the
+            other stages; None preserves standalone local execution.
 
     Returns:
         CoaddResult with collection and status
     """
+    from stips.core.executor import LocalExecutor
+
+    if executor is None:
+        executor = LocalExecutor()
+
     if not nights:
         return CoaddResult(
             success=False,
@@ -373,17 +364,9 @@ def run(
         else:
             # No template data found. Check if a stale CHAINED collection
             # exists from a previous failed attempt — if so, rebase to clean it up.
-            collection_name = f"templates/deep/tract{tract}/{band}"
+            collection_name = template_deep(tract, band)
             try:
-                check_result = run_butler_query(
-                    ["query-collections", str(config.repo), collection_name],
-                    config,
-                    check=False,
-                )
-                if (
-                    check_result.returncode == 0
-                    and collection_name in check_result.stdout
-                ):
+                if butler_query.collection_exists(config, collection_name):
                     log.info(
                         f"Stale collection {collection_name} exists without data, will rebase"
                     )
@@ -423,8 +406,8 @@ def run(
 
     repo = str(config.repo)
     run_ts = generate_run_timestamp()
-    template_parent = f"templates/deep/tract{tract}/{band}"
-    template_run = f"{template_parent}/{run_ts}"
+    template_parent = template_deep(tract, band)
+    template_run = template_deep_run(tract, band, run_ts)
     pipeline = config.resolve_pipeline("DRP.yaml")
 
     qg_dir = config.repo / "qgraphs"
@@ -432,29 +415,35 @@ def run(
     qg_file = qg_dir / f"template_t{tract}_{band}_{run_ts}.qg"
 
     try:
-        # Register instrument (idempotent)
-        run_butler(
-            ["register-instrument", repo, prof.instrument_class],
-            config,
-            check=False,
-            log_file=log_file,
-        )
+        # Build-then-swap sequencing (F-009).
+        #
+        # OLD (destructive) order: on a rebase the parent chain was emptied
+        # (collection-chain --mode redefine) and the parent removed
+        # (remove-collections) *before* the replacement was built. A failed
+        # build — the common case (template overlap / WCS issues) — therefore
+        # left NO template at all, with no rollback, and the removal's own
+        # failure was swallowed by check=False.
+        #
+        # NEW order: (1) build the coadd into a fresh timestamped RUN, passing
+        # no --output CHAINED collection so the build cannot touch the live
+        # template; (2) verify the new RUN actually holds template_coadd; (3)
+        # only then redefine the parent chain to the new RUN (one atomic swap);
+        # (4) then remove the now-de-chained old RUNs, best-effort. If the build
+        # or verification fails, the existing template is left completely
+        # untouched.
 
-        # Handle rebase (overwrite existing template)
+        # Snapshot the existing template's RUN collections up front so they can
+        # be cleaned up *after* a verified swap. Nothing is deleted here.
+        old_runs: list[str] = []
         if needs_rebase:
-            log.info(f"Rebasing existing template: {template_parent}")
-            run_butler(
-                ["collection-chain", repo, template_parent, "--mode", "redefine"],
-                config,
-                check=False,
-                log_file=log_file,
+            existing_runs = butler_query.list_collections(
+                config, f"{template_parent}/*"
             )
-            run_butler(
-                ["remove-collections", repo, template_parent, "--no-confirm"],
-                config,
-                check=False,
-                log_file=log_file,
-            )
+            if existing_runs:
+                old_runs = [c for c in existing_runs if c != template_run]
+
+        # Register instrument (idempotent)
+        ensure_instrument_registered(config, log_file)
 
         # Build input chain
         input_chain = ",".join(input_collections)
@@ -479,60 +468,40 @@ def run(
             for cf in config_files:
                 config_args.extend(["--config-file", cf])
 
-        # Build quantum graph
-        qgraph_args = [
-            "qgraph",
-            "-b",
-            repo,
-            "-p",
-            f"{pipeline}#coadds-only",
-            "-i",
-            full_input,
-            "-o",
-            template_parent,
-            "--output-run",
-            template_run,
-            "--save-qgraph",
-            str(qg_file),
-            "-d",
-            data_query,
-        ] + config_args
+        # Build quantum graph into the new RUN only. No --output CHAINED
+        # collection is passed (output_parent=None): the existing template chain
+        # is left untouched until the new outputs are built and verified below.
+        stage = PipetaskStage(
+            repo=repo,
+            pipeline=f"{pipeline}#coadds-only",
+            inputs=full_input,
+            output_parent=None,
+            output_run=template_run,
+            qgraph_path=str(qg_file),
+            data_query=data_query,
+            post_query_args=config_args,
+            jobs=jobs,
+        )
 
-        run_pipetask(qgraph_args, config, log_file=log_file)
+        executor.run_pipetask(stage.qgraph_args(), config, log_file=log_file)
 
         # Run coadd pipeline
-        run_pipetask(
-            [
-                "run",
-                "-b",
-                repo,
-                "-g",
-                str(qg_file),
-                "-j",
-                str(jobs),
-                "--register-dataset-types",
-            ],
+        executor.run_pipetask(
+            stage.run_args(),
             config,
             log_file=log_file,
+            output_run=template_run,
         )
 
-        # Update collection chain
-        run_butler(
-            [
-                "collection-chain",
-                repo,
-                template_parent,
-                template_run,
-                "--mode",
-                "prepend",
-            ],
+        # Verify the NEW run actually produced template_coadd datasets BEFORE
+        # touching the existing template. On failure, leave the old template in
+        # place and report the build as failed.
+        if not butler_query.has_datasets(
             config,
-            log_file=log_file,
-        )
-
-        # Verify that template_coadd datasets were actually produced
-        verified = check_template_exists(band, tract, config)
-        if not verified:
+            dataset_types.TEMPLATE_COADD,
+            template_run,
+            where=f"band={butler_str_literal(band)}",
+        ):
             return CoaddResult(
                 success=False,
                 band=band,
@@ -540,9 +509,20 @@ def run(
                 nights_used=nights,
                 error=(
                     f"Coadd pipeline ran but produced no template_coadd datasets "
-                    f"for band={band}, tract={tract}. Check pipeline logs."
+                    f"in {template_run} for band={band}, tract={tract}. Existing "
+                    f"template (if any) left untouched. Check pipeline logs."
                 ),
             )
+
+        # Verified: atomically swap the parent chain to point at the new run.
+        # In a rebase this also drops the old runs from the chain, which must
+        # happen before they can be removed.
+        redefine_chain(config, template_parent, template_run, log_file=log_file)
+
+        # Now that the old runs are no longer chain members, clean them up
+        # (best-effort — failures are logged, never fatal).
+        if old_runs:
+            _remove_run_collections(old_runs, repo, config, log_file)
 
         collection = template_parent
         log.info(f"Coadd template built: {collection}")

@@ -1,6 +1,10 @@
 # ruff: noqa: F821
 
-# Very relaxed warp selection for Nickel coadd templates.
+# Very relaxed warp selection for coadd templates.
+#
+# FRAMEWORK DEFAULT: REFERENCE tuning from the Nickel 1-m, resolved
+# instrument-dir-first (a fork can override with its own
+# configs/coadds/makeDirectWarp_relaxed.py; see instrument_defaults/README.md).
 #
 # The Nickel 1-m telescope produces images with larger PSF variations
 # than LSST defaults allow. These thresholds are very relaxed to accept

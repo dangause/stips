@@ -34,20 +34,10 @@ import numpy as np
 import pandas as pd
 from lsst.daf.butler import Butler
 
-from stips.core.config import load_active_profile
-
-
-def _resolve_instrument(instrument):
-    """Resolve the instrument name from a CLI arg or the active profile.
-
-    Stays robust if INSTRUMENT_DIR/profile.py is unavailable (falls back to "Nickel").
-    """
-    if instrument:
-        return instrument
-    try:
-        return load_active_profile().name
-    except Exception:
-        return "Nickel"
+from stips.pipeline_tools._profile_resolve import (
+    resolve_collection_prefix,
+    resolve_instrument_name,
+)
 
 
 def parse_args():
@@ -334,12 +324,9 @@ def get_photocalib_for_visit(
     # Check if we've already cached the processCcd collections
     if "_processccd_collections" not in photocalib_cache:
         # The collection prefix is the instrument's collection_prefix. For these
-        # single-CCD instruments collection_prefix == instrument name (Nickel),
-        # but resolve it from the profile to stay correct for non-Nickel forks.
-        try:
-            prefix = load_active_profile().collection_prefix
-        except Exception:
-            prefix = instrument
+        # single-CCD instruments collection_prefix == instrument name, but
+        # resolve it from the profile to stay correct for multi-detector forks.
+        prefix = resolve_collection_prefix(instrument)
         try:
             photocalib_cache["_processccd_collections"] = list(
                 butler.registry.queryCollections(f"{prefix}/runs/*/processCcd/*")
@@ -391,7 +378,7 @@ def main():
     # Note: wildcards must be resolved before passing to Butler constructor
     butler = Butler(args.repo)
 
-    instrument = _resolve_instrument(args.instrument)
+    instrument = resolve_instrument_name(args.instrument)
 
     # Cache for photoCalib objects (keyed by visit, band)
     photocalib_cache = {}

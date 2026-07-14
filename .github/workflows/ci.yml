@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ main, master, dev, audit-fixes ]
   pull_request:
-    branches: [ main, master ]
+    branches: [ main, master, dev ]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -26,8 +26,8 @@ jobs:
 
     env:
       STACK_DIR: /opt/lsst/software/stack
-      # Use internal testdata from packages/testdata
-      TESTDATA_NICKEL_DIR: ${{ github.workspace }}/packages/testdata
+      # Use internal testdata from instruments/nickel/testdata
+      TESTDATA_NICKEL_DIR: ${{ github.workspace }}/instruments/nickel/testdata
 
     steps:
       - name: Install git and git-lfs (AlmaLinux container)
@@ -50,7 +50,7 @@ jobs:
           fetch-depth: 0
           lfs: true
 
-      # Note: Using internal testdata from packages/testdata instead of external repo
+      # Note: Using internal testdata from instruments/nickel/testdata instead of external repo
       # - name: Checkout testdata_nickel
       #   uses: actions/checkout@v4
       #   with:

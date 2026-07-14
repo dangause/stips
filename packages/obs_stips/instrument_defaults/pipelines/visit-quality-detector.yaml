@@ -1,9 +1,11 @@
 description: |
-  Nickel overrides for visitQualityCore (no crosstalk metric, don't fail on missing fields)
+  Framework overrides for visitQualityCore (no crosstalk metric, don't fail on
+  missing fields). The "Visit" label suffix keeps this task distinct from the
+  upstream analyzeCalibrateImageMetadata in $ANALYSIS_TOOLS_DIR pipelines.
 
 
 tasks:
-  analyzeCalibrateImageMetadataNickel:
+  analyzeCalibrateImageMetadataVisit:
     class: lsst.analysis.tools.tasks.TaskMetadataAnalysisTask
     config:
       connections.inputName: calibrateImage_metadata

@@ -10,16 +10,18 @@ requires-python = ">=3.12"
 dependencies = [
     "astropy",
     "numpy",
+    "scipy",
     "pandas",
     "pyyaml>=6.0",
     "rich>=13.0.0",
     "matplotlib>=3.5.0",
     "click>=8.0.0",
+    "stips-refcats",
 ]
 
 [project.optional-dependencies]
 dashboard = [
-    "fastapi>=0.104.0",
+    "fastapi>=0.110.0",
     "uvicorn[standard]>=0.24.0",
     "jinja2>=3.1.0",
     "sse-starlette>=1.8.0",
@@ -34,6 +36,11 @@ stips-archive-nights = "stips.pipeline_tools.generate_nights_list:main"
 stips-archive-ingest-ps1 = "stips.pipeline_tools.ingest_ps1_template:main"
 stips-archive-template-meta = "stips.pipeline_tools.template_metadata:main"
 
+# Calibration tools
+stips-defects-build = "stips.pipeline_tools.build_defects:main"
+stips-colorterms-fit = "stips.pipeline_tools.fit_colorterms:main"
+stips-tune-calibrate-image = "stips.pipeline_tools.tune_calibrate_image:main"
+
 # DIA tools
 stips-dia-assess = "stips.pipeline_tools.assess_dia_quality:main"
 stips-dia-lightcurve = "stips.pipeline_tools.extract_lightcurve:main"
@@ -44,6 +51,11 @@ stips-skymap-make = "stips.skymap.make_skymap_from_datasets:main"
 
 # EDA tools
 stips-eda-butler = "stips.eda.butler_inspect:main"
+
+[tool.uv.sources]
+# stips-refcats is a workspace member (packages/refcats); without this
+# entry a clean `uv sync` fails with "missing an entry in tool.uv.sources".
+stips-refcats = { workspace = true }
 
 [tool.setuptools.packages.find]
 where = ["src"]

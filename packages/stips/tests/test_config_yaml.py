@@ -122,9 +122,128 @@ class TestYamlConfig(unittest.TestCase):
         self.assertEqual(c.profile.name, "DemoFix")
         self.assertIn(FIX, sys.path)  # by-path load also inserts on sys.path
 
+    def test_self_referential_var_raises_labeled_error(self):
+        # A self-referential ${A} used to infinite-loop with unbounded string
+        # growth; the depth cap now makes it a deterministic, labeled error.
+        with self.assertRaises(ValueError) as ctx:
+            cfg.load(
+                env={
+                    "REPO": "/r",
+                    "STACK_DIR": "/s",
+                    "INSTRUMENT_DIR": "/o",
+                    "RAW_PARENT_DIR": "/raw",
+                    "A": "${A}/x",
+                }
+            )
+        msg = str(ctx.exception)
+        self.assertIn("did not terminate", msg)
+        self.assertIn("'A'", msg)
+
+    def test_mutually_recursive_vars_raise_labeled_error(self):
+        with self.assertRaises(ValueError) as ctx:
+            cfg.load(
+                env={
+                    "REPO": "/r",
+                    "STACK_DIR": "/s",
+                    "INSTRUMENT_DIR": "/o",
+                    "RAW_PARENT_DIR": "/raw",
+                    "A": "${B}",
+                    "B": "${A}",
+                }
+            )
+        self.assertIn("did not terminate", str(ctx.exception))
+
+    def test_unterminated_brace_raises_labeled_error(self):
+        with self.assertRaises(ValueError) as ctx:
+            cfg.load(
+                env={
+                    "REPO": "/r",
+                    "STACK_DIR": "/s",
+                    "INSTRUMENT_DIR": "/o",
+                    "RAW_PARENT_DIR": "/raw",
+                    "CP_PIPE_DIR": "${STACK_DIR/cp_pipe",
+                }
+            )
+        msg = str(ctx.exception)
+        self.assertIn("Unterminated", msg)
+        self.assertIn("CP_PIPE_DIR", msg)
+
+    def test_unknown_var_raises_labeled_error(self):
+        # A typo like ${RAW_PARNT_DIR} used to silently expand to "" (so
+        # "${RAW_PARNT_DIR}/data" became "/data"); it now fails loud, naming the
+        # unknown var and listing the available keys.
+        with self.assertRaises(ValueError) as ctx:
+            cfg.load(
+                env={
+                    "REPO": "/r",
+                    "STACK_DIR": "/s",
+                    "INSTRUMENT_DIR": "/o",
+                    "RAW_PARENT_DIR": "${RAW_PARNT_DIR}/data",
+                }
+            )
+        msg = str(ctx.exception)
+        self.assertIn("RAW_PARNT_DIR", msg)  # the unknown name
+        self.assertIn("Available env keys", msg)
+        self.assertIn("STACK_DIR", msg)  # a real key is listed
+
+    def test_validate_flags_missing_refcat_repo(self):
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as d:
+            real = Path(d)
+            c = cfg.Config(
+                repo=real,
+                stack_dir=real,
+                instrument_dir=real,
+                raw_parent_dir=real,
+                refcat_repo=real / "does_not_exist",
+            )
+            errors = c.validate()
+            self.assertTrue(
+                any("REFCAT_REPO" in e for e in errors),
+                f"expected a REFCAT_REPO error, got: {errors}",
+            )
+
+    def test_validate_accepts_existing_refcat_repo(self):
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as d:
+            real = Path(d)
+            c = cfg.Config(
+                repo=real,
+                stack_dir=real,
+                instrument_dir=real,
+                raw_parent_dir=real,
+                refcat_repo=real,
+            )
+            errors = c.validate()
+            self.assertEqual(errors, [])
+
+    def test_validate_skips_unset_refcat_repo(self):
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as d:
+            real = Path(d)
+            c = cfg.Config(
+                repo=real,
+                stack_dir=real,
+                instrument_dir=real,
+                raw_parent_dir=real,
+                refcat_repo=None,
+            )
+            errors = c.validate()
+            self.assertEqual(errors, [])
+
     def test_config_and_obs_stips_loaders_agree(self):
         import sys
         from pathlib import Path
+
+        import pytest
+
+        pytest.importorskip("lsst.obs.stips")
 
         from lsst.obs.stips.profile_loader import load_profile_from_dir
 

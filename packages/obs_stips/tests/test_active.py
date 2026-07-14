@@ -4,6 +4,12 @@ import sys
 import unittest
 from pathlib import Path
 
+import pytest
+
+# Every test here needs the real LSST stack (lsst.obs.base et al.), not just the
+# editable obs_stips namespace package; skip cleanly in a plain venv.
+pytest.importorskip("lsst.obs.base")
+
 FIX = str(Path(__file__).parent / "data" / "demo_instrument")
 FIX_CAM = str(Path(__file__).parent / "data" / "demo_camera_instrument")
 

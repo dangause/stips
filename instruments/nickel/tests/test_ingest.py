@@ -10,10 +10,14 @@ import os
 import unittest
 from pathlib import Path
 
-import lsst.utils.tests
-from lsst.afw.image import FilterLabel
-from lsst.daf.butler import Butler, DataCoordinate
-from lsst.obs.base.ingest_tests import IngestTestBase
+import pytest
+
+pytest.importorskip("lsst.daf.butler")
+
+import lsst.utils.tests  # noqa: E402
+from lsst.afw.image import FilterLabel  # noqa: E402
+from lsst.daf.butler import Butler, DataCoordinate  # noqa: E402
+from lsst.obs.base.ingest_tests import IngestTestBase  # noqa: E402
 
 # IngestTestBase re-imports instrumentClassName by FQN; the synthesized
 # instrument resolves its profile from INSTRUMENT_DIR, so set it here.

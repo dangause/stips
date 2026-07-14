@@ -1,0 +1,133 @@
+# Small Telescope Image Processing Suite - Singularity/Apptainer Definition
+#
+# For HPC environments that require Singularity instead of Docker.
+#
+# Build from Docker image:
+#   # First build Docker image
+#   docker build -t stips:latest -f docker/Dockerfile .
+#
+#   # Convert to Singularity (requires docker2singularity or newer Singularity)
+#   singularity build stips.sif docker-daemon://stips:latest
+#
+# Build directly (if Singularity can access container registry):
+#   singularity build stips.sif docker://ghcr.io/lick-observatory/stips:latest
+#
+# Usage:
+#   singularity run -B /path/to/repo:/data/repo \
+#                   -B /path/to/raw:/data/raw \
+#                   -B /path/to/refcats:/data/refcats \
+#                   stips.sif stips calibs 20230519
+
+Bootstrap: docker
+From: stips:latest
+
+%labels
+    Author Small Telescope Image Processing Suite Team
+    Description Small Telescope Image Processing Suite for LSST Science Pipelines on HPC
+    Version 1.0.0
+    URL https://github.com/dangause/stips
+
+%help
+    Small Telescope Image Processing Suite (STIPS) Container
+    ========================================
+
+    This container provides the Small Telescope Image Processing Suite for processing
+    data from the Nickel 1-meter telescope using LSST Science Pipelines.
+
+    USAGE:
+        # Run calibrations
+        singularity run stips.sif stips calibs 20230519
+
+        # Run science processing
+        singularity run stips.sif stips science 20230519
+
+        # Run difference imaging
+        singularity run stips.sif stips dia 20230519 --auto --band r
+
+        # Interactive shell
+        singularity shell stips.sif
+
+        # Direct pipetask access
+        singularity exec stips.sif pipetask run -b /data/repo ...
+
+    REQUIRED BIND MOUNTS:
+        -B /path/to/butler/repo:/data/repo      Butler repository
+        -B /path/to/raw/data:/data/raw          Raw FITS files
+        -B /path/to/refcats:/data/refcats       Reference catalogs
+
+    OPTIONAL BIND MOUNTS:
+        -B /path/to/config:/config              Configuration files (.env)
+        -B /path/to/outputs:/data/outputs       Output directory
+
+    ENVIRONMENT VARIABLES:
+        REPO=/data/repo
+        RAW_PARENT_DIR=/data/raw
+        REFCAT_REPO=/data/refcats
+        STIPS_PROFILE=<profile>                   Load .env.<profile> from /config
+
+    EXAMPLES:
+        # Basic processing
+        singularity run -B /scratch/repo:/data/repo \
+                        -B /archive/raw:/data/raw \
+                        -B /common/refcats:/data/refcats \
+                        stips.sif stips calibs 20230519
+
+        # With profile configuration
+        singularity run -B /scratch/repo:/data/repo \
+                        -B /archive/raw:/data/raw \
+                        -B /common/refcats:/data/refcats \
+                        -B ./config:/config \
+                        --env STIPS_PROFILE=2023ixf \
+                        stips.sif stips dia 20230519 --auto
+
+        # BPS submission (local testing)
+        singularity run -B ... \
+                        stips.sif stips bps submit science 20230519 --site local
+
+%environment
+    # Standard environment variables
+    export STACK_DIR=/opt/lsst/software/stack
+    export INSTRUMENT_DIR=/opt/stips/instruments/nickel
+    export STIPS_DEFAULTS=/opt/stips/packages/obs_stips/instrument_defaults
+    export OBS_NICKEL_DATA=/opt/stips/instruments/nickel/obs_nickel_data
+    export STIPS_ROOT=/opt/stips
+
+    # Default data paths (can be overridden with --env)
+    export REPO=/data/repo
+    export RAW_PARENT_DIR=/data/raw
+    export REFCAT_REPO=/data/refcats
+
+    # Locale settings to avoid encoding issues
+    export LC_ALL=C
+    export LANG=C
+
+%runscript
+    # Execute the entrypoint script with passed arguments
+    exec /opt/stips/docker/entrypoint.sh "$@"
+
+%startscript
+    # For Singularity instances
+    exec /opt/stips/docker/entrypoint.sh "$@"
+
+%test
+    # Basic sanity checks during build
+    echo "Testing STIPS container..."
+
+    # Check that LSST stack is present
+    if [ ! -f "${STACK_DIR}/loadLSST.bash" ]; then
+        echo "ERROR: LSST stack not found at ${STACK_DIR}"
+        exit 1
+    fi
+
+    # Check that the nickel instrument is present
+    if [ ! -d "${INSTRUMENT_DIR}" ]; then
+        echo "ERROR: nickel instrument not found at ${INSTRUMENT_DIR}"
+        exit 1
+    fi
+
+    # Check that stips CLI is available
+    if ! command -v stips &> /dev/null; then
+        echo "WARNING: stips command not in PATH (will be available after stack activation)"
+    fi
+
+    echo "Container tests passed!"

@@ -1,4 +1,4 @@
-"""BPS (Batch Processing Service) integration for Nickel Processing Suite.
+"""BPS (Batch Processing Service) integration for Small Telescope Image Processing Suite.
 
 This module provides functionality for submitting pipelines to HPC clusters
 using LSST's BPS (Batch Processing Service) with Parsl or HTCondor backends.
@@ -16,6 +16,7 @@ Example usage:
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 from dataclasses import dataclass, field
@@ -23,8 +24,15 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from stips.collections import template_ps1
+from stips.core.config import resolve_data_package_dir
+from stips.core.query import butler_str_literal
+
 if TYPE_CHECKING:
     from stips.core.config import Config
+
+
+log = logging.getLogger(__name__)
 
 
 # Repo's packages/ directory (bps.py is at packages/stips/src/stips/core/bps.py;
@@ -38,6 +46,38 @@ VALID_PIPELINES = ("calibs", "science", "dia", "fphot", "custom")
 
 # Valid site names
 VALID_SITES = ("slurm", "htcondor", "local", "singularity-slurm", "docker-slurm")
+
+# Sites whose ``wmsServiceClass`` is Parsl (see ``bps/sites/*.yaml``). Parsl runs
+# *synchronously* — ``bps submit`` blocks until the workflow finishes and there is
+# no pollable WMS run (``ParslService.report`` raises ``NotImplementedError``), so
+# a missing run id on these sites is EXPECTED, not an error. HTCondor is the only
+# asynchronous site: it submits and returns a run id for later polling.
+_PARSL_SITES = frozenset({"local", "slurm", "singularity-slurm", "docker-slurm"})
+_HTCONDOR_SITES = frozenset({"htcondor"})
+
+
+def is_synchronous_site(site: str) -> bool:
+    """Whether ``site`` runs synchronously (Parsl) with no pollable WMS run.
+
+    On synchronous sites a missing ``run_id`` is legitimate (the job already
+    finished during ``bps submit``); on asynchronous sites (HTCondor) it means
+    run-id extraction failed and the poll strategy is unavailable.
+    """
+    return site in _PARSL_SITES
+
+
+def wms_service_fqn_for_site(site: str) -> str | None:
+    """WMS service class FQN for a site, or ``None`` if unknown.
+
+    Mirrors the ``wmsServiceClass`` in ``bps/sites/{site}.yaml``. Only the
+    asynchronous (HTCondor) FQN is used by the run-id WMS fallback; the Parsl
+    FQN is returned for completeness but its ``report`` is unimplemented.
+    """
+    if site in _HTCONDOR_SITES:
+        return "lsst.ctrl.bps.htcondor.HTCondorService"
+    if site in _PARSL_SITES:
+        return "lsst.ctrl.bps.parsl.ParslService"
+    return None
 
 
 @dataclass
@@ -53,7 +93,8 @@ class BPSConfig:
         object_filter: Optional object name filter
         coord_collection: Coordinate collection for forced photometry
         operator: Username for output collections
-        project: Project/account for HPC allocation
+        project: Project/account for HPC allocation (None → the active
+            profile's name, lowercased)
         dry_run: If True, show what would be submitted without running
         extra_args: Additional arguments to pass to bps submit
     """
@@ -65,8 +106,10 @@ class BPSConfig:
     template_collection: str | None = None
     object_filter: str | None = None
     coord_collection: str | None = None
-    operator: str = field(default_factory=lambda: os.environ.get("USER", "nps"))
-    project: str = "nickel"
+    operator: str = field(default_factory=lambda: os.environ.get("USER", "stips"))
+    # HPC allocation account. None → resolved from the active profile's
+    # ``name.lower()`` at render time (F-021), rather than hardcoding "nickel".
+    project: str | None = None
     dry_run: bool = False
     extra_args: list[str] = field(default_factory=list)
 
@@ -176,6 +219,15 @@ def render_bps_config(
     timestamp = generate_timestamp()
     prof = config.require_profile()
 
+    # Default band / PS1 template collection follow the profile's band->template
+    # policy: fall back to the first PS1-eligible band (ps1_band_map key) rather
+    # than a hardcoded "r". For Nickel/CTIO1m this is "r", preserving behavior.
+    default_band = bps_cfg.band or next(iter(prof.ps1_band_map), "r")
+    # Resolve the HPC project account and BPS payload prefix from the active
+    # profile rather than hardcoding "nickel" (F-021).
+    project = bps_cfg.project or prof.name.lower()
+    payload_prefix = prof.name.lower()
+
     # Load template config
     template_path = find_bps_config(bps_cfg.pipeline, config)
     template_content = template_path.read_text()
@@ -183,7 +235,9 @@ def render_bps_config(
     # Build object filter string
     object_filter = ""
     if bps_cfg.object_filter:
-        object_filter = f" AND exposure.target_name='{bps_cfg.object_filter}'"
+        object_filter = (
+            f" AND exposure.target_name={butler_str_literal(bps_cfg.object_filter)}"
+        )
 
     # Variable substitutions
     variables = {
@@ -197,8 +251,14 @@ def render_bps_config(
         "stips_defaults": str(_PACKAGES_DIR / "obs_stips" / "instrument_defaults"),
         "stips_src": str(_PACKAGES_DIR / "stips" / "src"),
         "obs_data_package": prof.obs_data_package or "",
+        # Resolve the data-package dir with the shared precedence (explicit
+        # package_dir, co-located under the instrument dir, or the reference
+        # packages/ layout) so a fork's data package need not live under the
+        # framework packages/ directory.
         "instrument_data_dir": (
-            str(_PACKAGES_DIR / prof.obs_data_package) if prof.obs_data_package else ""
+            str(_data_dir)
+            if (_data_dir := resolve_data_package_dir(prof, config.instrument_dir))
+            else ""
         ),
         "stack_dir": str(config.stack_dir),
         "cp_pipe_dir": str(config.cp_pipe_dir) if config.cp_pipe_dir else "",
@@ -206,10 +266,11 @@ def render_bps_config(
         "refcat_repo": str(config.refcat_repo) if config.refcat_repo else "",
         "computeSite": bps_cfg.site,
         "operator": bps_cfg.operator,
-        "project": bps_cfg.project,
-        "band": bps_cfg.band or "r",
+        "project": project,
+        "payload_prefix": payload_prefix,
+        "band": default_band,
         "template_collection": bps_cfg.template_collection
-        or f"templates/ps1/{bps_cfg.band or 'r'}",
+        or template_ps1(default_band),
         "coord_collection": bps_cfg.coord_collection or "",
         "object_filter": object_filter,
         "pipeline": bps_cfg.pipeline,
@@ -273,6 +334,93 @@ def render_bps_config(
     return output_file
 
 
+#: Matches ``Run Id``/``Run ID``/``run_id`` followed by ``: <value>`` anywhere in
+#: a line (tolerating a leading log prefix); the ``Run Name`` line is excluded by
+#: the caller.
+_RUN_ID_RE = re.compile(r"\brun[ _]?id\s*:\s*(\S+)", re.IGNORECASE)
+
+
+def _extract_run_id(stdout: str) -> str | None:
+    """Extract the BPS run id from ``bps submit`` stdout.
+
+    The v30 submit banner prints ``Run Id: <id>`` followed by ``Run Name: <name>``
+    (``ctrl_bps.drivers.submit_driver``). Match ``Run Id``/``Run ID``/``run_id``
+    case-insensitively (and tolerate a leading log/timestamp prefix) while
+    explicitly excluding the ``Run Name:`` line — a superset of the original
+    ``"Run ID:" in line or "run_id:" in line`` substring check, which the prior
+    ``startswith("run id")`` fix had inadvertently narrowed (it dropped the
+    ``run_id:`` underscore variant and any prefixed line).
+    """
+    for line in stdout.splitlines():
+        if "run name" in line.lower():
+            continue
+        match = _RUN_ID_RE.search(line)
+        if match:
+            return match.group(1).strip()
+    return None
+
+
+def _match_run_id(runs: list[dict], output_run: str) -> str | None:
+    """Pick the ``wms_id`` of the run matching ``output_run`` from a WMS listing.
+
+    ``output_run`` is the RUN collection this submission targets — it is rendered
+    into the BPS config as ``outputRun`` and is unique (it carries a timestamp),
+    so it identifies the just-submitted workflow among the WMS's recent runs.
+    ``WmsRunReport`` exposes it via ``run`` (and the payload/path echo pieces of
+    it), so we match defensively across those fields but require a **single**
+    unambiguous match — otherwise we return ``None`` and let the caller degrade
+    loudly rather than poll the wrong run.
+    """
+    if not output_run:
+        return None
+
+    matched: list[str] = []
+    for r in runs:
+        wms_id = r.get("wms_id")
+        if not wms_id:
+            continue
+        for key in ("run", "payload", "path"):
+            value = r.get(key) or ""
+            if output_run == value or output_run in value:
+                matched.append(str(wms_id))
+                break
+
+    if len(matched) == 1:
+        return matched[0]
+    return None
+
+
+def _resolve_run_id_via_wms(
+    bps_cfg: BPSConfig,
+    config: Config,
+) -> str | None:
+    """Recover a run id from the WMS when the submit banner did not yield one.
+
+    Structured fallback for asynchronous (HTCondor) submissions: list recent WMS
+    runs via ``bps_report.list_runs`` (``retrieve_report(run_id=None)``) and match
+    the one whose RUN collection equals ``bps_cfg.output_run``. Returns ``None``
+    when the WMS is unavailable, returns nothing, or does not match uniquely — the
+    caller then treats the run id as genuinely unavailable.
+
+    Not attempted on synchronous (Parsl) sites: there is no pollable run there, so
+    a missing banner id is expected rather than something to recover.
+    """
+    if is_synchronous_site(bps_cfg.site):
+        return None
+
+    fqn = wms_service_fqn_for_site(bps_cfg.site)
+    if not fqn:
+        return None
+
+    from stips.core import bps_report
+
+    runs = bps_report.list_runs(config, wms_service_fqn=fqn)
+    if not runs:
+        return None
+
+    return _match_run_id(runs, bps_cfg.output_run or "")
+
+
 def submit(
     bps_cfg: BPSConfig,
     config: Config,
@@ -327,18 +475,32 @@ def submit(
             cwd=submit_dir,
         )
 
-        # Parse output for run ID
-        run_id = None
-        if result.stdout:
-            # Look for run ID in output (format varies by WMS)
-            for line in result.stdout.splitlines():
-                if "Run ID:" in line or "run_id:" in line:
-                    parts = line.split(":", 1)
-                    if len(parts) > 1:
-                        run_id = parts[1].strip()
-                        break
-
         success = result.returncode == 0
+
+        # Layered run-id extraction, most-reliable-first:
+        #   1. the submit banner (cheap; works on v30 —
+        #      ``ctrl_bps.drivers.submit_driver`` prints ``Run Id: <id>``).
+        #   2. structured WMS fallback (query ``retrieve_report`` and match this
+        #      submission's output RUN collection) when the banner parse fails.
+        # The CLI ``bps submit`` invocation is kept as-is on purpose: an
+        # in-process submit would change ctrl_bps config/logging semantics and is
+        # too risky to fold into this fix. Only run-id *recovery* is layered.
+        run_id = None
+        if success:
+            run_id = _extract_run_id(result.stdout or "")
+            if run_id is None:
+                run_id = _resolve_run_id_via_wms(bps_cfg, config)
+                if run_id is None and not is_synchronous_site(bps_cfg.site):
+                    # Async site with no recoverable run id: no longer silent.
+                    # The executor turns this into a loud, degraded mode rather
+                    # than misclassifying it as a finished synchronous backend.
+                    log.error(
+                        "bps submit (site=%s) succeeded but no run id could be "
+                        "extracted from the banner or recovered from the WMS "
+                        "(output_run=%s); WMS polling is unavailable for this run.",
+                        bps_cfg.site,
+                        bps_cfg.output_run or "",
+                    )
 
         return BPSResult(
             success=success,

@@ -14,7 +14,9 @@ import logging
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from stips.core.stack import run_butler, run_butler_query
+from stips.collections import CollectionNames
+from stips.core import butler_query
+from stips.core.stack import run_butler
 
 if TYPE_CHECKING:
     from stips.core.config import Config
@@ -27,11 +29,10 @@ log = logging.getLogger(__name__)
 def run_patterns(prefix: str) -> list[str]:
     """Processing-run glob patterns (safe to delete) for an instrument prefix."""
     return [
-        f"{prefix}/runs/*/processCcd/*",
+        CollectionNames.science_glob(prefix),
         f"{prefix}/runs/*/diff/*",
-        f"{prefix}/runs/*/forcedPhotRaDec/*",
+        CollectionNames.forced_phot_glob(prefix),
         f"{prefix}/runs/*/coadd/*",
-        f"{prefix}/runs/*/science/*",
     ]
 
 
@@ -60,12 +61,33 @@ def step_patterns(prefix: str) -> dict[str, list[str]]:
         "calibs": [f"{prefix}/cp/{{night}}/*", f"{prefix}/calib/{{night}}"],
         "science": [f"{prefix}/runs/{{night}}/processCcd/*"],
         "dia": [f"{prefix}/runs/{{night}}/diff/*"],
-        "fphot": [f"{prefix}/runs/{{night}}/forcedPhotRaDec/*"],
-        "coadd": [
-            f"{prefix}/runs/{{night}}/coadd/*",
-            f"{prefix}/runs/{{night}}/science/*",
-        ],
+        "fphot": [CollectionNames.forced_phot_glob(prefix, night="{night}")],
+        "coadd": [f"{prefix}/runs/{{night}}/coadd/*"],
     }
+
+
+@dataclass
+class CleanPlan:
+    """A captured plan of exactly which collections ``execute()`` will remove.
+
+    Discovery runs once in :func:`plan`; :func:`execute` deletes precisely the
+    collections recorded here. This closes the race where preview and deletion
+    each re-query the Butler and could act on different collection sets.
+    """
+
+    #: Mapping of collection name -> collection type (RUN/CHAINED/CALIBRATION/...).
+    collections: dict[str, str] = field(default_factory=dict)
+    #: Validation error (e.g. unknown step); when set the plan is not executable.
+    error: str | None = None
+
+    @property
+    def names(self) -> list[str]:
+        """Collection names slated for removal (sorted, as discovered)."""
+        return list(self.collections.keys())
+
+    @property
+    def is_empty(self) -> bool:
+        return not self.collections
 
 
 @dataclass
@@ -102,36 +124,18 @@ def _query_collections(
     Uses run_butler_query() (not run_butler()) to keep stdout clean
     of LSST log messages that would corrupt the table parsing.
     """
-    repo = str(config.repo)
     prefix = config.require_profile().collection_prefix
     collections: dict[str, str] = {}
 
     for pattern in patterns:
         try:
-            result = run_butler_query(
-                ["query-collections", repo, pattern],
-                config,
-                check=False,
-            )
-            if result.returncode == 0:
-                for line in result.stdout.strip().splitlines():
-                    line = line.strip()
-                    if not line:
-                        continue
-                    # Skip table formatting (header, separator lines)
-                    if line.startswith("-") or line.startswith("="):
-                        continue
-                    if line.lower().startswith("name"):
-                        continue
-                    parts = line.split()
-                    if len(parts) < 2:
-                        continue
-                    col = parts[0]
-                    col_type = parts[-1]  # Type is the last column
-                    # Never touch preserved collections
-                    if _is_preserved(col, prefix):
-                        continue
-                    collections[col] = col_type
+            for col, col_type in (
+                butler_query.list_collection_types(config, pattern) or {}
+            ).items():
+                # Never touch preserved collections
+                if _is_preserved(col, prefix):
+                    continue
+                collections[col] = col_type
         except Exception as e:
             log.debug(f"Error querying pattern {pattern}: {e}")
 
@@ -170,56 +174,72 @@ def _build_patterns(
     return list(dict.fromkeys(patterns))
 
 
-def run(
+def plan(
     config: Config,
     *,
     nights: list[str] | None = None,
     steps: list[str] | None = None,
-    dry_run: bool = False,
-) -> CleanResult:
-    """Remove processing runs from the Butler repository.
+) -> CleanPlan:
+    """Discover exactly which collections would be removed (no deletion).
 
-    Deletes science, DIA, forced photometry, and per-night coadd runs.
-    Calibrations are only removed when explicitly requested via
-    ``steps=["calibs"]``.  Preserves raws, reference catalogs, and skymaps.
-
-    Uses ``butler remove-collections --remove-from-parents`` for non-RUN
-    collections and ``butler remove-runs --force`` for RUN collections.
+    Runs Butler discovery a single time and captures the result in a
+    :class:`CleanPlan`. Callers preview the plan, confirm, then pass the *same*
+    plan to :func:`execute` — so the set that is deleted is provably the set the
+    user saw.
 
     Args:
         config: Pipeline configuration
         nights: Only clean these nights (default: all nights)
         steps: Only clean these steps, e.g. ["calibs", "science", "dia"]
             (default: all processing steps except calibs)
-        dry_run: List what would be removed without deleting
 
     Returns:
-        CleanResult with removed collections and any errors
+        CleanPlan of collections to remove, or one carrying ``error`` on an
+        invalid step selection.
     """
     valid_steps = {"calibs", "science", "dia", "fphot", "coadd"}
     if steps:
         bad = [s for s in steps if s not in valid_steps]
         if bad:
-            return CleanResult(
-                success=False,
-                errors=[f"Unknown step(s): {bad}. Valid: {sorted(valid_steps)}"],
+            return CleanPlan(
+                error=f"Unknown step(s): {bad}. Valid: {sorted(valid_steps)}"
             )
 
-    repo = str(config.repo)
     prefix = config.require_profile().collection_prefix
-    result = CleanResult(success=True)
-
     patterns = _build_patterns(prefix, nights, steps)
     col_map = _query_collections(config, patterns)
 
     if not col_map:
         log.info("No collections found to remove")
-        return result
+    else:
+        log.info(f"Found {len(col_map)} collections to remove")
 
-    log.info(f"Found {len(col_map)} collections to remove")
+    return CleanPlan(collections=col_map)
 
-    if dry_run:
-        result.collections_removed = list(col_map.keys())
+
+def execute(config: Config, clean_plan: CleanPlan) -> CleanResult:
+    """Remove exactly the collections captured in ``clean_plan``.
+
+    Uses ``butler remove-collections --remove-from-parents`` for non-RUN
+    collections and ``butler remove-runs --force`` for RUN collections, so
+    cleanup works even when collections are still linked from parent chains.
+
+    Args:
+        config: Pipeline configuration
+        clean_plan: The plan produced by :func:`plan` (deletion targets are read
+            from it, not re-discovered).
+
+    Returns:
+        CleanResult with removed collections and any errors.
+    """
+    if clean_plan.error:
+        return CleanResult(success=False, errors=[clean_plan.error])
+
+    repo = str(config.repo)
+    result = CleanResult(success=True)
+
+    col_map = clean_plan.collections
+    if not col_map:
         return result
 
     # Group collections by type for correct removal strategy:

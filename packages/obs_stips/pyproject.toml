@@ -12,7 +12,14 @@ dependencies = [
     "stips",
     "astro_metadata_translator>=0.11.0",
     "astropy",
+    "numpy",
+    "pyyaml",
 ]
+
+[project.optional-dependencies]
+# matplotlib is only needed by the plotting module and the plot PipelineTasks,
+# which already require the (non-pip) LSST stack; keep it an opt-in extra.
+plotting = ["matplotlib"]
 
 [project.entry-points."astro_metadata_translator.translators"]
 Stips = "lsst.obs.stips.translator:StipsTranslator"

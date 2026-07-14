@@ -15,7 +15,9 @@ A telescope is defined entirely by the files in this directory:
 | `fetch.py`        | Optional Lick-archive data-fetch hook (referenced by the profile) |
 | `template_metadata.json` | PS1 template metadata for this instrument              |
 | `tests/`          | Reference-instrument tests, run against the generic machinery |
-| `configs/`, `pipelines/` | *Optional.* Tuned config / pipeline overrides. Absent here — Nickel inherits the framework defaults from `obs_stips/instrument_defaults/`; a fork drops a same-named file to override one |
+| `configs/`        | Nickel's **instrument-fitted** science calibration — Landolt-fit `colorterms.py`, `calibrateImage/tuned_configs/*`, and the Nickel-band `refcats_gaia_ps1.py` (resolved instrument-dir-first). These are per-telescope and are deliberately **not** in the framework's neutral tier; a fork must fit and drop in its own — see `packages/obs_stips/instrument_defaults/README.md` |
+| `pipelines/`      | *Optional, absent here.* Nickel inherits all framework-default pipelines from `obs_stips/instrument_defaults/pipelines/`; a fork drops a same-named file to override one |
+| `colorterms/`, `tuning/`, `defects/` | Recipes/utilities that regenerate the fitted `configs/` assets (`stips-colorterms-fit`, `stips-tune-calibrate-image`, `stips-defects-build`) |
 
 ## Using it
 
@@ -28,8 +30,9 @@ export INSTRUMENT_DIR=/path/to/stips/instruments/nickel
 butler register-instrument <repo> lsst.obs.stips.active.Instrument
 ```
 
-Curated calibrations (defects/crosstalk) still come from the separate
-`obs_nickel_data` EUPS data package, named by `profile.obs_data_package`.
+Curated calibrations (defects/crosstalk) come from the co-located
+`obs_nickel_data` EUPS data package (`instruments/nickel/obs_nickel_data`),
+named by `profile.obs_data_package`.
 
 To define a new telescope, copy this directory and edit `profile.py` +
 `camera/`. See `docs/forking-stips.md`.

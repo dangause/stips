@@ -28,16 +28,8 @@ Example:
     run.run(config_file=Path("pipeline.yaml"), config=cfg)
 """
 
-from stips.core import (
-    calibs,
-    dia,
-    fphot,
-    lightcurve,
-    ps1_template,
-    run,
-    science,
-)
-from stips.core.config import Config, load
+import importlib
+from typing import TYPE_CHECKING
 
 __all__ = [
     "Config",
@@ -50,3 +42,52 @@ __all__ = [
     "lightcurve",
     "run",
 ]
+
+# Submodules re-exported lazily via PEP 562 ``__getattr__``. Importing them
+# eagerly here would pull in heavy/optional dependencies (e.g. the LSST stack)
+# at package import time, breaking commands that never need them -- including
+# ``stips --help``. The CLI already imports each core module lazily inside its
+# command handlers; keeping this list lazy preserves that isolation.
+_SUBMODULES = frozenset(
+    {
+        "calibs",
+        "science",
+        "dia",
+        "ps1_template",
+        "fphot",
+        "lightcurve",
+        "run",
+    }
+)
+
+# Names re-exported from ``stips.core.config``.
+_CONFIG_ATTRS = frozenset({"Config", "load"})
+
+if TYPE_CHECKING:  # Help static analysers see the re-exported names.
+    from stips.core import (  # noqa: F401
+        calibs,
+        dia,
+        fphot,
+        lightcurve,
+        ps1_template,
+        run,
+        science,
+    )
+    from stips.core.config import Config, load  # noqa: F401
+
+
+def __getattr__(name: str):
+    if name in _SUBMODULES:
+        module = importlib.import_module(f"{__name__}.{name}")
+        globals()[name] = module
+        return module
+    if name in _CONFIG_ATTRS:
+        config = importlib.import_module(f"{__name__}.config")
+        value = getattr(config, name)
+        globals()[name] = value
+        return value
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def __dir__() -> list[str]:
+    return sorted(set(globals()) | set(__all__))

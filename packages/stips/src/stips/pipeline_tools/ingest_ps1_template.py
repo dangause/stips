@@ -82,14 +82,44 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
-# PS1 filter to Nickel filter mapping
-PS1_TO_NICKEL_BANDS = {
-    "g": "v",  # PS1 g is closest to Nickel V (Johnson V)
-    "r": "r",  # PS1 r matches Nickel R (Cousins R)
-    "i": "i",  # PS1 i matches Nickel I (Cousins I)
-    "z": "i",  # PS1 z → Nickel I (no z in Nickel)
-    "y": "i",  # PS1 y → Nickel I (no y in Nickel)
-}
+
+def _resolve_ps1_band(local_band: str) -> str | None:
+    """Resolve the PS1 band to download for a LOCAL science band.
+
+    The band->template policy lives in the active instrument profile's
+    ``ps1_band_map`` (LOCAL band -> PS1 band); this replaces the historical
+    hardcoded PS1->Nickel table so a fork expresses its own filter policy in the
+    profile instead of editing the framework. This tool runs in-stack and
+    standalone, so it resolves the profile at runtime via the same
+    ``load_active_profile`` path used elsewhere in this module.
+
+    Returns the PS1 band name, or None if ``local_band`` is not PS1-eligible for
+    the active profile. If the profile cannot be loaded at all (e.g.
+    INSTRUMENT_DIR unset), falls back to an identity mapping (PS1 band == local
+    band) to preserve the tool's historical standalone behavior.
+    """
+    try:
+        from stips.core.config import load_active_profile
+
+        prof = load_active_profile()
+        band_map = dict(getattr(prof, "ps1_band_map", None) or {})
+    except Exception as e:
+        log.warning(
+            "Could not load instrument profile (%s); assuming PS1 band == "
+            "local band %r",
+            e,
+            local_band,
+        )
+        return local_band
+    if local_band in band_map:
+        return band_map[local_band]
+    log.error(
+        "Band %r is not PS1-eligible for the active instrument; eligible: %s",
+        local_band,
+        ", ".join(sorted(band_map)) or "(none configured)",
+    )
+    return None
+
 
 # PS1 zeropoints (AB mag for 1 DN/sec)
 # From PS1 DR2: https://outerspace.stsci.edu/display/PANSTARRS/PS1+Stack+images
@@ -1128,7 +1158,10 @@ def ingest_exposure_to_butler(
 
     # Get skymap to determine tract/patch.
     # Prefer the active instrument's profile values, allowing env overrides.
-    # Wrapped in try/except so this script stays runnable without a loaded profile.
+    # Wrapped in try/except so this script stays runnable without a loaded
+    # profile — but when the profile is unavailable AND no env override is
+    # given, fail loud rather than silently assuming Nickel (F-043).
+    profile_error: Exception | None = None
     try:
         from stips.core.config import load_active_profile
 
@@ -1136,12 +1169,31 @@ def ingest_exposure_to_butler(
         prof_skymap_name = prof.skymap_name
         prof_skymap_collection = prof.skymap_collection
         prof_instrument = prof.name
-    except Exception:
+    except Exception as exc:
         prof_skymap_name = None
         prof_skymap_collection = None
-        prof_instrument = "Nickel"
+        prof_instrument = None
+        profile_error = exc
 
-    skymap_name = os.environ.get("SKYMAP_NAME") or prof_skymap_name or "nickelRings-v1"
+    _profile_hint = (
+        f"instrument profile not loaded ({profile_error})"
+        if profile_error is not None
+        else "the loaded instrument profile does not define it"
+    )
+
+    skymap_name = os.environ.get("SKYMAP_NAME") or prof_skymap_name
+    if not skymap_name:
+        raise RuntimeError(
+            f"skymap name unavailable: {_profile_hint} and SKYMAP_NAME is "
+            "unset; set INSTRUMENT_DIR to instruments/<name>/ (containing "
+            "profile.py) in your config env: block, or export SKYMAP_NAME."
+        )
+    if not prof_instrument:
+        raise RuntimeError(
+            f"instrument name unavailable: {_profile_hint}; set INSTRUMENT_DIR "
+            "to instruments/<name>/ (containing profile.py) in your config "
+            "env: block."
+        )
     skymap_collections = (
         os.environ.get("SKYMAPS_CHAIN") or prof_skymap_collection or "skymaps"
     )
@@ -1310,13 +1362,15 @@ Examples:
     parser.add_argument(
         "--band",
         required=True,
-        choices=["r", "i"],
-        help="Nickel filter band (restricted to r/i for PS1 templates)",
+        # No static choices: PS1 eligibility is instrument-specific and lives in
+        # the active profile's ps1_band_map. Validated at runtime (see
+        # _resolve_ps1_band), which also names the eligible bands on error.
+        help="Local science band (must be PS1-eligible for the active instrument)",
     )
     parser.add_argument(
         "--ps1-band",
-        choices=["r", "i"],
-        help="PS1 band to download (default: auto-map from --band)",
+        choices=["g", "r", "i", "z", "y"],
+        help="PS1 band to download (default: auto-map from --band via the profile)",
     )
     parser.add_argument(
         "--size",
@@ -1370,10 +1424,12 @@ Examples:
     if args.verbose:
         log.setLevel(logging.DEBUG)
 
-    # Map Nickel band to PS1 band if not specified
+    # Map local band to PS1 band (via the active profile) if not specified.
     if args.ps1_band is None:
-        args.ps1_band = args.band
-        log.info(f"Auto-mapped Nickel {args.band} → PS1 {args.ps1_band}")
+        args.ps1_band = _resolve_ps1_band(args.band)
+        if args.ps1_band is None:
+            sys.exit(1)
+        log.info(f"Mapped local band {args.band} → PS1 {args.ps1_band}")
 
     # Step 1: Download or use existing PS1 FITS
     if args.ps1_fits:
@@ -1464,7 +1520,7 @@ Examples:
     log.info(f"  Collection: {args.collection}")
     log.info(f"  Data ID: {data_id}")
     log.info(f"  FITS file: {lsst_fits_path}")
-    log.info(f"  PS1 filter: {args.ps1_band} → Nickel {args.band}")
+    log.info(f"  PS1 filter: {args.ps1_band} → local band {args.band}")
     log.info("")
     log.info("Next steps:")
     log.info(

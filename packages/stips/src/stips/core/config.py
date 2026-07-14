@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+import os
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -10,10 +12,70 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from stips.profile import InstrumentProfile
 
+_log = logging.getLogger(__name__)
+
 
 # Repo packages/ dir, derived from this file's location
 # (packages/stips/src/stips/core/config.py -> parents[4] == packages/).
 _PACKAGES_DIR = Path(__file__).resolve().parents[4]
+
+
+def resolve_data_package_dir(
+    profile: "InstrumentProfile", instrument_dir: str | Path
+) -> Path | None:
+    """Resolve the directory of the profile's curated-calibration data package.
+
+    The active instrument declares an optional EUPS data package of curated
+    calibrations via ``profile.obs_data_package`` (e.g. ``obs_nickel_data``).
+    This locates that package on disk so callers can eups-setup / PYTHONPATH it,
+    without assuming it lives under the framework's own ``packages/`` directory.
+
+    Resolution precedence:
+
+    1. ``profile.package_dir`` if set — an explicit override. An absolute path is
+       used as-is; a relative path is resolved against ``instrument_dir`` so a
+       fork can co-locate the package under its own ``instruments/<x>/`` tree
+       (e.g. ``package_dir="obs_<x>_data"``). Honored even if the path does not
+       yet exist, since it is an explicit declaration.
+    2. ``<instrument_dir>/<obs_data_package>`` if it exists — the co-located
+       layout, without needing an explicit ``package_dir``. This is the
+       reference layout (``instruments/nickel/obs_nickel_data``).
+    3. ``<framework packages/>/<obs_data_package>`` if it exists — a legacy
+       fallback for a package still living under the framework ``packages/`` dir.
+    4. ``None`` — the profile declares no data package, or a package is named but
+       none of the candidate locations exist (caller skips data-package setup).
+
+    Args:
+        profile: The active instrument profile.
+        instrument_dir: The active instrument directory (``INSTRUMENT_DIR``).
+
+    Returns:
+        The resolved data-package directory, or ``None`` if not resolvable.
+    """
+    instrument_dir = Path(instrument_dir)
+
+    # (1) Explicit override wins, existence-independent.
+    package_dir = getattr(profile, "package_dir", None)
+    if package_dir:
+        p = Path(package_dir).expanduser()
+        return p if p.is_absolute() else (instrument_dir / p)
+
+    data_pkg = getattr(profile, "obs_data_package", None)
+    if not data_pkg:
+        return None
+
+    # (2) Co-located under the instrument dir.
+    colocated = instrument_dir / data_pkg
+    if colocated.exists():
+        return colocated
+
+    # (3) Reference layout: framework packages/ sibling.
+    framework = _PACKAGES_DIR / data_pkg
+    if framework.exists():
+        return framework
+
+    # (4) Named but not found anywhere.
+    return None
 
 
 def load_active_profile(instrument_dir: str | Path | None = None):
@@ -69,13 +131,21 @@ def _discover_cp_pipe_dir(stack_dir: Path) -> Path | None:
             break
 
     if not loader:
+        _log.warning(
+            "CP_PIPE_DIR not discovered (no LSST loader script in %s); calib "
+            "pipelines will fail — set CP_PIPE_DIR explicitly.",
+            stack_dir,
+        )
         return None
 
-    # Query eups for cp_pipe location
-    script = f"""
-source "{loader}" 2>/dev/null
+    # Query eups for cp_pipe location. The loader path is passed via the
+    # environment and referenced as "$STIPS_LOADER" rather than interpolated
+    # into the script text, so a path with shell metacharacters cannot expand
+    # or inject (F-018).
+    script = """
+source "$STIPS_LOADER" 2>/dev/null
 setup lsst_distrib 2>/dev/null
-eups list -d cp_pipe 2>/dev/null | head -1 | awk '{{print $1}}'
+eups list -d cp_pipe 2>/dev/null | head -1 | awk '{print $1}'
 """
     try:
         result = subprocess.run(
@@ -83,14 +153,25 @@ eups list -d cp_pipe 2>/dev/null | head -1 | awk '{{print $1}}'
             capture_output=True,
             text=True,
             timeout=30,
+            env={**os.environ, "STIPS_LOADER": str(loader)},
         )
         if result.returncode == 0 and result.stdout.strip():
             path = Path(result.stdout.strip())
             if path.exists():
                 return path
-    except Exception:
-        pass
+    except Exception as e:
+        _log.warning(
+            "CP_PIPE_DIR auto-discovery failed (%s: %s); calib pipelines will "
+            "fail — set CP_PIPE_DIR explicitly.",
+            type(e).__name__,
+            e,
+        )
+        return None
 
+    _log.warning(
+        "CP_PIPE_DIR not discovered from the LSST stack; calib pipelines will "
+        "fail — set CP_PIPE_DIR explicitly."
+    )
     return None
 
 
@@ -104,8 +185,6 @@ class Config:
         instrument_dir: Active instrument package directory containing
             pipelines/ and configs/ (the primary required instrument field;
             base of all pipeline/config path joins)
-        obs_nickel: Deprecated read-only alias for instrument_dir (kept one
-            release; see the ``obs_nickel`` property)
         raw_parent_dir: Parent directory for raw data
         refcat_repo: Path to reference catalog repository
         cp_pipe_dir: Path to cp_pipe pipelines
@@ -188,24 +267,62 @@ class Config:
             errors.append(f"RAW_PARENT_DIR does not exist: {self.raw_parent_dir}")
         if self.cp_pipe_dir and not self.cp_pipe_dir.exists():
             errors.append(f"CP_PIPE_DIR does not exist: {self.cp_pipe_dir}")
+        if self.refcat_repo and not self.refcat_repo.exists():
+            errors.append(f"REFCAT_REPO does not exist: {self.refcat_repo}")
         return errors
 
 
-def _expand_within(value: str, env: dict[str, str]) -> str:
+# Max ${VAR} expansion passes before we declare a reference cycle. Config env
+# blocks are shallow (a value referencing a value referencing a value), so a
+# legitimate chain resolves in a handful of passes; 10 is generous headroom
+# while still terminating deterministically on a self-referential cycle.
+_MAX_EXPANSION_PASSES = 10
+
+
+def _expand_within(value: str, env: dict[str, str], *, key: str | None = None) -> str:
     """Expand ${VAR} references using ONLY the given env dict (no os.environ).
 
     Args:
         value: String potentially containing ${VAR} references
         env: The config env block — the sole substitution source
+        key: The env key ``value`` came from (for error messages), if known
 
     Returns:
-        String with all ${VAR} references expanded; unknown vars expand to "".
+        String with all ${VAR} references fully expanded.
+
+    Raises:
+        ValueError: If a ``${`` is unterminated (no closing ``}``), if a
+            referenced variable is not defined in the env block, or if the
+            expansion does not terminate within ``_MAX_EXPANSION_PASSES``
+            (a self-referential or mutually-recursive cycle).
     """
+    where = f" (env key '{key}')" if key else ""
+    passes = 0
     while "${" in value:
+        passes += 1
+        if passes > _MAX_EXPANSION_PASSES:
+            raise ValueError(
+                f"${{VAR}} expansion did not terminate after "
+                f"{_MAX_EXPANSION_PASSES} passes{where}; this indicates a "
+                f"self-referential or mutually-recursive reference. Last value: "
+                f"{value!r}. Remove the cycle in the config env: block."
+            )
         start = value.index("${")
-        end = value.index("}", start)
+        end = value.find("}", start)
+        if end == -1:
+            raise ValueError(
+                f"Unterminated '${{' in config value{where}: {value!r}. "
+                f"Every ${{VAR}} must have a closing '}}'."
+            )
         var_name = value[start + 2 : end]
-        var_value = env.get(var_name, "")
+        if var_name not in env:
+            available = ", ".join(sorted(env)) or "(none)"
+            raise ValueError(
+                f"Unknown variable '${{{var_name}}}' referenced in config "
+                f"value{where}: {value!r}. Available env keys: {available}. "
+                f"Check for a typo, or define '{var_name}' in the env: block."
+            )
+        var_value = env[var_name]
         value = value[:start] + var_value + value[end + 1 :]
     return value
 
@@ -246,7 +363,7 @@ def load(
         env = {str(k): str(v) for k, v in env.items()}
 
     # ${VAR} expansion using ONLY the env block (no os.environ)
-    merged = {k: _expand_within(v, env) for k, v in env.items()}
+    merged = {k: _expand_within(v, env, key=k) for k, v in env.items()}
 
     # INSTRUMENT_PACKAGE is removed: the profile is loaded BY PATH from
     # INSTRUMENT_DIR. A lingering INSTRUMENT_PACKAGE in the env block is a stale

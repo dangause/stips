@@ -24,7 +24,7 @@ import re
 # Safe to import at module load: fetch.py is stdlib-only at import time
 # (urllib/json); the NOIRLab archive is hit only when fetch_data() runs.
 from fetch import fetch_data as _fetch_data
-from stips import Field, InstrumentProfile, Site, hook
+from stips import CrosstalkSpec, Field, InstrumentProfile, Site, hook, make_exposure_id
 
 log = logging.getLogger("lsst.obs.stips.ctio1m.profile")
 
@@ -56,6 +56,10 @@ profile = InstrumentProfile(
         "I": "I",
     },
     filter_key="FILTERID",
+    # PS1 templates (LOCAL band -> PS1 band). PS1 serves grizy; Y4KCam's r/i map
+    # to PS1 r/i. u/b/v have no PS1 equivalent and fall back to coadd templates in
+    # "auto" mode. Matches the reference Nickel r/i policy.
+    ps1_band_map={"r": "r", "i": "i"},
     # FITS INSTRUME is "Y4KCam" (the camera), not the instrument name "CTIO1m".
     instrument_header_value="Y4KCam",
     header_map={
@@ -101,6 +105,26 @@ profile = InstrumentProfile(
     #     tracks it. Must be on for the bias build too, else the master bias keeps
     #     the parallel structure and science would double-subtract it.
     isr_overrides={"doDefect": False, "overscan.doParallelOverscan": True},
+    # Intra-detector crosstalk for the 4-amp Y4KCam. MEASURED with
+    # `stips measure-crosstalk` (cp_pipe cpCrosstalk) on the E2 standard field,
+    # night 20111113 (2x2-binned, B/V/R/I, 93 science exposures; full 12-element
+    # off-diagonal solve, ~20k-34k samples/element). Row i = receiving amp, col j
+    # = source amp (coeffs[i][j] = fraction of amp j's signal appearing in amp i);
+    # amp order is the camera order A00,A01,A02,A03; diagonal is 0.0. Magnitudes
+    # are ~0.1-0.4% (largest between adjacent quadrants), as expected; per-element
+    # errors are order-of-coefficient (crosstalk measured from stars, not saturated
+    # trails), so treat these as indicative. STIPS builds a CrosstalkCalib from
+    # this matrix, certifies it into the calib chain, and enables ISR doCrosstalk.
+    # Re-measure with a brighter/denser field to tighten the values.
+    crosstalk=CrosstalkSpec(
+        coeffs=[
+            [0.0, 2.796342e-03, 8.545585e-04, 7.248305e-04],
+            [3.919039e-03, 0.0, 9.806441e-04, 8.650255e-04],
+            [1.106021e-03, 8.157125e-04, 0.0, 2.590679e-03],
+            [1.432011e-03, 1.140293e-03, 4.400683e-03, 0.0],
+        ],
+        units="adu",
+    ),
 )
 
 
@@ -172,13 +196,6 @@ def _day_obs(header):
     return int(_datetime_end(header).datetime.strftime("%Y%m%d"))
 
 
-# Epoch used for the 31-bit-safe exposure_id (days since 2000-01-01).
-def _epoch0():
-    import astropy.time
-
-    return astropy.time.Time("2000-01-01T00:00:00", scale="utc")
-
-
 # ---------------------------------------------------------------------------
 # Quirk hooks. Signatures mirror the reference Nickel profile's hooks exactly.
 # ---------------------------------------------------------------------------
@@ -219,13 +236,7 @@ def exposure_id(header):
     Mirrors the Nickel scheme: a full YYYYMMDD date * 10000 overflows 31 bits,
     so days-since-2000 (the end-of-exposure UTC day) is used as the date term.
     """
-    seqnum = _seqnum(header)
-    t = _datetime_end(header)
-    days = int((t - _epoch0()).to_value("day"))
-    exp_id = days * 10000 + seqnum
-    if exp_id >= 2**31:
-        raise ValueError(f"exposure_id {exp_id} is out of 31-bit range")
-    return exp_id
+    return make_exposure_id(_datetime_end(header), _seqnum(header))
 
 
 @hook(profile)

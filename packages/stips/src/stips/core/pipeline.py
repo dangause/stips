@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import re
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -11,6 +12,14 @@ from typing import TYPE_CHECKING
 # Re-exported for backwards compatibility; canonical home is stips.collections.
 from stips.collections import CollectionNames as CollectionNames
 from stips.collections import generate_run_timestamp as generate_run_timestamp
+from stips.collections import template_deep as template_deep
+from stips.collections import template_deep_glob as template_deep_glob
+from stips.collections import template_deep_run as template_deep_run
+from stips.collections import template_ps1 as template_ps1
+from stips.collections import template_ps1_glob as template_ps1_glob
+from stips.core import butler_query
+from stips.core.query import butler_str_literal
+from stips.core.stack import run_butler
 
 if TYPE_CHECKING:
     from stips.core.config import Config
@@ -94,15 +103,110 @@ def night_to_day_obs(night: str, offset_days: int = 1) -> str:
     return (dt + timedelta(days=offset_days)).strftime("%Y%m%d")
 
 
-def isr_config_args(profile, label: str = "isr") -> list[str]:
+def ps1_band_map(config: "Config") -> dict[str, str]:
+    """Return the active profile's LOCAL-band -> PS1-band map (empty if no profile).
+
+    This is the single source of truth for the band->template policy (F-011):
+    the KEYS are the local science bands eligible for external PS1 templates, and
+    each value is the PS1 band to download for it. An empty map (no profile, or a
+    fork that declares none) means "no PS1 templates" — every band then falls
+    back to a coadd template in "auto" mode.
+    """
+    prof = getattr(config, "profile", None)
+    if prof is None:
+        return {}
+    return dict(getattr(prof, "ps1_band_map", None) or {})
+
+
+def ps1_eligible_bands(config: "Config") -> list[str]:
+    """Local science bands eligible for PS1 templates (``ps1_band_map`` keys)."""
+    return list(ps1_band_map(config).keys())
+
+
+def night_day_obs_values(
+    night: str,
+    profile=None,
+    *,
+    offset_days: int | None = None,
+) -> tuple[int, ...]:
+    """Return the distinct UT ``day_obs`` values an observing night can span.
+
+    A single local observing night can straddle UT midnight: exposures taken
+    before midnight (Pacific evening) have ``day_obs == night``, while
+    post-midnight exposures have ``day_obs == night + offset_days`` (what
+    :func:`night_to_day_obs` returns). Butler queries must include *both* days
+    or pre-midnight exposures are silently dropped.
+
+    Args:
+        night: Local observing night (YYYYMMDD)
+        profile: Active instrument profile; its
+            ``night_to_dayobs_offset_days`` is used when ``offset_days`` is not
+            given explicitly. Defaults to 1 (Nickel-correct) when both are None.
+        offset_days: Explicit local->UT offset, overriding the profile value.
+
+    Returns:
+        Tuple of distinct integer ``day_obs`` values (one value when the offset
+        collapses both days onto the same date, e.g. ``offset_days=0``).
+    """
+    if offset_days is None:
+        offset_days = profile.night_to_dayobs_offset_days if profile is not None else 1
+    first = int(night)
+    second = int(night_to_day_obs(night, offset_days=offset_days))
+    if second == first:
+        return (first,)
+    return (first, second)
+
+
+def night_day_obs_expr(
+    night: str,
+    profile=None,
+    *,
+    column: str = "day_obs",
+    offset_days: int | None = None,
+) -> str:
+    """Build a Butler WHERE fragment selecting a night's UT ``day_obs`` value(s).
+
+    Emits ``{column} IN (a, b)`` for the two UT days an observing night spans,
+    or ``{column}=a`` when the offset collapses them onto a single date. See
+    :func:`night_day_obs_values` for the two-UT-day rationale.
+
+    Args:
+        night: Local observing night (YYYYMMDD)
+        profile: Active instrument profile (supplies the offset).
+        column: Column name to constrain (e.g. ``"day_obs"`` or
+            ``"exposure.day_obs"``).
+        offset_days: Explicit local->UT offset, overriding the profile value.
+
+    Returns:
+        A WHERE clause fragment (no leading ``AND``).
+    """
+    values = night_day_obs_values(night, profile, offset_days=offset_days)
+    if len(values) == 1:
+        return f"{column}={values[0]}"
+    joined = ", ".join(str(v) for v in values)
+    return f"{column} IN ({joined})"
+
+
+def isr_config_args(
+    profile, label: str = "isr", *, include_crosstalk: bool = True
+) -> list[str]:
     """Build ``pipetask --config`` args from the profile's ``isr_overrides``.
 
     The same overrides are applied to every ISR invocation — calib build
     (``cpBiasIsr``/``cpFlatIsr``) and science (``isr``) — by passing the task
     label, so e.g. parallel-overscan settings stay consistent between the master
     bias/flat and the science frames they correct.
+
+    When the profile declares ``crosstalk``, ``doCrosstalk=True`` is injected for
+    every ISR invocation (so the certified crosstalk calib corrects the master
+    bias/flat and the science frames alike). An explicit ``doCrosstalk`` in
+    ``isr_overrides`` wins and is not duplicated. Pass ``include_crosstalk=False``
+    for the crosstalk *measurement* ISR (``cpCrosstalkIsr``), which must not apply
+    crosstalk while measuring it.
     """
-    overrides = getattr(profile, "isr_overrides", None) or {}
+    overrides = dict(getattr(profile, "isr_overrides", None) or {})
+    if include_crosstalk and getattr(profile, "crosstalk", None) is not None:
+        overrides.setdefault("doCrosstalk", True)
     args: list[str] = []
     for key, value in overrides.items():
         args.extend(["--config", f"{label}:{key}={value}"])
@@ -198,27 +302,26 @@ def find_bad_coord_exposures(
     # A Lick observing night can span two UT days (Pacific evening = night,
     # post-midnight = night+1). Query both. The local->UT offset is
     # instrument-configurable via the active profile.
-    offset_days = (
-        config.profile.night_to_dayobs_offset_days if config.profile is not None else 1
-    )
-    day_obs_next = night_to_day_obs(night, offset_days=offset_days)
+    day_obs_expr = night_day_obs_expr(night, config.profile, column="exposure.day_obs")
 
     # Build WHERE clause
     where = (
         f"instrument='{instrument_name}' AND exposure.observation_type='science'"
-        f" AND exposure.day_obs IN ({night}, {day_obs_next})"
+        f" AND {day_obs_expr}"
     )
     if object_filter:
-        where += f" AND exposure.target_name='{object_filter}'"
+        where += f" AND exposure.target_name={butler_str_literal(object_filter)}"
 
+    # Embed the repo path and WHERE expression as Python literals (!r) so they
+    # cannot break out of the generated snippet's string literals (F-018).
     script = f"""
 import json
 from lsst.daf.butler import Butler
 
-butler = Butler("{config.repo}")
+butler = Butler({str(config.repo)!r})
 records = list(butler.registry.queryDimensionRecords(
     "exposure",
-    where="{where}",
+    where={where!r},
 ))
 
 results = []
@@ -235,7 +338,19 @@ print(json.dumps(results))
 """
 
     exposures = run_butler_python_json(script, config)
+    if exposures is None:
+        # The in-stack query crashed (None), which is NOT the same as "no
+        # exposures matched" ([]). Silently returning [] here would disable
+        # the stuck-DEC coordinate-validation safety net without anyone
+        # noticing. Do not raise (degraded/offline runs must proceed), but the
+        # operator must see that the check did not run.
+        log.error(
+            "Coordinate validation could not run (in-stack exposure query "
+            "returned no result) — proceeding WITHOUT bad-coordinate exclusion."
+        )
+        return []
     if not exposures:
+        # Genuinely no exposures matched the query; nothing to validate.
         return []
 
     bad_ids: list[int] = []
@@ -276,53 +391,123 @@ print(json.dumps(results))
 REFCATS_CHAIN = "refcats"
 
 
-def parse_butler_query_output(
-    output: str,
-    *,
-    prefix_filter: str | None = None,
-) -> list[str]:
-    """Parse butler query-collections or query-datasets tabular output.
+def _is_processccd_parent(collection: str) -> bool:
+    """True for a CHAINED processCcd parent (not a bare ``/run`` or ``/run_fb*``).
 
-    Extracts the first column (collection/dataset name) from butler CLI
-    tabular output, skipping headers and separator lines.
+    Science processing writes RUN collections ``.../processCcd/{ts}/run`` plus
+    ``.../run_fb1..3`` for fallback ``calibrateImage`` configs, all chained under
+    the CHAINED parent ``.../processCcd/{ts}``. The parent is what downstream
+    consumers (DIA, coadd, fphot) must use, since it aggregates the primary and
+    every successful fallback RUN.
+    """
+    return not collection.endswith("/run") and "/run_fb" not in collection
+
+
+def latest_raw_run(config: Config, night: str) -> str | None:
+    """Return the newest raw-ingest collection for ``night`` (or ``None``).
+
+    ``list_collections`` returns names sorted ascending, so the timestamped raw
+    ingest collections sort oldest-first; the newest (``[-1]``) is the correct
+    one to use, since a re-ingest (e.g. after a header fix) appends a newer
+    timestamp that supersedes the stale earlier one.
+    """
+    prof = config.require_profile()
+    raw_collections = (
+        butler_query.list_collections(
+            config,
+            f"{prof.collection_prefix}/raw/{night}/*",
+            prefix=f"{prof.collection_prefix}/",
+        )
+        or []
+    )
+    return raw_collections[-1] if raw_collections else None
+
+
+def resolve_processccd_collections(
+    config: Config,
+    night: str,
+    *,
+    all_parents: bool = False,
+    verify_datasets: bool = False,
+    dataset_type: str | None = None,
+    where: str = "",
+) -> list[str]:
+    """Resolve the processCcd science collection(s) to feed downstream steps.
+
+    Encapsulates the "prefer the CHAINED parent over individual ``/run`` and
+    ``/run_fb*`` RUNs" policy shared by DIA, coadd, and forced photometry, with a
+    single, consistent tie-break: CHAINED parents are returned **newest-first**.
 
     Args:
-        output: Raw stdout from butler query-collections/query-datasets
-        prefix_filter: Only return names starting with this prefix
-            (e.g. (Nickel) "Nickel/", or "templates/")
+        config: Pipeline configuration.
+        night: Observing night (YYYYMMDD).
+        all_parents: When True, return every CHAINED parent (DIA needs the union
+            across disjoint band groups). When False (default), return only the
+            single newest parent (fphot / coadd).
+        verify_datasets: When True, keep only collections that actually contain
+            ``dataset_type`` (coadd's per-band verification). Requires
+            ``dataset_type``.
+        dataset_type: Dataset type checked when ``verify_datasets`` is True.
+        where: Optional Butler WHERE clause for the verification query
+            (e.g. ``"band='r'"``).
 
     Returns:
-        List of collection/dataset names
+        Matching collection names, newest-first. Empty list when none is found
+        (or none survive verification).
+
+    Notes:
+        If **no** CHAINED parent exists for the night, this falls back to a bare
+        RUN collection, preferring ``/run`` over any ``/run_fb*`` (a lone
+        fallback RUN is only a partial result), and logs a WARNING — downstream
+        steps normally expect the CHAINED parent.
     """
-    names = []
-    for line in output.strip().splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        # Skip header/separator lines
-        if line.startswith(("-", "=")):
-            continue
-        # Skip column header lines (case-insensitive)
-        first_word = line.split()[0].lower() if line.split() else ""
-        if first_word in ("type", "name", "collection", "dataset"):
-            continue
-        # Extract first column
-        parts = line.split()
-        if not parts:
-            continue
-        name = parts[0]
-        if prefix_filter and not name.startswith(prefix_filter):
-            continue
-        names.append(name)
-    return names
+    if verify_datasets and dataset_type is None:
+        raise ValueError("verify_datasets=True requires a dataset_type to check.")
 
+    prof = config.require_profile()
+    colls = (
+        butler_query.list_collections(
+            config,
+            f"{prof.collection_prefix}/runs/{night}/processCcd/*",
+            prefix=f"{prof.collection_prefix}/",
+        )
+        or []
+    )
+    if not colls:
+        return []
 
-def butler_query_has_results(output: str) -> bool:
-    """Check if butler tabular output contains at least one data row.
+    # Newest-first CHAINED parents.
+    parents = sorted((c for c in colls if _is_processccd_parent(c)), reverse=True)
 
-    Useful for checking if query-datasets or query-data-ids returned results.
-    """
-    return len(parse_butler_query_output(output)) > 0
+    if not parents:
+        # No CHAINED parent: fall back to a bare RUN, preferring /run over a lone
+        # /run_fb* (which only holds partial, fallback-config results).
+        runs = sorted((c for c in colls if c.endswith("/run")), reverse=True)
+        fallback_runs = sorted((c for c in colls if "/run_fb" in c), reverse=True)
+        candidates = runs or fallback_runs
+        if not candidates:
+            return []
+        chosen = candidates[0]
+        log.warning(
+            "No CHAINED processCcd parent for night %s; falling back to bare RUN "
+            "collection %s (partial results — downstream steps normally expect "
+            "the CHAINED parent).",
+            night,
+            chosen,
+        )
+        parents = [chosen]
+
+    if verify_datasets:
+        parents = [
+            c
+            for c in parents
+            if butler_query.has_datasets(config, dataset_type, c, where=where)
+        ]
+
+    if not parents:
+        return []
+
+    return parents if all_parents else parents[:1]
 
 
 def parse_quanta_summary(
@@ -398,3 +583,122 @@ def read_log_delta(
 def is_empty_qgraph(output: str) -> bool:
     """Check if pipetask output indicates an empty quantum graph."""
     return "QuantumGraph contains no quanta" in output
+
+
+def ensure_instrument_registered(
+    config: "Config",
+    log_file: Path | None = None,
+) -> None:
+    """Register the active instrument in the Butler repo (idempotent).
+
+    Hoisted from the five identical copies that lived in science/dia/calibs
+    (×2)/coadd. ``check=False`` tolerates the common "already registered"
+    non-zero exit. No try/except here on purpose: the only remaining raise path
+    is a stack-activation/spawn failure, which must surface rather than be
+    silently swallowed.
+    """
+    prof = config.require_profile()
+    run_butler(
+        ["register-instrument", str(config.repo), prof.instrument_class],
+        config,
+        check=False,
+        log_file=log_file,
+    )
+
+
+def redefine_chain(
+    config: "Config",
+    parent: str,
+    members: str | list[str],
+    *,
+    log_file: Path | None = None,
+) -> None:
+    """Redefine a CHAINED collection's members (``collection-chain --mode redefine``).
+
+    Hoisted from the identical post-run chain redefinitions in science
+    (``_verify_and_chain_runs`` + coadd tail), dia, calibs (bias + flat), and
+    coadd. ``members`` may be a single collection name or an ordered list
+    (search order is preserved). The calibs *final* calib-chain update is NOT
+    routed through here: it uses ``--mode prepend`` with ``check=False`` (a
+    different, tolerant semantic) and is deliberately left inline.
+    """
+    if isinstance(members, str):
+        members = [members]
+    run_butler(
+        ["collection-chain", str(config.repo), parent, *members, "--mode", "redefine"],
+        config,
+        log_file=log_file,
+    )
+
+
+@dataclass
+class PipetaskStage:
+    """Declarative description of one ``qgraph``-then-``run`` pipetask invocation.
+
+    Collapses the copy-pasted ``["qgraph", "-b", repo, "-p", ...]`` +
+    ``["run", "-b", repo, "-g", ...]`` argv construction shared by every stage
+    module (science attempt + science coadd tail, dia, calibs bias + flat,
+    coadd) into one builder. Field values and ordering are chosen to reproduce
+    each site's *exact* argv (pinned by ``test_pipetask_stage.py``), so wiring a
+    site through this dataclass is a pure behavior-preserving refactor.
+
+    Args:
+        repo: Butler repo path (``-b``).
+        pipeline: Pipeline expression, already including any ``#subset`` (``-p``);
+            may be a bare pipeline path (calibs).
+        inputs: Comma-joined input collections (``-i``).
+        output_run: RUN collection (``--output-run`` on the qgraph).
+        qgraph_path: Where the built qgraph is saved (``--save-qgraph``) and read
+            back for the run (``-g``).
+        data_query: Butler data-selection expression (``-d``).
+        output_parent: CHAINED output parent (``-o``); omitted when ``None``
+            (coadd builds into a bare RUN and swaps the chain afterward).
+        pre_query_args: Extra qgraph args emitted between ``--save-qgraph`` and
+            ``-d`` (science's ``--config-file`` chain).
+        post_query_args: Extra qgraph args emitted after ``-d`` (profile ISR
+            overrides, per-stage ``--config-file`` / ``-c``, and science's
+            ``--skip-existing-in`` / ``--clobber-outputs``).
+        jobs: Parallel jobs (``-j``) for the run.
+        register_dataset_types: Emit ``--register-dataset-types`` on the run.
+        run_includes_output_run: Emit ``--output-run`` inline on the run args
+            (science attempt + dia; the other sites pass ``output_run`` only as
+            an executor kwarg).
+        summary_file: When set, emit ``--summary <file>`` on the run args.
+    """
+
+    repo: str
+    pipeline: str
+    inputs: str
+    output_run: str
+    qgraph_path: str
+    data_query: str
+    output_parent: str | None = None
+    pre_query_args: list[str] = field(default_factory=list)
+    post_query_args: list[str] = field(default_factory=list)
+    jobs: int = 8
+    register_dataset_types: bool = True
+    run_includes_output_run: bool = False
+    summary_file: str | None = None
+
+    def qgraph_args(self) -> list[str]:
+        """Build the ``pipetask qgraph`` argv for this stage."""
+        args = ["qgraph", "-b", self.repo, "-p", self.pipeline, "-i", self.inputs]
+        if self.output_parent is not None:
+            args += ["-o", self.output_parent]
+        args += ["--output-run", self.output_run, "--save-qgraph", self.qgraph_path]
+        args += list(self.pre_query_args)
+        args += ["-d", self.data_query]
+        args += list(self.post_query_args)
+        return args
+
+    def run_args(self) -> list[str]:
+        """Build the ``pipetask run`` argv for this stage."""
+        args = ["run", "-b", self.repo, "-g", self.qgraph_path]
+        if self.run_includes_output_run:
+            args += ["--output-run", self.output_run]
+        args += ["-j", str(self.jobs)]
+        if self.register_dataset_types:
+            args.append("--register-dataset-types")
+        if self.summary_file is not None:
+            args += ["--summary", str(self.summary_file)]
+        return args

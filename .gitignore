@@ -68,8 +68,8 @@ logs
 packages/obs_stips/tests/data/**/__pycache__/
 packages/obs_stips/tests/data/**/*.pyc
 
-# Defect visualization outputs
-packages/defects/defects_tools/defects/defects_*/
+# Defect tool outputs (stips-defects-build writes ./defects_<TS>/ to cwd)
+defects_*/
 **/defects/defects/
 
 # DIA pipeline outputs
@@ -87,7 +87,6 @@ packages/refcats/upstream/
 *.png
 
 # Project docs (auto-generated)
-CLAUDE.md
 
 # Claude Code / superpowers session state
 .claude/

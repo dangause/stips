@@ -4,12 +4,12 @@
 # Singularity/Apptainer containers with Slurm job scheduling.
 #
 # Deployment workflow:
-#   1. Build Docker image:    docker build -t nps:latest -f docker/Dockerfile .
-#   2. Convert to SIF:        singularity build nps.sif docker-daemon://nps:latest
-#   3. Transfer to cluster:   scp nps.sif cluster:/scratch/images/
-#   4. Bootstrap on login:    apptainer exec --bind /scratch nps.sif \
+#   1. Build Docker image:    docker build -t stips:latest -f docker/Dockerfile .
+#   2. Convert to SIF:        singularity build stips.sif docker-daemon://stips:latest
+#   3. Transfer to cluster:   scp stips.sif cluster:/scratch/images/
+#   4. Bootstrap on login:    apptainer exec --bind /scratch stips.sif \
 #                               nickel bootstrap --env-file /scratch/config/.env.hpc
-#   5. Run pipeline:          apptainer exec --bind /scratch nps.sif \
+#   5. Run pipeline:          apptainer exec --bind /scratch stips.sif \
 #                               nickel run /scratch/config/pipeline_ps1_hpc.yaml
 #
 # The orchestrator (nickel run) runs inside the container on the login node.
@@ -23,11 +23,11 @@
 # Data paths (REPO, RAW_PARENT_DIR, REFCAT_REPO) use host paths that get
 # bind-mounted into the container by the singularity-slurm commandPrefix.
 env:
-  REPO: "/scratch/nps/repo"
+  REPO: "/scratch/stips/repo"
   STACK_DIR: "/opt/lsst/software/stack"
-  INSTRUMENT_DIR: "/opt/nps/instruments/nickel"
-  RAW_PARENT_DIR: "/scratch/nps/raw"
-  REFCAT_REPO: "/scratch/nps/refcats"
+  INSTRUMENT_DIR: "/opt/stips/instruments/nickel"
+  RAW_PARENT_DIR: "/scratch/stips/raw"
+  REFCAT_REPO: "/scratch/stips/refcats"
 
 # Target information
 # SN 2023ixf in M101 (Pinwheel Galaxy)
@@ -87,7 +87,7 @@ options:
   # Execution backend: route pipetask through BPS/Parsl/Slurm
   execution: bps
   site: singularity-slurm
-  container_image: /scratch/images/nps.sif
+  container_image: /scratch/images/stips.sif
 
   # Parallelism
   jobs: 8

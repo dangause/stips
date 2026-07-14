@@ -57,20 +57,36 @@ nothing to rename in Python, no metadata files to edit — it is pure data:
 ```bash
 cp -r instruments/nickel instruments/<x>
 rm -rf instruments/<x>/tests   # optional: keep & adapt, or start fresh
+
+# Nickel's configs/ hold Nickel-FITTED photometric calibration (§6) — they must
+# NOT carry over to another telescope. Clear them and start from the neutral
+# framework defaults:
+rm -rf instruments/<x>/configs instruments/<x>/obs_nickel_data \
+       instruments/<x>/{colorterms,tuning,defects,testdata,vendor}
 ```
 
-Resulting layout:
+Resulting layout (of a minimal fork):
 
 ```
 instruments/<x>/
 ├── profile.py                 # THE file you edit — your InstrumentProfile + @hooks
 ├── camera/
 │   └── <x>.yaml               # LSST yamlCamera geometry (detectors, plate scale)
-├── pipelines/                 # instrument-tuned pipeline YAMLs (copy & tune)
-├── configs/                   # pipeline task config overrides (copy & tune)
 ├── fetch.py                   # OPTIONAL: a data-fetch hook (delete if you place raws by hand)
+├── template_metadata.json     # OPTIONAL: coadd-template bookkeeping
+├── configs/                   # OPTIONAL: your instrument-fitted calibration (see §6) — add once you have it
+├── README.md
 └── tests/                     # OPTIONAL: reference tests, adapt to your golden values
 ```
+
+`nickel` deliberately ships **no** `pipelines/` dir — it inherits every reference
+pipeline from `packages/obs_stips/instrument_defaults/`. It *does* ship a
+`configs/` dir, but only for its **instrument-fitted** photometric calibration
+(Landolt color terms, `calibrateImage/tuned_configs/`, the Nickel-band PS1
+overlay) — which is exactly what a fork must **not** inherit (§6). So a fresh fork
+starts with **no** `pipelines/` and **no** `configs/`, inheriting the neutral
+framework defaults, and adds its own `instruments/<x>/pipelines/` or `configs/`
+only to override individual files.
 
 That's the whole fork. No `python/lsst/obs/<x>/`, no bindings, no
 `pyproject.toml`, no `ups/` table — `obs_stips` builds the LSST instrument
@@ -92,9 +108,9 @@ profile = InstrumentProfile(
     name="Nickel",
     policy_name="Nickel",                 # defaults to name if omitted
     site=Site(
-        latitude=37.3414,
-        longitude=-121.6429,
-        elevation=1283.0,
+        latitude=37.343333,
+        longitude=-121.636667,
+        elevation=1290.0,
         name="Lick Observatory",          # if set, uses EarthLocation.of_site(name)
     ),
     # physical_filter -> band
@@ -196,15 +212,46 @@ These are the real `InstrumentProfile` fields (from
   without forking the shared `DRP.yaml`. E.g. an instrument with no defect maps
   sets `isr_overrides={"doDefect": False}` (CTIO does exactly this). Default
   `{}` (inherit the framework ISR config unchanged).
+- **`crosstalk`** — Optional `stips.CrosstalkSpec` declaring intra-detector
+  crosstalk coefficients for a **multi-amp** camera (an N×N matrix, N = amp
+  count, zero diagonal). When set, STIPS builds a `CrosstalkCalib` from it,
+  certifies it into the calib chain, and enables ISR crosstalk correction
+  (`stips measure-crosstalk` can measure the matrix from data first). `None`
+  (Nickel, single-amp) disables crosstalk entirely.
 - **`obs_data_package`** — Optional companion EUPS data package with curated
-  calibs / defects / crosstalk (`"obs_nickel_data"`). Left as a normal EUPS
-  package; the stack activation sets it up by name. Omit if you have none — and
-  disable the ISR steps that would need its products via `isr_overrides`.
+  calibs / defects / crosstalk (`"obs_nickel_data"`). Co-locate it under your
+  instrument dir (the reference layout is `instruments/nickel/obs_nickel_data`);
+  `resolve_data_package_dir()` finds `<INSTRUMENT_DIR>/<obs_data_package>`
+  automatically, and the stack activation sets it up by name. Omit if you have
+  none — and disable the ISR steps that would need its products via
+  `isr_overrides`. To build the defect maps this package ships, run the generic
+  `stips-defects-build` tool against master calibs (recipe:
+  `instruments/nickel/defects/README.md`).
+- **`package_dir`** — Optional filesystem path to the instrument package root,
+  for profiles that need to resolve their own bundled resources. Normally left
+  unset (the loader already knows `INSTRUMENT_DIR`); Nickel omits it. When
+  `obs_data_package` is set, `package_dir` is the explicit override for where it
+  lives on disk (absolute path, or a name resolved under the instrument dir);
+  when unset, STIPS looks for `<INSTRUMENT_DIR>/<obs_data_package>` first, then
+  the reference `packages/<obs_data_package>` layout (see
+  `stips.core.config.resolve_data_package_dir` for the full precedence).
+- **`ps1_band_map`** — PS1-template policy: maps a **local science band → the PS1
+  band** to download for it. The map's *keys* are the local bands eligible for
+  external PS1 templates; in `template.type: auto`, every other band falls back
+  to a coadd template. PS1 serves *grizy*, so a Johnson–Cousins instrument like
+  Nickel maps only its `{"r": "r", "i": "i"}`; a Sloan fork could add
+  `{"g": "g"}`. The default (empty dict) means **no PS1 templates** — the safe
+  choice for an unknown fork, which then uses coadd templates for every band.
 - **`fetch_data`** — Optional callable hook: `fetch_data(night, config, *,
   overwrite=False) -> "ok" | "not_found" | "failed"`, used by `stips download`.
   Wire it from a co-located module (Nickel's `profile.py` does `from fetch import
   fetch_data` — the loader puts `instruments/<x>/` on `sys.path` so a co-located
-  `fetch.py` is importable). Leave unset if you place raws by hand.
+  `fetch.py` is importable). Your `fetch.py` implements only the archive backend
+  `_fetch_night(night, raw_root, *, overwrite, **kwargs) -> int` (0 ok / 1 failed
+  / 2 not-found) plus a `build_kwargs(env)` mapping your env schema, then
+  `fetch_data = make_fetch_data(_fetch_night, build_kwargs)` from `stips.fetch`
+  (use `stips.fetch.parse_night` for `YYYYMMDD` validation) — the wrapper, night
+  validation, and status mapping are shared. Leave unset if you place raws by hand.
 - **`policy_name`**, **`refcat_path`** — Optional; `policy_name` defaults to `name`.
 
 ### Quirk hooks (`@hook(profile)`)
@@ -307,14 +354,34 @@ than trusting documentation.
 
 ## 6. Step 5 — Pipelines & configs
 
-**You inherit the whole reference set — no copying required for the common
-case.** STIPS ships reference pipelines
+**You inherit the whole neutral reference set — no copying required for the
+common case.** STIPS ships reference pipelines
 (`packages/obs_stips/instrument_defaults/pipelines/`) and config overrides
 (`packages/obs_stips/instrument_defaults/configs/`), and every fork inherits all
-of them by default. A minimal fork carries **zero** pipeline/config files. These
-framework defaults *are* the reference Nickel tuning — a working starting point
-(mostly relaxed thresholds for a small-aperture, sparse-field instrument) that
-you tweak only where your telescope differs. The rules:
+of them by default. A minimal fork carries **zero** pipeline/config files. The
+structural thresholds in these defaults are a REFERENCE tuning from the Nickel
+1-m (relaxed cuts for a small-aperture, sparse-field instrument) — a working
+starting point that you tweak only where your telescope differs. See
+`packages/obs_stips/instrument_defaults/README.md` for the full tiering
+contract.
+
+**What you do NOT inherit: photometric calibration.** Nickel's empirically-fit
+color terms (`colorterms.py`), its `calibrateImage/tuned_configs/`, and its
+Gaia+PS1 refcat overlay live in `instruments/nickel/configs/` — they are fit for
+one telescope and are deliberately excluded from the neutral tier. **Your fork
+still runs science out of the box**: with no tuned `calibrateImage` config,
+`science.py` falls back to the neutral `calibrateImage/neutral_default.py`
+(schema-compat only, no tuning), and until you fit your own color terms and drop
+a `colorterms.py` into `instruments/<x>/configs/`, photometry is calibrated with
+a plain per-visit zeropoint (color terms OFF). Fitting these is a fork's **#1
+review item** for quality, not a prerequisite to process. (An
+explicitly-configured-but-missing config path still errors — that is typo
+protection, not the no-config fallback.) Two framework tools produce these
+per-instrument files: `stips-colorterms-fit` fits your `colorterms.py` from
+matched standard-star photometry (recipe:
+`instruments/nickel/colorterms/README.md`) and `stips-tune-calibrate-image`
+searches `calibrateImage` parameters to produce your `tuned_configs/` (recipe:
+`instruments/nickel/tuning/README.md`). The rules:
 
 - **Override one file by dropping a same-named file.** The CLI resolves each
   pipeline/config **instrument-dir-first, else framework default** (via
@@ -340,6 +407,15 @@ you tweak only where your telescope differs. The rules:
   `$STIPS_DEFAULTS/configs/<name>.py`. Use `$STIPS_DEFAULTS/...` to reference
   framework siblings and `$INSTRUMENT_DIR/...` to reference your fork's own
   sibling files — both are exported by stack activation.
+- **Never import the profile inside a pex_config (`.py`) config override.**
+  pex_config replays every module first-imported while a config file executes
+  when a saved quantum graph is reloaded, and the path-loaded profile machinery
+  is unimportable at replay time — it kills `pipetask run` at graph
+  deserialization. If your override needs a profile value, read it from an env
+  var instead: STIPS exports `STIPS_PS1_BAND_MAP` (the profile's `ps1_band_map`
+  as JSON) from `run_with_stack` for exactly this reason (see the neutral
+  `refcats_gaia_ps1*.py` overlays). `$STIPS_DEFAULTS` and `$INSTRUMENT_DIR` are
+  exported the same way and are safe to reference by path.
 - **Generic tasks stay generic.** Pipeline steps that reference
   `lsst.obs.stips.tasks.*` or `lsst.obs.stips.calibCombine.StipsCalibCombineTask`
   are framework tasks — keep those references as-is. (The robust calib-combine
@@ -397,6 +473,11 @@ stips -c $CFG run
 ---
 
 ## 9. Verifying & common gotchas
+
+**Free contract coverage.** Ship `tests/contract_data.py` in your instrument
+dir and the framework's auto-discovered contract suite tests your profile,
+exposure-id scheme, translation, and fetch hook with no test code to write —
+see `docs/instrument-contract.md`.
 
 **Translation parity — test first.** Before running pipelines, point
 `astro_metadata_translator` at a real raw FITS header from your telescope and

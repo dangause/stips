@@ -38,21 +38,10 @@ import numpy as np
 from lsst.daf.butler import Butler
 from lsst.daf.butler.registry import MissingDatasetTypeError
 
-from stips.core.config import load_active_profile
-
-
-def _resolve_instrument(instrument: str | None) -> str:
-    """Resolve the instrument name from a CLI arg or the active profile.
-
-    Stays robust if INSTRUMENT_DIR/profile.py is unavailable (falls back to "Nickel").
-    """
-    if instrument:
-        return instrument
-    try:
-        return load_active_profile().name
-    except Exception:
-        return "Nickel"
-
+from stips.pipeline_tools._profile_resolve import (
+    resolve_collection_prefix,
+    resolve_instrument_name,
+)
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -476,14 +465,13 @@ def parse_args():
 def main() -> int:
     args = parse_args()
 
+    instrument = resolve_instrument_name(args.instrument)
+
     # Resolve the collection glob from the active profile when not given,
-    # so non-Nickel forks default to their own processCcd collections.
+    # so forks default to their own processCcd collections.
     collection = args.collection
     if collection is None:
-        try:
-            prefix = load_active_profile().collection_prefix
-        except Exception:
-            prefix = "Nickel"
+        prefix = resolve_collection_prefix(instrument)
         collection = f"{prefix}/runs/*/processCcd/*"
 
     if not args.list_stars and not args.output:
@@ -500,8 +488,6 @@ def main() -> int:
 
     # Open Butler
     butler = Butler(args.repo)
-
-    instrument = _resolve_instrument(args.instrument)
 
     # Resolve collections
     print(f"[info] querying collection: {collection}", file=sys.stderr)

@@ -14,7 +14,13 @@
 
 > The CLI is `stips`. The active instrument is a declarative profile under `instruments/<name>/`, selected at runtime via the `INSTRUMENT_DIR` path in your config's `env:` block (the reference profile is `instruments/nickel`).
 
-> Tested with LSST Science Pipelines `v30.0.3` and `v11.0.0`
+> **Supported LSST stack:** release **`v30_0_3`** — the version the Docker
+> images build on and the one the docs are validated against. CI validates every
+> push against the pinned weekly **`w_2025_32`**, and a scheduled canary tracks
+> **`w_latest`** so upcoming breakage surfaces before the pin moves. (The old
+> "v11.0.0" note here was a `rubin-env` conda-environment number, not a stack
+> release — a category error, now removed.) Before bumping the stack, follow
+> [docs/stack-bump-runbook.md](docs/stack-bump-runbook.md).
 
 ---
 
@@ -58,14 +64,14 @@ stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml dia 20230519 --auto  
 
 ```bash
 # Run with Docker
-docker-compose run --rm nps stips calibs 20230519
+docker-compose run --rm stips stips calibs 20230519
 
 # Or build and run directly
-docker build -t nps:latest -f docker/Dockerfile .
+docker build -t stips:latest -f docker/Dockerfile .
 docker run -v /path/to/repo:/data/repo \
            -v /path/to/raw:/data/raw \
            -v /path/to/refcats:/data/refcats \
-           nps:latest stips env
+           stips:latest stips env
 ```
 
 ---
@@ -103,20 +109,22 @@ docker run -v /path/to/repo:/data/repo \
 
 ```
 stips/
-├── packages/
+├── packages/                 # Framework only
 │   ├── stips/                # Framework core + CLI (the `stips` command) + pipeline tools
 │   ├── obs_stips/            # Instrument-neutral LSST glue (lsst.obs.stips): translator base,
 │   │                         #   camera builder, the `active` Instrument/translator synthesizer,
 │   │                         #   shared tasks, and reference pipelines/configs (instrument_defaults/)
-│   ├── obs_nickel_data/      # Curated Nickel calibrations (defects)
-│   ├── lick_searchable_archive/  # Lick archive client (Nickel data fetch)
-│   ├── defects/              # Defect mask generation
-│   ├── refcats/              # Reference catalog tooling (MONSTER shard dump/ingest)
-│   ├── colorterms/           # Color term fitting
-│   ├── testdata/             # Test fixtures and data
-│   └── tuning/               # Pipeline tuning utilities
+│   └── refcats/              # Reference-catalog tooling (dist `stips-refcats`, import `stips_refcats`):
+│                             #   Gaia DR3 / PS1 cone fetch, HTM coverage, LSST refcat conversion
 ├── instruments/              # Declarative instrument profiles (loaded by INSTRUMENT_DIR)
 │   ├── nickel/               # Reference profile (profile.py, camera, fetch.py, tests)
+│   │   ├── configs/          # Nickel-fitted calibration (colorterms, tuned_configs, PS1 overlay)
+│   │   ├── obs_nickel_data/  # Curated Nickel calibrations (defects) — EUPS data package
+│   │   ├── testdata/         # Test fixtures and data (testdata_nickel EUPS product)
+│   │   ├── defects/          # Defect mask generation (stips-defects-build)
+│   │   ├── colorterms/       # Color term fitting (stips-colorterms-fit)
+│   │   ├── tuning/           # Pipeline tuning utilities (stips-tune-calibrate-image)
+│   │   └── vendor/lick_searchable_archive/  # Vendored Lick archive (client used by fetch.py)
 │   └── ctio1m/               # CTIO 1.0m / Y4KCam (4-amp camera, NOIRLab fetch, tests)
 ├── scripts/
 │   ├── config/               # Per-target YAML configs (2023ixf, 2020wnt, ctio1m, ...)
@@ -126,8 +134,10 @@ stips/
 ├── docker/
 │   ├── Dockerfile            # Standard Docker image
 │   ├── Dockerfile.hpc        # HPC-optimized image
+│   ├── Dockerfile.slurm      # Slurm service image (controller + compute nodes)
 │   ├── docker-compose.yml    # Local development
-│   └── nps.def               # Singularity definition
+│   ├── docker-compose.slurm.yml  # 6-container Slurm test cluster
+│   └── stips.def             # Singularity/Apptainer definition
 ├── bps/
 │   ├── base.yaml             # Base BPS configuration
 │   ├── sites/                # Site configs (slurm, htcondor, local)
@@ -153,18 +163,20 @@ All commands take the group-level config via `stips -c <config.yaml> <command> .
 | `stips bootstrap` | Initialize Butler repository |
 | `stips download NIGHT` | Fetch raw data via the instrument's `fetch_data` hook (Nickel → Lick archive; CTIO → NOIRLab Astro Data Archive) |
 | `stips calibs NIGHT` | Run nightly calibrations (bias, flat, defects) |
+| `stips measure-crosstalk NIGHTS...` | Measure & certify intra-detector crosstalk (multi-amp cameras; needs a profile `CrosstalkSpec`) |
 | `stips science NIGHT` | Process science frames (ISR, WCS, photometry) |
 | `stips dia NIGHT` | Run difference imaging analysis |
 | `stips ps1-template` | Download and ingest PS1 template |
 | `stips fphot NIGHT` | Run forced photometry at RA/Dec |
 | `stips lightcurve` | Extract light curve from sources |
-| `stips clean` | Remove processing outputs for re-runs |
+| `stips calib-metrics` | Dump per-visit astrometric/photometric calibration metrics to CSV |
+| `stips landolt-validate` | Validate photometric calibration against Landolt standards |
+| `stips clean` | Remove processing outputs for re-runs (plan/execute; `--dry-run`) |
 | `stips run` | Run full pipeline from the `-c` YAML config |
 | `stips dashboard` | Launch browser-based pipeline monitoring (needs the `stips[dashboard]` extra) |
-| `stips bps submit` | Submit pipeline to BPS cluster |
-| `stips bps status` | Check BPS run status |
-| `stips bps cancel` | Cancel BPS run |
-| `stips bps list` | List recent BPS runs |
+| `stips refcat fetch\|status` | On-demand Gaia DR3 + PS1 refcat coverage for a target cone |
+| `stips bps submit\|status\|cancel\|list` | Submit and manage BPS cluster runs |
+| `stips provenance sync\|mark-deleted` | Maintain the run-provenance document (`provenance/runs.json`) |
 
 ### Multi-Target Workflows
 
@@ -179,15 +191,23 @@ The group-level `-c/--config` YAML is the sole config source. Its `env:` block s
 
 ### Transient Analysis Workflow
 
+> **Use full-precision coordinates** (6+ decimal places, e.g. SN 2023ixf at
+> `210.910750, 54.311694`). Rounding RA/Dec to 2 decimals is a ~5–17″ offset —
+> enough to miss a point source on Nickel's 0.37″/pixel scale, so forced
+> photometry measures galaxy background instead of the SN.
+
+> Each command still needs the group-level `-c <config.yaml>` (omitted below for
+> brevity; see the note under [Running Pipelines](#running-pipelines)).
+
 ```bash
 # 1. Ingest PS1 template for r-band
-stips ps1-template --ra 210.91 --dec 54.32 --band r
+stips ps1-template --ra 210.910750 --dec 54.311694 --band r
 
 # 2. Run forced photometry on difference images
-stips fphot 20230519 --ra 210.91 --dec 54.32
+stips fphot 20230519 --ra 210.910750 --dec 54.311694
 
 # 3. Extract light curve
-stips lightcurve --ra 210.91 --dec 54.32 \
+stips lightcurve --ra 210.910750 --dec 54.311694 \
     --collections "Nickel/runs/20230519/forcedPhotRaDec/*/run" \
     --dataset-type forced_phot_diffim_radec \
     --name "SN 2023ixf"
@@ -330,6 +350,11 @@ env:
 
 ## Running Pipelines
 
+> Every command needs the group-level `-c <config.yaml>` (its `env:` block is the
+> sole config source). It is shown on the bootstrap step below and omitted from
+> the later one-liners for brevity — prefix each with your config, e.g.
+> `stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml calibs 20230519`.
+
 ### Step 0: Bootstrap (Automatic)
 
 The `stips run` command automatically bootstraps the repository if needed. For manual bootstrap:
@@ -376,27 +401,30 @@ stips dia 20230519 --auto --prefer-ps1 --band r  # Prefer PS1 template
 
 ### Step 5: Forced Photometry
 
+Pass **full-precision** RA/Dec (6+ decimals); 2-decimal rounding offsets the
+aperture by ~5–17″ and measures background instead of the source.
+
 ```bash
-stips fphot 20230519 --ra 210.91 --dec 54.32
-stips fphot 20230519 --ra 210.91 --dec 54.32 --band r --image-type both
+stips fphot 20230519 --ra 210.910750 --dec 54.311694
+stips fphot 20230519 --ra 210.910750 --dec 54.311694 --band r --image-type both
 ```
 
 ### Step 6: Light Curve Extraction
 
 ```bash
 # From DIA sources
-stips lightcurve --ra 210.91 --dec 54.32 \
+stips lightcurve --ra 210.910750 --dec 54.311694 \
     --collections "Nickel/runs/*/diff/*/run" \
     --name "SN 2023ixf"
 
 # From forced photometry (more reliable)
-stips lightcurve --ra 210.91 --dec 54.32 \
+stips lightcurve --ra 210.910750 --dec 54.311694 \
     --collections "Nickel/runs/*/forcedPhotRaDec/*/run" \
     --dataset-type forced_phot_diffim_radec \
     --name "SN 2023ixf"
 
 # With display options (absolute magnitude, days since explosion)
-stips lightcurve --ra 210.91 --dec 54.32 \
+stips lightcurve --ra 210.910750 --dec 54.311694 \
     --collections "Nickel/runs/*/forcedPhotRaDec/*/run" \
     --dataset-type forced_phot_diffim_radec \
     --name "SN 2023ixf" \
@@ -467,10 +495,10 @@ Pipeline runs create a unified log directory at `logs/{RUN_ID}/` with subdirecto
 
 ```bash
 # Default build (LSST v30_0_3)
-docker build -t nps:latest -f docker/Dockerfile .
+docker build -t stips:latest -f docker/Dockerfile .
 
 # Specific LSST version
-docker build --build-arg LSST_TAG=w_2025_19 -t nps:weekly .
+docker build --build-arg LSST_TAG=w_2025_19 -t stips:weekly .
 ```
 
 ### Running with Docker Compose
@@ -483,17 +511,17 @@ docker-compose up -d
 REPO=/path/to/repo RAW_PARENT_DIR=/path/to/raw docker-compose up -d
 
 # Run a command
-docker-compose run --rm nps stips calibs 20230519
+docker-compose run --rm stips stips calibs 20230519
 
 # Interactive shell
-docker-compose run --rm nps bash
+docker-compose run --rm stips bash
 ```
 
 ### Docker Compose Services
 
 | Service | Description | Profile |
 |---------|-------------|---------|
-| `nps` | Main processing service | default |
+| `stips` | Main processing service | default |
 | `jupyter` | JupyterLab for interactive analysis | `interactive` |
 | `bps-worker` | BPS local worker for testing | `bps` |
 
@@ -510,13 +538,13 @@ For HPC environments requiring Singularity:
 
 ```bash
 # Convert Docker image to Singularity
-singularity build nps.sif docker-daemon://nps:latest
+singularity build stips.sif docker-daemon://stips:latest
 
 # Run with bind mounts
 singularity run -B /scratch/repo:/data/repo \
                 -B /archive/raw:/data/raw \
                 -B /common/refcats:/data/refcats \
-                nps.sif stips calibs 20230519
+                stips.sif stips calibs 20230519
 ```
 
 ---
@@ -739,6 +767,16 @@ The science processing step may have failed. Check:
 1. Processing logs in `logs/{RUN_ID}/`
 2. That science processing completed successfully
 3. That collections match the expected pattern
+
+### `stips run` aborts with a refcat error before science
+
+In `gaia_ps1` refcat mode, the on-demand Gaia/PS1 fetch failed, so `stips run`
+fails fast with the root cause rather than continuing into opaque per-night
+science failures (`MissingDatasetTypeError('panstarrs1_dr2')`). Common causes:
+no network to the Gaia TAP / MAST services, `stips-refcats` fetch dependencies
+not installed (a clean `uv sync --group dev` includes them), or a southern field
+(dec ≲ −30°) with no PS1 coverage. Fix the cause, or set `refcat.mode: monster`
+if the repo already holds reference catalogs.
 
 ---
 

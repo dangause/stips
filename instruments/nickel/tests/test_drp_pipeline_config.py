@@ -4,8 +4,7 @@ import pytest
 
 # instruments/nickel/tests/test_drp_pipeline_config.py -> parents[3] == repo root.
 # Derive the framework-defaults DRP.yaml relative to this file so the test does
-# not depend on the caller exporting an env var (only run_with_stack does that),
-# matching the file-relative idiom in conftest.py.
+# not depend on the caller exporting an env var (only run_with_stack does that).
 DRP_YAML_PATH = (
     Path(__file__).resolve().parents[3]
     / "packages"

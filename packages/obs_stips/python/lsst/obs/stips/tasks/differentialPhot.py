@@ -15,8 +15,11 @@ import numpy as np
 try:
     import lsst.pex.config as pexConfig
     import lsst.pipe.base as pipeBase
-    from lsst.daf.butler import DeferredDatasetHandle
     from lsst.pipe.base import connectionTypes as ct
+
+    # Relative import: also fails (harmlessly) when this file is loaded
+    # standalone by path outside the package, matching the stackless test mode.
+    from ._refload import load_ref
 
     _HAS_LSST = True
 except ImportError:
@@ -31,6 +34,14 @@ _LOG = logging.getLogger(__name__)
 
 # Valid aperture radii from calibrateImage (best_calib_t071.py)
 VALID_APERTURE_RADII = [3.0, 6.0, 9.0, 12.0, 17.0, 25.0, 35.0, 50.0, 70.0]
+
+
+def _aperture_key(radius):
+    """Format an aperture radius as the calibrateImage aperture-flux column-key
+    fragment (e.g. ``17.0`` -> ``'17_0'``, ``4.5`` -> ``'4_5'``)."""
+    if radius == int(radius):
+        return f"{int(radius)}_0"
+    return str(radius).replace(".", "_")
 
 
 # ---------------------------------------------------------------------------
@@ -124,8 +135,6 @@ def _compute_differential_flux(target_flux, target_err, comp_fluxes, comp_errs):
     comp_sum = sum(comp_fluxes)
     if comp_sum <= 0:
         return None, None
-    if target_flux == 0:
-        return 0.0, 0.0
     diff = target_flux / comp_sum
     # Error propagation: sigma_diff = diff * sqrt((sigma_t/t)^2 + (sigma_c/c_sum)^2)
     comp_err_sum = np.sqrt(sum(e**2 for e in comp_errs))
@@ -178,8 +187,7 @@ def _process_catalogs(
     """
     from astropy.table import Table
 
-    r = aperture_radius
-    ap_key = f"{int(r)}_0" if r == int(r) else str(r).replace(".", "_")
+    ap_key = _aperture_key(aperture_radius)
     ap_col = f"base_CircularApertureFlux_{ap_key}_instFlux"
     ap_err_col = f"base_CircularApertureFlux_{ap_key}_instFluxErr"
 
@@ -491,10 +499,7 @@ if _HAS_LSST:
         @property
         def _ap_key(self):
             """Aperture radius formatted as column key fragment (e.g. '17_0')."""
-            r = self.config.apertureRadius
-            if r == int(r):
-                return f"{int(r)}_0"
-            return str(r).replace(".", "_")
+            return _aperture_key(self.config.apertureRadius)
 
         def runQuantum(self, butlerQC, inputRefs, outputRefs):
             """Load catalogs from Butler, process, write outputs."""
@@ -505,11 +510,9 @@ if _HAS_LSST:
             for ref in inputRefs.starCatalogs:
                 visit_id = ref.dataId.get("visit")
                 try:
-                    cat = butlerQC.get(ref)
-                    if isinstance(cat, DeferredDatasetHandle):
-                        cat = cat.get()
+                    cat = load_ref(butlerQC, ref)
                 except Exception:
-                    _LOG.warning(
+                    self.log.warning(
                         "Failed to load catalog for visit %s", visit_id, exc_info=True
                     )
                     continue

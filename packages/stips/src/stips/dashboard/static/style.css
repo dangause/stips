@@ -1,4 +1,4 @@
-/* NPS Dashboard Styles */
+/* STIPS Dashboard Styles */
 
 :root {
     --bg: #0d1117;
@@ -269,6 +269,7 @@ h2 { font-size: 1.1rem; margin-bottom: 12px; color: var(--text-muted); }
 }
 .cell-status.success { background: rgba(63, 185, 80, 0.15); color: var(--green); }
 .cell-status.failed  { background: rgba(248, 81, 73, 0.15); color: var(--red); }
+.cell-status.partial { background: rgba(210, 153, 34, 0.15); color: var(--yellow); }
 .cell-status.running { background: rgba(88, 166, 255, 0.15); color: var(--blue); }
 .cell-status.pending { background: var(--bg-tertiary); color: var(--text-muted); }
 .cell-status.skipped { background: var(--bg-tertiary); color: var(--text-muted); font-style: italic; }
