@@ -19,6 +19,8 @@ config.star_measurement.plugins.names |= [
     "base_Variance",
     "base_Blendedness",
     "base_Jacobian",
+    "ext_shapeHSM_HsmPsfMomentsDebiased",
+    "ext_shapeHSM_HsmShapeRegauss",
 ]
 config.star_measurement.plugins["base_CircularApertureFlux"].radii = [
     3.0,
