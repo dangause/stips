@@ -62,10 +62,12 @@ RUN chmod +x /opt/stips/docker/entrypoint.sh
 RUN mkdir -p /data/repo /data/raw /data/refcats /data/outputs /config
 
 # Environment
+# The instrument's EUPS packages (obs_nickel_data, testdata_nickel, ...) are
+# discovered UNDER INSTRUMENT_DIR by entrypoint.sh, so there is no
+# per-instrument data-package ENV to bake here.
 ENV STIPS_ROOT=/opt/stips
 ENV INSTRUMENT_DIR=/opt/stips/instruments/nickel
 ENV STIPS_DEFAULTS=/opt/stips/packages/obs_stips/instrument_defaults
-ENV OBS_NICKEL_DATA=/opt/stips/instruments/nickel/obs_nickel_data
 ENV STACK_DIR=/opt/lsst/software/stack
 ENV REPO=/data/repo
 ENV RAW_PARENT_DIR=/data/raw

@@ -85,11 +85,12 @@ From: stips:latest
                         stips.sif stips bps submit science 20230519 --site local
 
 %environment
-    # Standard environment variables
+    # Standard environment variables. The instrument's EUPS packages
+    # (obs_nickel_data, testdata_nickel, ...) are discovered UNDER INSTRUMENT_DIR
+    # by entrypoint.sh, so there is no per-instrument data-package var here.
     export STACK_DIR=/opt/lsst/software/stack
     export INSTRUMENT_DIR=/opt/stips/instruments/nickel
     export STIPS_DEFAULTS=/opt/stips/packages/obs_stips/instrument_defaults
-    export OBS_NICKEL_DATA=/opt/stips/instruments/nickel/obs_nickel_data
     export STIPS_ROOT=/opt/stips
 
     # Default data paths (can be overridden with --env)
