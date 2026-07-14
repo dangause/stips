@@ -102,8 +102,9 @@ def create_app(
         """Show all pipeline runs."""
         runs = discover_runs(logs_dir)
         return templates.TemplateResponse(
+            request,
             "run_list.html",
-            {"request": request, "runs": runs, "logs_dir": str(logs_dir)},
+            {"runs": runs, "logs_dir": str(logs_dir)},
         )
 
     @app.get("/run/{run_id}", response_class=HTMLResponse)
@@ -115,10 +116,7 @@ def create_app(
                 content="<h1>Run not found</h1><a href='/'>Back</a>",
                 status_code=404,
             )
-        return templates.TemplateResponse(
-            "run_detail.html",
-            {"request": request, "run": run},
-        )
+        return templates.TemplateResponse(request, "run_detail.html", {"run": run})
 
     @app.get("/run/{run_id}/tab/{tab_name}", response_class=HTMLResponse)
     async def run_tab(request: Request, run_id: str, tab_name: str):
@@ -137,7 +135,7 @@ def create_app(
         if template_name is None:
             return HTMLResponse("<p>Unknown tab</p>", status_code=404)
 
-        context: dict = {"request": request, "run": info}
+        context: dict = {"run": info}
 
         if tab_name == "overview":
             log_path = logs_dir / run_id / "pipeline.log"
@@ -161,7 +159,7 @@ def create_app(
 
             context["log_tree"] = get_log_tree(logs_dir, run_id)
 
-        return templates.TemplateResponse(template_name, context)
+        return templates.TemplateResponse(request, template_name, context)
 
     @app.get("/run/{run_id}/night/{night}", response_class=HTMLResponse)
     async def night_detail(request: Request, run_id: str, night: str):
@@ -173,9 +171,9 @@ def create_app(
             return HTMLResponse("<p>Run not found</p>", status_code=404)
         detail = get_night_detail(logs_dir, run_id, night)
         return templates.TemplateResponse(
+            request,
             "night_detail.html",
             {
-                "request": request,
                 "run": info,
                 "night": night,
                 "detail": detail,
