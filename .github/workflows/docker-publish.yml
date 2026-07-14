@@ -26,6 +26,7 @@ on:
       - 'scripts/**'
       - '.github/workflows/docker-publish.yml'
   pull_request:
+    types: [opened, synchronize, reopened, labeled]
     branches:
       - main
       - dev
