@@ -768,6 +768,16 @@ The science processing step may have failed. Check:
 2. That science processing completed successfully
 3. That collections match the expected pattern
 
+### `stips run` aborts with a refcat error before science
+
+In `gaia_ps1` refcat mode, the on-demand Gaia/PS1 fetch failed, so `stips run`
+fails fast with the root cause rather than continuing into opaque per-night
+science failures (`MissingDatasetTypeError('panstarrs1_dr2')`). Common causes:
+no network to the Gaia TAP / MAST services, `stips-refcats` fetch dependencies
+not installed (a clean `uv sync --group dev` includes them), or a southern field
+(dec ≲ −30°) with no PS1 coverage. Fix the cause, or set `refcat.mode: monster`
+if the repo already holds reference catalogs.
+
 ---
 
 ## References
