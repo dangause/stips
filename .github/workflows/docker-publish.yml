@@ -185,10 +185,12 @@ jobs:
           IMAGE_TAG="${TAG#v}"
           singularity build stips.sif docker://${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${IMAGE_TAG}
 
-      - name: Upload Singularity image as release asset
-        uses: softprops/action-gh-release@v1
-        with:
-          files: stips.sif
-          tag_name: ${{ github.event.inputs.release_tag || github.ref_name }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # GitHub release assets are capped at 2 GiB and the .sif exceeds it;
+      # publish via ORAS to ghcr instead. Pull on HPC with:
+      #   singularity pull oras://ghcr.io/<owner>/stips-sif:<tag>
+      - name: Push Singularity image to ghcr via ORAS
+        run: |
+          TAG="${{ github.event.inputs.release_tag || github.ref_name }}"
+          echo "${{ secrets.GITHUB_TOKEN }}" | \
+            singularity remote login -u "${{ github.actor }}" --password-stdin oras://ghcr.io
+          singularity push stips.sif "oras://ghcr.io/${{ github.repository_owner }}/stips-sif:${TAG}"
