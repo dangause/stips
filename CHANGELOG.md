@@ -2,7 +2,7 @@
 
 All notable changes to STIPS (the Small Telescope Image Processing Suite) are documented here.
 
-## [Unreleased]
+## [2.0.0] — 2026-07-14
 
 A large documentation-and-correctness audit campaign. The grouped summary below
 is at user level; the finding-tagged subsections that follow it keep the detailed
