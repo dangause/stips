@@ -25,7 +25,6 @@ on:
       - 'bps/**'
       - 'scripts/**'
       - '.github/workflows/docker-publish.yml'
-
   pull_request:
     branches:
       - main
@@ -35,6 +34,11 @@ on:
 
   workflow_dispatch:
     inputs:
+      release_tag:
+        description: 'Existing release tag to (re)build the Singularity image for (e.g. v2.0.0)'
+        required: false
+        default: ''
+        type: string
       lsst_tag:
         description: 'LSST Science Pipelines version tag'
         required: true
@@ -130,7 +134,9 @@ jobs:
   # Optional: Build Singularity image for HPC
   build-singularity:
     needs: build-and-push
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    if: >-
+      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.release_tag != '')
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -147,6 +153,10 @@ jobs:
             build-essential \
             libseccomp-dev \
             libglib2.0-dev \
+            libfuse-dev \
+            libfuse3-dev \
+            fuse2fs \
+            uidmap \
             pkg-config \
             squashfs-tools \
             cryptsetup \
@@ -170,11 +180,13 @@ jobs:
       - name: Build Singularity image
         run: |
           # Build from Docker image
-          singularity build stips.sif docker://${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}
+          TAG="${{ github.event.inputs.release_tag || github.ref_name }}"
+          singularity build stips.sif docker://${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${TAG}
 
       - name: Upload Singularity image as release asset
         uses: softprops/action-gh-release@v1
         with:
           files: stips.sif
+          tag_name: ${{ github.event.inputs.release_tag || github.ref_name }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
