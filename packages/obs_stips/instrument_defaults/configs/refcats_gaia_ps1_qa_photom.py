@@ -22,7 +22,13 @@ if not _ps1_band_map:
     _ps1_band_map = dict(
         load_profile_from_dir(os.environ["INSTRUMENT_DIR"]).ps1_band_map
     )
+# The matcher looks up reference fluxes by PHYSICAL filter as well as by band
+# (e.g. Y4KCam physical 'I' for band 'i'), so map both spellings. Instruments
+# whose physical filter names are not simply the upper-cased band should ship
+# their own copy of this overlay under instruments/<name>/configs/.
 config.referenceCatalogLoader.refObjLoader.filterMap = {
-    band: f"{ps1_band}MeanPSFMag" for band, ps1_band in _ps1_band_map.items()
+    key: f"{ps1_band}MeanPSFMag"
+    for band, ps1_band in _ps1_band_map.items()
+    for key in (band, band.upper())
 }
 config.referenceCatalogLoader.doApplyColorTerms = False
