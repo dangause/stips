@@ -22,16 +22,9 @@ on:
     paths:
       - 'docker/**'
       - 'packages/**'
-  workflow_dispatch:
-    inputs:
-      release_tag:
-        description: "Existing release tag to (re)build the Singularity image for (e.g. v2.0.0)"
-        required: false
-        default: ""
       - 'bps/**'
       - 'scripts/**'
       - '.github/workflows/docker-publish.yml'
-
   pull_request:
     branches:
       - main
@@ -41,6 +34,11 @@ on:
 
   workflow_dispatch:
     inputs:
+      release_tag:
+        description: 'Existing release tag to (re)build the Singularity image for (e.g. v2.0.0)'
+        required: false
+        default: ''
+        type: string
       lsst_tag:
         description: 'LSST Science Pipelines version tag'
         required: true
