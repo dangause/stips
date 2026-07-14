@@ -368,10 +368,15 @@ contract.
 **What you do NOT inherit: photometric calibration.** Nickel's empirically-fit
 color terms (`colorterms.py`), its `calibrateImage/tuned_configs/`, and its
 Gaia+PS1 refcat overlay live in `instruments/nickel/configs/` — they are fit for
-one telescope and are deliberately excluded from the neutral tier. Until you fit
-your own color terms and drop a `colorterms.py` into `instruments/<x>/configs/`,
-your photometry is calibrated with a plain per-visit zeropoint (color terms
-OFF). This is a fork's **#1 review item**. Two framework tools produce these
+one telescope and are deliberately excluded from the neutral tier. **Your fork
+still runs science out of the box**: with no tuned `calibrateImage` config,
+`science.py` falls back to the neutral `calibrateImage/neutral_default.py`
+(schema-compat only, no tuning), and until you fit your own color terms and drop
+a `colorterms.py` into `instruments/<x>/configs/`, photometry is calibrated with
+a plain per-visit zeropoint (color terms OFF). Fitting these is a fork's **#1
+review item** for quality, not a prerequisite to process. (An
+explicitly-configured-but-missing config path still errors — that is typo
+protection, not the no-config fallback.) Two framework tools produce these
 per-instrument files: `stips-colorterms-fit` fits your `colorterms.py` from
 matched standard-star photometry (recipe:
 `instruments/nickel/colorterms/README.md`) and `stips-tune-calibrate-image`
@@ -402,6 +407,15 @@ searches `calibrateImage` parameters to produce your `tuned_configs/` (recipe:
   `$STIPS_DEFAULTS/configs/<name>.py`. Use `$STIPS_DEFAULTS/...` to reference
   framework siblings and `$INSTRUMENT_DIR/...` to reference your fork's own
   sibling files — both are exported by stack activation.
+- **Never import the profile inside a pex_config (`.py`) config override.**
+  pex_config replays every module first-imported while a config file executes
+  when a saved quantum graph is reloaded, and the path-loaded profile machinery
+  is unimportable at replay time — it kills `pipetask run` at graph
+  deserialization. If your override needs a profile value, read it from an env
+  var instead: STIPS exports `STIPS_PS1_BAND_MAP` (the profile's `ps1_band_map`
+  as JSON) from `run_with_stack` for exactly this reason (see the neutral
+  `refcats_gaia_ps1*.py` overlays). `$STIPS_DEFAULTS` and `$INSTRUMENT_DIR` are
+  exported the same way and are safe to reference by path.
 - **Generic tasks stay generic.** Pipeline steps that reference
   `lsst.obs.stips.tasks.*` or `lsst.obs.stips.calibCombine.StipsCalibCombineTask`
   are framework tasks — keep those references as-is. (The robust calib-combine

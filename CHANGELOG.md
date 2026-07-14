@@ -78,6 +78,36 @@ per-area notes.
   `...Nickel_metadata`/`_log`/`_config` names must update. No data loss and
   nothing to migrate on disk. See `docs/migrations.md`.
 
+### E2E validation fixes
+End-to-end runs on real Nickel and CTIO/Y4KCam data hardened the venv/stack
+boundary and the forking path:
+- **Refcat fetch runs from a plain venv.** The HTM cone-coverage math and
+  `convertReferenceCatalog` now fall back to in-stack execution automatically, so
+  `stips run` with `refcat.mode: gaia_ps1` works without a stack-activated shell
+  (previously it only ran from inside the stack).
+- **`stips-refcats` declares its fetch dependencies** (`astroquery`, `astropy`,
+  `numpy`, `pandas`), so a clean `uv sync --group dev` can fetch Gaia/PS1.
+- **A failed refcat ensure aborts `stips run` early** with the root cause, instead
+  of warning and limping into science where every night died with an opaque
+  `MissingDatasetTypeError('panstarrs1_dr2')`.
+- **Instruments with no tuned `calibrateImage` config now run science** on a
+  neutral schema-compatibility default (measurement plugins/radii/slots only, no
+  instrument tuning) — a fork no longer needs to fit `calibrateImage` before
+  processing. An explicitly-configured-but-missing config path still errors (typo
+  protection).
+- **gaia_ps1 mode now covers the stage-1 QA ref-match tasks** via two neutral
+  overlays (`refcats_gaia_ps1_qa_astrom.py`, `refcats_gaia_ps1_qa_photom.py`), so
+  fields outside local MONSTER shard coverage no longer fail quantum-graph
+  construction.
+- **Instrument config overrides no longer import the profile.** The PS1 band map
+  reaches the `refcats_gaia_ps1*.py` overlays through the new `STIPS_PS1_BAND_MAP`
+  env var (exported by `run_with_stack`), fixing saved-quantum-graph replay, which
+  re-imports every module a pex_config file touched during config exec.
+- **PS1 templates must exceed the camera FOV plus dither margin.** On a large
+  (~20′) FOV like Y4KCam, too small a `template.size` left dithered pointings with
+  no PSF-matching kernel candidates (`NoKernelCandidatesError`).
+- **Dashboard requires `fastapi>=0.110`** (request-first `TemplateResponse`).
+
 ### Defaults tiering: Nickel-fitted science calibration moved out of the framework tier (F-012)
 - **Moved to `instruments/nickel/configs/`** (behavior for Nickel unchanged —
   instrument-dir-first resolution finds them there): the Landolt-fit

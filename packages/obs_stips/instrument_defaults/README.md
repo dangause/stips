@@ -38,6 +38,27 @@ Structural pipeline scaffolding and geometry-agnostic glue:
   `configs/refcats_gaia_ps1.py` — **instrument-aware** glue: they load the active
   instrument's `configs/colorterms.py` (via `$INSTRUMENT_DIR`) when present and
   fall back to a neutral, no-op default otherwise (see below).
+- `configs/refcats_gaia_ps1_qa_astrom.py`, `configs/refcats_gaia_ps1_qa_photom.py`
+  — redirect the visit-level astrometric/photometric **ref-match QA** tasks from
+  MONSTER to Gaia DR3 / PS1 DR2. `science.py` applies them (alongside
+  `refcats_gaia_ps1.py`) **only** when `refcat.mode == "gaia_ps1"`, so fields
+  outside local MONSTER shard coverage still get QA. The photometric overlay
+  derives its band → PS1-column map exactly like `refcats_gaia_ps1.py`.
+- `configs/calibrateImage/neutral_default.py` — the schema-compatibility
+  `calibrateImage` config `science.py` uses when the instrument ships **no** tuned
+  config. It applies no instrument tuning — only the measurement plugins, aperture
+  radii, and slots the rest of stage-1 requires (the stock `CalibrateImageConfig`
+  measures a single 12px aperture, so a bare stock run fails downstream on the
+  missing `base_CircularApertureFlux_*` columns).
+
+> **pex_config import-replay trap.** The `refcats_gaia_ps1*.py` overlays derive
+> the PS1 band map from the `STIPS_PS1_BAND_MAP` env var (exported by
+> `run_with_stack`) rather than importing the profile. A pex_config file must not
+> import the path-loaded profile during config exec: pex_config replays every
+> module first-imported that way when a saved quantum graph is reloaded, and the
+> profile machinery is unimportable at replay time — killing `pipetask run` at
+> graph deserialization. Profile loading survives only as a documented
+> direct-use fallback.
 
 ### Instrument-fitted (MUST be reviewed by a fork — do NOT inherit blindly)
 
@@ -49,7 +70,10 @@ this neutral tier:
 - `colorterms.py` — PS1/Gaia/MONSTER → instrument-band color terms, fit against
   Landolt standards. The neutral default here is an **empty** library.
 - `calibrateImage/tuned_configs/*.py` — per-field/per-campaign `calibrateImage`
-  tunings (`dense_strict`, `2023ixf_*`, `2020wnt_*`, `best_calib_t071`, ...).
+  tunings (`dense_strict`, `2023ixf_*`, `2020wnt_*`, `best_calib_t071`, ...). A
+  fork does **not** need these to run science: when no tuned config resolves,
+  `science.py` falls back to the neutral `calibrateImage/neutral_default.py`
+  (schema-compat only, no tuning). Fit your own tunings once you have data.
 - `refcats_gaia_ps1.py` — the full Nickel band → PS1 column overlay. The neutral
   default here **derives** the PS1 filterMap from the active profile's
   `ps1_band_map` instead.
@@ -80,8 +104,10 @@ parameters to produce `calibrateImage/tuned_configs/*` (recipes under
 | File | Neutral default (here) | Nickel (reference) |
 |------|------------------------|--------------------|
 | `colorterms.py` | empty library | `instruments/nickel/configs/colorterms.py` |
-| `calibrateImage/tuned_configs/*` | absent | `instruments/nickel/configs/calibrateImage/tuned_configs/*` |
-| `refcats_gaia_ps1.py` | derives PS1 map from profile | `instruments/nickel/configs/refcats_gaia_ps1.py` |
+| `calibrateImage/tuned_configs/*` | absent (falls back to `calibrateImage/neutral_default.py`) | `instruments/nickel/configs/calibrateImage/tuned_configs/*` |
+| `calibrateImage/neutral_default.py` | schema-compat default (no tuning) | inherits neutral |
+| `refcats_gaia_ps1.py` | derives PS1 map from profile (via `STIPS_PS1_BAND_MAP`) | `instruments/nickel/configs/refcats_gaia_ps1.py` |
+| `refcats_gaia_ps1_qa_{astrom,photom}.py` | Gaia/PS1 QA overlays (gaia_ps1 mode) | inherits neutral |
 | `filter_map.py` | reference map (+U for CTIO) | inherits neutral |
 | `apply_colorterms.py` | instrument-aware, off if empty | inherits neutral |
 | `makeSkyMap.py` | reference geometry (0.40"/px) | inherits neutral |

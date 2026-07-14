@@ -392,6 +392,8 @@ stips -c scripts/config/my_target/pipeline.yaml science 20230519 \
     --object 2023ixf --ra 210.910750 --dec 54.311694
 ```
 
+If instead the whole run aborts before science with a refcat error, the on-demand Gaia/PS1 fetch failed. In `gaia_ps1` mode `stips run` fails fast with the root cause (no network, missing fetch dependencies, or a southern field with no PS1 coverage) rather than continuing into opaque per-night science failures. Fix the cause, or set `refcat.mode: monster` if the repo already holds reference catalogs.
+
 ### Astrometry failures
 
 Try the relaxed PSF configs or exclude problematic frames.

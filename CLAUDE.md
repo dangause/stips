@@ -248,7 +248,9 @@ All commands take the config via the group-level `stips -c <config.yaml>
 butler) are wrapped by `run_with_stack()` in `core/stack.py`, which:
 1. Sources the LSST stack loader (`loadLSST.bash`).
 2. Sets up `lsst_distrib` and `obs_stips`; exports `INSTRUMENT_DIR`,
-   `STIPS_DEFAULTS` (framework defaults dir), and config values as env vars.
+   `STIPS_DEFAULTS` (framework defaults dir), `STIPS_PS1_BAND_MAP` (the profile's
+   `ps1_band_map` as JSON, read by in-stack pex_config files that must not import
+   the profile — see Common Issues), and config values as env vars.
 3. Runs the command in the activated environment.
 
 Where STIPS needs data *out* of the stack (Butler queries), it runs a small
@@ -454,6 +456,14 @@ catches these by comparing exposure coordinates against the expected target
 RA/Dec (5° tolerance, RA wrap-around handled). Automatic under `stips run` (the
 YAML has `ra`/`dec`); for standalone `stips science`, pass `--ra` and `--dec`.
 
+A different root cause for a downstream `astrometry_ref_cat`/`panstarrs1_dr2`
+`MissingDatasetTypeError` is missing reference catalogs. In `gaia_ps1` mode
+`stips run` now **aborts early** if the on-demand refcat ensure fails (e.g. no
+network, missing `astroquery`), reporting the root cause — rather than warning
+and limping into science where every night dies with an opaque missing-dataset
+error. Fix the reported cause, or use `refcat.mode: monster` if the repo already
+holds refcats.
+
 ### DIA reports success but no difference images
 `core/dia.py` checks `diff_image_count` after execution. If the pipeline exits 0
 but produces zero difference images (typically because `rewarpTemplate` found no
@@ -464,7 +474,17 @@ cascade is the most common DIA failure mode.
 The PS1 cutout size defaults to 0.2° (`--size`; YAML `template.size`). The Nickel
 FOV is ~6.3 arcmin, so increase `template.size` if overlap failures persist. The
 ingest cache validates target coverage and file size, so a larger size triggers a
-re-download.
+re-download. **Size the cutout to comfortably exceed the camera FOV plus the
+dither range** — on a large-FOV camera (e.g. CTIO Y4KCam, ~20 arcmin) the default
+leaves dithered pointings with no PSF-matching kernel candidates
+(`NoKernelCandidatesError` in DIA). The 2023ixf configs use `template.size: 0.4`
+(24 arcmin) for exactly this margin.
+
+### Southern fields have no PS1 coverage
+PS1 (Pan-STARRS1) covers dec ≳ −30° only. For a southern target the `gaia_ps1`
+refcat mode has no PS1 photometry: astrometry (Gaia DR3) still works, but
+photometric calibration needs MONSTER shards (`refcat.mode: monster`) or a future
+Gaia-photometry path.
 
 ### Coordinate precision for forced photometry
 Target RA/Dec must use full TNS precision (sexagesimal → decimal, 6+ decimal

@@ -222,6 +222,8 @@ This usually means some exposures have incorrect coordinates in their FITS heade
 stips science 20230519 --object 2023ixf --ra 210.910750 --dec 54.311694
 ```
 
+The other cause is missing reference catalogs. In `gaia_ps1` refcat mode, `stips run` now **aborts early** with the root cause if the on-demand Gaia/PS1 fetch fails (e.g. no network, or `stips-refcats` fetch dependencies not installed) — rather than continuing into science where every night fails with an opaque missing-dataset error. Fix the reported cause, or set `refcat.mode: monster` if the repo already holds refcats.
+
 ### `ModuleNotFoundError` or stale paths after moving/renaming the checkout
 
 The `.venv` is an editable install: it records **absolute** paths to the

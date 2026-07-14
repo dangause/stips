@@ -225,7 +225,9 @@ All LSST commands run through `stack.py`:
 def run_with_stack(cmd: list[str], config: Config, **kwargs) -> subprocess.CompletedProcess:
     """Execute command with LSST stack activated."""
     # Sources loadLSST.bash
-    # Sets up lsst_distrib and obs_stips; exports INSTRUMENT_DIR
+    # Sets up lsst_distrib and obs_stips; exports INSTRUMENT_DIR,
+    #   STIPS_DEFAULTS, and STIPS_PS1_BAND_MAP (profile ps1_band_map as JSON,
+    #   read by in-stack pex_config files that must not import the profile)
     # Exports config as environment variables
     # Runs the command
 ```
