@@ -17,7 +17,7 @@ ENVBLOCK = """
     env:
       REPO: /tmp/repo
       STACK_DIR: /tmp/stack
-      INSTRUMENT_DIR: /tmp/obs_nickel
+      INSTRUMENT_DIR: /tmp/instrument_dir
       RAW_PARENT_DIR: /tmp/raw
     object: demo
     """

@@ -291,7 +291,7 @@ class TestBPSExecutor:
         executor = BPSExecutor(site="htcondor", poll_interval=0.01, timeout=1.0)
         mock_config = MagicMock()
         mock_config.repo = Path("/repo")
-        mock_config.instrument_dir = Path("/obs_nickel")
+        mock_config.instrument_dir = Path("/instrument_dir")
 
         mock_bps_result = MagicMock()
         mock_bps_result.success = True
@@ -436,7 +436,7 @@ class TestBPSExecutor:
         executor = BPSExecutor(site="local")
         mock_config = MagicMock()
         mock_config.repo = Path("/repo")
-        mock_config.instrument_dir = Path("/obs_nickel")
+        mock_config.instrument_dir = Path("/instrument_dir")
 
         mock_bps_result = MagicMock()
         mock_bps_result.success = False
@@ -464,7 +464,7 @@ class TestBPSExecutor:
         executor = BPSExecutor(site="local", poll_interval=0.01, timeout=0.05)
         mock_config = MagicMock()
         mock_config.repo = Path("/repo")
-        mock_config.instrument_dir = Path("/obs_nickel")
+        mock_config.instrument_dir = Path("/instrument_dir")
 
         mock_bps_result = MagicMock()
         mock_bps_result.success = True

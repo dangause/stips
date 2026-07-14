@@ -94,7 +94,7 @@ class ColortermSpline:
         print(f"Saved color term to {filename}")
 
     def save_lsst_config(self, filename, overwrite=False):
-        """Save in LSST config.py format for obs_nickel/configs/colorterms.py"""
+        """Save in LSST config.py format for instruments/nickel/configs/colorterms.py"""
         if os.path.exists(filename) and not overwrite:
             raise FileExistsError(f"{filename} exists. Use overwrite=True.")
 
@@ -810,8 +810,10 @@ class NickelSplineMeasurer:
             for band, filepath in colorterm_files.items():
                 f.write(f"  {band}: {filepath}\n")
 
-            f.write("\n\nTo use these in obs_nickel:\n")
-            f.write("1. Copy YAML files to obs_nickel/data/colorterms/\n")
+            f.write("\n\nTo use these with STIPS:\n")
+            f.write(
+                "1. Keep the YAML files with this fitter (instruments/nickel/colorterms/)\n"
+            )
             f.write("2. Implement spline color term reader in colorterm configs\n")
             f.write("3. Or use polynomial approximations in *_config.txt files\n")
 
@@ -876,7 +878,7 @@ def main():
         print(f"  {band}: {path}")
     print("\nNext steps:")
     print("1. Review the QA plots")
-    print("2. Integrate color terms into obs_nickel/configs/colorterms.py")
+    print("2. Integrate color terms into instruments/nickel/configs/colorterms.py")
     print("3. Test on real Nickel data")
     print("")
 
