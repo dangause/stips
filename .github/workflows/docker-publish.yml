@@ -181,7 +181,9 @@ jobs:
         run: |
           # Build from Docker image
           TAG="${{ github.event.inputs.release_tag || github.ref_name }}"
-          singularity build stips.sif docker://${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${TAG}
+          # docker/metadata-action publishes semver tags without the leading v
+          IMAGE_TAG="${TAG#v}"
+          singularity build stips.sif docker://${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${IMAGE_TAG}
 
       - name: Upload Singularity image as release asset
         uses: softprops/action-gh-release@v1
