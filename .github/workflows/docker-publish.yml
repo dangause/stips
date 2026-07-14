@@ -147,6 +147,10 @@ jobs:
             build-essential \
             libseccomp-dev \
             libglib2.0-dev \
+            libfuse-dev \
+            libfuse3-dev \
+            fuse2fs \
+            uidmap \
             pkg-config \
             squashfs-tools \
             cryptsetup \
