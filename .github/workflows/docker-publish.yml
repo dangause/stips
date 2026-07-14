@@ -192,5 +192,5 @@ jobs:
         run: |
           TAG="${{ github.event.inputs.release_tag || github.ref_name }}"
           echo "${{ secrets.GITHUB_TOKEN }}" | \
-            singularity remote login -u "${{ github.actor }}" --password-stdin oras://ghcr.io
+            singularity registry login -u "${{ github.actor }}" --password-stdin oras://ghcr.io
           singularity push stips.sif "oras://ghcr.io/${{ github.repository_owner }}/stips-sif:${TAG}"
