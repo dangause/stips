@@ -44,20 +44,11 @@ jobs:
           git --version
           git lfs version
 
-      - name: Checkout obs_nickel
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           lfs: true
-
-      # Note: Using internal testdata from instruments/nickel/testdata instead of external repo
-      # - name: Checkout testdata_nickel
-      #   uses: actions/checkout@v4
-      #   with:
-      #     repository: dangause/testdata_nickel
-      #     path: extern/testdata_nickel
-      #     # If private, uncomment and provide a token in repo secrets:
-      #     # token: ${{ secrets.GH_PAT }}
 
       - name: Mark workspace as safe for git (running as root)
         run: |

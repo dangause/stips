@@ -53,7 +53,7 @@ class TestRequireProfile(unittest.TestCase):
         cfg = Config(
             repo=Path("/tmp/repo"),
             stack_dir=Path("/tmp/stack"),
-            instrument_dir=Path("/tmp/obs_nickel"),
+            instrument_dir=Path("/tmp/instrument_dir"),
             raw_parent_dir=Path("/tmp/raw"),
             profile=None,
         )
