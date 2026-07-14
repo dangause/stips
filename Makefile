@@ -42,7 +42,7 @@ setup lsst_distrib; \
 _setup_local() { [[ -d "$$1/ups" ]] && { eups declare -r "$$1" "$$2" -t current 2>/dev/null || true; setup "$$2" 2>/dev/null || setup -r "$$1" "$$2"; }; }; \
 OBS_STIPS_LOCAL="$${REPO_ROOT}/packages/obs_stips"; \
 _setup_local "$$OBS_STIPS_LOCAL" obs_stips; \
-export PYTHONPATH="$${REPO_ROOT}/packages/stips/src:$${OBS_STIPS_LOCAL}/python:$${PYTHONPATH:-}"; \
+export PYTHONPATH="$${REPO_ROOT}/packages/stips/src:$${REPO_ROOT}/packages/refcats/src:$${OBS_STIPS_LOCAL}/python:$${PYTHONPATH:-}"; \
 for pkg_dir in "$${INSTRUMENT_DIR}"/*/; do \
 [[ -d "$${pkg_dir}ups" ]] || continue; \
 for tbl in "$${pkg_dir}ups/"*.table; do \
