@@ -26,11 +26,14 @@ on:
       - 'scripts/**'
       - '.github/workflows/docker-publish.yml'
   pull_request:
+    types: [opened, synchronize, reopened, labeled]
     branches:
       - main
+      - dev
     paths:
       - 'docker/**'
       - 'packages/**'
+      - '.github/workflows/docker-publish.yml'
 
   workflow_dispatch:
     inputs:
@@ -136,14 +139,18 @@ jobs:
     needs: build-and-push
     if: >-
       (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) ||
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.release_tag != '')
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.release_tag != '') ||
+      (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'test-singularity'))
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      packages: write
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Install Singularity
         run: |
@@ -181,6 +188,13 @@ jobs:
         run: |
           # Build from Docker image
           TAG="${{ github.event.inputs.release_tag || github.ref_name }}"
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            # Label-gated PR test mode: exercise this PR's workflow end-to-end
+            # against the newest published release image.
+            TAG=$(git tag -l 'v*' --sort=-v:refname | head -1)
+            echo "PR test mode: using release tag ${TAG}"
+          fi
+          echo "TAG=${TAG}" >> "$GITHUB_ENV"
           # docker/metadata-action publishes semver tags without the leading v
           IMAGE_TAG="${TAG#v}"
           singularity build stips.sif docker://${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${IMAGE_TAG}
@@ -190,7 +204,6 @@ jobs:
       #   singularity pull oras://ghcr.io/<owner>/stips-sif:<tag>
       - name: Push Singularity image to ghcr via ORAS
         run: |
-          TAG="${{ github.event.inputs.release_tag || github.ref_name }}"
           echo "${{ secrets.GITHUB_TOKEN }}" | \
             singularity registry login -u "${{ github.actor }}" --password-stdin oras://ghcr.io
           singularity push stips.sif "oras://ghcr.io/${{ github.repository_owner }}/stips-sif:${TAG}"
