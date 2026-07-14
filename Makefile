@@ -41,11 +41,18 @@ fi; \
 setup lsst_distrib; \
 _setup_local() { [[ -d "$$1/ups" ]] && { eups declare -r "$$1" "$$2" -t current 2>/dev/null || true; setup "$$2" 2>/dev/null || setup -r "$$1" "$$2"; }; }; \
 OBS_STIPS_LOCAL="$${REPO_ROOT}/packages/obs_stips"; \
-OBS_NICKEL_DATA_LOCAL="$${REPO_ROOT}/instruments/nickel/obs_nickel_data"; \
 _setup_local "$$OBS_STIPS_LOCAL" obs_stips; \
-_setup_local "$$OBS_NICKEL_DATA_LOCAL" obs_nickel_data; \
-_setup_local "$${TESTDATA_NICKEL_DIR}" testdata_nickel; \
-export PYTHONPATH="$${REPO_ROOT}/packages/stips/src:$${OBS_STIPS_LOCAL}/python:$${OBS_NICKEL_DATA_LOCAL}/python:$${PYTHONPATH:-}";
+export PYTHONPATH="$${REPO_ROOT}/packages/stips/src:$${OBS_STIPS_LOCAL}/python:$${PYTHONPATH:-}"; \
+for pkg_dir in "$${INSTRUMENT_DIR}"/*/; do \
+[[ -d "$${pkg_dir}ups" ]] || continue; \
+for tbl in "$${pkg_dir}ups/"*.table; do \
+[[ -e "$$tbl" ]] || continue; \
+pkg="$$(basename "$$tbl" .table)"; \
+_setup_local "$${pkg_dir%/}" "$$pkg"; \
+[[ -d "$${pkg_dir}python" ]] && export PYTHONPATH="$${pkg_dir}python:$${PYTHONPATH:-}"; \
+done; \
+done; \
+_setup_local "$${TESTDATA_NICKEL_DIR}" testdata_nickel;
 endef
 
 # =============================================================================
@@ -78,14 +85,20 @@ refcat-cones: ## Generate cones.csv + htm7_list.txt via stips-refcats (pass ARGS
 		PYTHONPATH=$${PYTHONPATH}:$${PWD}/packages/refcats/src python -u -m stips_refcats cones $(ARGS)'
 
 .PHONY: declare-eups
-declare-eups: ## Declare obs_stips, obs_nickel_data, and testdata_nickel in the current stack (uses STACK_DIR and env files)
+declare-eups: ## Declare obs_stips + the active instrument's EUPS packages in the current stack (uses STACK_DIR, INSTRUMENT_DIR, env files)
 	$(SHELL) -lc '$(envsource) \
 	  if [ -f "$${STACK_DIR}/loadLSST.zsh" ]; then source "$${STACK_DIR}/loadLSST.zsh"; \
 	  elif [ -f "$${STACK_DIR}/loadLSST.bash" ]; then source "$${STACK_DIR}/loadLSST.bash"; \
 	  else echo "STACK_DIR loader not found (loadLSST)"; exit 1; fi; \
 	  cd "$(PWD)/packages/obs_stips" && eups declare obs_stips git -r . -t current || true; \
-	  cd "$(PWD)/instruments/nickel/obs_nickel_data" && eups declare obs_nickel_data git -r . -t current || true; \
-	  cd "$(PWD)/instruments/nickel/testdata" && eups declare testdata_nickel git -r . -t current 2>/dev/null || true'
+	  for pkg_dir in "$${INSTRUMENT_DIR}"/*/; do \
+	    [ -d "$${pkg_dir}ups" ] || continue; \
+	    for tbl in "$${pkg_dir}ups/"*.table; do \
+	      [ -e "$$tbl" ] || continue; \
+	      pkg="$$(basename "$$tbl" .table)"; \
+	      eups declare "$$pkg" git -r "$${pkg_dir%/}" -t current 2>/dev/null || true; \
+	    done; \
+	  done'
 
 .PHONY: stack-install
 stack-install: ## Install an LSST stack release (TAG=w_2025_10 or r_28_0_0). Does not touch existing stack.

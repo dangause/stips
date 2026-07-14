@@ -123,11 +123,25 @@ fi
 # instrument; override by exporting INSTRUMENT_DIR before invoking this script).
 export INSTRUMENT_DIR="${INSTRUMENT_DIR:-${REPO_ROOT}/instruments/nickel}"
 
-# Declare + setup the instrument data package (curated calibrations), if present.
-OBS_NICKEL_DATA_DIR="${REPO_ROOT}/instruments/nickel/obs_nickel_data"
-if [[ -d "$OBS_NICKEL_DATA_DIR" ]]; then
-  eups declare -r "$OBS_NICKEL_DATA_DIR" obs_nickel_data -t current 2>/dev/null || true
-  setup obs_nickel_data 2>/dev/null || setup -r "$OBS_NICKEL_DATA_DIR" obs_nickel_data
+# Declare + setup the active instrument's EUPS packages (curated calibration
+# data, test fixtures, ...). Any subdirectory of INSTRUMENT_DIR that contains a
+# ups/<name>.table is an instrument-owned EUPS product; declare/setup it by its
+# table (product) name -- note the product name comes from the table filename,
+# not the directory (e.g. dir `testdata/` ships product `testdata_nickel`). This
+# is generic: a fork exports INSTRUMENT_DIR and its co-located packages (e.g.
+# obs_<x>_data, testdata_<x>) are picked up with no per-instrument edits here.
+# (A testdata product that lives OUTSIDE the instrument dir is still handled via
+# --setup-testdata / TESTDATA_NICKEL_DIR below.)
+if [[ -d "$INSTRUMENT_DIR" ]]; then
+  for pkg_dir in "$INSTRUMENT_DIR"/*/; do
+    [[ -d "${pkg_dir}ups" ]] || continue
+    for tbl in "${pkg_dir}ups/"*.table; do
+      [[ -e "$tbl" ]] || continue
+      pkg="$(basename "$tbl" .table)"
+      eups declare -r "${pkg_dir%/}" "$pkg" -t current 2>/dev/null || true
+      setup "$pkg" 2>/dev/null || setup -r "${pkg_dir%/}" "$pkg" 2>/dev/null || true
+    done
+  done
 fi
 
 # Ensure workspace packages are importable. obs_stips is python-layout (not
