@@ -67,10 +67,11 @@ science:
 
 configs:
   science:
-    calibrate_image: calibrateImage/tuned_configs/dense_strict.py
-    calibrate_image_fallbacks:
-      - calibrateImage/tuned_configs/dense_relaxed.py
-      - calibrateImage/tuned_configs/sparse_relaxed.py
+    # No calibrate_image override: CTIO has no fitted calibrateImage config, so
+    # it resolves the neutral framework default (calibrateImage/neutral_default.py,
+    # schema-compat only). Do NOT point at Nickel's tuned_configs/ -- those are
+    # fitted for a 1024x1024, 0.37"/pix single-amp CCD and live under
+    # instruments/nickel/configs/. Fitting a Y4KCam config is future work.
     colorterms: apply_colorterms.py
   coadd:
     # Y4KCam-tuned visit selection + warp (instruments/ctio1m/configs/coadds/).
@@ -92,7 +93,7 @@ options:
   forced_phot: true
   forced_phot_image_type: diffim   # difference flux at the field centre should be ~0
   continue_on_error: true
-  use_fallbacks: true
+  use_fallbacks: false   # no fallback chain exists without tuned configs
 
 # No transient -> no light curve (forced_phot above is the quantitative clean-diff check).
 lightcurve:
