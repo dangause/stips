@@ -24,3 +24,14 @@ def test_ctio_coadd_select_configs_resolve_to_instrument_dir():
         resolved = cfg.resolve_config(rel)
         assert resolved == _INFO.path / "configs" / rel
         assert Path(resolved).is_file()
+
+
+def test_ctio_dia_select_configs_resolve_to_instrument_dir():
+    cfg = _config()
+    for rel in (
+        "dia/subtractImages.py",
+        "dia/detectAndMeasure.py",
+    ):
+        resolved = cfg.resolve_config(rel)
+        assert resolved == _INFO.path / "configs" / rel
+        assert Path(resolved).is_file()
