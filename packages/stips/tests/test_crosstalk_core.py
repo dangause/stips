@@ -217,6 +217,7 @@ class TestCrosstalkIdempotency(unittest.TestCase):
             mod.run_with_stack,
         )
         try:
+
             class _Worker:
                 returncode = 0
                 stdout = ""

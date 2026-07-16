@@ -487,7 +487,10 @@ def _build_coadd_config_files(run_cfg: "RunConfig", config: "Config") -> list[st
     """
     mapping = [
         ("makeDirectWarp", run_cfg.coadd_configs.make_direct_warp),
-        ("selectTemplateCoaddVisits", run_cfg.coadd_configs.select_template_coadd_visits),
+        (
+            "selectTemplateCoaddVisits",
+            run_cfg.coadd_configs.select_template_coadd_visits,
+        ),
         ("selectDeepCoaddVisits", run_cfg.coadd_configs.select_deep_coadd_visits),
     ]
     files: list[str] = []

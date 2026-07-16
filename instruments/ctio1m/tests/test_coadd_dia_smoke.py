@@ -23,7 +23,6 @@ SMOKE_REPO = os.environ.get("CTIO_SMOKE_REPO")
 class TestCtioCoaddDiaSmoke(unittest.TestCase):
     def test_template_and_diff_exist(self):
         from lsst.daf.butler import Butler
-
         from stips.core.dataset_types import DIFFERENCE_IMAGE, TEMPLATE_COADD
 
         butler = Butler(SMOKE_REPO)
