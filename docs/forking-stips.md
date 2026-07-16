@@ -268,7 +268,17 @@ logic beyond a flat `header_map` lookup. The hooks Nickel actually defines:
 - **`temperature(header)`** — Return an astropy `Quantity`. Nickel reads
   `TEMPDET` in Celsius and converts to Kelvin.
 - **`exposure_id(header)` / `visit_id(header)`** — Build a unique ID that fits in
-  31 bits. Nickel uses `days_since_2000 * 10000 + OBSNUM`.
+  31 bits. Use `stips.make_exposure_id(datetime_end, seqnum)` if your observing
+  night maps 1:1 onto a UT day (Nickel does: `days_since_2000 * 10000 + OBSNUM`).
+  **Verify that assumption before relying on it.** If your site's local night
+  straddles UT midnight *and* your seqnum resets each local night, the UT day is
+  NOT a unique key — night N's post-midnight frames and night N+1's afternoon
+  calibs share a UT day and a reset seqnum, and collide (real case: CTIO ids
+  `36730069` on both SA98 nights 20100120/20100121, failing Butler exposure-sync
+  on ingest). Derive your own day term from the local night and call
+  `stips.pack_exposure_id(days_since_2000, seqnum)` instead — see
+  `instruments/ctio1m/profile.py`. This only bites on multi-night ingest, so
+  single-night testing will not surface it.
 - **`datetime_begin(header)` / `datetime_end(header)`** — Nickel prefers
   `DATE-BEG`/`DATE-END`, falls back to `DATE-OBS`, and synthesizes the end from
   `begin + EXPTIME` when `DATE-END` is missing or bad.

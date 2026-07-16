@@ -232,6 +232,16 @@ class Config:
         return self._first_existing("configs", name)
 
     def _first_existing(self, kind: str, name: str) -> Path:
+        """Return the instrument-dir path if it exists, else the defaults path.
+
+        NOTE: the returned defaults path is NOT checked for existence — if
+        neither tier has ``name`` you get back a path that does not exist, and
+        the failure surfaces late and opaquely (e.g. pipetask rejecting a
+        missing ``--config-file``). Callers that tolerate a miss MUST check
+        ``.exists()``; ``ScienceConfig.default()`` deliberately relies on this
+        to probe for optional instrument-tuned configs, which is why this does
+        not raise.
+        """
         p = self.instrument_dir / kind / name
         return p if p.exists() else self._defaults_root / kind / name
 
