@@ -205,16 +205,6 @@ def _filename_fields(header):
     )
 
 
-def _seqnum(header):
-    """Exposure sequence number (resets each local night)."""
-    return _filename_fields(header)[1]
-
-
-def _local_night(header):
-    """Local observing-night date as a YYYYMMDD int, parsed from the filename."""
-    return _filename_fields(header)[0]
-
-
 def _day_obs(header):
     """Derive day_obs (YYYYMMDD int) from the end-of-exposure UT datetime.
 
