@@ -167,3 +167,24 @@ The dead amp is evident in both assembled-image metrics: A01's pedestal is
 elevated and its noise is catastrophically high, confirming the raw-frame
 forensics. This is the acceptance-check baseline that Task 5 (the fix: defect
 mask on A01) must flip to PASS.
+
+## Task 5 — E2E verification (real data, both epochs)
+
+The epoch-scoped defect was validated by rebuilding calibs on both epochs and
+measuring the fraction of BAD-masked pixels per amp quadrant in the master flat:
+
+| epoch / field        | A01 (dead) | A00 | A02 | A03 |
+|----------------------|-----------:|----:|----:|----:|
+| 2010 SA98 (broken)   | **1.000**  | 0.000 | 0.000 | 0.001 |
+| 2006 NGC2298 (healthy) | **0.000** | 0.000 | 0.000 | 0.001 |
+
+The 2010 defect masks exactly the dead A01 quadrant (100%) and nothing else; the
+2006 flat has A01 unmasked (0%) because the A01 defect's validity (from
+2010-01-01) does not cover 2006 exposures — Butler selects the empty 1970 base
+for them. **Epoch-scoping holds on real data.**
+
+Note: the SA98 *science* stage fails for one visit (36730198) on
+`FileNotFoundError: astrometry_ref_cat (MONSTER) 0 datasets` — a refcat-coverage
+gap orthogonal to this amp fix (same class as the PR #31 astrometry finding).
+The A01 mask is proven at the ISR/calib level (above), which is where defects
+apply; the science-stage refcat gap is a separate pre-existing issue.
