@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "obs-ctio1m-data"
+version = "0.1.0"
+description = "Curated calibration data for the CTIO 1.0m (Y4KCam) telescope"
+authors = [{ name = "Dan Gause" }]
+requires-python = ">=3.12"
+dependencies = []
+readme = "README.md"
+
+[tool.setuptools.packages.find]
+where = ["python"]
+
+[tool.setuptools.package-data]
+"*" = ["*.yaml", "*.ecsv"]
