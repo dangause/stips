@@ -125,3 +125,45 @@ a defect mask covering its full `rawDataBBox`) for this data, and document
 the resulting ~75% usable detector area (3 of 4 quadrants) in the `ctio1m`
 instrument docs. Do not touch A01's `rawDataBBox`/`rawSerialOverscanBBox`/
 `readCorner`/`flipXY` — those are correct, as proven by the 2006 cross-check.
+
+## Task 2: Per-amp uniformity baseline (BROKEN SA98)
+
+**Date:** 2026-07-17
+
+Captured baseline uniformity check on the assembled `preliminary_visit_image`
+from processCcd (collection `CTIO1m/runs/20100121/processCcd/20260716T131537Z`,
+visit 36730118, band `r`). The check splits the 4104×4104 assembled image into
+four 2032×2032 quadrants (A02 TL / A03 TR / A00 BL / A01 BR) and reports
+median + MAD per amp.
+
+**Result: FAIL** (exit code 1)
+
+Per-amp statistics from `ctio_amp_uniformity.py`:
+
+```json
+{
+ "per_amp": {
+  "A02_TL": [1.1884034276008606, 78.721435546875],
+  "A03_TR": [9.215655326843262, 86.8960599899292],
+  "A00_BL": [3.1581844091415405, 83.1839290857315],
+  "A01_BR": [284.9891052246094, 1947.2654113769531]
+ },
+ "a01_vs_others": {
+  "a01": [284.9891052246094, 1947.2654113769531],
+  "others_median": [3.1581844091415405, 83.1839290857315]
+ },
+ "PASS": false
+}
+```
+
+**Analysis:**
+
+- **A01 median:** 284.99 ADU (should be within ~3 ADU of A00/A02/A03 = 3.16 ADU) —
+  **FAIL by 281.8 ADU** (limit: ±30 ADU)
+- **A01 MAD:** 1947.27 ADU (should be ≤2× the other amps' median MAD = 83.18 ADU) —
+  **FAIL by 23.4×** (limit: 2×)
+
+The dead amp is evident in both assembled-image metrics: A01's pedestal is
+elevated and its noise is catastrophically high, confirming the raw-frame
+forensics. This is the acceptance-check baseline that Task 5 (the fix: defect
+mask on A01) must flip to PASS.
