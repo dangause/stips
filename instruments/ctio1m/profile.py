@@ -98,11 +98,14 @@ profile = InstrumentProfile(
     night_to_dayobs_offset_days=1,
     skymap_name="ctio1mRings-v1",
     skymap_collection="skymaps/ctio1mRings",
+    obs_data_package="obs_ctio1m_data",
     # ISR config overrides, applied to every ISR invocation (calib build +
     # science) so the master bias/flat and the science frames are corrected
     # consistently:
-    #   - doDefect=False: CTIO ships no curated defect maps (obs_nickel_data is
-    #     Nickel-specific), so the ISR `defects` connection has no datasets.
+    #   - doDefect=True: CTIO ships curated defect maps via obs_ctio1m_data
+    #     (mirroring obs_nickel_data). The base defect (valid from 1970) is
+    #     empty and masks nothing; an epoch-scoped defect covers the dead amp
+    #     A01 region for the Jan-2010 SA98 run.
     #   - overscan.doParallelOverscan=True: Y4KCam reads 4 amps toward the
     #     detector centre with parallel-overscan strips on the inner edges.
     #     Serial overscan alone leaves a per-frame amp-row bias step (~2.5 ADU,
@@ -116,7 +119,7 @@ profile = InstrumentProfile(
     #     spurious detections on the dense SA98 standard field). Growing the SAT
     #     footprint covers the bleed wings so they are excluded from detection.
     isr_overrides={
-        "doDefect": False,
+        "doDefect": True,
         "overscan.doParallelOverscan": True,
         "doSaturation": True,
         "growSaturationFootprintSize": 8,
