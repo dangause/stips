@@ -193,6 +193,27 @@ def build_and_certify_crosstalk(
     cols = CollectionNames(night, prefix=prof.collection_prefix)
     repo = str(config.repo)
 
+    # Idempotent: the crosstalk calib is a static, repo-level product certified
+    # into a shared CALIBRATION collection. If it already exists, skip the
+    # rebuild + re-certify — re-certifying the same matrix raises
+    # ConflictingDefinitionError on that collection, which is what broke
+    # multi-night calibs (every night after the first re-certified and conflicted,
+    # with a fragile cascade that could fail the whole night's calibs).
+    already = (
+        butler_query.list_collections(
+            config,
+            cols.crosstalk_calib,
+            prefix=f"{prof.collection_prefix}/",
+        )
+        or []
+    )
+    if already:
+        log.info(
+            "Crosstalk calib already certified in %s; skipping rebuild/re-certify",
+            cols.crosstalk_calib,
+        )
+        return CrosstalkResult(True, cols.crosstalk_calib, [])
+
     worker = run_with_stack(
         build_worker_args(
             repo=repo,

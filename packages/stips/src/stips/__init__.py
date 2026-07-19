@@ -8,6 +8,7 @@ from .profile import (
     Site,
     hook,
     make_exposure_id,
+    pack_exposure_id,
 )
 
 __all__ = [
@@ -20,6 +21,7 @@ __all__ = [
     "hook",
     "make_exposure_id",
     "make_fetch_data",
+    "pack_exposure_id",
     "parse_night",
     "status_for_code",
 ]

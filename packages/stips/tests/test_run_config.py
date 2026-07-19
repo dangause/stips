@@ -307,3 +307,49 @@ class TestExecutorFactory:
         assert executor.site == "slurm"
         assert executor.poll_interval == 10.0
         assert executor.timeout == 3600
+
+
+@pytest.fixture
+def coadd_select_yaml(tmp_path):
+    cfg = {
+        "object": "E2",
+        "ra": 100.0,
+        "dec": -45.0,
+        "bands": ["r"],
+        "template": {"type": "coadd", "nights": [20111110, 20111111]},
+        "science": {"nights": [20111113]},
+        "configs": {
+            "coadd": {
+                "make_direct_warp": "coadds/makeDirectWarp.py",
+                "select_template_coadd_visits": "coadds/selectTemplateCoaddVisits.py",
+                "select_deep_coadd_visits": "coadds/selectDeepCoaddVisits.py",
+            }
+        },
+    }
+    path = tmp_path / "coadd_select.yaml"
+    with open(path, "w") as f:
+        yaml.dump(cfg, f)
+    return path
+
+
+class TestRunConfigCoaddSelectConfigs:
+    def test_parses_select_visit_config_paths(self, coadd_select_yaml):
+        from stips.core.run import RunConfig
+
+        cfg = RunConfig.from_yaml(coadd_select_yaml)
+        assert cfg.coadd_configs.make_direct_warp == "coadds/makeDirectWarp.py"
+        assert (
+            cfg.coadd_configs.select_template_coadd_visits
+            == "coadds/selectTemplateCoaddVisits.py"
+        )
+        assert (
+            cfg.coadd_configs.select_deep_coadd_visits
+            == "coadds/selectDeepCoaddVisits.py"
+        )
+
+    def test_select_visit_configs_default_to_none(self, sn_yaml):
+        from stips.core.run import RunConfig
+
+        cfg = RunConfig.from_yaml(sn_yaml)
+        assert cfg.coadd_configs.select_template_coadd_visits is None
+        assert cfg.coadd_configs.select_deep_coadd_visits is None

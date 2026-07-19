@@ -179,25 +179,54 @@ def hook(profile: InstrumentProfile, name: Optional[str] = None) -> Callable:
 EXPOSURE_ID_EPOCH = "2000-01-01T00:00:00"
 
 
+def pack_exposure_id(days_since_2000: int, seqnum: int) -> int:
+    """Pack a day number + sequence number into a 31-bit exposure id.
+
+    ``id = days_since_2000 * 10000 + seqnum``. A full ``YYYYMMDD`` date * 10000
+    overflows 31 bits, so the days-since-:data:`EXPOSURE_ID_EPOCH` term keeps the
+    id within the signed 31-bit range required by the LSST ``exposure``/``visit``
+    dimensions.
+
+    This is the low-level packer. Instruments differ ONLY in which day number is
+    correct for them, which is the reason this is separate from
+    :func:`make_exposure_id`:
+
+    - Nickel takes the UT day of the end-of-exposure time (via
+      :func:`make_exposure_id`); its whole observing night lands on one UT day.
+    - CTIO takes the LOCAL observing night parsed from the frame filename. At
+      ~-70deg longitude a local night straddles UT midnight and the Y4KCam seqnum
+      resets each local night, so the UT day is NOT a unique key — night N's
+      post-midnight frames and night N+1's afternoon calibs collide on it.
+
+    Raises ``ValueError`` if ``seqnum`` does not fit the low 4 digits (it would
+    silently carry into the day term and alias onto another day's id), or if the
+    packed id does not fit in 31 bits.
+    """
+    seqnum = int(seqnum)
+    if not 0 <= seqnum < 10000:
+        raise ValueError(
+            f"seqnum {seqnum} is out of range [0, 10000); it would carry into "
+            "the day term and alias onto a different day's exposure_id"
+        )
+    exposure_id = int(days_since_2000) * 10000 + seqnum
+    if exposure_id >= 2**31:
+        raise ValueError(f"exposure_id {exposure_id} is out of 31-bit range")
+    return exposure_id
+
+
 def make_exposure_id(end_time: Any, seqnum: int) -> int:
     """Pack an end-of-exposure time + sequence number into a 31-bit exposure id.
 
-    ``id = days_since_2000 * 10000 + seqnum`` where ``days_since_2000`` is the
-    integer number of whole days between :data:`EXPOSURE_ID_EPOCH` and
-    ``end_time`` (an ``astropy.time.Time``). A full ``YYYYMMDD`` date * 10000
-    overflows 31 bits, so the days-since-2000 term keeps the id within the signed
-    31-bit range required by the LSST ``exposure``/``visit`` dimensions.
+    Derives ``days_since_2000`` from ``end_time`` (an ``astropy.time.Time``) and
+    delegates the packing and range checks to :func:`pack_exposure_id`.
 
-    Instrument profiles that want the reference scheme call this from their
-    ``exposure_id`` hook; only the ``seqnum`` source differs per instrument (e.g.
-    Nickel reads ``OBSNUM``, CTIO parses the frame filename). Raises
-    ``ValueError`` if the result does not fit in 31 bits.
+    Instrument profiles whose observing night maps 1:1 onto a UT day call this
+    from their ``exposure_id`` hook; only the ``seqnum`` source differs (e.g.
+    Nickel reads ``OBSNUM``). Profiles whose local night straddles UT midnight
+    (e.g. CTIO) must NOT use this — see :func:`pack_exposure_id`.
     """
     import astropy.time
 
     epoch0 = astropy.time.Time(EXPOSURE_ID_EPOCH, scale="utc")
     days = int((end_time - epoch0).to_value("day"))
-    exposure_id = days * 10000 + int(seqnum)
-    if exposure_id >= 2**31:
-        raise ValueError(f"exposure_id {exposure_id} is out of 31-bit range")
-    return exposure_id
+    return pack_exposure_id(days, seqnum)

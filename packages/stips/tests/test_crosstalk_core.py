@@ -180,5 +180,75 @@ class TestResolveRawRuns(unittest.TestCase):
         self.assertIn("ingest-raws", calls)
 
 
+class TestCrosstalkIdempotency(unittest.TestCase):
+    """The crosstalk calib is a static, repo-level product certified into a shared
+    CALIBRATION collection. Re-certifying it (e.g. once per night in a multi-night
+    run) raises ConflictingDefinitionError after the first night, which broke
+    multi-night CTIO calibs. build_and_certify_crosstalk must be idempotent: if the
+    calib collection already exists, skip the rebuild + re-certify."""
+
+    class _CT:
+        coeffs = [[0.0, 1e-4], [1e-4, 0.0]]
+        units = "adu"
+
+    class _Prof:
+        name = "CTIO1m"
+        collection_prefix = "CTIO1m"
+        crosstalk = None  # set per-instance
+
+    class _Cfg:
+        repo = "/repo"
+
+        def __init__(self, prof):
+            self._prof = prof
+
+        def require_profile(self):
+            return self._prof
+
+    def _run(self, exists):
+        import stips.core.crosstalk as mod
+
+        prof = self._Prof()
+        prof.crosstalk = self._CT()
+        calls = []
+        orig_lc, orig_b, orig_stack = (
+            mod.butler_query.list_collections,
+            mod.run_butler,
+            mod.run_with_stack,
+        )
+        try:
+
+            class _Worker:
+                returncode = 0
+                stdout = ""
+                stderr = ""
+
+            mod.butler_query.list_collections = lambda config, pattern, **k: (
+                ["CTIO1m/calib/crosstalk"] if exists else []
+            )
+            mod.run_butler = lambda args, config, **k: calls.append(args[0])
+            mod.run_with_stack = lambda *a, **k: (
+                calls.append("run_with_stack") or _Worker()
+            )
+            result = mod.build_and_certify_crosstalk("20070321", self._Cfg(prof))
+        finally:
+            mod.butler_query.list_collections = orig_lc
+            mod.run_butler = orig_b
+            mod.run_with_stack = orig_stack
+        return result, calls
+
+    def test_skips_rebuild_and_recertify_when_calib_exists(self):
+        result, calls = self._run(exists=True)
+        self.assertTrue(result.success)
+        self.assertEqual(result.calib_collection, "CTIO1m/calib/crosstalk")
+        self.assertNotIn("run_with_stack", calls)  # did not rebuild
+        self.assertNotIn("certify-calibrations", calls)  # did not re-certify
+
+    def test_builds_and_certifies_when_calib_absent(self):
+        # No existing collection -> the worker build runs (and would certify).
+        result, calls = self._run(exists=False)
+        self.assertIn("run_with_stack", calls)
+
+
 if __name__ == "__main__":
     unittest.main()

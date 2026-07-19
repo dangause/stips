@@ -2,6 +2,34 @@
 
 All notable changes to STIPS (the Small Telescope Image Processing Suite) are documented here.
 
+## [Unreleased]
+
+### Fixed
+- **ctio1m: `exposure_id`/`observation_id` collided across consecutive nights.**
+  CTIO straddles UT midnight and Y4KCam seqnums reset each local night, so the
+  UT-day-keyed id mapped night N's post-midnight frames and night N+1's afternoon
+  calibs to the same value (real: `36730069` on SA98 20100120/20100121), failing
+  Butler exposure-sync on ingest and yielding an empty calib qgraph. Both ids now
+  key on the local night parsed from the `y{YYMMDD}.{seq}.fits` filename. This
+  changes ingested ids for ctio1m — existing ctio1m repos must be re-ingested.
+- **crosstalk:** certification is idempotent; re-certifying a static calib raised
+  `ConflictingDefinitionError` and broke every night after the first.
+- **ctio1m:** the U+CuSO4 near-UV filter is recognised; nights whose biases sat at
+  that wheel slot had zero ingestable biases (real: 20100120).
+
+### Added
+- `stips.pack_exposure_id(days_since_2000, seqnum)` — the low-level id packer, for
+  profiles whose local night does not map 1:1 onto a UT day. `make_exposure_id`
+  now delegates to it and is unchanged for callers.
+- ctio1m Y4KCam DIA tuning (bleed masking, SAT-excluded detection, spatial kernel)
+  and coadd visit-selection/warp configs; SA98 validation pipeline configs.
+- refcat: synchronous Gaia TAP fallback for async result-storage outages.
+
+### Changed
+- ctio1m pipeline configs use the neutral `calibrateImage` default instead of
+  Nickel's fitted `tuned_configs/` (which are fitted for Nickel's CCD and now live
+  under `instruments/nickel/configs/`). A Y4KCam-fitted config is future work.
+
 ## [2.0.1] — 2026-07-14
 
 ### Fixed
