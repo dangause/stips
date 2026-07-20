@@ -1,0 +1,4 @@
+# EUPS table file for obs_ctio1m_data
+# Curated calibration data for the CTIO 1.0m (Y4KCam) telescope
+
+envPrepend(PYTHONPATH, ${PRODUCT_DIR}/python)
