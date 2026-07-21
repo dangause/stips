@@ -14,8 +14,15 @@
 #   .venv/bin/stips -c scripts/config/ctio1m/pipeline_ngc2298.yaml download 20060927 20060929 20061001 20061216
 #   .venv/bin/stips -c scripts/config/ctio1m/pipeline_ngc2298.yaml calibs 20060927
 #   .venv/bin/stips -c scripts/config/ctio1m/pipeline_ngc2298.yaml science 20060927 \
-#       --object NGC2298 --ra 102.246542 --dec -36.005333 --skip-coadds
+#       --object NGC2298 --ra 102.246542 --dec -36.005333 --skip-coadds \
+#       --calibrate-config instruments/ctio1m/configs/calibrateImage/ctio_dense.py
 #   # ...repeat calibs/science per night as needed.
+#
+# calibrateImage config: the dense southern cores REQUIRE the dense-field config
+# `calibrateImage/ctio_dense.py` (matcher count-caps + Gaia astrometry) — the stock
+# neutral_default matcher does not finish on the crowded core. Pass it via
+# --calibrate-config for the per-stage `science` command (above), OR rely on the
+# `configs:` block below when driving via `stips run`. Both resolve the same file.
 env:
   REPO: "/Users/dangause/Developer/lick/data_ctio/ngc2298_repo"
   STACK_DIR: "/Users/dangause/Developer/lick/lsst/lsst_stack"
@@ -41,6 +48,14 @@ science:
     - 20060929
     - 20061001
     - 20061216
+
+# calibrateImage config resolution (instrument-dir-first). ctio_dense.py caps the
+# dense-field asterism blowup + routes astrometry to Gaia DR3; required on the
+# crowded globular cores. Used by `stips run`; the per-stage `science` commands in
+# the header pass the same file via --calibrate-config.
+configs:
+  science:
+    calibrate_image: calibrateImage/ctio_dense.py
 
 options:
   jobs: 4

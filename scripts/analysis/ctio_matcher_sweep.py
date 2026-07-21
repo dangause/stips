@@ -72,7 +72,8 @@ config.psf_measure_psf.psfDeterminer["psfex"].spatialOrder = {k["psfSpatialOrder
 
 
 def score_csv(csv_path: Path, attempted: int) -> dict:
-    rows = list(csv.DictReader(open(csv_path)))
+    with open(csv_path, newline="") as _fh:
+        rows = list(csv.DictReader(_fh))
     vals = []
     for r in rows:
         v = r.get("astromOffsetMean")

@@ -15,6 +15,14 @@ source-vs-refcat alignment sweep" the profile says originally found the 180 deg
 boresight -- but now as an epoch-by-epoch measurement (the 180 deg was empirically
 fit on 2010/2011 SA98; 2006 NGC2298 may differ).
 
+LIMITATION (important): this probe searches only (rotation, scale) about the field
+center -- it has NO translation degree of freedom, so it CANNOT detect a pure
+pointing/boresight *offset* (a bulk RA/Dec shift), which is the most common seed
+defect. On CTIO 2006 the real defect turned out to be exactly such a ~7' pointing
+translation: this probe could not see it (it collapsed to the chance-match floor),
+and the offset was instead found by a blind astrometry.net solve. Add a (dRA, dDec)
+search axis before trusting a null / low-n_match result from this tool.
+
 The four pure functions (rotate_about, scale_about, align_score, search_offset)
 are unit-tested in tests/test_ctio_wcs_seed_probe.py and are pure numpy -- NO
 lsst import at module top level, so the module imports in a plain venv. All
@@ -335,7 +343,8 @@ def main() -> None:
                          "chance-match floor from the over-dense refcat cone)")
     ap.add_argument("--radius", type=float, default=0.3,
                     help="refcat cone radius (deg)")
-    ap.add_argument("--stack-dir", default="/Users/dangause/Developer/lick/lsst/lsst_stack")
+    ap.add_argument("--stack-dir", default=os.environ.get("STACK_DIR"),
+                    help="LSST stack dir (defaults to $STACK_DIR); required if unset")
     args = ap.parse_args()
 
     data = _run_instack(args)
