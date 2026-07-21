@@ -189,6 +189,34 @@ def _datetime_end(header):
     return begin
 
 
+# --- 2006-run systematic boresight pointing offset (see tracking_radec) -------
+# The 2006 Y4KCam run (nights 20060927-20061216) carries a constant on-sky
+# telescope pointing error: the TRUE field center is EAST and NORTH of the header
+# RA/DEC. Measured by BLIND astrometry.net solves on one science frame per night
+# across all four 2006 nights (NGC6522, NGC6101, TPheA, NGC2298, M79):
+#   dRA*cosDec = +257" (std 24),  dDec = +320" (std 57),  total ~412" @ PA~39 E-of-N.
+# The camera plate scale (0.2889"/pix), orientation (PA~0) and distortion
+# (negligible) were all confirmed CORRECT on every night, so this is a pure
+# boresight TRANSLATION -- a systematic 2006 telescope pointing offset, NOT a
+# code/parse bug or a camera-geometry error. Per-night residual after this
+# constant shift is <=94" (<325 px) < matchPessimisticB.maxOffsetPix, so a single
+# epoch constant brings every 2006 exposure inside the matcher's offset window.
+# 2010+ frames (e.g. SA98, ~60" offset already within the matcher window) are
+# left UNCHANGED.
+_BORESIGHT_2006_DELTA_EAST_ARCSEC = 257.0  # +East  (RA*cosDec direction)
+_BORESIGHT_2006_DELTA_NORTH_ARCSEC = 320.0  # +North (Dec direction)
+
+
+def _is_2006_run(header):
+    """True for the 2006 Y4KCam run, which needs the boresight offset correction.
+
+    Gated on the observation year (all four 2006 nights are UT-year 2006; SA98 and
+    any later run are not), so the correction never touches 2010+ data.
+    """
+    begin = _datetime_begin(header)
+    return begin is not None and begin.datetime.year == 2006
+
+
 def _filename_fields(header):
     """Parse ``(local_night: int YYYYMMDD, seqnum: int)`` from the raw filename.
 
@@ -321,6 +349,12 @@ def tracking_radec(header, default=None):
 
     Frame is taken from RADESYS/RADECSYS, falling back to EQUINOX (2000 -> FK5,
     else ICRS).
+
+    For the 2006 Y4KCam run ONLY, a constant on-sky boresight offset (+257" East,
+    +320" North) is applied to correct a systematic telescope pointing error that
+    otherwise places the seed WCS ~1500 px off and breaks astrometric calibration
+    on every 2006 exposure. See ``_is_2006_run`` / the offset constants above for
+    the measured provenance. 2010+ frames are returned unchanged.
     """
     import astropy.units as u
     from astropy.coordinates import Angle, SkyCoord
@@ -338,4 +372,12 @@ def tracking_radec(header, default=None):
         equinox = header.get("EQUINOX")
         ref_system = "FK5" if equinox in (2000, 2000.0, "2000") else "ICRS"
 
-    return SkyCoord(ra_angle, dec_angle, frame=str(ref_system).lower())
+    coord = SkyCoord(ra_angle, dec_angle, frame=str(ref_system).lower())
+
+    if _is_2006_run(header):
+        coord = coord.spherical_offsets_by(
+            _BORESIGHT_2006_DELTA_EAST_ARCSEC * u.arcsec,
+            _BORESIGHT_2006_DELTA_NORTH_ARCSEC * u.arcsec,
+        )
+
+    return coord
