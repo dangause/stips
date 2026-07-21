@@ -64,18 +64,26 @@ config.astrometry_ref_loader.filterMap = {}
 #     KeyError: 'Could not find field flux in catalog'. Density cap lives in the matcher.) ---
 config.astrometry_ref_loader.pixelMargin = 300
 
-# --- MATCHER: hard caps break the combinatorial pattern blowup (the Cycle-2 fix) ---
+# --- MATCHER ---
+# Two independent concerns, tuned separately (the key Cycle-2 lesson):
+#   (1) SPEED: the O(N^2) asterism blowup is driven by the *count* of objects, so cap
+#       numBrightStars + maxRefObjects. These break the 28-min hang -> ~8-min night.
+#   (2) PRECISION: the *acceptance tolerances* must stay STRICT (near stack defaults),
+#       else the matcher locks onto ~10" false-match solutions on the crowded field.
+#       An earlier over-loosened pass (offset 900, minFrac 0.05, minPairs 15) accepted
+#       ~10" fits on 87% of visits. Restored to strict defaults here.
 m = config.astrometry.matcher
-m.maxOffsetPix = 900          # CTIO px @ 0.29"/pix (~260"); 180-deg mount seed handled in profile
+m.numBrightStars = 150        # (speed) patterns from the 150 brightest only
+m.maxRefObjects = 3000        # (speed) bound the reference set on the dense field
+m.maxOffsetPix = 400          # (precision) 180-deg handled in profile; residual pointing is small
 m.maxRotationDeg = 1.0        # equatorial mount, no field rotation
-m.numBrightStars = 150        # patterns from the 150 brightest only (was effectively unbounded)
-m.maxRefObjects = 3000        # bound the reference set on the dense field
-m.minMatchedPairs = 15
-m.minFracMatchedPairs = 0.05
+m.minMatchedPairs = 30        # (precision) stack default — demand a well-supported solution
+m.minFracMatchedPairs = 0.3   # (precision) stack default — reject loose/partial matches
+m.minMatchDistPixels = 1.0    # (precision) tight final match tolerance
 m.numPatternConsensus = 3
 m.numPointsForShape = 6
 
 # --- astrometry WCS fit ---
-config.astrometry.maxIter = 5
-config.astrometry.maxMeanDistanceArcsec = 0.5   # matches the Cycle-2 precision gate
+config.astrometry.maxMeanDistanceArcsec = 0.5   # the Cycle-2 precision gate
+config.astrometry.matchDistanceSigma = 2.0      # clip spatial match outliers (stack default)
 config.astrometry.doMagnitudeOutlierRejection = True
