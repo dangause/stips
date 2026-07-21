@@ -13,7 +13,6 @@ from pathlib import Path
 
 import astropy.units as u
 import pytest
-
 from stips.testing.instrument_contract import InstrumentDirInfo, load_profile
 
 _INFO = InstrumentDirInfo(name="ctio1m", path=Path(__file__).resolve().parents[1])

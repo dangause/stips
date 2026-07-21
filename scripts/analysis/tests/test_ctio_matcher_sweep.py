@@ -1,11 +1,12 @@
 import csv
-from pathlib import Path
 import importlib.util
+from pathlib import Path
 
 _SPEC = importlib.util.spec_from_file_location(
     "ctio_matcher_sweep", Path(__file__).resolve().parents[1] / "ctio_matcher_sweep.py"
 )
-sweep = importlib.util.module_from_spec(_SPEC); _SPEC.loader.exec_module(sweep)
+sweep = importlib.util.module_from_spec(_SPEC)
+_SPEC.loader.exec_module(sweep)
 
 
 def test_build_config_grid_cartesian():

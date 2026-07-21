@@ -1,11 +1,13 @@
+import importlib.util
 import math
 from pathlib import Path
-import importlib.util
+
 import numpy as np
 
 _S = importlib.util.spec_from_file_location(
     "probe", Path(__file__).resolve().parents[1] / "ctio_wcs_seed_probe.py")
-probe = importlib.util.module_from_spec(_S); _S.loader.exec_module(probe)
+probe = importlib.util.module_from_spec(_S)
+_S.loader.exec_module(probe)
 
 
 def _ring(center, radius_deg, n):
