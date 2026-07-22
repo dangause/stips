@@ -19,6 +19,7 @@ from stips.core.pipeline import (
     isr_config_args,
     latest_raw_run,
     night_day_obs_expr,
+    night_to_day_obs,
     parse_bad_exposures,
     read_log_delta,
     redefine_chain,
@@ -31,6 +32,60 @@ if TYPE_CHECKING:
     from stips.core.config import Config
 
 log = logging.getLogger(__name__)
+
+
+def _coerce_date(d):
+    """datetime/date/astropy.Time/ISO-str -> datetime.date (or None). Fail-closed."""
+    import datetime as _d
+
+    if d is None:
+        return None
+    if isinstance(d, _d.date) and not isinstance(d, _d.datetime):
+        return d
+    if isinstance(d, _d.datetime):
+        return d.date()
+    to_dt = getattr(d, "datetime", None)     # astropy.time.Time
+    if to_dt is not None:
+        return to_dt.date()
+    if isinstance(d, str):
+        try:
+            return _d.date.fromisoformat(d[:10])
+        except ValueError:
+            return None
+    return None
+
+
+def _night_is_boresight_covered(prof, night):
+    """Whether the night's campaign has a characterized boresight offset.
+
+    Maps the observing night (local) to its UT day_obs date and queries the
+    profile's ``boresight_offset_covered`` hook. Returns None if the profile has
+    no such hook (e.g. a non-CTIO instrument) so callers can no-op.
+
+    The night->UT-date mapping uses ``night_to_dayobs_offset_days`` (CTIO: 1);
+    the ~1-day slop is immaterial to coverage because the table windows have
+    multi-day margin from real observing nights.
+    """
+    hook = getattr(prof, "hooks", {}).get("boresight_offset_covered")
+    if hook is None:
+        return None
+    offset = getattr(prof, "night_to_dayobs_offset_days", 1)
+    day_obs = night_to_day_obs(night, offset)          # 'YYYYMMDD'
+    ut_date = _coerce_date(f"{day_obs[:4]}-{day_obs[4:6]}-{day_obs[6:8]}")
+    return bool(hook(ut_date))
+
+
+def _warn_if_uncharacterized_campaign(prof, night):
+    """Log a WARNING when the night's campaign has no boresight characterization."""
+    covered = _night_is_boresight_covered(prof, night)
+    if covered is False:
+        log.warning(
+            "Night %s: this campaign has no boresight-offset characterization for "
+            "this instrument. If astrometry fails broadly it likely needs one "
+            "(blind-solve one exposure, measure the RA/Dec offset, add a row to the "
+            "instrument profile's boresight-offset table).",
+            night,
+        )
 
 
 def _count_matching_exposures(config: "Config", where: str) -> int | None:
@@ -1013,6 +1068,7 @@ def run(
     prof = config.require_profile()
     night = validate_night(night)
     cols = CollectionNames(night, prefix=prof.collection_prefix)
+    _warn_if_uncharacterized_campaign(prof, night)
 
     # Build config chain: explicit > legacy > default
     if science_cfg is None:
