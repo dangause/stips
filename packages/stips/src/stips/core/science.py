@@ -88,6 +88,35 @@ def _warn_if_uncharacterized_campaign(prof, night):
         )
 
 
+_BORESIGHT_FAIL_FRACTION_THRESHOLD = 0.50
+
+
+def _diagnose_uncharacterized_failure(prof, night, succeeded, failed):
+    """Actionable ERROR when an uncharacterized night's astrometry failed broadly.
+
+    Most visits failing on an uncharacterized campaign is the signature of an
+    uncorrected boresight pointing offset (the 2006 failure mode). A few failures
+    are normal per-visit issues, so only fire at/above the fraction threshold.
+    """
+    total = succeeded + failed
+    if total == 0:
+        return
+    if _night_is_boresight_covered(prof, night) is not False:
+        return
+    if failed / total < _BORESIGHT_FAIL_FRACTION_THRESHOLD:
+        return
+    log.error(
+        "Night %s: %d/%d science visits failed astrometry on an uncharacterized "
+        "campaign (NO boresight-offset characterization for this instrument). "
+        "This is the signature of an uncorrected telescope pointing offset (cf. "
+        "the 2006 CTIO run, ~7' off). Fix: blind-solve one exposure (e.g. "
+        "astrometry.net), measure the RA/Dec offset vs the header pointing, and "
+        "add a row to the instrument profile's boresight-offset table; then "
+        "re-run.",
+        night, failed, total,
+    )
+
+
 def _count_matching_exposures(config: "Config", where: str) -> int | None:
     """Count exposure records matching a Butler WHERE expression.
 
@@ -1162,6 +1191,9 @@ def run(
 
     _save_processing_log(plog, config, cols.science_run)
     total_succeeded, last_attempt_failed = _final_counts(attempts, plog)
+    _diagnose_uncharacterized_failure(
+        prof, night, total_succeeded, last_attempt_failed
+    )
 
     # Check if any config succeeded
     if not attempts.any_success:

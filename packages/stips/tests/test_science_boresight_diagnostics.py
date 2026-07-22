@@ -50,3 +50,32 @@ def test_preflight_silent_on_covered(caplog):
         science._warn_if_uncharacterized_campaign(prof, "20061001")
     assert not any("boresight-offset characterization" in r.message.lower()
                    for r in caplog.records)
+
+
+def test_diagnostic_fires_uncovered_and_broad_failure(caplog):
+    prof = _prof({dt.date(2006, 10, 2): True})
+    with caplog.at_level(logging.ERROR, logger="stips.core.science"):
+        science._diagnose_uncharacterized_failure(prof, "20080601", succeeded=2, failed=40)
+    msgs = " ".join(r.message.lower() for r in caplog.records)
+    assert "uncharacterized" in msgs and "blind-solve" in msgs
+
+
+def test_diagnostic_silent_when_covered(caplog):
+    prof = _prof({dt.date(2006, 10, 2): True})
+    with caplog.at_level(logging.ERROR, logger="stips.core.science"):
+        science._diagnose_uncharacterized_failure(prof, "20061001", succeeded=0, failed=45)
+    assert not any("uncharacterized" in r.message.lower() for r in caplog.records)
+
+
+def test_diagnostic_silent_when_failure_below_threshold(caplog):
+    prof = _prof({dt.date(2006, 10, 2): True})
+    with caplog.at_level(logging.ERROR, logger="stips.core.science"):
+        science._diagnose_uncharacterized_failure(prof, "20080601", succeeded=40, failed=5)
+    assert not any("uncharacterized" in r.message.lower() for r in caplog.records)
+
+
+def test_diagnostic_silent_when_no_attempts(caplog):
+    prof = _prof({dt.date(2006, 10, 2): True})
+    with caplog.at_level(logging.ERROR, logger="stips.core.science"):
+        science._diagnose_uncharacterized_failure(prof, "20080601", succeeded=0, failed=0)
+    assert not any("uncharacterized" in r.message.lower() for r in caplog.records)
