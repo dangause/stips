@@ -4,6 +4,8 @@ Replaces the hardcoded year==2006 gate: the 2006 correction and 2010 no-op are
 now rows in _BORESIGHT_OFFSET_TABLE, bounded to each campaign's measured nights.
 """
 import datetime as dt
+import importlib.util
+import sys as _sys
 from pathlib import Path
 
 import astropy.units as u
@@ -22,8 +24,6 @@ PROFILE = load_profile(_INFO)
 # global state behind (nickel/profile.py has the same bare `from fetch
 # import`, so a leaked sys.modules["fetch"] could silently resolve to the
 # wrong instrument's fetch module later in the same pytest process).
-import importlib.util
-import sys as _sys
 _CTIO_DIR = Path(__file__).resolve().parents[1]
 _saved_path = list(_sys.path)
 _saved_fetch = _sys.modules.get("fetch")
@@ -89,12 +89,9 @@ def test_tracking_radec_shifts_2006_header_via_table():
     assert shifted.ra.deg > raw.ra.deg and shifted.dec.deg > raw.dec.deg
 
 
-import datetime as _dt2
-
-
 def test_boresight_offset_covered_registered_as_hook():
     hook = PROFILE.hooks["boresight_offset_covered"]
-    assert hook(_dt2.date(2006, 10, 2)) is True     # in 2006 window
-    assert hook(_dt2.date(2010, 1, 21)) is True      # covered, zero-offset
-    assert hook(_dt2.date(2008, 6, 1)) is False      # uncharacterized
+    assert hook(dt.date(2006, 10, 2)) is True     # in 2006 window
+    assert hook(dt.date(2010, 1, 21)) is True      # covered, zero-offset
+    assert hook(dt.date(2008, 6, 1)) is False      # uncharacterized
     assert hook(None) is False                        # fail-closed
