@@ -189,32 +189,74 @@ def _datetime_end(header):
     return begin
 
 
-# --- 2006-run systematic boresight pointing offset (see tracking_radec) -------
-# The 2006 Y4KCam run (nights 20060927-20061216) carries a constant on-sky
-# telescope pointing error: the TRUE field center is EAST and NORTH of the header
-# RA/DEC. Measured by BLIND astrometry.net solves on one science frame per night
-# across all four 2006 nights (NGC6522, NGC6101, TPheA, NGC2298, M79):
-#   dRA*cosDec = +257" (std 24),  dDec = +320" (std 57),  total ~412" @ PA~39 E-of-N.
-# The camera plate scale (0.2889"/pix), orientation (PA~0) and distortion
-# (negligible) were all confirmed CORRECT on every night, so this is a pure
-# boresight TRANSLATION -- a systematic 2006 telescope pointing offset, NOT a
-# code/parse bug or a camera-geometry error. Per-night residual after this
-# constant shift is <=94" (<325 px) < matchPessimisticB.maxOffsetPix, so a single
-# epoch constant brings every 2006 exposure inside the matcher's offset window.
-# 2010+ frames (e.g. SA98, ~60" offset already within the matcher window) are
-# left UNCHANGED.
-_BORESIGHT_2006_DELTA_EAST_ARCSEC = 257.0  # +East  (RA*cosDec direction)
-_BORESIGHT_2006_DELTA_NORTH_ARCSEC = 320.0  # +North (Dec direction)
+# --- Date-characterized boresight pointing offsets (see tracking_radec) --------
+# The CTIO Y4KCam mount carries a per-campaign systematic pointing offset: the
+# TRUE field center is EAST/NORTH of the header RA/DEC by a campaign-specific
+# amount (measured by BLIND astrometry.net solves). It is a pure boresight
+# TRANSLATION -- camera plate scale (0.2889"/pix), orientation (PA~0) and
+# distortion (negligible) were all confirmed correct -- NOT a parse/geometry bug.
+#
+# A row means the campaign has been CHARACTERIZED; the offset may be 0. Ranges are
+# bounded to the MEASURED extent of each campaign (first/last night we have data
+# for), NOT padded to month/year -- the range asserts what was VERIFIED, not mount
+# stability across unmeasured time. An unmeasured night INSIDE a window inherits
+# that offset (mild "stable within one run" interpolation); a night OUTSIDE every
+# window is uncovered (offset 0) and is flagged by science.py's diagnostics.
+#
+# (start_date, end_date, delta_east_arcsec, delta_north_arcsec, provenance)
+_BORESIGHT_OFFSET_TABLE = [
+    ("2006-09-27", "2006-12-16", 257.0, 320.0,
+     "blind astrometry.net solve, 4 nights 20060927-20061216 (2026-07); "
+     "dRA*cosDec +257\" (std 24), dDec +320\" (std 57), ~412\" @ PA~39 E-of-N"),
+    ("2010-01-17", "2010-01-22", 0.0, 0.0,
+     "SA98 run; ~60\" offset already within matcher tolerance, no correction"),
+]
 
 
-def _is_2006_run(header):
-    """True for the 2006 Y4KCam run, which needs the boresight offset correction.
+def _as_date(dt):
+    """Coerce a datetime/date/astropy.time.Time/None to a datetime.date (or None)."""
+    import datetime as _d
 
-    Gated on the observation year (all four 2006 nights are UT-year 2006; SA98 and
-    any later run are not), so the correction never touches 2010+ data.
+    if dt is None:
+        return None
+    if isinstance(dt, _d.date) and not isinstance(dt, _d.datetime):
+        return dt
+    if isinstance(dt, _d.datetime):
+        return dt.date()
+    # astropy.time.Time
+    to_dt = getattr(dt, "datetime", None)
+    if to_dt is not None:
+        return to_dt.date()
+    return None
+
+
+def _boresight_offset_entry(dt):
+    """Row whose inclusive [start, end] UT-date range contains ``dt``, else None.
+
+    Fail-closed: returns None if the date cannot be determined.
     """
-    begin = _datetime_begin(header)
-    return begin is not None and begin.datetime.year == 2006
+    import datetime as _d
+
+    d = _as_date(dt)
+    if d is None:
+        return None
+    for row in _BORESIGHT_OFFSET_TABLE:
+        start = _d.date.fromisoformat(row[0])
+        end = _d.date.fromisoformat(row[1])
+        if start <= d <= end:
+            return row
+    return None
+
+
+def boresight_offset_arcsec(dt):
+    """(delta_east_arcsec, delta_north_arcsec) for the campaign, else (0.0, 0.0)."""
+    row = _boresight_offset_entry(dt)
+    return (row[2], row[3]) if row is not None else (0.0, 0.0)
+
+
+def boresight_offset_covered(dt):
+    """True iff the observation date falls in a characterized campaign window."""
+    return _boresight_offset_entry(dt) is not None
 
 
 def _filename_fields(header):
@@ -350,11 +392,9 @@ def tracking_radec(header, default=None):
     Frame is taken from RADESYS/RADECSYS, falling back to EQUINOX (2000 -> FK5,
     else ICRS).
 
-    For the 2006 Y4KCam run ONLY, a constant on-sky boresight offset (+257" East,
-    +320" North) is applied to correct a systematic telescope pointing error that
-    otherwise places the seed WCS ~1500 px off and breaks astrometric calibration
-    on every 2006 exposure. See ``_is_2006_run`` / the offset constants above for
-    the measured provenance. 2010+ frames are returned unchanged.
+    A campaign-specific boresight offset (see ``_BORESIGHT_OFFSET_TABLE``) is
+    applied when the exposure date falls in a characterized window; uncharacterized
+    dates get no shift.
     """
     import astropy.units as u
     from astropy.coordinates import Angle, SkyCoord
@@ -374,10 +414,11 @@ def tracking_radec(header, default=None):
 
     coord = SkyCoord(ra_angle, dec_angle, frame=str(ref_system).lower())
 
-    if _is_2006_run(header):
+    east_arcsec, north_arcsec = boresight_offset_arcsec(_datetime_begin(header))
+    if east_arcsec or north_arcsec:
         coord = coord.spherical_offsets_by(
-            _BORESIGHT_2006_DELTA_EAST_ARCSEC * u.arcsec,
-            _BORESIGHT_2006_DELTA_NORTH_ARCSEC * u.arcsec,
+            east_arcsec * u.arcsec,
+            north_arcsec * u.arcsec,
         )
 
     return coord
