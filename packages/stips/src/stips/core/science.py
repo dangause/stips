@@ -44,7 +44,7 @@ def _coerce_date(d):
         return d
     if isinstance(d, _d.datetime):
         return d.date()
-    to_dt = getattr(d, "datetime", None)     # astropy.time.Time
+    to_dt = getattr(d, "datetime", None)  # astropy.time.Time
     if to_dt is not None:
         return to_dt.date()
     if isinstance(d, str):
@@ -70,7 +70,7 @@ def _night_is_boresight_covered(prof, night):
     if hook is None:
         return None
     offset = getattr(prof, "night_to_dayobs_offset_days", 1)
-    day_obs = night_to_day_obs(night, offset)          # 'YYYYMMDD'
+    day_obs = night_to_day_obs(night, offset)  # 'YYYYMMDD'
     ut_date = _coerce_date(f"{day_obs[:4]}-{day_obs[4:6]}-{day_obs[6:8]}")
     return bool(hook(ut_date))
 
@@ -113,7 +113,9 @@ def _diagnose_uncharacterized_failure(prof, night, succeeded, failed):
         "astrometry.net), measure the RA/Dec offset vs the header pointing, and "
         "add a row to the instrument profile's boresight-offset table; then "
         "re-run.",
-        night, failed, total,
+        night,
+        failed,
+        total,
     )
 
 
@@ -1191,9 +1193,7 @@ def run(
 
     _save_processing_log(plog, config, cols.science_run)
     total_succeeded, last_attempt_failed = _final_counts(attempts, plog)
-    _diagnose_uncharacterized_failure(
-        prof, night, total_succeeded, last_attempt_failed
-    )
+    _diagnose_uncharacterized_failure(prof, night, total_succeeded, last_attempt_failed)
 
     # Check if any config succeeded
     if not attempts.any_success:

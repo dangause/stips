@@ -30,6 +30,7 @@ stack/butler machinery lives inside main() (and the in-stack snippet it runs),
 following the repo's "run a snippet inside the stack that returns JSON, then
 compute in the venv" pattern (see packages/stips/src/stips/core/stack.py).
 """
+
 from __future__ import annotations
 
 import argparse
@@ -132,7 +133,7 @@ def search_offset(src_sky, ref_sky, center, rot_grid, scale_grid) -> dict:
 
 # In-stack snippet. Reads its parameters from environment variables (never
 # interpolated into shell text). Prints one JSON line to stdout.
-_INSTACK_SNIPPET = r'''
+_INSTACK_SNIPPET = r"""
 import json, os
 import numpy as np
 import lsst.geom as geom
@@ -251,7 +252,7 @@ print("PROBE_JSON:" + json.dumps({
     "n_ref": len(ref_sky),
     "run": refs[0].run,
 }))
-'''
+"""
 
 
 def _run_instack(args) -> dict:
@@ -295,7 +296,7 @@ def _run_instack(args) -> dict:
         "STIPS_SRC": str(stips_src),
         "SNIPPET": snippet_path,
     }
-    script = r'''
+    script = r"""
 cd "$STACK_DIR"
 source "$STIPS_LOADER"
 setup lsst_distrib
@@ -306,9 +307,12 @@ setup -r "$OBS_STIPS" obs_stips
 export INSTRUMENT_DIR="$INSTRUMENT_DIR"
 export PYTHONPATH="${STIPS_SRC}:${PYTHONPATH:-}"
 python "$SNIPPET"
-'''
+"""
     proc = subprocess.run(
-        ["bash", "-c", script], capture_output=True, text=True, env=env,
+        ["bash", "-c", script],
+        capture_output=True,
+        text=True,
+        env=env,
         cwd=str(stack_dir),
     )
     try:
@@ -319,32 +323,53 @@ python "$SNIPPET"
     payload = None
     for line in (proc.stdout or "").splitlines():
         if line.startswith("PROBE_JSON:"):
-            payload = json.loads(line[len("PROBE_JSON:"):])
+            payload = json.loads(line[len("PROBE_JSON:") :])
     if payload is None:
-        sys.stderr.write(proc.stdout[-3000:] + "\n---STDERR---\n" + proc.stderr[-3000:] + "\n")
-        raise SystemExit(f"in-stack snippet produced no PROBE_JSON (exit {proc.returncode})")
+        sys.stderr.write(
+            proc.stdout[-3000:] + "\n---STDERR---\n" + proc.stderr[-3000:] + "\n"
+        )
+        raise SystemExit(
+            f"in-stack snippet produced no PROBE_JSON (exit {proc.returncode})"
+        )
     return payload
 
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--repo", required=True)
-    ap.add_argument("--collection", required=True,
-                    help="collection glob holding the post_isr_image")
-    ap.add_argument("--visit", type=int, required=True,
-                    help="exposure id (post_isr_image is keyed by exposure)")
+    ap.add_argument(
+        "--collection", required=True, help="collection glob holding the post_isr_image"
+    )
+    ap.add_argument(
+        "--visit",
+        type=int,
+        required=True,
+        help="exposure id (post_isr_image is keyed by exposure)",
+    )
     ap.add_argument("--detector", type=int, default=0)
-    ap.add_argument("--refcat", default="gaia_dr3",
-                    help="reference-catalog dataset type (gaia_dr3 for NGC2298; "
-                         "the_monster_20250219_local for SA98)")
+    ap.add_argument(
+        "--refcat",
+        default="gaia_dr3",
+        help="reference-catalog dataset type (gaia_dr3 for NGC2298; "
+        "the_monster_20250219_local for SA98)",
+    )
     ap.add_argument("--n-bright", dest="n_bright", type=int, default=300)
-    ap.add_argument("--n-ref", dest="n_ref", type=int, default=400,
-                    help="keep only the brightest n_ref refs (collapses the "
-                         "chance-match floor from the over-dense refcat cone)")
-    ap.add_argument("--radius", type=float, default=0.3,
-                    help="refcat cone radius (deg)")
-    ap.add_argument("--stack-dir", default=os.environ.get("STACK_DIR"),
-                    help="LSST stack dir (defaults to $STACK_DIR); required if unset")
+    ap.add_argument(
+        "--n-ref",
+        dest="n_ref",
+        type=int,
+        default=400,
+        help="keep only the brightest n_ref refs (collapses the "
+        "chance-match floor from the over-dense refcat cone)",
+    )
+    ap.add_argument(
+        "--radius", type=float, default=0.3, help="refcat cone radius (deg)"
+    )
+    ap.add_argument(
+        "--stack-dir",
+        default=os.environ.get("STACK_DIR"),
+        help="LSST stack dir (defaults to $STACK_DIR); required if unset",
+    )
     args = ap.parse_args()
 
     data = _run_instack(args)
@@ -353,8 +378,12 @@ def main() -> None:
     ref_sky = np.asarray(data["ref_sky"], dtype=float)
 
     print(f"# repo={args.repo}")
-    print(f"# collection={args.collection}  exposure={args.visit}  detector={args.detector}")
-    print(f"# refcat={data['refcat']} (flux_filter={data.get('flux_filter')})  run={data.get('run')}")
+    print(
+        f"# collection={args.collection}  exposure={args.visit}  detector={args.detector}"
+    )
+    print(
+        f"# refcat={data['refcat']} (flux_filter={data.get('flux_filter')})  run={data.get('run')}"
+    )
     print(f"# field center (seed WCS): RA={center[0]:.6f} Dec={center[1]:.6f}")
     print(f"# n_detected_sources={data['n_src']}  n_refs={data['n_ref']}")
     if src_sky.size == 0 or ref_sky.size == 0:
@@ -362,8 +391,10 @@ def main() -> None:
 
     # Baseline (no correction) alignment, for context.
     base = align_score(src_sky, ref_sky, 0.0, 0.0, center)
-    print(f"# baseline (d_rot=0, d_scale=0): n_match={base['n_match']} "
-          f"median_sep={base['median_sep_arcsec']:.3f}\"")
+    print(
+        f"# baseline (d_rot=0, d_scale=0): n_match={base['n_match']} "
+        f"median_sep={base['median_sep_arcsec']:.3f}\""
+    )
 
     rot_grid = np.arange(-30, 30, 0.25)
     scale_grid = np.arange(-0.05, 0.05, 0.0025)
@@ -372,18 +403,27 @@ def main() -> None:
     print("=" * 64)
     print("PEAK (best re-aligning correction):")
     print(f"  d_rot_deg          = {best['d_rot_deg']:+.3f}")
-    print(f"  d_scale            = {best['d_scale']:+.5f}  "
-          f"({best['d_scale'] * 100:+.3f}% plate-scale)")
-    print(f"  n_match            = {best['n_match']}  "
-          f"(of {data['n_src']} sources, {data['n_ref']} refs)")
+    print(
+        f"  d_scale            = {best['d_scale']:+.5f}  "
+        f"({best['d_scale'] * 100:+.3f}% plate-scale)"
+    )
+    print(
+        f"  n_match            = {best['n_match']}  "
+        f"(of {data['n_src']} sources, {data['n_ref']} refs)"
+    )
     print(f"  median_sep_arcsec  = {best['median_sep_arcsec']:.3f}")
     print("=" * 64)
-    print("MEASUREMENT_TUPLE:" + json.dumps({
-        "d_rot_deg": best["d_rot_deg"],
-        "d_scale": best["d_scale"],
-        "n_match": best["n_match"],
-        "median_sep_arcsec": best["median_sep_arcsec"],
-    }))
+    print(
+        "MEASUREMENT_TUPLE:"
+        + json.dumps(
+            {
+                "d_rot_deg": best["d_rot_deg"],
+                "d_scale": best["d_scale"],
+                "n_match": best["n_match"],
+                "median_sep_arcsec": best["median_sep_arcsec"],
+            }
+        )
+    )
 
 
 if __name__ == "__main__":

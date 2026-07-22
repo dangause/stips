@@ -3,6 +3,7 @@
 Replaces the hardcoded year==2006 gate: the 2006 correction and 2010 no-op are
 now rows in _BORESIGHT_OFFSET_TABLE, bounded to each campaign's measured nights.
 """
+
 import datetime as dt
 import importlib.util
 import sys as _sys
@@ -30,7 +31,8 @@ _saved_fetch = _sys.modules.get("fetch")
 try:
     _sys.path.insert(0, str(_CTIO_DIR))
     _SPEC = importlib.util.spec_from_file_location(
-        "ctio_profile", _CTIO_DIR / "profile.py")
+        "ctio_profile", _CTIO_DIR / "profile.py"
+    )
     prof_mod = importlib.util.module_from_spec(_SPEC)
     _SPEC.loader.exec_module(prof_mod)
 finally:
@@ -105,7 +107,7 @@ def test_tracking_radec_shifts_2006_header_via_table():
 
 def test_boresight_offset_covered_registered_as_hook():
     hook = PROFILE.hooks["boresight_offset_covered"]
-    assert hook(dt.date(2006, 10, 2)) is True     # in 2006 window
-    assert hook(dt.date(2010, 1, 21)) is True      # covered, zero-offset
-    assert hook(dt.date(2008, 6, 1)) is False      # uncharacterized
-    assert hook(None) is False                        # fail-closed
+    assert hook(dt.date(2006, 10, 2)) is True  # in 2006 window
+    assert hook(dt.date(2010, 1, 21)) is True  # covered, zero-offset
+    assert hook(dt.date(2008, 6, 1)) is False  # uncharacterized
+    assert hook(None) is False  # fail-closed

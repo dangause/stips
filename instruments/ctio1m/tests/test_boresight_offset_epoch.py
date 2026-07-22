@@ -19,7 +19,7 @@ _INFO = InstrumentDirInfo(name="ctio1m", path=Path(__file__).resolve().parents[1
 PROFILE = load_profile(_INFO)
 
 # A TPheA-like pointing (RA 7.537 deg, Dec -46.523 deg) in header sexagesimal form.
-_RA = "00:30:08.9"   # hours
+_RA = "00:30:08.9"  # hours
 _DEC = "-46:31:22.8"  # deg
 _BASE = {"RA": _RA, "DEC": _DEC, "EQUINOX": 2000}
 
@@ -48,16 +48,13 @@ def test_2006_frame_is_shifted_east_and_north():
     shifted = PROFILE.hooks["tracking_radec"](_hdr_2006())
     d_east, d_north = raw.spherical_offsets_to(shifted)
     # Offset must be +257" East (RA*cosDec) and +320" North (Dec), within ~1".
-    assert d_east.to_value(u.arcsec) == \
-        pytest.approx(_EXPECT_EAST_ARCSEC, abs=1.0)
-    assert d_north.to_value(u.arcsec) == \
-        pytest.approx(_EXPECT_NORTH_ARCSEC, abs=1.0)
+    assert d_east.to_value(u.arcsec) == pytest.approx(_EXPECT_EAST_ARCSEC, abs=1.0)
+    assert d_north.to_value(u.arcsec) == pytest.approx(_EXPECT_NORTH_ARCSEC, abs=1.0)
     # RA must INCREASE (East) and Dec must INCREASE (North).
     assert shifted.ra.deg > raw.ra.deg
     assert shifted.dec.deg > raw.dec.deg
     # Total offset ~412" (well beyond the ~115" matcher offset window).
-    assert raw.separation(shifted).arcsec == \
-        pytest.approx(412.0, abs=5.0)
+    assert raw.separation(shifted).arcsec == pytest.approx(412.0, abs=5.0)
 
 
 def test_2010_frame_is_unchanged():

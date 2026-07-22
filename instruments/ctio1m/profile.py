@@ -214,14 +214,24 @@ def _datetime_end(header):
 #
 # (start_date, end_date, delta_east_arcsec, delta_north_arcsec, provenance)
 _BORESIGHT_OFFSET_TABLE = [
-    ("2006-09-27", "2006-12-17", 257.0, 320.0,
-     "blind astrometry.net solve, 4 local nights 20060927-20061216 (2026-07); "
-     "dRA*cosDec +257\" (std 24), dDec +320\" (std 57), ~412\" @ PA~39 E-of-N; "
-     "UT DATE-OBS extent 2006-09-27..2006-12-17 (each local night spans "
-     "evening+next-morning UT, so the window end is the LAST night's UT "
-     "morning date, one day past its local-night label)"),
-    ("2010-01-17", "2010-01-22", 0.0, 0.0,
-     "SA98 run; ~60\" offset already within matcher tolerance, no correction"),
+    (
+        "2006-09-27",
+        "2006-12-17",
+        257.0,
+        320.0,
+        "blind astrometry.net solve, 4 local nights 20060927-20061216 (2026-07); "
+        'dRA*cosDec +257" (std 24), dDec +320" (std 57), ~412" @ PA~39 E-of-N; '
+        "UT DATE-OBS extent 2006-09-27..2006-12-17 (each local night spans "
+        "evening+next-morning UT, so the window end is the LAST night's UT "
+        "morning date, one day past its local-night label)",
+    ),
+    (
+        "2010-01-17",
+        "2010-01-22",
+        0.0,
+        0.0,
+        'SA98 run; ~60" offset already within matcher tolerance, no correction',
+    ),
 ]
 
 

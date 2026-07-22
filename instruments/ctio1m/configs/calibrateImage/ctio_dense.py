@@ -18,13 +18,28 @@
 
 # --- measurement schema (REQUIRED; downstream stage-1 consumes the full ladder) ---
 config.star_measurement.plugins.names |= [
-    "base_CircularApertureFlux", "base_LocalBackground", "base_PsfFlux",
-    "base_SdssCentroid", "base_SdssShape", "base_PixelFlags", "base_Variance",
-    "base_Blendedness", "base_Jacobian",
-    "ext_shapeHSM_HsmPsfMomentsDebiased", "ext_shapeHSM_HsmShapeRegauss",
+    "base_CircularApertureFlux",
+    "base_LocalBackground",
+    "base_PsfFlux",
+    "base_SdssCentroid",
+    "base_SdssShape",
+    "base_PixelFlags",
+    "base_Variance",
+    "base_Blendedness",
+    "base_Jacobian",
+    "ext_shapeHSM_HsmPsfMomentsDebiased",
+    "ext_shapeHSM_HsmShapeRegauss",
 ]
 config.star_measurement.plugins["base_CircularApertureFlux"].radii = [
-    3.0, 6.0, 9.0, 12.0, 17.0, 25.0, 35.0, 50.0, 70.0,
+    3.0,
+    6.0,
+    9.0,
+    12.0,
+    17.0,
+    25.0,
+    35.0,
+    50.0,
+    70.0,
 ]
 config.star_measurement.plugins["base_CircularApertureFlux"].maxSincRadius = 12.0
 config.star_measurement.plugins.names |= ["base_CompensatedTophatFlux"]
@@ -36,7 +51,7 @@ except Exception:
 
 # --- detection: high threshold => far fewer sources on the dense field (speed + clean) ---
 config.psf_detection.thresholdType = "stdev"
-config.psf_detection.thresholdValue = 8.0        # aggressive; dense field has plenty
+config.psf_detection.thresholdValue = 8.0  # aggressive; dense field has plenty
 config.psf_detection.includeThresholdMultiplier = 3.0
 config.psf_detection.minPixels = 7
 
@@ -73,17 +88,21 @@ config.astrometry_ref_loader.pixelMargin = 300
 #       An earlier over-loosened pass (offset 900, minFrac 0.05, minPairs 15) accepted
 #       ~10" fits on 87% of visits. Restored to strict defaults here.
 m = config.astrometry.matcher
-m.numBrightStars = 150        # (speed) patterns from the 150 brightest only
-m.maxRefObjects = 3000        # (speed) bound the reference set on the dense field
-m.maxOffsetPix = 400          # (precision) 180-deg handled in profile; residual pointing is small
-m.maxRotationDeg = 1.0        # equatorial mount, no field rotation
-m.minMatchedPairs = 30        # (precision) stack default — demand a well-supported solution
-m.minFracMatchedPairs = 0.3   # (precision) stack default — reject loose/partial matches
-m.minMatchDistPixels = 1.0    # (precision) tight final match tolerance
+m.numBrightStars = 150  # (speed) patterns from the 150 brightest only
+m.maxRefObjects = 3000  # (speed) bound the reference set on the dense field
+m.maxOffsetPix = (
+    400  # (precision) 180-deg handled in profile; residual pointing is small
+)
+m.maxRotationDeg = 1.0  # equatorial mount, no field rotation
+m.minMatchedPairs = 30  # (precision) stack default — demand a well-supported solution
+m.minFracMatchedPairs = 0.3  # (precision) stack default — reject loose/partial matches
+m.minMatchDistPixels = 1.0  # (precision) tight final match tolerance
 m.numPatternConsensus = 3
 m.numPointsForShape = 6
 
 # --- astrometry WCS fit ---
-config.astrometry.maxMeanDistanceArcsec = 0.5   # the Cycle-2 precision gate
-config.astrometry.matchDistanceSigma = 2.0      # clip spatial match outliers (stack default)
+config.astrometry.maxMeanDistanceArcsec = 0.5  # the Cycle-2 precision gate
+config.astrometry.matchDistanceSigma = (
+    2.0  # clip spatial match outliers (stack default)
+)
 config.astrometry.doMagnitudeOutlierRejection = True
