@@ -203,11 +203,23 @@ def _datetime_end(header):
 # that offset (mild "stable within one run" interpolation); a night OUTSIDE every
 # window is uncovered (offset 0) and is flagged by science.py's diagnostics.
 #
+# IMPORTANT: start_date/end_date are UT DATE-OBS dates (both consumers -- this
+# table's own lookup via _datetime_begin, and science.py's day_obs diagnostic --
+# match on UT), NOT local observing nights. A local CTIO night spans TWO UT
+# calendar dates (evening + next-morning UT), so a window must extend one UT day
+# past the last local night's date or it silently drops that night's morning
+# frames. E.g. local night 20061216 (the last measured 2006 night) has frames on
+# both UT 2006-12-16 (evening) and UT 2006-12-17 (morning) -- hence end 12-17
+# below, not 12-16.
+#
 # (start_date, end_date, delta_east_arcsec, delta_north_arcsec, provenance)
 _BORESIGHT_OFFSET_TABLE = [
-    ("2006-09-27", "2006-12-16", 257.0, 320.0,
-     "blind astrometry.net solve, 4 nights 20060927-20061216 (2026-07); "
-     "dRA*cosDec +257\" (std 24), dDec +320\" (std 57), ~412\" @ PA~39 E-of-N"),
+    ("2006-09-27", "2006-12-17", 257.0, 320.0,
+     "blind astrometry.net solve, 4 local nights 20060927-20061216 (2026-07); "
+     "dRA*cosDec +257\" (std 24), dDec +320\" (std 57), ~412\" @ PA~39 E-of-N; "
+     "UT DATE-OBS extent 2006-09-27..2006-12-17 (each local night spans "
+     "evening+next-morning UT, so the window end is the LAST night's UT "
+     "morning date, one day past its local-night label)"),
     ("2010-01-17", "2010-01-22", 0.0, 0.0,
      "SA98 run; ~60\" offset already within matcher tolerance, no correction"),
 ]

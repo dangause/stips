@@ -63,16 +63,30 @@ def test_2010_in_window_zero_offset_but_covered():
 
 
 def test_out_of_window_dates_are_uncovered():
-    # 2008 (no campaign) AND a 2006 date OUTSIDE the measured Sep27-Dec16 window.
+    # 2008 (no campaign) AND a 2006 date OUTSIDE the measured Sep27-Dec17 window.
     for d in (dt.date(2008, 6, 1), dt.date(2006, 6, 1), dt.date(2011, 3, 1)):
         assert prof_mod.boresight_offset_covered(d) is False
         assert prof_mod.boresight_offset_arcsec(d) == (0.0, 0.0)
 
 
 def test_window_boundaries_are_inclusive():
-    for d in (dt.date(2006, 9, 27), dt.date(2006, 12, 16)):
+    for d in (dt.date(2006, 9, 27), dt.date(2006, 12, 17)):
         assert prof_mod.boresight_offset_covered(d) is True
         assert prof_mod.boresight_offset_arcsec(d) == (257.0, 320.0)
+
+
+def test_2006_window_end_covers_last_local_nights_ut_morning_frames():
+    # Regression: the last measured local night (20061216) spans UT 2006-12-16
+    # (evening) AND UT 2006-12-17 (morning). An end bound of 2006-12-16 silently
+    # dropped the 12-17 morning frames (no offset applied -> astrometry
+    # regression; science.py's day_obs diagnostic also wrongly flagged them
+    # "uncovered"). Both UT dates of that local night must be covered.
+    for d in (dt.date(2006, 12, 16), dt.date(2006, 12, 17)):
+        assert prof_mod.boresight_offset_covered(d) is True
+        assert prof_mod.boresight_offset_arcsec(d) == (257.0, 320.0)
+    # One UT day past the window end is correctly uncovered.
+    assert prof_mod.boresight_offset_covered(dt.date(2006, 12, 18)) is False
+    assert prof_mod.boresight_offset_arcsec(dt.date(2006, 12, 18)) == (0.0, 0.0)
 
 
 def test_none_date_is_uncovered_no_crash():
