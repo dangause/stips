@@ -27,6 +27,7 @@ from stips.core.pipeline import (
 )
 from stips.core.query import butler_str_literal
 from stips.core.refcat import refcat_overlay_config
+from stips.profile import coerce_date as _coerce_date
 
 if TYPE_CHECKING:
     from stips.core.config import Config
@@ -34,89 +35,46 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
-def _coerce_date(d):
-    """datetime/date/astropy.Time/ISO-str -> datetime.date (or None). Fail-closed."""
-    import datetime as _d
-
-    if d is None:
-        return None
-    if isinstance(d, _d.date) and not isinstance(d, _d.datetime):
-        return d
-    if isinstance(d, _d.datetime):
-        return d.date()
-    to_dt = getattr(d, "datetime", None)  # astropy.time.Time
-    if to_dt is not None:
-        return to_dt.date()
-    if isinstance(d, str):
-        try:
-            return _d.date.fromisoformat(d[:10])
-        except ValueError:
-            return None
-    return None
-
-
 def _night_is_boresight_covered(prof, night):
     """Whether the night's campaign has a characterized boresight offset.
 
-    Maps the observing night (local) to its UT day_obs date and queries the
-    profile's ``boresight_offset_covered`` hook. Returns None if the profile has
-    no such hook (e.g. a non-CTIO instrument) so callers can no-op.
-
-    The night->UT-date mapping uses ``night_to_dayobs_offset_days`` (CTIO: 1);
-    the ~1-day slop is immaterial to coverage because the table windows have
-    multi-day margin from real observing nights.
+    A night's science frames span two consecutive UT ``DATE-OBS`` dates (evening +
+    the next morning), and the profile's boresight-offset table windows are keyed
+    on per-frame UT. The campaign is characterized for this night if EITHER of the
+    night's UT dates falls in a window -- this matches the translator's per-frame
+    coverage exactly, so the two never disagree at a window's trailing edge (a
+    night-vs-day_obs off-by-one would otherwise flag a covered night uncovered).
+    Returns None if the profile has no ``boresight_offset_covered`` hook (e.g. a
+    non-CTIO instrument) so callers can no-op.
     """
     hook = getattr(prof, "hooks", {}).get("boresight_offset_covered")
     if hook is None:
         return None
     offset = getattr(prof, "night_to_dayobs_offset_days", 1)
-    day_obs = night_to_day_obs(night, offset)  # 'YYYYMMDD'
-    ut_date = _coerce_date(f"{day_obs[:4]}-{day_obs[4:6]}-{day_obs[6:8]}")
-    return bool(hook(ut_date))
+    night_date = _coerce_date(f"{night[:4]}-{night[4:6]}-{night[6:8]}")
+    day_obs = night_to_day_obs(night, offset)  # 'YYYYMMDD' (== night + offset)
+    dayobs_date = _coerce_date(f"{day_obs[:4]}-{day_obs[4:6]}-{day_obs[6:8]}")
+    return bool(hook(night_date) or hook(dayobs_date))
 
 
 def _warn_if_uncharacterized_campaign(prof, night):
-    """Log a WARNING when the night's campaign has no boresight characterization."""
+    """Log a WARNING when the night's campaign has no boresight characterization.
+
+    Informational and appropriately hedged: coverage is factual (a row exists or
+    not); the "if astrometry fails" clause is conditional, not an assertion of
+    cause. (A post-run auto-diagnosis was intentionally NOT added -- attributing a
+    broad astrometry failure to a pointing offset cannot be done reliably from
+    graph-wide success/failure counts alone; see the boresight-offset design doc.)
+    """
     covered = _night_is_boresight_covered(prof, night)
     if covered is False:
         log.warning(
             "Night %s: this campaign has no boresight-offset characterization for "
-            "this instrument. If astrometry fails broadly it likely needs one "
+            "this instrument. If astrometry fails broadly it may need one "
             "(blind-solve one exposure, measure the RA/Dec offset, add a row to the "
             "instrument profile's boresight-offset table).",
             night,
         )
-
-
-_BORESIGHT_FAIL_FRACTION_THRESHOLD = 0.50
-
-
-def _diagnose_uncharacterized_failure(prof, night, succeeded, failed):
-    """Actionable ERROR when an uncharacterized night's astrometry failed broadly.
-
-    Most visits failing on an uncharacterized campaign is the signature of an
-    uncorrected boresight pointing offset (the 2006 failure mode). A few failures
-    are normal per-visit issues, so only fire at/above the fraction threshold.
-    """
-    total = succeeded + failed
-    if total == 0:
-        return
-    if _night_is_boresight_covered(prof, night) is not False:
-        return
-    if failed / total < _BORESIGHT_FAIL_FRACTION_THRESHOLD:
-        return
-    log.error(
-        "Night %s: %d/%d science visits failed astrometry on an uncharacterized "
-        "campaign (NO boresight-offset characterization for this instrument). "
-        "This is the signature of an uncorrected telescope pointing offset (cf. "
-        "the 2006 CTIO run, ~7' off). Fix: blind-solve one exposure (e.g. "
-        "astrometry.net), measure the RA/Dec offset vs the header pointing, and "
-        "add a row to the instrument profile's boresight-offset table; then "
-        "re-run.",
-        night,
-        failed,
-        total,
-    )
 
 
 def _count_matching_exposures(config: "Config", where: str) -> int | None:
@@ -1193,7 +1151,6 @@ def run(
 
     _save_processing_log(plog, config, cols.science_run)
     total_succeeded, last_attempt_failed = _final_counts(attempts, plog)
-    _diagnose_uncharacterized_failure(prof, night, total_succeeded, last_attempt_failed)
 
     # Check if any config succeeded
     if not attempts.any_success:

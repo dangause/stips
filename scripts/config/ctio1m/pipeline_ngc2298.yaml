@@ -64,7 +64,8 @@ options:
   skip_dia: true
   forced_phot: false
   continue_on_error: true
-  use_fallbacks: true
+  # No calibrate_image_fallbacks are declared above, so use_fallbacks would be a
+  # no-op; omitted deliberately (ctio_dense is the single science config).
 
 lightcurve:
   enabled: false

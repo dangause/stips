@@ -24,7 +24,15 @@ import re
 # Safe to import at module load: fetch.py is stdlib-only at import time
 # (urllib/json); the NOIRLab archive is hit only when fetch_data() runs.
 from fetch import fetch_data as _fetch_data
-from stips import CrosstalkSpec, Field, InstrumentProfile, Site, hook, pack_exposure_id
+from stips import (
+    CrosstalkSpec,
+    Field,
+    InstrumentProfile,
+    Site,
+    coerce_date,
+    hook,
+    pack_exposure_id,
+)
 
 log = logging.getLogger("lsst.obs.stips.ctio1m.profile")
 
@@ -235,23 +243,6 @@ _BORESIGHT_OFFSET_TABLE = [
 ]
 
 
-def _as_date(dt):
-    """Coerce a datetime/date/astropy.time.Time/None to a datetime.date (or None)."""
-    import datetime as _d
-
-    if dt is None:
-        return None
-    if isinstance(dt, _d.date) and not isinstance(dt, _d.datetime):
-        return dt
-    if isinstance(dt, _d.datetime):
-        return dt.date()
-    # astropy.time.Time
-    to_dt = getattr(dt, "datetime", None)
-    if to_dt is not None:
-        return to_dt.date()
-    return None
-
-
 def _boresight_offset_entry(dt):
     """Row whose inclusive [start, end] UT-date range contains ``dt``, else None.
 
@@ -259,7 +250,7 @@ def _boresight_offset_entry(dt):
     """
     import datetime as _d
 
-    d = _as_date(dt)
+    d = coerce_date(dt)
     if d is None:
         return None
     for row in _BORESIGHT_OFFSET_TABLE:

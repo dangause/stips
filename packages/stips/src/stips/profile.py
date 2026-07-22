@@ -175,6 +175,34 @@ def hook(profile: InstrumentProfile, name: Optional[str] = None) -> Callable:
     return deco
 
 
+def coerce_date(value):
+    """Coerce a ``datetime``/``date``/``astropy.time.Time``/ISO-string/``None`` to a
+    ``datetime.date`` (or ``None``). Fail-closed: unrecognized or unparseable input
+    returns ``None`` rather than raising.
+
+    Shared by both sides of the venv/stack boundary (the in-stack translator's
+    date-window lookup and the venv orchestrator's coverage check) so the coercion
+    rules cannot drift between two copies.
+    """
+    import datetime as _dt
+
+    if value is None:
+        return None
+    if isinstance(value, _dt.date) and not isinstance(value, _dt.datetime):
+        return value
+    if isinstance(value, _dt.datetime):
+        return value.date()
+    to_dt = getattr(value, "datetime", None)  # astropy.time.Time
+    if to_dt is not None:
+        return to_dt.date()
+    if isinstance(value, str):
+        try:
+            return _dt.date.fromisoformat(value[:10])
+        except ValueError:
+            return None
+    return None
+
+
 # Epoch for the reference 31-bit-safe exposure-id scheme (days since 2000-01-01).
 EXPOSURE_ID_EPOCH = "2000-01-01T00:00:00"
 

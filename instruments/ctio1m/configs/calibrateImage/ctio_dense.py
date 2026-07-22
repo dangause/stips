@@ -14,7 +14,8 @@
 # the source/reference counts and demanding higher-S/N inputs breaks the blowup:
 # far fewer, cleaner candidates feed the matcher, so it converges fast AND matches.
 #
-# Fallback chain: ctio_dense -> ctio_relaxed.
+# This is the sole calibrateImage config for the CTIO NGC2298 workflow; there is
+# no relaxed fallback (ngc2298.yaml declares none).
 
 # --- measurement schema (REQUIRED; downstream stage-1 consumes the full ladder) ---
 config.star_measurement.plugins.names |= [
@@ -44,9 +45,12 @@ config.star_measurement.plugins["base_CircularApertureFlux"].radii = [
 config.star_measurement.plugins["base_CircularApertureFlux"].maxSincRadius = 12.0
 config.star_measurement.plugins.names |= ["base_CompensatedTophatFlux"]
 config.star_measurement.plugins["base_CompensatedTophatFlux"].apertures = [12, 17]
+# Point the apFlux slot at the 17px aperture (added to `radii` above). Guarded
+# only against stack versions that name the slotted field differently; the
+# narrow AttributeError/KeyError is expected-and-benign, any other error is not.
 try:
     config.star_measurement.slots.apFlux = "base_CircularApertureFlux_17_0"
-except Exception:
+except (AttributeError, KeyError):
     pass
 
 # --- detection: high threshold => far fewer sources on the dense field (speed + clean) ---
