@@ -422,3 +422,14 @@ def tracking_radec(header, default=None):
         )
 
     return coord
+
+
+@hook(profile, name="boresight_offset_covered")
+def _boresight_offset_covered_hook(dt):
+    """Hook: True iff the observation date is in a characterized campaign window.
+
+    Registered under the key ``boresight_offset_covered`` so science.py can query
+    it via ``profile.hooks``. A thin wrapper over the module-level lookup (no
+    duplicated logic); named distinctly so it does not shadow that function.
+    """
+    return boresight_offset_covered(dt)

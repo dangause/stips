@@ -87,3 +87,14 @@ def test_tracking_radec_shifts_2006_header_via_table():
     assert d_east.to_value(u.arcsec) == pytest.approx(257.0, abs=1.0)
     assert d_north.to_value(u.arcsec) == pytest.approx(320.0, abs=1.0)
     assert shifted.ra.deg > raw.ra.deg and shifted.dec.deg > raw.dec.deg
+
+
+import datetime as _dt2
+
+
+def test_boresight_offset_covered_registered_as_hook():
+    hook = PROFILE.hooks["boresight_offset_covered"]
+    assert hook(_dt2.date(2006, 10, 2)) is True     # in 2006 window
+    assert hook(_dt2.date(2010, 1, 21)) is True      # covered, zero-offset
+    assert hook(_dt2.date(2008, 6, 1)) is False      # uncharacterized
+    assert hook(None) is False                        # fail-closed
