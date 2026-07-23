@@ -1,0 +1,71 @@
+# CTIO 1.0m / Y4KCam — calibs + science on the NGC2298 globular-cluster field
+# and other southern clusters observed across four 2006 nights.
+#
+# Reverse-engineered from the (now-reproducible) ngc2298_repo Butler repo:
+#   - raw source: CTIO archive nights 20060927, 20060929, 20061001, 20061216
+#   - unbinned Y4KCam (raw 4104x4104 -> CCD_BINNING unset = 1)
+#   - bands B/V/R/I, no NOIRLAB proposal filter (old headers carry no PROPID)
+#   - target NGC2298 (RA 06:48:59.17, DEC -36:00:19.2)
+#
+# Southern field (dec ~ -36, below PS1's -30 floor) -> NO PS1 DIA/lightcurve;
+# this is a calibs + single-visit science reduction. Drive with the PER-STAGE
+# CLI (NOT `stips run`, which always runs the template step):
+#   .venv/bin/stips -c scripts/config/ctio1m/pipeline_ngc2298.yaml bootstrap
+#   .venv/bin/stips -c scripts/config/ctio1m/pipeline_ngc2298.yaml download 20060927 20060929 20061001 20061216
+#   .venv/bin/stips -c scripts/config/ctio1m/pipeline_ngc2298.yaml calibs 20060927
+#   .venv/bin/stips -c scripts/config/ctio1m/pipeline_ngc2298.yaml science 20060927 \
+#       --object NGC2298 --ra 102.246542 --dec -36.005333 --skip-coadds \
+#       --calibrate-config instruments/ctio1m/configs/calibrateImage/ctio_dense.py
+#   # ...repeat calibs/science per night as needed.
+#
+# calibrateImage config: the dense southern cores REQUIRE the dense-field config
+# `calibrateImage/ctio_dense.py` (matcher count-caps + Gaia astrometry) — the stock
+# neutral_default matcher does not finish on the crowded core. Pass it via
+# --calibrate-config for the per-stage `science` command (above), OR rely on the
+# `configs:` block below when driving via `stips run`. Both resolve the same file.
+env:
+  REPO: "/Users/dangause/Developer/lick/data_ctio/ngc2298_repo"
+  STACK_DIR: "/Users/dangause/Developer/lick/lsst/lsst_stack"
+  INSTRUMENT_DIR: "/Users/dangause/Developer/lick/lsst/lsst_stack/stack/stips/instruments/ctio1m"
+  RAW_PARENT_DIR: "/Users/dangause/Developer/lick/data_ctio"
+  REFCAT_REPO: "/Users/dangause/Developer/lick/lsst/lsst_stack/stack/refcats"
+
+object: "NGC2298"
+ra: 102.246542
+dec: -36.005333
+
+bands: ["b", "v", "r", "i"]
+
+# template: present for run-config schema validity only; the per-stage commands
+# above never execute the template step.
+template:
+  type: ps1
+  size: 0.3
+
+science:
+  nights:
+    - 20060927
+    - 20060929
+    - 20061001
+    - 20061216
+
+# calibrateImage config resolution (instrument-dir-first). ctio_dense.py caps the
+# dense-field asterism blowup + routes astrometry to Gaia DR3; required on the
+# crowded globular cores. Used by `stips run`; the per-stage `science` commands in
+# the header pass the same file via --calibrate-config.
+configs:
+  science:
+    calibrate_image: calibrateImage/ctio_dense.py
+
+options:
+  jobs: 4
+  skip_calibs: false
+  skip_science: false
+  skip_dia: true
+  forced_phot: false
+  continue_on_error: true
+  # No calibrate_image_fallbacks are declared above, so use_fallbacks would be a
+  # no-op; omitted deliberately (ctio_dense is the single science config).
+
+lightcurve:
+  enabled: false

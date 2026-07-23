@@ -24,7 +24,15 @@ import re
 # Safe to import at module load: fetch.py is stdlib-only at import time
 # (urllib/json); the NOIRLab archive is hit only when fetch_data() runs.
 from fetch import fetch_data as _fetch_data
-from stips import CrosstalkSpec, Field, InstrumentProfile, Site, hook, pack_exposure_id
+from stips import (
+    CrosstalkSpec,
+    Field,
+    InstrumentProfile,
+    Site,
+    coerce_date,
+    hook,
+    pack_exposure_id,
+)
 
 log = logging.getLogger("lsst.obs.stips.ctio1m.profile")
 
@@ -189,6 +197,81 @@ def _datetime_end(header):
     return begin
 
 
+# --- Date-characterized boresight pointing offsets (see tracking_radec) --------
+# The CTIO Y4KCam mount carries a per-campaign systematic pointing offset: the
+# TRUE field center is EAST/NORTH of the header RA/DEC by a campaign-specific
+# amount (measured by BLIND astrometry.net solves). It is a pure boresight
+# TRANSLATION -- camera plate scale (0.2889"/pix), orientation (PA~0) and
+# distortion (negligible) were all confirmed correct -- NOT a parse/geometry bug.
+#
+# A row means the campaign has been CHARACTERIZED; the offset may be 0. Ranges are
+# bounded to the MEASURED extent of each campaign (first/last night we have data
+# for), NOT padded to month/year -- the range asserts what was VERIFIED, not mount
+# stability across unmeasured time. An unmeasured night INSIDE a window inherits
+# that offset (mild "stable within one run" interpolation); a night OUTSIDE every
+# window is uncovered (offset 0) and is flagged by science.py's diagnostics.
+#
+# IMPORTANT: start_date/end_date are UT DATE-OBS dates (both consumers -- this
+# table's own lookup via _datetime_begin, and science.py's day_obs diagnostic --
+# match on UT), NOT local observing nights. A local CTIO night spans TWO UT
+# calendar dates (evening + next-morning UT), so a window must extend one UT day
+# past the last local night's date or it silently drops that night's morning
+# frames. E.g. local night 20061216 (the last measured 2006 night) has frames on
+# both UT 2006-12-16 (evening) and UT 2006-12-17 (morning) -- hence end 12-17
+# below, not 12-16.
+#
+# (start_date, end_date, delta_east_arcsec, delta_north_arcsec, provenance)
+_BORESIGHT_OFFSET_TABLE = [
+    (
+        "2006-09-27",
+        "2006-12-17",
+        257.0,
+        320.0,
+        "blind astrometry.net solve, 4 local nights 20060927-20061216 (2026-07); "
+        'dRA*cosDec +257" (std 24), dDec +320" (std 57), ~412" @ PA~39 E-of-N; '
+        "UT DATE-OBS extent 2006-09-27..2006-12-17 (each local night spans "
+        "evening+next-morning UT, so the window end is the LAST night's UT "
+        "morning date, one day past its local-night label)",
+    ),
+    (
+        "2010-01-17",
+        "2010-01-22",
+        0.0,
+        0.0,
+        'SA98 run; ~60" offset already within matcher tolerance, no correction',
+    ),
+]
+
+
+def _boresight_offset_entry(dt):
+    """Row whose inclusive [start, end] UT-date range contains ``dt``, else None.
+
+    Fail-closed: returns None if the date cannot be determined.
+    """
+    import datetime as _d
+
+    d = coerce_date(dt)
+    if d is None:
+        return None
+    for row in _BORESIGHT_OFFSET_TABLE:
+        start = _d.date.fromisoformat(row[0])
+        end = _d.date.fromisoformat(row[1])
+        if start <= d <= end:
+            return row
+    return None
+
+
+def boresight_offset_arcsec(dt):
+    """(delta_east_arcsec, delta_north_arcsec) for the campaign, else (0.0, 0.0)."""
+    row = _boresight_offset_entry(dt)
+    return (row[2], row[3]) if row is not None else (0.0, 0.0)
+
+
+def boresight_offset_covered(dt):
+    """True iff the observation date falls in a characterized campaign window."""
+    return _boresight_offset_entry(dt) is not None
+
+
 def _filename_fields(header):
     """Parse ``(local_night: int YYYYMMDD, seqnum: int)`` from the raw filename.
 
@@ -321,6 +404,10 @@ def tracking_radec(header, default=None):
 
     Frame is taken from RADESYS/RADECSYS, falling back to EQUINOX (2000 -> FK5,
     else ICRS).
+
+    A campaign-specific boresight offset (see ``_BORESIGHT_OFFSET_TABLE``) is
+    applied when the exposure date falls in a characterized window; uncharacterized
+    dates get no shift.
     """
     import astropy.units as u
     from astropy.coordinates import Angle, SkyCoord
@@ -338,4 +425,24 @@ def tracking_radec(header, default=None):
         equinox = header.get("EQUINOX")
         ref_system = "FK5" if equinox in (2000, 2000.0, "2000") else "ICRS"
 
-    return SkyCoord(ra_angle, dec_angle, frame=str(ref_system).lower())
+    coord = SkyCoord(ra_angle, dec_angle, frame=str(ref_system).lower())
+
+    east_arcsec, north_arcsec = boresight_offset_arcsec(_datetime_begin(header))
+    if east_arcsec or north_arcsec:
+        coord = coord.spherical_offsets_by(
+            east_arcsec * u.arcsec,
+            north_arcsec * u.arcsec,
+        )
+
+    return coord
+
+
+@hook(profile, name="boresight_offset_covered")
+def _boresight_offset_covered_hook(dt):
+    """Hook: True iff the observation date is in a characterized campaign window.
+
+    Registered under the key ``boresight_offset_covered`` so science.py can query
+    it via ``profile.hooks``. A thin wrapper over the module-level lookup (no
+    duplicated logic); named distinctly so it does not shadow that function.
+    """
+    return boresight_offset_covered(dt)
