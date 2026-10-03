@@ -24,7 +24,15 @@ import re
 # Safe to import at module load: fetch.py is stdlib-only at import time
 # (urllib/json); the NOIRLab archive is hit only when fetch_data() runs.
 from fetch import fetch_data as _fetch_data
-from stips import CrosstalkSpec, Field, InstrumentProfile, Site, hook, make_exposure_id
+from stips import (
+    CrosstalkSpec,
+    Field,
+    InstrumentProfile,
+    Site,
+    coerce_date,
+    hook,
+    pack_exposure_id,
+)
 
 log = logging.getLogger("lsst.obs.stips.ctio1m.profile")
 
@@ -39,9 +47,13 @@ profile = InstrumentProfile(
         elevation=2200.0,
         name="Cerro Tololo Interamerican Observatory",
     ),
-    # physical_filter -> band
+    # physical_filter -> band. "U+CuSO4" is Y4KCam's near-UV filter (U glass +
+    # CuSO4 red-leak block); it maps to band u. It must be present or bias frames
+    # parked at that wheel slot raise in unknown_filter and fail to ingest (a night
+    # whose biases are all U+CuSO4 then has zero ingestable biases — real: 20100120).
     filters={
         "U": "u",
+        "U+CuSO4": "u",
         "B": "b",
         "V": "v",
         "R": "r",
@@ -50,6 +62,7 @@ profile = InstrumentProfile(
     # raw FITS FILTERID value (upper-cased on lookup) -> physical_filter
     filter_aliases={
         "U": "U",
+        "U+CuSO4": "U+CuSO4",
         "B": "B",
         "V": "V",
         "R": "R",
@@ -60,6 +73,19 @@ profile = InstrumentProfile(
     # to PS1 r/i. u/b/v have no PS1 equivalent and fall back to coadd templates in
     # "auto" mode. Matches the reference Nickel r/i policy.
     ps1_band_map={"r": "r", "i": "i"},
+    # External-template band policy per source. SkyMapper (DR4) serves u/v/g/r/i/z
+    # but its "v" is a Stromgren-like ~384nm VIOLET filter — NOT Johnson V
+    # (~551nm), which Y4KCam's "v" is. Mapping v->v would fetch a near-UV
+    # template for a green science image. The nearest SkyMapper match to
+    # Johnson V is g (~510nm), but that needs a colorterm nobody has fit, so v
+    # is EXCLUDED rather than silently mismapped.
+    template_band_maps={
+        "skymapper": {"r": "r", "i": "i"},
+    },
+    # Y4KCam covers ~20' on a side. Every SkyMapper cutout (10.2' cap) is
+    # smaller than this, so external-template ingest warns about dithered
+    # pointings falling outside the template.
+    fov_arcmin=20.0,
     # FITS INSTRUME is "Y4KCam" (the camera), not the instrument name "CTIO1m".
     instrument_header_value="Y4KCam",
     header_map={
@@ -93,18 +119,33 @@ profile = InstrumentProfile(
     night_to_dayobs_offset_days=1,
     skymap_name="ctio1mRings-v1",
     skymap_collection="skymaps/ctio1mRings",
+    obs_data_package="obs_ctio1m_data",
     # ISR config overrides, applied to every ISR invocation (calib build +
     # science) so the master bias/flat and the science frames are corrected
     # consistently:
-    #   - doDefect=False: CTIO ships no curated defect maps (obs_nickel_data is
-    #     Nickel-specific), so the ISR `defects` connection has no datasets.
+    #   - doDefect=True: CTIO ships curated defect maps via obs_ctio1m_data
+    #     (mirroring obs_nickel_data). The base defect (valid from 1970) is
+    #     empty and masks nothing; an epoch-scoped defect covers the dead amp
+    #     A01 region for the Jan-2010 SA98 run.
     #   - overscan.doParallelOverscan=True: Y4KCam reads 4 amps toward the
     #     detector centre with parallel-overscan strips on the inner edges.
     #     Serial overscan alone leaves a per-frame amp-row bias step (~2.5 ADU,
     #     visible as a top/bottom seam in the assembled image); the parallel pass
     #     tracks it. Must be on for the bias build too, else the master bias keeps
     #     the parallel structure and science would double-subtract it.
-    isr_overrides={"doDefect": False, "overscan.doParallelOverscan": True},
+    #   - growSaturationFootprintSize=8 + doSaturationInterpolation: the camera
+    #     saturation level (65535 ADU) masks only the saturated CORES (~tens of
+    #     px); the default grow of 1 leaves the bleed wings of bright stars
+    #     unmasked, and DIA then detects them as trailed sources (~40% of the
+    #     spurious detections on the dense SA98 standard field). Growing the SAT
+    #     footprint covers the bleed wings so they are excluded from detection.
+    isr_overrides={
+        "doDefect": True,
+        "overscan.doParallelOverscan": True,
+        "doSaturation": True,
+        "growSaturationFootprintSize": 8,
+        "doSaturationInterpolation": True,
+    },
     # Intra-detector crosstalk for the 4-amp Y4KCam. MEASURED with
     # `stips measure-crosstalk` (cp_pipe cpCrosstalk) on the E2 standard field,
     # night 20111113 (2x2-binned, B/V/R/I, 93 science exposures; full 12-element
@@ -135,7 +176,11 @@ profile = InstrumentProfile(
 # see _day_obs); the local night is recovered via night_to_dayobs_offset_days=1.
 # ---------------------------------------------------------------------------
 
-_SEQNUM_RE = re.compile(r"y\d{6}\.(\d+)\.fits", re.IGNORECASE)
+# Y4KCam raw filename: ``y{YYMMDD}.{seqnum}.fits``. YYMMDD is the LOCAL observing
+# night; the seqnum resets each local night. So (local-night, seqnum) is the
+# natural globally-unique exposure key (see _filename_fields / exposure_id) — it
+# must NOT be derived from the UT day, which collides across consecutive nights.
+_FILENAME_RE = re.compile(r"y(\d{6})\.(\d+)\.fits", re.IGNORECASE)
 
 
 def _datetime_begin(header):
@@ -165,21 +210,97 @@ def _datetime_end(header):
     return begin
 
 
-def _seqnum(header):
-    """Parse the exposure sequence number from the filename keyword.
+# --- Date-characterized boresight pointing offsets (see tracking_radec) --------
+# The CTIO Y4KCam mount carries a per-campaign systematic pointing offset: the
+# TRUE field center is EAST/NORTH of the header RA/DEC by a campaign-specific
+# amount (measured by BLIND astrometry.net solves). It is a pure boresight
+# TRANSLATION -- camera plate scale (0.2889"/pix), orientation (PA~0) and
+# distortion (negligible) were all confirmed correct -- NOT a parse/geometry bug.
+#
+# A row means the campaign has been CHARACTERIZED; the offset may be 0. Ranges are
+# bounded to the MEASURED extent of each campaign (first/last night we have data
+# for), NOT padded to month/year -- the range asserts what was VERIFIED, not mount
+# stability across unmeasured time. An unmeasured night INSIDE a window inherits
+# that offset (mild "stable within one run" interpolation); a night OUTSIDE every
+# window is uncovered (offset 0) and is flagged by science.py's diagnostics.
+#
+# IMPORTANT: start_date/end_date are UT DATE-OBS dates (both consumers -- this
+# table's own lookup via _datetime_begin, and science.py's day_obs diagnostic --
+# match on UT), NOT local observing nights. A local CTIO night spans TWO UT
+# calendar dates (evening + next-morning UT), so a window must extend one UT day
+# past the last local night's date or it silently drops that night's morning
+# frames. E.g. local night 20061216 (the last measured 2006 night) has frames on
+# both UT 2006-12-16 (evening) and UT 2006-12-17 (morning) -- hence end 12-17
+# below, not 12-16.
+#
+# (start_date, end_date, delta_east_arcsec, delta_north_arcsec, provenance)
+_BORESIGHT_OFFSET_TABLE = [
+    (
+        "2006-09-27",
+        "2006-12-17",
+        257.0,
+        320.0,
+        "blind astrometry.net solve, 4 local nights 20060927-20061216 (2026-07); "
+        'dRA*cosDec +257" (std 24), dDec +320" (std 57), ~412" @ PA~39 E-of-N; '
+        "UT DATE-OBS extent 2006-09-27..2006-12-17 (each local night spans "
+        "evening+next-morning UT, so the window end is the LAST night's UT "
+        "morning date, one day past its local-night label)",
+    ),
+    (
+        "2010-01-17",
+        "2010-01-22",
+        0.0,
+        0.0,
+        'SA98 run; ~60" offset already within matcher tolerance, no correction',
+    ),
+]
 
-    The Y4KCam filename pattern is ``yYYMMDD.NNNN.fits`` (NNNN = sequence
-    number); the header may carry it as FILENAME/DTACQNAM/ORIGNAME.
+
+def _boresight_offset_entry(dt):
+    """Row whose inclusive [start, end] UT-date range contains ``dt``, else None.
+
+    Fail-closed: returns None if the date cannot be determined.
+    """
+    import datetime as _d
+
+    d = coerce_date(dt)
+    if d is None:
+        return None
+    for row in _BORESIGHT_OFFSET_TABLE:
+        start = _d.date.fromisoformat(row[0])
+        end = _d.date.fromisoformat(row[1])
+        if start <= d <= end:
+            return row
+    return None
+
+
+def boresight_offset_arcsec(dt):
+    """(delta_east_arcsec, delta_north_arcsec) for the campaign, else (0.0, 0.0)."""
+    row = _boresight_offset_entry(dt)
+    return (row[2], row[3]) if row is not None else (0.0, 0.0)
+
+
+def boresight_offset_covered(dt):
+    """True iff the observation date falls in a characterized campaign window."""
+    return _boresight_offset_entry(dt) is not None
+
+
+def _filename_fields(header):
+    """Parse ``(local_night: int YYYYMMDD, seqnum: int)`` from the raw filename.
+
+    The Y4KCam filename ``y{YYMMDD}.{NNNN}.fits`` is carried in
+    FILENAME/DTACQNAM/ORIGNAME. YY is a 20xx year (Y4KCam operated 2003-2013).
+    The local night + per-night seqnum form the natural unique exposure key.
     """
     for key in ("FILENAME", "DTACQNAM", "ORIGNAME"):
         value = header.get(key)
         if not value:
             continue
-        m = _SEQNUM_RE.search(str(value))
+        m = _FILENAME_RE.search(str(value))
         if m:
-            return int(m.group(1))
+            return int("20" + m.group(1)), int(m.group(2))
     raise ValueError(
-        "Could not parse exposure sequence number from FILENAME/DTACQNAM/ORIGNAME"
+        "Could not parse y{YYMMDD}.{seqnum}.fits from FILENAME/DTACQNAM/ORIGNAME"
     )
 
 
@@ -231,12 +352,22 @@ def observation_type(header):
 def exposure_id(header):
     """Unique exposure/visit ID that fits in 31 bits.
 
-    ID = (days_since_2000 * 10000) + seqnum
+    ID = (days_since_2000 of the LOCAL night) * 10000 + seqnum
 
-    Mirrors the Nickel scheme: a full YYYYMMDD date * 10000 overflows 31 bits,
-    so days-since-2000 (the end-of-exposure UTC day) is used as the date term.
+    The date term is the LOCAL observing night (from the y{YYMMDD} filename), NOT
+    the UT day. Keying on the UT day (end-of-exposure) collides across consecutive
+    nights: at CTIO's -70deg longitude a local night straddles UT midnight and the
+    seqnum resets each local night, so the late frames of night N and the early
+    frames of night N+1 share a UT day + reset seqnum and map to the same id
+    (Butler exposure-sync conflict on ingest). (local-night, seqnum) is unique.
+    day_obs stays UT-based (see day_obs) for to_observing_day consistency.
     """
-    return make_exposure_id(_datetime_end(header), _seqnum(header))
+    import datetime as _dt
+
+    night, seqnum = _filename_fields(header)
+    d = _dt.date(night // 10000, (night // 100) % 100, night % 100)
+    days = (d - _dt.date(2000, 1, 1)).days
+    return pack_exposure_id(days, seqnum)
 
 
 @hook(profile)
@@ -264,8 +395,13 @@ def day_obs(header):
 
 @hook(profile)
 def observation_id(header):
-    """String ID that must be globally unique for the instrument."""
-    return f"{_day_obs(header):08d}_{_seqnum(header)}"
+    """String ID that must be globally unique for the instrument.
+
+    Keyed on the LOCAL night for the same reason as exposure_id -- the UT day
+    collides across consecutive nights ("20100121_69" for two distinct frames).
+    """
+    night, seqnum = _filename_fields(header)
+    return f"{night:08d}_{seqnum}"
 
 
 @hook(profile)
@@ -281,6 +417,10 @@ def tracking_radec(header, default=None):
 
     Frame is taken from RADESYS/RADECSYS, falling back to EQUINOX (2000 -> FK5,
     else ICRS).
+
+    A campaign-specific boresight offset (see ``_BORESIGHT_OFFSET_TABLE``) is
+    applied when the exposure date falls in a characterized window; uncharacterized
+    dates get no shift.
     """
     import astropy.units as u
     from astropy.coordinates import Angle, SkyCoord
@@ -298,4 +438,24 @@ def tracking_radec(header, default=None):
         equinox = header.get("EQUINOX")
         ref_system = "FK5" if equinox in (2000, 2000.0, "2000") else "ICRS"
 
-    return SkyCoord(ra_angle, dec_angle, frame=str(ref_system).lower())
+    coord = SkyCoord(ra_angle, dec_angle, frame=str(ref_system).lower())
+
+    east_arcsec, north_arcsec = boresight_offset_arcsec(_datetime_begin(header))
+    if east_arcsec or north_arcsec:
+        coord = coord.spherical_offsets_by(
+            east_arcsec * u.arcsec,
+            north_arcsec * u.arcsec,
+        )
+
+    return coord
+
+
+@hook(profile, name="boresight_offset_covered")
+def _boresight_offset_covered_hook(dt):
+    """Hook: True iff the observation date is in a characterized campaign window.
+
+    Registered under the key ``boresight_offset_covered`` so science.py can query
+    it via ``profile.hooks``. A thin wrapper over the module-level lookup (no
+    duplicated logic); named distinctly so it does not shadow that function.
+    """
+    return boresight_offset_covered(dt)

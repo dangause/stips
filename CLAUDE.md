@@ -483,8 +483,41 @@ leaves dithered pointings with no PSF-matching kernel candidates
 ### Southern fields have no PS1 coverage
 PS1 (Pan-STARRS1) covers dec ≳ −30° only. For a southern target the `gaia_ps1`
 refcat mode has no PS1 photometry: astrometry (Gaia DR3) still works, but
-photometric calibration needs MONSTER shards (`refcat.mode: monster`) or a future
-Gaia-photometry path.
+photometric calibration needs `refcat.mode: gaia` (Gaia-only) or MONSTER shards
+(`refcat.mode: monster`).
+
+For **templates**, southern fields have two options, in order of preference:
+
+1. **`template.type: coadd`** — a CTIO self-coadd from SN-free epochs. This is
+   the validated path (NGC2298, Dec −36) and is same-instrument, which avoids
+   the cross-instrument registration and PSF-matching problems entirely.
+2. **`template.type: skymapper`** — a SkyMapper DR4 external cutout. **Use only
+   when no SN-free epochs exist to self-coadd.** Verified limits (2026-07-27):
+   - the DR4 SIA serves **single-epoch frames, not stacks** (only 100 s `main`
+     frames are usable; 5 s `short` frames are rejected)
+   - cutouts are **hard-capped at 0.17° (10.2′)**, smaller than the Y4KCam
+     ~20′ FOV — widely dithered pointings risk `NoKernelCandidatesError` (this
+     did NOT occur on NGC2298, whose pointings sit near the field centre)
+   - main-frame seeing is ~1.8–2.3″, i.e. **not sharper than the science**, so
+     `subtractImages_skymapper.py` does not assume `convolveTemplate`
+   - **SkyMapper `v` is a ~384 nm violet filter, NOT Johnson V (~551 nm).** Only
+     `r` and `i` are mapped for Y4KCam; see `template_band_maps` in the profile.
+
+   SkyMapper is **explicit-only** — `template.type: auto` never selects it.
+
+   **Measured on NGC2298 (see `docs/skymapper-template-validation.md`).** The
+   cutout covers only **~16% of a Y4KCam field** (85% of each difference image is
+   `NO_DATA`), so only same-footprint comparisons are meaningful. Within that
+   footprint SkyMapper recovers **51% of the coadd's sources at ~30% purity**.
+   Registration is excellent (0.000″ systematic offset) — the limit is template
+   depth, not astrometry. Use it to get a southern field through the pipeline;
+   confirm its detections independently.
+
+   **Always pass the DIA config.** `stips dia --subtract-config
+   dia/subtractImages_skymapper.py` (or set `configs.dia.subtract_images` in the
+   YAML). Without it you get `mode="convolveTemplate"`, which deconvolves when
+   the SkyMapper template is blurrier than the science and drives the kernel
+   condition number up ~33×.
 
 ### Coordinate precision for forced photometry
 Target RA/Dec must use full TNS precision (sexagesimal → decimal, 6+ decimal
@@ -500,6 +533,22 @@ PS1 templates must be pre-calibrated to nJy during ingestion
 DIA kernel must absorb a ~363× flux ratio on top of PSF matching, causing
 numerical instability and unreliable kernel sums. After re-ingesting templates,
 rerun existing DIA results.
+
+### PS1 stack pixels are asinh-compressed
+PS1 stores stack pixels asinh-scaled (`BSOFTEN`/`BOFFSET` in the header):
+`flux = BOFFSET + BSOFTEN·2·sinh(stored·ln10/2.5)`. `imaging.decode_asinh_scaling()`
+applies the inverse inside `fits_to_lsst_exposure()`, keyed off `BSOFTEN`, so it
+covers every download path and any future source using the convention. Only the
+`fitscut` service hands back decoded pixels (and strips `BSOFTEN`); the MAST and
+`ps1filenames` paths return the raw compressed stack.
+
+Symptom when it is missing: subtraction quality that degrades with source
+brightness — faint stars subtract cleanly (asinh is near-linear at sky, so the
+kernel absorbs the constant scale) while bright stars leave large POSITIVE
+residuals, plus kernel-candidate starvation (`NoKernelCandidatesError`) because
+the template's bright stars are suppressed. Do not mistake this for template
+saturation. Check with `TEMPLATE_ASINH_DECODED` in the ingested template's
+metadata, or look for `BSOFTEN` in the cached cutout.
 
 ### Nickel coadd template contamination
 Building Nickel coadd templates from epochs where the SN is still active bakes SN

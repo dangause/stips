@@ -2,6 +2,301 @@
 
 All notable changes to STIPS (the Small Telescope Image Processing Suite) are documented here.
 
+## [Unreleased]
+
+## [2.1.0] — 2026-10-03
+
+A science-quality release. The headline is the PS1 asinh decode: every PS1
+template ingested before it was brightness-compressed, so both Nickel campaigns
+(2023ixf, 2020wnt) were rebuilt on this code. It also adds the external-template
+framework (PS1 + SkyMapper, multi-patch ingest), Gaia-only refcats and validated
+DIA for southern CTIO fields, and fixes Nickel ingest for 2020+ data.
+**Migration:** re-ingest every external template with `--overwrite` and rerun the
+DIA that used it; re-ingest existing ctio1m repos (exposure ids changed).
+
+### Fixed
+- **SkyMapper templates ingested saturated bright stars unmasked.** SkyMapper's
+  SIA serves single-epoch ~100 s frames, not deep stacks, so bright stars reach
+  the detector ceiling — and the frames say so. Measured on the NGC2298 i-band
+  frame: `SATURATE = 65435`, with real cores pinned at 64539 and flat-topped
+  over 5+ pixels, negative bleed undershoot (−97, −98) immediately adjacent, and
+  893 pixels in 35 blobs above 0.9× the level. Nothing read that card:
+  `fits_to_lsst_exposure()` masked only non-finite pixels, so clipped cores were
+  ingested as if they were valid flux, corrupting the template's noise estimate
+  and offering the kernel fit candidates built on clipped data.
+  `imaging.saturation_mask()` now reads an adapter-supplied saturation card,
+  flags pixels at or above 0.9× the declared level, grows the footprint by 2 px
+  to cover the bleed artifacts, sets the LSST `SAT` plane, and excludes those
+  pixels from the variance estimate. Ingested templates record
+  `TEMPLATE_SAT_PIXELS` / `TEMPLATE_SAT_LEVEL`. `SkyMapperSource` declares
+  `SATURATE`; `PS1Source` deliberately declares **none** — PS1 stacks coadd ~27
+  dithered exposures, their bright-star cores measure as clean un-clipped PSFs,
+  and the header's `CELL.SATURATION` describes a single input cell rather than
+  the stack.
+
+  **This does not currently change DIA output, and is not claimed to.** Measured
+  on NGC2298 (18 visits, same science runs and DIA configs, template collection
+  the only variable), against the coadd-template truth run
+  `20260726T150523Z`:
+
+  | | before | after |
+  |---|---|---|
+  | purity vs truth | 32.4% | 32.4% |
+  | recall vs truth | 35.1% | 35.1% |
+  | false positives | 5836 | 5843 |
+
+  The reason is traceable: the `SAT` plane is set on `template_coadd` (4738 px)
+  and survives the rewarp to `template_detector` (7773 px), but
+  `template_matched` carries **0** SAT pixels — the PSF-matching convolution in
+  `AlardLuptonSubtractTask` drops it, so the template's saturation flag never
+  reaches the difference image. Independently, only 1 of 2753 DIA sources sits
+  within 3 px of a SAT pixel, so saturated stars are not what drives the CTIO
+  false-positive population anyway. The fix is kept because it closes a real
+  latent defect in what gets ingested; making it *act* on detection needs the
+  mask-propagation gap above resolved first.
+- **PS1 stack templates were ingested asinh-compressed, never decoded.** PS1
+  stores stack pixels asinh-scaled, with the softening in `BSOFTEN`/`BOFFSET`
+  (`flux = BOFFSET + BSOFTEN·2·sinh(stored·ln10/2.5)`); nothing in STIPS applied
+  the inverse. The `fitscut` service returns already-decoded pixels and strips
+  `BSOFTEN`, so the bug only bit when fitscut lost the race to the MAST or
+  `ps1filenames` paths — which is what happened in practice: every cached PS1
+  template on disk was a raw 6302×6283 skycell spanning `[-2.86, 9.47]` with
+  `BSOFTEN` still set. The effect is a ~1e6:1 dynamic range crushed to ~10:1.
+  Because asinh is nearly linear near sky, faint stars still subtracted cleanly
+  (the DIA kernel just absorbs the constant scale) while the deficit grew with
+  brightness — measured encoded/true aperture flux on the 2023ixf skycell ran
+  0.86 at 20–50σ down to 0.02 above 1600σ, which is the brightness-dependent
+  template deficit previously read as template saturation. It is **not**
+  saturation: the PS1 stack mask flags no pixels in that field, the stack's
+  bright-star cores are unclipped, and Nickel science stars peak ~20k ADU
+  against a 65535 rail. Decoding now happens in `fits_to_lsst_exposure()`, the
+  single point where any source's FITS becomes an `Exposure`, so it covers all
+  three PS1 download methods and any future source using the same convention;
+  it runs before the `PhotoCalib` scaling (the zeropoint describes decoded
+  counts) and before the finite check. Ingested templates record
+  `TEMPLATE_ASINH_DECODED`. **Re-ingest existing PS1 templates and rerun the DIA
+  that used them.** Measured on `nickel_smoketest_repo` (same science runs, same
+  default DIA configs, template collection the only variable):
+
+  | metric | 20230521 before → after | 20230519 before → after |
+  |---|---|---|
+  | difference images | 15 → 15 | **2 → 10** |
+  | median star residual, 20–50σ | +11.1% → **+3.7%** | +20.5% → **+1.0%** |
+  | median star residual, 50–100σ | +71.3% → **+5.7%** | +74.4% → **+1.7%** |
+  | median star residual, 100–200σ | +78.7% → **+0.7%** | +87.0% → **+1.9%** |
+  | SN 2023ixf detected | 1/15 → **14/15** visits | 2/2 → **7/10** visits |
+  | SN median SNR | 446 → **700** | 189 → **768** |
+  | dia sources / visit | 410 → 340 | 274 → 263 |
+
+  The SN itself keeps a ~100% residual, which is correct — a transient has no
+  template flux. The 20230519 gain indicates the `NoKernelCandidatesError`
+  starvation on that night was largely this bug: a template whose bright stars
+  are suppressed ~50× offers little for the kernel fit to lock onto.
+- **nickel: frames with `OBSNUM` ≥ 10,000 could not be ingested.** Nickel's
+  `OBSNUM` is an observatory-wide running counter, not a per-night sequence; it
+  exceeds 10,000 on many nights (already by 2018, though it also resets, so some
+  nights stay 4-digit) — but the profile fed it straight to
+  `pack_exposure_id`, which only accepts a 4-digit sequence. Every frame of both
+  documented campaigns died at ingest with `seqnum 228041 is out of range
+  [0, 10000)`: `stips calibs 20230519` extracted metadata from 0 of 176 files and
+  aborted, so the pipeline was unreachable for 2020wnt (OBSNUM 12001+) and 2023ixf
+  (228001+). `exposure_id` now packs `OBSNUM % 10000`; that same night now ingests
+  176/176. **No migration is needed:** the fold is the identity below 10,000, so
+  every id already in a repo is unchanged, and ids at or above it never made it
+  into a repo to begin with. `observation_id` deliberately keeps the full OBSNUM,
+  so it still names the source frame (`20230520_228001` → `d228001.fits`).
+- **External templates were truncated to a single skymap patch.**
+  `ingest_exposure_to_butler()` reprojected the survey cutout onto the one patch
+  containing the target coordinate and discarded everything outside it, while
+  the self-coadd template path has always ingested every patch the field
+  overlaps and let `rewarpTemplate` gather them at DIA time. Same field, same
+  tract, i band: the validated CTIO self-coadd covers 4 patches (142, 143, 156,
+  157 of tract 444); the external ingest wrote 1 (156). On NGC2298 the assembled
+  SkyMapper mosaic spans 17.0′ × 25.5′ but the ingested `template_coadd` kept
+  only 10.0′ × 15.3′ of it — the target sits 6.2′, −8.7′ off the centre of patch
+  156 — leaving 39.0% science-field coverage and a template edge running through
+  the field. The ingest now traces the exposure's sky footprint from its WCS and
+  bbox, asks the skymap (`findTractPatchList`) which patches that footprint
+  overlaps, and writes one `template_coadd` per patch, skipping any whose
+  reprojection carries no usable data (an all-`NO_DATA` template is worse than an
+  absent one, since `rewarpTemplate` would still gather it). This is shared
+  PS1-inherited code, so **PS1 templates are affected too**: any PS1 cutout wider
+  than one patch was being clipped the same way. Re-ingest existing external
+  templates and rerun the DIA that used them. `ingest_exposure_to_butler()` now
+  returns a list of data IDs (target patch first) and `ExternalTemplateResult`
+  gained a `patches` field.
+- **`stips external-template` never reported which tract/patch it wrote.**
+  `ingest.py` configures `logging` with the default handler, which writes to
+  *stderr*, so under `capture_output=True` every `Data ID:` line lands in
+  `result.stderr` while `result.stdout` is empty — and the parse only looked at
+  stdout. `tract`/`patch` came back `None` on every real run and the CLI silently
+  omitted the line. Both streams are scanned now, which is also what surfaces the
+  new multi-patch `Patches: [...]` summary.
+- **`stips dia` ignored the YAML's `configs.dia.*` overrides.**
+  `dia.run()` has accepted `subtract_config_file`/`detect_config_file` since the
+  YAML-driven `stips run` path started wiring them from
+  `configs.dia.subtract_images`/`detect_and_measure`, but the `stips dia` CLI
+  subcommand exposed neither flag and passed neither — so the documented
+  `stips dia <night> -b i --template ...` workflow silently fell back to the
+  instrument-dir default DIA config instead of the one the YAML specified.
+  Caught on a SkyMapper DIA run: the ctio1m default (`mode='convolveTemplate'`,
+  `spatialKernelOrder=2`) applied instead of `subtractImages_skymapper.py`'s
+  `mode="auto"`, forcing a deconvolution that drove the spatial condition
+  number to 2.4e10. `stips dia` now has `--subtract-config`/`--detect-config`
+  (resolved instrument-dir-first via the same `config.resolve_config()` as
+  `stips run`), falls back to the `-c` YAML's `configs.dia.*` when a flag is
+  omitted, and always prints which config file is in effect so this failure
+  mode is visible instead of silent.
+  **Migration: this is a behaviour change, not only a fix.** Every previous
+  `stips dia` result was produced with the instrument-dir defaults while its YAML
+  declared something else, so `stips dia` output from before and after this
+  change is NOT comparable. Measured on Nickel 2023ixf 20230519 with a probe
+  config (`kernelSize` 21→19, plus `nSigmaForKernel` reverting to the stack
+  default 7.0 because a `-C` file replaces the default wholesale): 548 → 583
+  DIA sources, a 6.4% change. Real configs differ by more still. Rerun any
+  `stips dia` results you intend to compare against new ones.
+- **External templates attached a PSF at the wrong pixel scale.**
+  `reproject_to_patch()` warped a survey cutout onto the skymap patch grid but
+  copied the `GaussianPsf` across unchanged — and `GaussianPsf` stores its width
+  in *pixels*, so the attached PSF silently misrepresented the seeing by the
+  ratio of the two pixel scales. For a SkyMapper frame (0.4976 ″/px → 0.2887
+  ″/px) a real 1.68″ FWHM read as 0.98″, understating the seeing by 1.72×, which
+  makes `subtractImages` `mode="auto"` pick the wrong convolution direction. The
+  bug predates the SkyMapper work and is WORSE for PS1 on Nickel, not milder:
+  measured end-to-end on 2023ixf, a PS1 template (0.25 ″/px native) reprojected
+  onto a Nickel patch (0.3998 ″/px) attached a **1.920″** PSF where PS1's assumed
+  seeing is **1.2″** — 60% too wide, on every PS1 template Nickel has ever
+  ingested. The same fix restores the
+  `TEMPLATE_*` provenance keys, which reprojection also dropped. **Migration:
+  this changes the PSF attached to every PS1 template.** Re-ingest existing
+  templates and rerun any DIA that used them. Only an end-to-end ingest
+  exercises this code (it needs a real skymap and the stack), so a regression
+  test now pins the rescaling.
+- **A mistyped `template.type` silently built nothing.** The dispatch was an
+  if/elif chain with no `else`, so `template: {type: skymappper}` ingested no
+  template and then failed every band in DIA with "no template available" —
+  after the run had already spent hours on calibs and science. `RunConfig` now
+  rejects an unrecognised value when the YAML is parsed, naming the valid ones.
+- **External-survey cutouts were only validated for PS1.** The coverage and
+  angular-size checks ran inside PS1's downloader, so an edge-trimmed SkyMapper
+  frame — a well-formed FITS that clears the response-size floor but misses the
+  target or leaves no DIA overlap margin — was converted and ingested silently,
+  surfacing much later as a `NoKernelCandidatesError`. Both checks now run
+  post-fetch for every source.
+- **ctio1m: `exposure_id`/`observation_id` collided across consecutive nights.**
+  CTIO straddles UT midnight and Y4KCam seqnums reset each local night, so the
+  UT-day-keyed id mapped night N's post-midnight frames and night N+1's afternoon
+  calibs to the same value (real: `36730069` on SA98 20100120/20100121), failing
+  Butler exposure-sync on ingest and yielding an empty calib qgraph. Both ids now
+  key on the local night parsed from the `y{YYMMDD}.{seq}.fits` filename. This
+  changes ingested ids for ctio1m — existing ctio1m repos must be re-ingested.
+- **crosstalk:** certification is idempotent; re-certifying a static calib raised
+  `ConflictingDefinitionError` and broke every night after the first.
+- **ctio1m:** the U+CuSO4 near-UV filter is recognised; nights whose biases sat at
+  that wheel slot had zero ingestable biases (real: 20100120).
+- **ctio1m: 2006 astrometry failed on every field** (NGC2298: 0/45 visits at
+  ~8.8″ residual). The 2006 run's seed WCS carries a stable ~7′ pointing offset
+  (+257″ E / +320″ N), far outside the matcher's search radius. The profile's
+  `tracking_radec` now applies that offset for 2006 observations only (fail-closed
+  on missing dates); 2010+ data is byte-identical. A dense-field matcher config
+  (`ctio_dense.py`) caps bright-star and reference counts for crowded cores.
+- **ctio1m: amp A01 was hardware-dead for the whole Jan-2010 run** and left a
+  hard-edged block in SA98 difference images. A new `obs_ctio1m_data` curated
+  defect package masks the A01 quadrant for exposures from 2010-01-01 on, via
+  calib validity ranges; 2006 data keeps all four amps. ctio1m now runs
+  `doDefect: True`.
+
+### Added
+- **SkyMapper templates are now mosaicked, lifting the 10.2′ ceiling.** The
+  DR4 SIA's 0.17° cap is per REQUEST, not per frame: several offset requests
+  against the same `image=` id come back as exact sub-arrays of one CCD pixel
+  grid — identical `CRVAL`, identical `CD`, identical `PV` distortion terms,
+  differing only in `CRPIX`. `fetch` now issues a small overlapping grid of
+  requests against the single selected frame whenever `--size` exceeds the cap
+  and pastes the tiles together at integer pixel offsets (`CRPIX_ref −
+  CRPIX_tile`), so there is **no reprojection, no resampling, and hence no
+  interpolation error, no PSF change and no photometric change** — the assembled
+  header keeps the frame's `CRVAL`/`CD`/`PV` and only shifts `CRPIX` to the new
+  origin. Tiles that disagree on `CRVAL`/`CD`, or that are offset by a
+  fractional pixel, raise `TemplateSourceError` rather than being pasted
+  misaligned. This was the binding constraint on the whole SkyMapper path: a
+  single 10.2′ cutout covers ~16% of a ~20′ Y4KCam field, which is why 85% of
+  every NGC2298 difference image came back flagged `NO_DATA`. Measured on that
+  same field at `--size 0.4`: nine tiles assemble to 17.0′ × 25.5′ and the
+  ingested `template_coadd` covers **37% of the science patch, up from 14%**.
+  The remaining limit is the detector, not the service — a SkyMapper CCD is
+  2048 × 4096 px at 0.4976″/px = 17′ × 34′, so a square request wider than 17′
+  comes back truncated on the short axis and says so explicitly in the log
+  (`max_assembled_deg` records the ceiling). A `--size` at or under 0.17° still
+  issues exactly one request and is byte-for-byte unchanged.
+- **`stips external-template --source {ps1,skymapper} --ra --dec -b <band>`** —
+  one command for every external-survey DIA template, replacing the
+  source-specific `stips ps1-template` (retained as a working alias). Adds
+  `--mjd-start`/`--mjd-end` so a template frame can be chosen from epochs that
+  exclude the transient. `--source` choices, the `template.type` dispatch, and
+  DIA's explicit-collection lookup all read the adapter registry, so a new
+  survey is one `sources/*.py` file — see `docs/architecture.md`.
+- **`template.type: skymapper`** in the run YAML — SkyMapper DR4 as an external
+  template source for southern fields (Dec ≲ −30°) with no PS1 coverage. It is
+  deliberately **Tier-2 and explicit-only**: `template.type: auto` never selects
+  it. DR4 serves single-epoch 100 s frames (5 s frames are rejected outright),
+  capped at 0.17° (10.2′) per request — see the mosaicking entry above — at ~2″
+  seeing. Validated against
+  a CTIO self-coadd on NGC2298: DIA succeeds on every visit but recovers 36% of
+  the difference-image sources and leaves an ~8× larger systematic residual, so
+  prefer `template.type: coadd` whenever SN-free epochs exist. Full comparison
+  in `docs/skymapper-template-validation.md`.
+- profile `template_band_maps` — per-source external-template band policy
+  (`SOURCE -> (LOCAL band -> that survey's band)`), additive alongside
+  `ps1_band_map`, which stays because it also builds the PS1 refcat filterMap
+  via `STIPS_PS1_BAND_MAP`. Band names are **not** interchangeable across
+  surveys: SkyMapper's `v` is a ~384 nm violet filter, not Johnson V (~551 nm),
+  so ctio1m maps only `{"r": "r", "i": "i"}` and excludes `v` rather than
+  silently fetching a near-UV template for a green science image.
+- profile `fov_arcmin` — approximate science field of view, the input to the
+  template-coverage warning (a cutout narrower than the field leaves dithered
+  pointings with no PSF-matching kernel candidates). Nickel `6.3`, ctio1m
+  `20.0`; unset means no warning.
+- `stips.pack_exposure_id(days_since_2000, seqnum)` — the low-level id packer, for
+  profiles whose local night does not map 1:1 onto a UT day. `make_exposure_id`
+  now delegates to it and is unchanged for callers.
+- `stips.core.pipeline.find_aliasing_exposure_ids()` — a pre-ingest scan, run by
+  `stips calibs`, that aborts naming the offending files when two frames in a
+  night would claim one `exposure_id`. A profile that folds a wide sequence
+  keyword into the packed id's 4-digit field (Nickel: `OBSNUM % 10000`) is only
+  injective within one window, and neither the `exposure_id` hook (one header at
+  a time) nor `pack_exposure_id`'s range guard (the folded value is in range by
+  construction) can see a fold collision. The night-wide scan can.
+- ctio1m Y4KCam DIA tuning (bleed masking, SAT-excluded detection, spatial kernel)
+  and coadd visit-selection/warp configs; SA98 validation pipeline configs.
+- refcat: synchronous Gaia TAP fallback for async result-storage outages.
+- **`refcat.mode: gaia`** — astrometry and photometry from Gaia DR3 alone, for
+  fields south of PS1's −30° floor. The on-demand refcat ensure skips the PS1
+  fetch in this mode, and the science QA photometric ref-match follows the mode.
+  Validated end-to-end on NGC2298 (Dec −36) with a coadd-template DIA config.
+  The Gaia colour terms are not yet populated, so final magnitudes are uncorrected.
+- `scripts/utilities/prune_night.py` — drops a night's intermediates (raws,
+  constructed calibs, processCcd, DIA) once its forced photometry is written.
+  Keeps a multi-night campaign repo at ~1.7 GB on a nearly-full disk; everything
+  dropped is rebuildable by re-running the night.
+
+### Changed
+- **External-template exposure metadata keys are source-namespaced:**
+  `PS1_FILTER`/`PS1_ZEROPOINT` are now `TEMPLATE_SOURCE`/`TEMPLATE_ZEROPOINT`
+  (joined by `TEMPLATE_FWHM_ARCSEC`), since one converter now serves every
+  survey. Templates ingested before this carry the old keys; anything reading
+  them must handle both or re-ingest.
+- **The default external-template download directory moved** from
+  `<repo>/ps1_templates` to `<repo>/external_templates`. The old directory is
+  not read, so the first run after upgrading re-downloads each cutout once;
+  delete the stale directory afterwards, or pass `--output-dir`.
+- ctio1m pipeline configs use the neutral `calibrateImage` default instead of
+  Nickel's fitted `tuned_configs/` (which are fitted for Nickel's CCD and now live
+  under `instruments/nickel/configs/`). A Y4KCam-fitted config is future work.
+- ctio1m DIA uses a reduced 9-function Alard–Lupton kernel basis instead of the
+  stack's 27. On NGC2298 this drops the median kernel condition number from
+  ~3e6 to ~1e3 with no loss of subtraction quality.
+
 ## [2.0.1] — 2026-07-14
 
 ### Fixed

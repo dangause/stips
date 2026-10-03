@@ -151,6 +151,26 @@ class InstrumentProfile:
     # ``{"g": "g"}``. The default (empty dict) means "no PS1 templates" — the safe
     # choice for an unknown fork, which then uses coadd templates for every band.
     ps1_band_map: dict[str, str] = field(default_factory=dict)
+    # Per-source external-template band policy: SOURCE NAME -> (LOCAL band ->
+    # that survey's band). Distinct from ``ps1_band_map`` above, which is
+    # ALSO consumed by the in-stack refcat configs via STIPS_PS1_BAND_MAP and
+    # therefore cannot be generalized away. For source "ps1" this field takes
+    # precedence when present and falls back to ``ps1_band_map`` when absent,
+    # so existing profiles keep working untouched.
+    #
+    # Band names are NOT interchangeable across surveys: SkyMapper's "v" is a
+    # ~384nm violet filter, not Johnson V (~551nm). Map deliberately.
+    template_band_maps: dict[str, dict[str, str]] = field(default_factory=dict)
+    # Approximate science field of view in ARCMIN (the long dimension is fine —
+    # this is an order-of-magnitude figure, not geometry). Its only consumer is
+    # the external-template coverage warning: a survey cutout smaller than the
+    # FOV leaves dithered pointings with no PSF-matching kernel candidates
+    # (NoKernelCandidatesError), and even a mosaicked SkyMapper template stops
+    # at the CCD's 17' short axis, under the FOV of some 1-m-class cameras
+    # (Y4KCam is ~20'). Camera geometry is not a reliable
+    # substitute (binning, partial illumination), so this is declared, not
+    # derived. None means "not measured" and keeps the warning silent.
+    fov_arcmin: Optional[float] = None
     # Optional data-fetch hook. Signature:
     #   fetch_data(night: str, config: Config, *, overwrite: bool = False) -> str
     # Returns one of "ok" | "not_found" | "failed". When None, `stips download`
@@ -175,29 +195,86 @@ def hook(profile: InstrumentProfile, name: Optional[str] = None) -> Callable:
     return deco
 
 
+def coerce_date(value):
+    """Coerce a ``datetime``/``date``/``astropy.time.Time``/ISO-string/``None`` to a
+    ``datetime.date`` (or ``None``). Fail-closed: unrecognized or unparseable input
+    returns ``None`` rather than raising.
+
+    Shared by both sides of the venv/stack boundary (the in-stack translator's
+    date-window lookup and the venv orchestrator's coverage check) so the coercion
+    rules cannot drift between two copies.
+    """
+    import datetime as _dt
+
+    if value is None:
+        return None
+    if isinstance(value, _dt.date) and not isinstance(value, _dt.datetime):
+        return value
+    if isinstance(value, _dt.datetime):
+        return value.date()
+    to_dt = getattr(value, "datetime", None)  # astropy.time.Time
+    if to_dt is not None:
+        return to_dt.date()
+    if isinstance(value, str):
+        try:
+            return _dt.date.fromisoformat(value[:10])
+        except ValueError:
+            return None
+    return None
+
+
 # Epoch for the reference 31-bit-safe exposure-id scheme (days since 2000-01-01).
 EXPOSURE_ID_EPOCH = "2000-01-01T00:00:00"
+
+
+def pack_exposure_id(days_since_2000: int, seqnum: int) -> int:
+    """Pack a day number + sequence number into a 31-bit exposure id.
+
+    ``id = days_since_2000 * 10000 + seqnum``. A full ``YYYYMMDD`` date * 10000
+    overflows 31 bits, so the days-since-:data:`EXPOSURE_ID_EPOCH` term keeps the
+    id within the signed 31-bit range required by the LSST ``exposure``/``visit``
+    dimensions.
+
+    This is the low-level packer. Instruments differ ONLY in which day number is
+    correct for them, which is the reason this is separate from
+    :func:`make_exposure_id`:
+
+    - Nickel takes the UT day of the end-of-exposure time (via
+      :func:`make_exposure_id`); its whole observing night lands on one UT day.
+    - CTIO takes the LOCAL observing night parsed from the frame filename. At
+      ~-70deg longitude a local night straddles UT midnight and the Y4KCam seqnum
+      resets each local night, so the UT day is NOT a unique key — night N's
+      post-midnight frames and night N+1's afternoon calibs collide on it.
+
+    Raises ``ValueError`` if ``seqnum`` does not fit the low 4 digits (it would
+    silently carry into the day term and alias onto another day's id), or if the
+    packed id does not fit in 31 bits.
+    """
+    seqnum = int(seqnum)
+    if not 0 <= seqnum < 10000:
+        raise ValueError(
+            f"seqnum {seqnum} is out of range [0, 10000); it would carry into "
+            "the day term and alias onto a different day's exposure_id"
+        )
+    exposure_id = int(days_since_2000) * 10000 + seqnum
+    if exposure_id >= 2**31:
+        raise ValueError(f"exposure_id {exposure_id} is out of 31-bit range")
+    return exposure_id
 
 
 def make_exposure_id(end_time: Any, seqnum: int) -> int:
     """Pack an end-of-exposure time + sequence number into a 31-bit exposure id.
 
-    ``id = days_since_2000 * 10000 + seqnum`` where ``days_since_2000`` is the
-    integer number of whole days between :data:`EXPOSURE_ID_EPOCH` and
-    ``end_time`` (an ``astropy.time.Time``). A full ``YYYYMMDD`` date * 10000
-    overflows 31 bits, so the days-since-2000 term keeps the id within the signed
-    31-bit range required by the LSST ``exposure``/``visit`` dimensions.
+    Derives ``days_since_2000`` from ``end_time`` (an ``astropy.time.Time``) and
+    delegates the packing and range checks to :func:`pack_exposure_id`.
 
-    Instrument profiles that want the reference scheme call this from their
-    ``exposure_id`` hook; only the ``seqnum`` source differs per instrument (e.g.
-    Nickel reads ``OBSNUM``, CTIO parses the frame filename). Raises
-    ``ValueError`` if the result does not fit in 31 bits.
+    Instrument profiles whose observing night maps 1:1 onto a UT day call this
+    from their ``exposure_id`` hook; only the ``seqnum`` source differs (e.g.
+    Nickel reads ``OBSNUM``). Profiles whose local night straddles UT midnight
+    (e.g. CTIO) must NOT use this — see :func:`pack_exposure_id`.
     """
     import astropy.time
 
     epoch0 = astropy.time.Time(EXPOSURE_ID_EPOCH, scale="utc")
     days = int((end_time - epoch0).to_value("day"))
-    exposure_id = days * 10000 + int(seqnum)
-    if exposure_id >= 2**31:
-        raise ValueError(f"exposure_id {exposure_id} is out of 31-bit range")
-    return exposure_id
+    return pack_exposure_id(days, seqnum)

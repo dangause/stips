@@ -6,8 +6,10 @@ from .profile import (
     Field,
     InstrumentProfile,
     Site,
+    coerce_date,
     hook,
     make_exposure_id,
+    pack_exposure_id,
 )
 
 __all__ = [
@@ -17,9 +19,11 @@ __all__ = [
     "Field",
     "InstrumentProfile",
     "Site",
+    "coerce_date",
     "hook",
     "make_exposure_id",
     "make_fetch_data",
+    "pack_exposure_id",
     "parse_night",
     "status_for_code",
 ]

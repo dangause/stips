@@ -28,6 +28,7 @@ from typing import TYPE_CHECKING
 from stips.collections import CollectionNames
 from stips.core import butler_query
 from stips.core.pipeline import (
+    find_aliasing_exposure_ids,
     get_raw_dir,
     isr_config_args,
     validate_night,
@@ -192,6 +193,27 @@ def build_and_certify_crosstalk(
     night = validate_night(night)
     cols = CollectionNames(night, prefix=prof.collection_prefix)
     repo = str(config.repo)
+
+    # Idempotent: the crosstalk calib is a static, repo-level product certified
+    # into a shared CALIBRATION collection. If it already exists, skip the
+    # rebuild + re-certify — re-certifying the same matrix raises
+    # ConflictingDefinitionError on that collection, which is what broke
+    # multi-night calibs (every night after the first re-certified and conflicted,
+    # with a fragile cascade that could fail the whole night's calibs).
+    already = (
+        butler_query.list_collections(
+            config,
+            cols.crosstalk_calib,
+            prefix=f"{prof.collection_prefix}/",
+        )
+        or []
+    )
+    if already:
+        log.info(
+            "Crosstalk calib already certified in %s; skipping rebuild/re-certify",
+            cols.crosstalk_calib,
+        )
+        return CrosstalkResult(True, cols.crosstalk_calib, [])
 
     worker = run_with_stack(
         build_worker_args(
@@ -380,6 +402,24 @@ def _resolve_raw_runs(nights, config, prof, *, log_file=None) -> list[str]:
         if not raw_dir.exists():
             log.warning(
                 "No raw collection or raw dir for %s (%s); skipping", night, raw_dir
+            )
+            continue
+        # Same pre-ingest aliasing guard as calibs: a folded sequence keyword
+        # (Nickel's OBSNUM % 10000) can collapse two frames onto one
+        # exposure_id, and this is the only layer that sees the whole night.
+        collisions = find_aliasing_exposure_ids(config, night)
+        if collisions:
+            detail = "; ".join(
+                f"exposure_id {exp_id} claimed by "
+                + ", ".join(f"{name} ({obs_id})" for name, obs_id in frames)
+                for exp_id, frames in sorted(collisions.items())
+            )
+            log.error(
+                "Colliding exposure_ids in %s: %s. Skipping this night's "
+                "crosstalk ingest; move the offending frames out of the raw "
+                "dir or widen the profile's exposure_id scheme.",
+                night,
+                detail,
             )
             continue
         cols = CollectionNames(night, prefix=prof.collection_prefix)

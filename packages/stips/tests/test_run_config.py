@@ -307,3 +307,144 @@ class TestExecutorFactory:
         assert executor.site == "slurm"
         assert executor.poll_interval == 10.0
         assert executor.timeout == 3600
+
+
+@pytest.fixture
+def coadd_select_yaml(tmp_path):
+    cfg = {
+        "object": "E2",
+        "ra": 100.0,
+        "dec": -45.0,
+        "bands": ["r"],
+        "template": {"type": "coadd", "nights": [20111110, 20111111]},
+        "science": {"nights": [20111113]},
+        "configs": {
+            "coadd": {
+                "make_direct_warp": "coadds/makeDirectWarp.py",
+                "select_template_coadd_visits": "coadds/selectTemplateCoaddVisits.py",
+                "select_deep_coadd_visits": "coadds/selectDeepCoaddVisits.py",
+            }
+        },
+    }
+    path = tmp_path / "coadd_select.yaml"
+    with open(path, "w") as f:
+        yaml.dump(cfg, f)
+    return path
+
+
+class TestRunConfigCoaddSelectConfigs:
+    def test_parses_select_visit_config_paths(self, coadd_select_yaml):
+        from stips.core.run import RunConfig
+
+        cfg = RunConfig.from_yaml(coadd_select_yaml)
+        assert cfg.coadd_configs.make_direct_warp == "coadds/makeDirectWarp.py"
+        assert (
+            cfg.coadd_configs.select_template_coadd_visits
+            == "coadds/selectTemplateCoaddVisits.py"
+        )
+        assert (
+            cfg.coadd_configs.select_deep_coadd_visits
+            == "coadds/selectDeepCoaddVisits.py"
+        )
+
+    def test_select_visit_configs_default_to_none(self, sn_yaml):
+        from stips.core.run import RunConfig
+
+        cfg = RunConfig.from_yaml(sn_yaml)
+        assert cfg.coadd_configs.select_template_coadd_visits is None
+        assert cfg.coadd_configs.select_deep_coadd_visits is None
+
+
+# ---------------------------------------------------------------------------
+# template.type validation (fail fast, not silently)
+# ---------------------------------------------------------------------------
+
+
+def _write_cfg(tmp_path, template_type):
+    cfg = {
+        "object": "NGC2298",
+        "ra": 102.246542,
+        "dec": -36.005333,
+        "bands": ["i"],
+        "template": {"type": template_type},
+        "science": {"nights": [20061216]},
+    }
+    path = tmp_path / f"{template_type}.yaml"
+    with open(path, "w") as f:
+        yaml.dump(cfg, f)
+    return path
+
+
+def test_unknown_template_type_is_rejected_at_parse_time(tmp_path):
+    """A typo used to no-op: nothing was ingested, then every band failed DIA
+    with "no template available" -- after calibs and science had already run."""
+    from stips.core.run import RunConfig
+
+    with pytest.raises(ValueError) as exc:
+        RunConfig.from_yaml(_write_cfg(tmp_path, "skymappper"))
+    message = str(exc.value)
+    assert "skymappper" in message
+    for valid in ("coadd", "auto", "ps1", "skymapper"):
+        assert valid in message
+
+
+@pytest.mark.parametrize("template_type", ["ps1", "skymapper", "coadd", "auto"])
+def test_known_template_types_are_accepted(tmp_path, template_type):
+    from stips.core.run import RunConfig
+
+    assert RunConfig.from_yaml(_write_cfg(tmp_path, template_type)).template_type == (
+        template_type
+    )
+
+
+def test_template_type_validation_covers_direct_construction():
+    """Not only from_yaml -- a RunConfig built in code gets the same guard."""
+    from stips.core.run import RunConfig
+
+    with pytest.raises(ValueError, match="nosuchsurvey"):
+        RunConfig(
+            object_name="x",
+            ra=1.0,
+            dec=2.0,
+            bands=["i"],
+            template_type="nosuchsurvey",
+        )
+
+
+def test_a_newly_registered_source_becomes_a_valid_template_type(tmp_path, monkeypatch):
+    """The valid set is the SOURCES registry, not a hardcoded list."""
+    from stips.core.run import RunConfig
+    from stips.pipeline_tools.external_template import sources as src_mod
+
+    monkeypatch.setitem(src_mod.SOURCES, "decals", object())
+    assert RunConfig.from_yaml(_write_cfg(tmp_path, "decals")).template_type == "decals"
+
+
+def test_template_type_none_is_a_supported_no_template_run(tmp_path):
+    """`type: none` is an in-use idiom for calibs+science / transit runs with no
+    DIA (scripts/config/hd189733, scripts/config/extended_objects)."""
+    from stips.core.run import RunConfig
+
+    assert RunConfig.from_yaml(_write_cfg(tmp_path, "none")).template_type == "none"
+
+
+def test_every_shipped_config_declares_a_valid_template_type():
+    """Guards the validation against rejecting a config we actually ship."""
+    from pathlib import Path
+
+    from stips.core.run import valid_template_types
+
+    root = Path(__file__).resolve().parents[3] / "scripts" / "config"
+    valid = set(valid_template_types())
+    seen = 0
+    for path in sorted(root.rglob("*.yaml")):
+        with open(path) as f:
+            data = yaml.safe_load(f) or {}
+        if not isinstance(data, dict) or "template" not in data:
+            continue
+        declared = (data.get("template") or {}).get("type")
+        if declared is None:
+            continue
+        seen += 1
+        assert declared in valid, f"{path} declares template.type: {declared}"
+    assert seen > 5, f"only {seen} configs inspected; did the path move?"

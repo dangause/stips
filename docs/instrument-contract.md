@@ -55,6 +55,9 @@ Stack-free (run in the plain `uv sync` venv):
   reference scheme (`days_since_2000 * 10000 + seq`) is provided by
   `stips.make_exposure_id`; profiles should call it rather than re-implement
   the packing and the 31-bit guard.
+  Profiles whose local night straddles UT midnight must instead derive the day
+  term themselves and call `stips.pack_exposure_id(days_since_2000, seq)`, which
+  owns the same packing, the 31-bit guard, and a `seqnum` range check.
 - **translation** — the declarative hooks reproduce `EXPECTED_TRANSLATION`.
 - **observation types / unknown-filter policy** — per the optional fixtures.
 - **fetch** — status-code mapping contract, parameterized by the instrument's
