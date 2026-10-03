@@ -86,6 +86,12 @@ _Generated from `provenance/runs.json` by `stips provenance sync`. Do not edit b
 | 2020wnt_ps1_022226_repo | 20211201 | science | success | 66 | — | 59.6 GB | deleted | lsst-scipipe-12.1.0 / 0f7ec0e | `stips science 20211201 --config dense_strict.py  # stips @ 0f7ec0e, lsst-scipipe-12.1.0  (instrument=nickel)` |
 | 2020wnt_ps1_022226_repo | 20211217 | science | failed | 0 | — | 59.6 GB | deleted | lsst-scipipe-12.1.0 / 0f7ec0e | `stips science 20211217 --config dense_strict.py  # stips @ 0f7ec0e, lsst-scipipe-12.1.0  (instrument=nickel)` |
 
+## 2023ixf
+
+| repo | night | step | status | succ. exp | duration | size | repo | env | recipe |
+|---|---|---|---|---|---|---|---|---|---|
+| 2023ixf_repo | 20230519 | science | partial | 188 | 337s | 3.5 GB | present | gf03f954c0e+3d14ea8aaf / v2.0.1-101-g8e6d815 | `stips science 20230519 --config dense_strict.py  # stips @ v2.0.1-101-g8e6d815, gf03f954c0e+3d14ea8aaf  (instrument=nickel)` |
+
 ## 2023ixf_freshboot
 
 | repo | night | step | status | succ. exp | duration | size | repo | env | recipe |
@@ -288,7 +294,7 @@ _Generated from `provenance/runs.json` by `stips provenance sync`. Do not edit b
 
 ## Totals
 
-- Runs recorded: 184
-- Repos: 21
-- On-disk (present repos): 143.7 GB
-- Tracked total (incl. reclaimed): 482.6 GB
+- Runs recorded: 185
+- Repos: 22
+- On-disk (present repos): 147.2 GB
+- Tracked total (incl. reclaimed): 486.1 GB

@@ -3100,6 +3100,65 @@
     "notes": null
   },
   {
+    "repo": "2023ixf_repo",
+    "repo_path": "/Users/dangause/Developer/lick/data/2023ixf_repo",
+    "target": "2023ixf",
+    "instrument": "nickel",
+    "night": "20230519",
+    "step": "science",
+    "final_status": "partial",
+    "configs_tried": [
+      {
+        "config": "dense_strict.py",
+        "is_fallback": false,
+        "quanta_attempted": 0,
+        "quanta_succeeded": 78,
+        "quanta_failed": 18,
+        "failed_exposures": [],
+        "error": null,
+        "quanta_parse_failed": false
+      },
+      {
+        "config": "dense_relaxed.py",
+        "is_fallback": true,
+        "quanta_attempted": 0,
+        "quanta_succeeded": 110,
+        "quanta_failed": 18,
+        "failed_exposures": [],
+        "error": null,
+        "quanta_parse_failed": false
+      },
+      {
+        "config": "sparse_relaxed.py",
+        "is_fallback": true,
+        "quanta_attempted": 0,
+        "quanta_succeeded": 0,
+        "quanta_failed": 18,
+        "failed_exposures": [],
+        "error": "sst.daf.butler.formatters.parquet.ParquetFormatter' for dataset 019fc320-d8f5-7acc-891a-b709b5a4873b (single_visit_star_ref_match_photom from file:///Users/dangause/Developer/lick/data/2023ixf_repo/Nickel/runs/20230519/processCcd/20260802T153617Z/run_fb1/single_visit_star_ref_match_photom/20230520/r/R/85408123/single_visit_star_ref_match_photom_Nickel_r_R_85408123_Nickel_runs_20230519_processCcd_20260802T153617Z_run_fb1.parq): Column mag_ref specified in parameters not available in parquet file.",
+        "quanta_parse_failed": false
+      }
+    ],
+    "total_exposures": 0,
+    "successful_exposures": 188,
+    "output_collection": "Nickel/runs/20230519/processCcd/20260802T153617Z/run",
+    "timestamp_end": "20260802T153631Z",
+    "started_at": "20260802T153631Z",
+    "ended_at": "20260802T154208Z",
+    "duration_s": 337,
+    "duration_approx": false,
+    "stips_git_sha": "8e6d815da7",
+    "stips_git_describe": "v2.0.1-101-g8e6d815",
+    "lsst_stack_version": "lsst-scipipe-12.1.0",
+    "lsst_stack_version_source": "repo-scan",
+    "lsst_pipelines_version": "gf03f954c0e+3d14ea8aaf",
+    "rerun_recipe": "stips science 20230519 --config dense_strict.py  # stips @ v2.0.1-101-g8e6d815, gf03f954c0e+3d14ea8aaf  (instrument=nickel)",
+    "repo_size_bytes": 3510661120,
+    "repo_status": "present",
+    "reclaimed_at": null,
+    "notes": null
+  },
+  {
     "repo": "2023ixf_freshboot_repo",
     "repo_path": "/Users/dangause/Developer/lick/lsst/data/nickel/2023ixf_freshboot_repo",
     "target": "2023ixf_freshboot",
