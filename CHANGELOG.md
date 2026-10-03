@@ -4,6 +4,16 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
 
 ## [Unreleased]
 
+## [2.1.0] — 2026-10-03
+
+A science-quality release. The headline is the PS1 asinh decode: every PS1
+template ingested before it was brightness-compressed, so both Nickel campaigns
+(2023ixf, 2020wnt) were rebuilt on this code. It also adds the external-template
+framework (PS1 + SkyMapper, multi-patch ingest), Gaia-only refcats and validated
+DIA for southern CTIO fields, and fixes Nickel ingest for 2020+ data.
+**Migration:** re-ingest every external template with `--overwrite` and rerun the
+DIA that used it; re-ingest existing ctio1m repos (exposure ids changed).
+
 ### Fixed
 - **SkyMapper templates ingested saturated bright stars unmasked.** SkyMapper's
   SIA serves single-epoch ~100 s frames, not deep stacks, so bright stars reach
@@ -184,6 +194,17 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
   `ConflictingDefinitionError` and broke every night after the first.
 - **ctio1m:** the U+CuSO4 near-UV filter is recognised; nights whose biases sat at
   that wheel slot had zero ingestable biases (real: 20100120).
+- **ctio1m: 2006 astrometry failed on every field** (NGC2298: 0/45 visits at
+  ~8.8″ residual). The 2006 run's seed WCS carries a stable ~7′ pointing offset
+  (+257″ E / +320″ N), far outside the matcher's search radius. The profile's
+  `tracking_radec` now applies that offset for 2006 observations only (fail-closed
+  on missing dates); 2010+ data is byte-identical. A dense-field matcher config
+  (`ctio_dense.py`) caps bright-star and reference counts for crowded cores.
+- **ctio1m: amp A01 was hardware-dead for the whole Jan-2010 run** and left a
+  hard-edged block in SA98 difference images. A new `obs_ctio1m_data` curated
+  defect package masks the A01 quadrant for exposures from 2010-01-01 on, via
+  calib validity ranges; 2006 data keeps all four amps. ctio1m now runs
+  `doDefect: True`.
 
 ### Added
 - **SkyMapper templates are now mosaicked, lifting the 10.2′ ceiling.** The
@@ -249,6 +270,15 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
 - ctio1m Y4KCam DIA tuning (bleed masking, SAT-excluded detection, spatial kernel)
   and coadd visit-selection/warp configs; SA98 validation pipeline configs.
 - refcat: synchronous Gaia TAP fallback for async result-storage outages.
+- **`refcat.mode: gaia`** — astrometry and photometry from Gaia DR3 alone, for
+  fields south of PS1's −30° floor. The on-demand refcat ensure skips the PS1
+  fetch in this mode, and the science QA photometric ref-match follows the mode.
+  Validated end-to-end on NGC2298 (Dec −36) with a coadd-template DIA config.
+  The Gaia colour terms are not yet populated, so final magnitudes are uncorrected.
+- `scripts/utilities/prune_night.py` — drops a night's intermediates (raws,
+  constructed calibs, processCcd, DIA) once its forced photometry is written.
+  Keeps a multi-night campaign repo at ~1.7 GB on a nearly-full disk; everything
+  dropped is rebuildable by re-running the night.
 
 ### Changed
 - **External-template exposure metadata keys are source-namespaced:**
@@ -263,6 +293,9 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
 - ctio1m pipeline configs use the neutral `calibrateImage` default instead of
   Nickel's fitted `tuned_configs/` (which are fitted for Nickel's CCD and now live
   under `instruments/nickel/configs/`). A Y4KCam-fitted config is future work.
+- ctio1m DIA uses a reduced 9-function Alard–Lupton kernel basis instead of the
+  stack's 27. On NGC2298 this drops the median kernel condition number from
+  ~3e6 to ~1e3 with no loss of subtraction quality.
 
 ## [2.0.1] — 2026-07-14
 
