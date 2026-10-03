@@ -1,0 +1,50 @@
+# CTIO 1.0m / Y4KCam — single-night defect-mask-build scratch (night 20060927).
+#
+# Provenance for the throwaway defect repos ngc_defect_repo AND
+# ngc2006_defect_repo — both were built from the SAME raw night (20060927,
+# bands B/V/R/I, unbinned) as defect-mask-generation experiments, before the
+# curated obs_ctio1m_data package existed (it now ships the epoch-scoped A01 amp
+# mask). This config lets the experiment repos be regenerated on demand, so the
+# on-disk scratch (11-18 G each) can be freed.
+#
+# Defect masks come out of the calibs step (bias/flat/defects). Drive per-stage:
+#   .venv/bin/stips -c scripts/config/ctio1m/pipeline_defect_build_20060927.yaml bootstrap
+#   .venv/bin/stips -c scripts/config/ctio1m/pipeline_defect_build_20060927.yaml download 20060927
+#   .venv/bin/stips -c scripts/config/ctio1m/pipeline_defect_build_20060927.yaml calibs 20060927
+#
+# NOTE: the two source repos are near-duplicate runs of this same night; the
+# exact per-run defect-build parameters were CLI-only and not otherwise
+# captured. Once a mask is curated into instruments/ctio1m/, both repos are safe
+# to delete.
+env:
+  REPO: "/Users/dangause/Developer/lick/data_ctio/ngc_defect_repo"
+  STACK_DIR: "/Users/dangause/Developer/lick/lsst/lsst_stack"
+  INSTRUMENT_DIR: "/Users/dangause/Developer/lick/lsst/lsst_stack/stack/stips/instruments/ctio1m"
+  RAW_PARENT_DIR: "/Users/dangause/Developer/lick/data_ctio"
+  REFCAT_REPO: "/Users/dangause/Developer/lick/lsst/lsst_stack/stack/refcats"
+
+object: "NGC2298"
+ra: 102.246542
+dec: -36.005333
+
+bands: ["b", "v", "r", "i"]
+
+template:
+  type: ps1
+  size: 0.3
+
+science:
+  nights:
+    - 20060927
+
+options:
+  jobs: 4
+  skip_calibs: false
+  skip_science: true      # defect-build only; science not required to regenerate masks
+  skip_dia: true
+  forced_phot: false
+  continue_on_error: true
+  use_fallbacks: true
+
+lightcurve:
+  enabled: false
