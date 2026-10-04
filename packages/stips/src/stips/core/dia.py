@@ -34,6 +34,28 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
+def _object_expr(object_filter: str | None, config: Config, night: str) -> str:
+    """The ``target_name`` clause for DIA's data query.
+
+    Resolves ``object_filter`` exactly as science does
+    (:func:`stips.core.science.resolve_object_filter`: case-insensitive
+    substring, exact match preferred), so DIA selects the same exposures science
+    calibrated. Matching the raw filter exactly instead dropped every frame
+    whose FITS OBJECT differs only in form -- "sn2023ixf" for object "2023ixf"
+    on 20230815 -- leaving calibrated frames with no difference images.
+    """
+    if not object_filter:
+        return ""
+    from stips.core.science import resolve_object_filter
+
+    target = resolve_object_filter(object_filter, config, night) or object_filter
+    if target != object_filter:
+        log.info(
+            "DIA object filter %r resolved to target_name %r", object_filter, target
+        )
+    return f" AND exposure.target_name={butler_str_literal(target)}"
+
+
 @dataclass
 class DIAResult:
     """Result of difference imaging for a single night/band.
@@ -234,9 +256,7 @@ def run(
     bad_ids = parse_bad_exposures(bad_exposures, bad_file)
     exclusion_expr = build_exclusion_expr(bad_ids)
 
-    object_expr = ""
-    if object_filter:
-        object_expr = f" AND exposure.target_name={butler_str_literal(object_filter)}"
+    object_expr = _object_expr(object_filter, config, night)
 
     band_expr = ""
     if band:
