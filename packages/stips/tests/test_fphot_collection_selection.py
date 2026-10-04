@@ -62,9 +62,13 @@ def test_select_diff_collection_prefers_matching_band(fphot_module, monkeypatch)
     assert selected == r_run
 
 
-def test_select_diff_collection_uses_latest_when_band_unspecified(
+def test_select_diff_collection_uses_every_run_when_band_unspecified(
     fphot_module, monkeypatch
 ):
+    """Per-band DIA writes one diff run per band. With no --band, forced phot
+    must see ALL of them (newest first, so a re-run wins per visit); taking
+    only the newest silently dropped every other band (real: SN 2009Y
+    20090207 lost its r visit)."""
     night = "20230519"
     r_run = f"Nickel/runs/{night}/diff/20260218T175707Z/run"
     i_run = f"Nickel/runs/{night}/diff/20260218T175815Z/run"
@@ -85,4 +89,28 @@ def test_select_diff_collection_uses_latest_when_band_unspecified(
         night, config=_nickel_config(), band=None
     )
     assert candidates == [i_run, r_run]
-    assert selected == i_run
+    assert selected == f"{i_run},{r_run}"
+
+
+def test_band_unspecified_skips_runs_without_difference_images(
+    fphot_module, monkeypatch
+):
+    night = "20230519"
+    empty = f"Nickel/runs/{night}/diff/20260218T180000Z/run"
+    r_run = f"Nickel/runs/{night}/diff/20260218T175707Z/run"
+
+    monkeypatch.setattr(
+        fphot_module.butler_query,
+        "list_collections",
+        lambda config, pattern, *, prefix=None: [r_run, empty],
+    )
+    monkeypatch.setattr(
+        fphot_module.butler_query,
+        "has_datasets",
+        lambda config, dataset_type, collection, *, where="": collection == r_run,
+    )
+
+    selected, _ = fphot_module._select_diff_collection(
+        night, config=_nickel_config(), band=None
+    )
+    assert selected == r_run
