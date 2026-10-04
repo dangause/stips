@@ -9,6 +9,7 @@ Same layout as plot_2023ixf_raw_vs_reduced.py but on visit 85480107 (R-band,
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -20,31 +21,19 @@ from astropy.visualization import (
     LogStretch,
 )
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import paper_data  # noqa: E402
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 OUT_PATH = REPO_ROOT / "analysis" / "2023ixf_raw_pvi_diff_ps1_poster.png"
 
-DATA_REPO = Path(
-    "/Users/dangause/Developer/lick/lsst/data/nickel/2023ixf_ps1_022226_repo"
-)
+DATA_REPO = paper_data.repo("2023ixf")
 
 # Visit 85480107 — SN 2023ixf, R-band, 20 s, night 20230527 (UT 20230528).
-RAW_FITS = (
-    DATA_REPO
-    / "Nickel/raw/20230527/20260312T172055Z/raw/20230528/20230528_107"
-    / "raw_Nickel_R_20230528_107_CCD0_Nickel_raw_20230527_20260312T172055Z.fits"
-)
-PVI_FITS = (
-    DATA_REPO
-    / "Nickel/runs/20230527/processCcd/20260313T202457Z/run/preliminary_visit_image"
-    / "20230528/r/R/85480107"
-    / "preliminary_visit_image_Nickel_r_R_85480107_CCD0_Nickel_runs_20230527_processCcd_20260313T202457Z_run.fits"
-)
-DIFF_FITS = (
-    DATA_REPO
-    / "Nickel/runs/20230527/diff/20260313T225106Z/run/difference_image"
-    / "20230528/r/R/85480107"
-    / "difference_image_Nickel_r_R_85480107_CCD0_Nickel_runs_20230527_diff_20260313T225106Z_run.fits"
-)
+# The rebuild keeps this night unpruned (targets.yaml keep_nights).
+RAW_FITS = paper_data.find_file(DATA_REPO, "raw_Nickel_R_20230528_107_*.fits")
+PVI_FITS = paper_data.dataset_file(DATA_REPO, "preliminary_visit_image", 85480107)
+DIFF_FITS = paper_data.dataset_file(DATA_REPO, "difference_image", 85480107)
 SCIENCE_LABEL = "SN 2023ixf in M101 · Nickel R · 20 s · visit 85480107 · PS1 template"
 
 

@@ -24,14 +24,18 @@ from __future__ import annotations
 import csv
 import glob
 import os
+import sys
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
 from astropy.io import fits
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import paper_data  # noqa: E402
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
-CSV_PATH = REPO_ROOT / "analysis" / "landolt_validation_4nights.csv"
+CSV_PATH = paper_data.data("landolt_validation_4nights.csv")
 # Rigorous per-measurement PM-corrected vector residual CSV produced by
 # scripts/analysis/landolt_pm_corrected_residuals.py — Gaia DR3 positions
 # propagated to each visit's UTC-MJD, re-matched against the
