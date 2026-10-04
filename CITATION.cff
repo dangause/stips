@@ -1,0 +1,51 @@
+cff-version: 1.2.0
+message: >-
+  If you use STIPS in your research, please cite it using the metadata below,
+  and cite the LSST Science Pipelines it is built on.
+type: software
+title: "STIPS: the Small Telescope Image Processing Suite"
+abstract: >-
+  STIPS brings the Rubin Observatory LSST Science Pipelines to 1-meter class
+  telescopes. It wraps the LSST reduction stack with a declarative instrument
+  profile, prefab pipelines, and a unified command-line interface for
+  calibration, difference imaging, forced photometry, and lightcurve
+  extraction. Supported instruments are the Nickel 1-m at Lick Observatory
+  and the CTIO 1.0-m with Y4KCam.
+authors:
+  - given-names: Dan
+    family-names: Gause
+repository-code: "https://github.com/dangause/stips"
+license: GPL-3.0-only
+version: 2.1.0
+date-released: "2026-10-03"
+keywords:
+  - astronomy
+  - image processing
+  - difference imaging
+  - transients
+  - supernovae
+  - LSST Science Pipelines
+  - small telescopes
+references:
+  - type: article
+    title: "The LSST Data Management System"
+    authors:
+      - family-names: Jurić
+        given-names: Mario
+      - name: "et al."
+    year: 2017
+    collection-title: "Astronomical Data Analysis Software and Systems XXV"
+    volume: 512
+    start: 279
+    notes: "ASP Conference Series"
+  - type: article
+    title: "The Hyper Suprime-Cam software pipeline"
+    authors:
+      - family-names: Bosch
+        given-names: James
+      - name: "et al."
+    year: 2018
+    journal: "Publications of the Astronomical Society of Japan"
+    volume: 70
+    start: S5
+    doi: "10.1093/pasj/psx080"
