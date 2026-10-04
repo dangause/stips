@@ -16,6 +16,7 @@ from stips.core.pipeline import (
     get_raw_dir,
     isr_config_args,
     night_to_date_range,
+    raw_ingest_locations,
     redefine_chain,
     validate_night,
 )
@@ -83,7 +84,7 @@ def write_curated_calibrations(
             [
                 "ingest-raws",
                 repo,
-                str(raw_dir),
+                *raw_ingest_locations(raw_dir),
                 "--transfer",
                 "copy",
                 "--output-run",
@@ -255,7 +256,7 @@ def run(
             [
                 "ingest-raws",
                 repo,
-                str(raw_dir),
+                *raw_ingest_locations(raw_dir),
                 "--transfer",
                 "copy",
                 "--output-run",
