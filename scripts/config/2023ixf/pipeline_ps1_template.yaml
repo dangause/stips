@@ -81,10 +81,19 @@ science:
     - 20230714
     - 20230728
     - 20230801
-    - 20230817
-    - 20230905
-    - 20230910
-    - 20231211   # Late 2023
+    - 20230815   # Day ~88: R/I 100 s (OBJECT "sn2023ixf")
+    - 20230817   # Day ~90: end of plateau. Needs the subframe ingest screen.
+    - 20240828   # Day ~466: nebular phase, R 100 s + 600 s
+    #
+    # Nights with no usable 2023ixf science, verified from the raw headers
+    # (2026-10-04). Listing them only produces failures:
+    #   20230905, 20230910 - only 10 s frames on the SN. They hold 1-3 stars,
+    #                        too few for a PSF model (PsfexTooFewGoodStarsError).
+    #                        The 650 s frame labelled 2023ixf on 20230905 points
+    #                        at RA 252, Dec +36 - a different field.
+    #   20231211           - no 2023ixf frames at all.
+    #   20250807           - one 100 s frame in the newer rp filter, which has
+    #                        no PS1 template mapping; left out.
     # 2024 observations (11 nights) - PROPRIETARY, not yet in archive
     # Uncomment when data becomes public or available locally
     # - 20240416
