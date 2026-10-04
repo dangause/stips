@@ -2,7 +2,7 @@
 
 What was checked before freezing STIPS for the paper, what changed, and what
 is still a decision for the author. Numbers here were measured on the code in
-PR #41 (three data-loss fixes) and should be re-quoted from the frozen rebuild.
+PR #41 (three data-loss fixes), PR #42 (Nickel filter identity) and PR #43 (transit) and should be re-quoted from the frozen rebuild.
 
 ## Reproducing the paper's numbers
 
@@ -52,6 +52,28 @@ position, 5–7 days after discovery:
 | 54870.31 | i | 14.99 ± 0.01 | 138 |
 
 Config: `scripts/config/sn2009y/pipeline_ps1_dia.yaml`.
+
+## HD 189733 b: transit reproduced only after two fixes  (PR #43)
+
+The pipeline could not reproduce the poster's transit. The transit search
+read PSF forced photometry, which for a B = 8.6 host spans a factor of four,
+and BLS returned a 72% "transit". The differential-photometry task that
+exists for this case found no target, because the config gave the J2000
+position and the star has since moved 6.4" (pmdec −250.8 mas/yr), outside
+the 2" match radius. It still reported success.
+
+With PR #43 (differential lightcurve exported and used; empty result fails;
+position at the 2025-08-02 epoch), on 400 B visits from 20250802:
+
+| | Value |
+|---|---|
+| Differential points | 332, 0.21% median error |
+| Transit depth | 2.09 ± 0.03% |
+| S/N | 83 |
+| Mid-transit vs Agol+2010 ephemeris | −7.4 min |
+
+One night cannot constrain the 2.22 d period; quote the single-transit depth
+and time, not the BLS period.
 
 ## PSF photometry is not biased low
 
