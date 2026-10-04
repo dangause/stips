@@ -23,8 +23,13 @@ env:
 # Target information
 # HD 189733: RA 20h 00m 43.71s, Dec +22d 42m 39.07s (SIMBAD J2000)
 object: "HD_189733"
-ra: 300.182125
-dec: 22.710853
+# Position at the OBSERVATION epoch (2025-08-02), not J2000. HD 189733 has a
+# proper motion of (-2.3, -250.8) mas/yr (Gaia DR3), so by 2025.6 it sits 6.4"
+# south of its J2000 position (300.182125, 22.710853) -- outside
+# DifferentialPhotTask's 2" match radius, which then finds no target. Update
+# this for observations at a different epoch.
+ra: 300.182108
+dec: 22.709071
 
 # B-band only (all 400 transit frames are B-band at 4s cadence)
 bands: ["b"]

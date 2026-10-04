@@ -391,6 +391,7 @@ class RunResult:
     template_collections: dict[str, str] = field(default_factory=dict)
     forced_phot_collections: dict[str, list[str]] = field(default_factory=dict)
     differential_phot_success: bool | None = None
+    differential_lightcurve_path: str | None = None
     lightcurve_path: str | None = None
     period_result_path: str | None = None
     transit_result_path: str | None = None
@@ -1347,23 +1348,35 @@ def _run_transit_step(
     result: RunResult,
     dry_run: bool,
 ) -> None:
-    """Run BLS transit search on extracted lightcurve."""
-    if not result.lightcurve_path:
+    """Run BLS transit search on extracted lightcurve.
+
+    Uses the differential aperture lightcurve when the differential step
+    produced one: transit hosts are bright, and PSF forced photometry on
+    their visit images is unusable (HD 189733: raw fluxes span 4x and BLS
+    returns a 72% "transit"). Falls back to the forced-photometry lightcurve.
+    """
+    csv = result.differential_lightcurve_path or result.lightcurve_path
+    if not csv:
         log.warning("No lightcurve available, skipping transit search")
         return
+    log.info(
+        "  Transit search on the %s lightcurve: %s",
+        "differential" if result.differential_lightcurve_path else "forced-phot",
+        csv,
+    )
 
     if not dry_run:
         from stips.core import transit
 
         transit_log = _get_step_log_file("transit")
         transit_result = transit.run(
-            csv_path=Path(result.lightcurve_path),
+            csv_path=Path(csv),
             period_min=run_cfg.period_min,
             period_max=run_cfg.period_max,
             duration_min=run_cfg.transit_duration_min,
             duration_max=run_cfg.transit_duration_max,
             n_samples=run_cfg.period_samples,
-            output_dir=Path(result.lightcurve_path).parent / "transit_analysis",
+            output_dir=Path(csv).parent / "transit_analysis",
             log_file=transit_log,
         )
         result.transit_result_path = str(transit_result.output_dir)
@@ -1468,8 +1481,28 @@ def _run_differential_phot_step(
                 log_file=log_file,
             )
             if proc.returncode == 0:
-                log.info("  Differential photometry pipeline complete")
-                result.differential_phot_success = True
+                out_csv = (
+                    Path(repo)
+                    / "lightcurves"
+                    / f"differential_{run_cfg.object_name}.csv"
+                )
+                n_rows = _export_differential_lightcurve(output_coll, config, out_csv)
+                if n_rows:
+                    log.info(
+                        "  Differential photometry: %d points -> %s", n_rows, out_csv
+                    )
+                    result.differential_phot_success = True
+                    result.differential_lightcurve_path = str(out_csv)
+                else:
+                    # The task exits 0 with an empty table when it cannot find
+                    # the target among the detected stars.
+                    log.error(
+                        "  Differential photometry produced no lightcurve: the "
+                        "target was not found within the match radius. For a "
+                        "high proper-motion star use RA/Dec at the observation "
+                        "epoch (HD 189733 moves ~0.25 arcsec/yr)."
+                    )
+                    result.differential_phot_success = False
             else:
                 log.error(
                     "  Differential photometry pipeline failed (exit code %d)",
@@ -1485,6 +1518,42 @@ def _run_differential_phot_step(
             f"-c differentialPhot:targetRa={run_cfg.ra} "
             f"-c differentialPhot:targetDec={run_cfg.dec}"
         )
+
+
+def _export_differential_lightcurve(
+    output_coll: str, config: Config, out_csv: Path
+) -> int:
+    """Write the newest ``differential_phot_lightcurve_table`` in
+    ``output_coll`` to ``out_csv`` with the transit search's columns
+    (mjd, band, flux, flux_err, plus the normalised and diagnostic columns).
+
+    Returns the number of rows written; 0 when the table is missing or empty.
+    """
+    from stips.core.stack import run_butler_python_json
+
+    script = f"""
+import json
+from lsst.daf.butler import Butler
+
+butler = Butler({str(config.repo)!r})
+refs = butler.query_datasets(
+    "differential_phot_lightcurve_table",
+    collections={output_coll!r},
+    explain=False,
+)
+rows = 0
+if refs:
+    table = butler.get(refs[-1])
+    df = table.to_pandas() if hasattr(table, "to_pandas") else table
+    if len(df):
+        df = df.rename(columns={{"diff_flux": "flux", "diff_flux_err": "flux_err"}})
+        df.to_csv({str(out_csv)!r}, index=False)
+        rows = len(df)
+print(json.dumps({{"rows": rows}}))
+"""
+    out_csv.parent.mkdir(parents=True, exist_ok=True)
+    result = run_butler_python_json(script, config)
+    return int((result or {}).get("rows", 0))
 
 
 def _discover_fphot_collections(
