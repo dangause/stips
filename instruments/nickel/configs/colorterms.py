@@ -40,6 +40,24 @@ config.data = {
                 c1=0.352,
                 c2=0.0,
             ),
+            # Sloan-like r'/i' (2020-2023 headers; see the filter_aliases note in
+            # profile.py). Slopes measured against PS1 on 13 2020wnt visits
+            # (2026-10-04): r -0.033 +/- 0.006 per mag of r-i, i -0.053 +/- 0.006.
+            # c0 = 0 keeps these bands on the PS1 AB system.
+            "rp": Colorterm(
+                primary="rMeanPSFMag",
+                secondary="iMeanPSFMag",
+                c0=0.0,
+                c1=-0.033,
+                c2=0.0,
+            ),
+            "ip": Colorterm(
+                primary="iMeanPSFMag",
+                secondary="rMeanPSFMag",
+                c0=0.0,
+                c1=0.053,
+                c2=0.0,
+            ),
         }
     ),
     "gaia*": ColortermDict(
@@ -115,6 +133,13 @@ config.data = {
             "rp": Colorterm(
                 primary="monster_ComCam_r",
                 secondary="monster_ComCam_i",
+                c0=0.0,
+                c1=0.0,
+                c2=0.0,
+            ),
+            "ip": Colorterm(
+                primary="monster_ComCam_i",
+                secondary="monster_ComCam_r",
                 c0=0.0,
                 c1=0.0,
                 c2=0.0,
