@@ -191,6 +191,31 @@ class Rebuild:
                 writer.writeheader()
                 writer.writerows(rows)
 
+    def ensure_cones(self, name, spec, cfg_path) -> int:
+        """Fetch Gaia/PS1 refcats for each ``refcat_cones`` entry.
+
+        For multi-field targets (Landolt) that have no single target position,
+        so ``stips run`` cannot ensure coverage itself. Retries each cone: the
+        Gaia archive intermittently returns 500s.
+        """
+        rc = 0
+        log = self.out / "logs" / name / "refcats.log"
+        for ra, dec in spec.get("refcat_cones", []):
+            for _attempt in range(3):
+                code = self.sh(
+                    [STIPS, "-c", cfg_path, "refcat", "fetch", "--ra", ra,
+                     "--dec", dec, "--radius", spec.get("cone_radius_deg", 0.1)],
+                    log,
+                )  # fmt: skip
+                if code == 0:
+                    break
+                if not self.dry:
+                    import time
+
+                    time.sleep(60)
+            rc = rc or code
+        return rc
+
     # -- modes -------------------------------------------------------------
     def per_night(self, name, spec, cfg):
         products = self.out / "products" / name
@@ -230,7 +255,12 @@ class Rebuild:
         print(f"[{name}] start {now()}", flush=True)
         path = self.write_config(cfg, name, "all_nights")
         log = self.out / "logs" / name / "run.log"
-        status = {"run": self.sh([STIPS, "-c", path, "run"], log)}
+        status = {}
+        if spec.get("refcat_cones"):
+            # The repo must exist before refcats can be ingested into it.
+            status["bootstrap"] = self.sh([STIPS, "-c", path, "bootstrap"], log)
+            status["refcats"] = self.ensure_cones(name, spec, path)
+        status["run"] = self.sh([STIPS, "-c", path, "run"], log)
         status.update(self.extract(name, spec, path, cfg, products, log))
         if "forced_phot" in spec.get("extract", []):
             status["forced_phot"] = self.export_forced_phot(cfg, products, log)

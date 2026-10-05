@@ -49,6 +49,14 @@ object: "DY_Pegasi"
 ra: 347.213274
 dec: 17.215555
 
+# Gaia DR3 astrometry + PS1 photometry, the same calibration path as the SN
+# campaigns, so every paper number shares one photometric system (Cousins
+# B/V/R/I on Vega; see InstrumentProfile.vega_bands). Landolt-validated on
+# 2026-10-05: BVRI mean offsets <= 0.012 mag, rms 0.02-0.08 mag.
+refcat:
+  mode: gaia_ps1
+  radius_deg: 0.2
+
 # Bands to process
 # B and V are standard for SX Phe photometry (large B amplitude useful).
 # Include R/I if observed.

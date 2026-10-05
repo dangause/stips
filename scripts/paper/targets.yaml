@@ -17,6 +17,7 @@
 #   landolt       — `stips landolt-validate` against the Landolt catalogue
 #   forced_phot   — every forced-photometry row, no S/N cut (keeps upper limits)
 # keep_nights: per_night targets only; nights left unpruned for image figures.
+# refcat_cones: whole targets only; [ra, dec] cones fetched before the run.
 
 targets:
   2023ixf:
@@ -65,3 +66,16 @@ targets:
     extract: [calib_metrics, landolt]
     overrides:
       options: {skip_calibs: false}   # a fresh repo has no calibs to reuse
+    # gaia_ps1 needs refcats per Landolt field; no single target position.
+    refcat_cones:
+      - [234.70925, -0.40735]   # SA 107-458
+      - [266.26098, -0.49131]   # SA 109-199
+      - [266.33318, -0.43100]   # SA 109-231
+      - [280.36853, 0.25639]    # SA 110-340
+      - [280.78193, 0.46708]    # SA 110-499
+      - [325.24935, 0.46018]    # SA 113-342
+      - [340.53870, 1.17133]    # SA 114-670
+      - [13.31889, 0.80803]     # SA 92-311
+      - [201.41445, -8.82198]   # PG1323-086
+      - [233.29474, 5.54080]    # PG1530+057
+      - [248.85010, 9.79719]    # PG1633+099
