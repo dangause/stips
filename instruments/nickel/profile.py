@@ -78,6 +78,11 @@ profile = InstrumentProfile(
     # coadd templates in "auto" mode. This reproduces the historical r/i policy.
     # The Sloan-like rp/ip bands take PS1 r/i templates too.
     ps1_band_map={"r": "r", "i": "i", "rp": "r", "ip": "i"},
+    # In gaia_ps1 mode the Cousins B/V/R/I colour terms (configs/colorterms.py,
+    # Landolt-fitted; constants match Tonry+2012's Johnson-Cousins minus PS1)
+    # put those bands on the Vega system. The Sloan-like rp/ip bands, and every
+    # band in MONSTER mode, stay AB.
+    vega_bands={"gaia_ps1": ("b", "v", "r", "i")},
     # The Nickel direct-imaging camera covers ~6.3' (2048 px at 0.37"/px).
     fov_arcmin=6.3,
     header_map={

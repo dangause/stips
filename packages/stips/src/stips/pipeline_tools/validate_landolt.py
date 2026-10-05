@@ -455,6 +455,12 @@ def parse_args():
         help="Dry-run: list matched stars per visit/band, then exit (no --output required)",
     )
     parser.add_argument(
+        "--vega-bands",
+        default="",
+        help="Comma-separated bands the pipeline already calibrates to Vega "
+        "(no AB->Vega offset applied to them)",
+    )
+    parser.add_argument(
         "--instrument",
         default=None,
         help="Instrument name (default: from the INSTRUMENT_DIR profile)",
@@ -464,6 +470,7 @@ def parse_args():
 
 def main() -> int:
     args = parse_args()
+    vega_bands = {b for b in args.vega_bands.split(",") if b}
 
     instrument = resolve_instrument_name(args.instrument)
 
@@ -608,8 +615,9 @@ def main() -> int:
             # Convert flux to AB magnitude
             pipeline_mag_ab = -2.5 * math.log10(flux_nJy / FLUX_ZERO_NJY)
 
-            # Apply AB-to-Vega offset
-            ab_to_vega_offset = AB_TO_VEGA.get(band, 0.0)
+            # Apply AB-to-Vega offset, unless the colour terms already put this
+            # band on Vega (InstrumentProfile.vega_bands for the refcat mode).
+            ab_to_vega_offset = 0.0 if band in vega_bands else AB_TO_VEGA.get(band, 0.0)
             pipeline_mag_vega = pipeline_mag_ab + ab_to_vega_offset
 
             # Magnitude error from flux error
@@ -641,6 +649,7 @@ def main() -> int:
                     "band": band,
                     "pipeline_mag_AB": _fmt(pipeline_mag_ab),
                     "pipeline_mag_vega": _fmt(pipeline_mag_vega),
+                    "mag_system": "Vega" if band in vega_bands else "AB",
                     "landolt_mag": _fmt(landolt_mag),
                     "residual": _fmt(residual),
                     "pipeline_mag_err": _fmt(mag_err),
@@ -679,6 +688,7 @@ def main() -> int:
         "band",
         "pipeline_mag_AB",
         "pipeline_mag_vega",
+        "mag_system",
         "landolt_mag",
         "residual",
         "pipeline_mag_err",
