@@ -75,6 +75,26 @@ position at the 2025-08-02 epoch), on 400 B visits from 20250802:
 One night cannot constrain the 2.22 d period; quote the single-transit depth
 and time, not the BLS period.
 
+## Variable stars: consistent with known periods, not recovered
+
+Rebuilt through the driver (2026-10-04), the period search returns periods
+that do not match the literature, and the reason is coverage, not the
+pipeline. Each star has at most ~2 h per night, about one pulsation cycle
+for the SX Phe stars and a fraction of AC And's 17 h fundamental. The
+Lomb–Scargle main peak is as wide as the period itself:
+
+| Star | Published P (d) | STIPS best P (d) | Peak FWHM in P (d) | Power at published P / peak |
+|---|---|---|---|---|
+| DY Peg | 0.07293 | 0.0668 | 0.05 | 0.96 |
+| CY Aqr | 0.06104 | 0.0471 | 0.03 | 0.73 |
+| AC And | 0.7112 | unconstrained | > 1 | 0.22 |
+
+The lightcurves are real (DY Peg's 0.55 mag amplitude matches the
+literature). For the paper, show them phase-folded at the published periods
+and say "consistent with", not "recovered". The period module reports a
+false-alarm probability of 0.0 and no period uncertainty, which overstates
+single-night results; it should report the peak width.
+
 ## PSF photometry is not biased low
 
 The poster stated that PSF forced photometry under-reports bright-source flux
