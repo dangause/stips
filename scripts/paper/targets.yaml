@@ -1,0 +1,67 @@
+# Paper data rebuild manifest — read by scripts/paper/rebuild.py.
+#
+# Every number in the STIPS paper comes from one tagged release, rebuilt from
+# raw by this manifest. Each target names its tracked run config; the driver
+# overrides only REPO and INSTRUMENT_DIR (so the rebuild uses the checkout it
+# runs from) plus the per-target `overrides` below.
+#
+# mode:
+#   per_night — run, measure, export and prune one night at a time (the
+#               multi-night supernova campaigns; bounded disk). The lightcurve
+#               is extracted once at the end.
+#   whole     — one `stips run` over every night (the variable-star and transit
+#               targets need all nights together for templates and period /
+#               transit searches), then measure and export.
+# extract: which per-visit products to write under products/<target>/.
+#   calib_metrics — `stips calib-metrics` (zeropoint, PSF, astrometric offset)
+#   landolt       — `stips landolt-validate` against the Landolt catalogue
+#   forced_phot   — every forced-photometry row, no S/N cut (keeps upper limits)
+# keep_nights: per_night targets only; nights left unpruned for image figures.
+
+targets:
+  2023ixf:
+    config: scripts/config/2023ixf/pipeline_ps1_template.yaml
+    mode: per_night
+    extract: [calib_metrics, forced_phot]
+    # Not pruned: plot_2023ixf_raw_vs_reduced_ps1.py shows visit 85480107's
+    # raw, calibrated and difference images from this night.
+    keep_nights: [20230527]
+  2020wnt:
+    config: scripts/config/2020wnt/pipeline_ps1_template.yaml
+    mode: per_night
+    extract: [calib_metrics, forced_phot]
+    overrides:
+      refcat: {mode: gaia_ps1, radius_deg: 0.3}
+  sn2009y:
+    # CTIO 1.0m; the one non-Nickel target. Its config documents the corrected
+    # SN position (the TNS coordinates are ~10" off).
+    config: scripts/config/sn2009y/pipeline_ps1_dia.yaml
+    mode: whole
+    extract: [calib_metrics, forced_phot]
+    prefix: CTIO1m
+  hd189733:
+    config: scripts/config/hd189733/pipeline_transit.yaml
+    mode: whole
+    extract: [calib_metrics, forced_phot]
+  ac_and:
+    config: scripts/config/ac_and/pipeline.yaml
+    mode: whole
+    extract: [calib_metrics, forced_phot]
+  cy_aqr:
+    config: scripts/config/cy_aqr/pipeline.yaml
+    mode: whole
+    extract: [calib_metrics, forced_phot]
+  dy_peg:
+    config: scripts/config/dy_peg/pipeline.yaml
+    mode: whole
+    extract: [calib_metrics, forced_phot]
+  extended_objects:
+    config: scripts/config/extended_objects/pipeline_calibs_science.yaml
+    mode: whole
+    extract: [calib_metrics]
+  landolt:
+    config: scripts/config/landolt_validation/pipeline_landolt.yaml
+    mode: whole
+    extract: [calib_metrics, landolt]
+    overrides:
+      options: {skip_calibs: false}   # a fresh repo has no calibs to reuse

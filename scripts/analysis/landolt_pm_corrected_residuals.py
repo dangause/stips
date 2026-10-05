@@ -35,6 +35,7 @@ from __future__ import annotations
 import csv
 import glob
 import os
+import sys
 import warnings
 from pathlib import Path
 
@@ -44,17 +45,18 @@ from astropy.io import fits
 from astropy.time import Time
 from astroquery.gaia import Gaia
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import paper_data  # noqa: E402
+
 warnings.filterwarnings("ignore")
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-SRC_CSV = REPO_ROOT / "analysis" / "landolt_validation_4nights.csv"
-OUT_CSV = REPO_ROOT / "analysis" / "landolt_pm_corrected.csv"
+SRC_CSV = paper_data.data("landolt_validation_4nights.csv")
+OUT_CSV = paper_data.data("landolt_pm_corrected.csv")
 LANDOLT_CATALOG = (
     REPO_ROOT / "scripts" / "config" / "landolt_validation" / "landolt_catalog.csv"
 )
-LANDOLT_REPO = Path(
-    "/Users/dangause/Developer/lick/lsst/data/nickel/landolt_validation_repo"
-)
+LANDOLT_REPO = paper_data.repo("landolt")
 
 GAIA_CONE_RADIUS_ARCSEC = 6.0  # generous enough for high-PM stars over ~22 yr
 RE_MATCH_RADIUS_ARCSEC = 2.0  # tighter once we've PM-corrected

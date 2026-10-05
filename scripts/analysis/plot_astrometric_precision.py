@@ -9,12 +9,16 @@ RMS residual reported by calibrateImage.
 from __future__ import annotations
 
 import csv
+import sys
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import paper_data  # noqa: E402
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
-CSV_PATH = REPO_ROOT / "analysis" / "calib_metrics" / "combined.csv"
+CSV_PATH = paper_data.data("calib_metrics", "combined.csv")
 OUT_PATH = REPO_ROOT / "analysis" / "astrometric_precision_poster.png"
 
 # Display order + colour per target (matches the notebook's field_comparison

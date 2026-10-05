@@ -1,0 +1,57 @@
+# SN 2009Y (Type Ia, NGC 5728) — CTIO 1.0m / Y4KCam, PS1-template DIA.
+#
+# POSITION. Do not use the TNS coordinates (220.59937, -17.24678): they sit
+# ~10" west of the supernova. The discovery report (CBET 1684) places it 9" E,
+# 24.6" N of the NGC 5728 nucleus. Centroiding the SN in all three difference
+# images (2026-10-04) gives RA 220.602305, Dec -17.246289 (scatter 0.03"), at
+# 8.7" E, 24.4" N of the nucleus measured in the same frames, which matches
+# CBET. The WCS is sound: the nucleus lands within 0.4" of its catalogue
+# position. At the old position forced photometry measured blank sky and
+# reported non-detections; at this one the SN is detected at S/N 140-230.
+#
+# Data: two nights, 5 and 7 days after discovery (2009 Feb 6 and 8):
+#   20090205 - R 45 s;   20090207 - R 30 s, I 30 s.
+env:
+  REPO: "/Users/dangause/Developer/lick/data_ctio/sn2009y_repo"
+  STACK_DIR: "/Users/dangause/Developer/lick/lsst/lsst_stack"
+  INSTRUMENT_DIR: "/Users/dangause/Developer/lick/lsst/lsst_stack/stack/stips/instruments/ctio1m"
+  RAW_PARENT_DIR: "/Users/dangause/Developer/lick/data_ctio"
+  REFCAT_REPO: "/Users/dangause/Developer/lick/lsst/lsst_stack/stack/refcats"
+
+object: "sn2009y"
+ra: 220.602305
+dec: -17.246289
+
+bands: ["r", "i"]
+
+refcat:
+  mode: gaia_ps1        # Dec -17: inside PS1 coverage
+  radius_deg: 0.3
+
+template:
+  type: ps1
+  size: 0.4
+
+science:
+  nights:
+    - 20090205
+    - 20090207
+
+configs:
+  science:
+    colorterms: apply_colorterms.py
+  dia:
+    subtract_images: dia/subtractImages_ps1.py
+    detect_and_measure: dia/detectAndMeasure.py
+
+options:
+  jobs: 4
+  concurrent_nights: 1
+  skip_dia: false
+  forced_phot: true
+  forced_phot_image_type: diffim
+  continue_on_error: true
+  use_fallbacks: false
+
+lightcurve:
+  enabled: false
