@@ -39,7 +39,9 @@ def run(
         config: Loaded Config (provides repo + stack_dir).
         collection: Butler collection glob (e.g. '<prefix>/runs/*/processCcd/*').
         output: Output CSV path (absolute or relative to CWD).
-        night: Optional YYYYMMDD to filter by exposure.day_obs.
+        night: Optional local observing night (YYYYMMDD). Translated to the UT
+            ``day_obs`` value(s) it spans via the profile's
+            ``night_to_dayobs_offset_days`` (Lick night 20230618 is UT 20230619).
         include_refcat_metrics: Also pull ref-match metric bundles if present.
         log_file: Optional path for captured stdout/stderr.
 
@@ -64,7 +66,10 @@ def run(
         str(output),
     ]
     if night:
-        args.extend(["--night", str(night)])
+        from stips.core.pipeline import night_day_obs_values
+
+        day_obs = night_day_obs_values(str(night), getattr(config, "profile", None))
+        args.extend(["--day-obs", ",".join(str(d) for d in day_obs)])
     if include_refcat_metrics:
         args.append("--include-refcat-metrics")
 
