@@ -4,6 +4,15 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
 
 ## [Unreleased]
 
+## [2.2.0] — 2026-10-05
+
+The paper-freeze release. A pre-freeze audit found and fixed calibration and
+data-loss bugs that affected published-grade numbers; every paper result is
+rebuilt from raw on this tag by `scripts/paper/rebuild.py`.
+**Migration:** re-ingest Nickel repos (r′/i′ frames now ingest as `rp`/`ip`),
+and add `rp`/`ip` to campaign `bands:`. Cousins B/V/R/I magnitudes from the
+`gaia_ps1` path are Vega; lightcurves say so in `mag_system`.
+
 ### Fixed
 - **Nickel 2020–2023 r′/i′ frames were calibrated as Cousins R/I.** Their
   headers carry a malformed card (`FILTNAM = 'r'                '`) that the
