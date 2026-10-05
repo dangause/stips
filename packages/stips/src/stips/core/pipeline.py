@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import re
+from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -241,6 +242,163 @@ def get_raw_dir(config: Config, night: str) -> Path:
 
 # Raw-frame extensions scanned by find_aliasing_exposure_ids().
 _RAW_GLOBS = ("*.fits", "*.fits.fz", "*.fit", "*.fts")
+
+
+@dataclass
+class RawScreen:
+    """Result of :func:`screen_raw_frames`."""
+
+    accepted: list[Path] = field(default_factory=list)
+    #: ``(filename, reason)`` for every frame left out of ingest.
+    rejected: list[tuple[str, str]] = field(default_factory=list)
+
+
+def _on_disk_header(hdu):
+    """The header as stored. A tile-compressed image presents its decompressed
+    view as ``.header``; the size check needs the binary-table header behind it."""
+    from astropy.io import fits
+
+    if isinstance(hdu, fits.CompImageHDU):
+        raw = getattr(hdu, "_bintable", None)
+        return raw.header if raw is not None else hdu._header
+    return hdu.header
+
+
+def _fits_frame_shape(hdul) -> tuple[tuple[int, int], ...]:
+    """``(nx, ny)`` of every 2-D+ image in the file (decompressed for .fz)."""
+    from astropy.io import fits
+
+    shape = []
+    for hdu in hdul:
+        if isinstance(hdu, (fits.PrimaryHDU, fits.ImageHDU, fits.CompImageHDU)):
+            h = hdu.header
+            if int(h.get("NAXIS", 0)) >= 2:
+                shape.append((int(h["NAXIS1"]), int(h["NAXIS2"])))
+    return tuple(shape)
+
+
+def _fits_declared_size(hdul) -> int:
+    """Bytes the headers declare, per the FITS standard (2880-byte blocks)."""
+    total = 0
+    for hdu in hdul:
+        h = _on_disk_header(hdu)
+        total += len(h.tostring())  # already padded to a 2880 multiple
+        naxis = int(h.get("NAXIS", 0))
+        if naxis:
+            npix = 1
+            for i in range(1, naxis + 1):
+                npix *= int(h.get(f"NAXIS{i}", 0))
+            nbytes = abs(int(h.get("BITPIX", 8))) // 8
+            nbytes *= int(h.get("GCOUNT", 1)) * (int(h.get("PCOUNT", 0)) + npix)
+            total += -(-nbytes // 2880) * 2880
+    return total
+
+
+def _format_shape(shape: tuple[tuple[int, int], ...]) -> str:
+    return "+".join(f"{nx}x{ny}" for nx, ny in shape) or "no image"
+
+
+def screen_raw_frames(raw_dir: Path) -> RawScreen:
+    """Split a night's raw frames into ingestable and not, before ingest.
+
+    Rejects three kinds of frame that ``butler ingest-raws`` would accept but
+    the pipeline cannot process:
+
+    - **subframes** -- an image smaller, in either axis, than the night's
+      dominant frame shape. Observatories leave test readouts in the night dir
+      (Nickel: 82x50 biases and 57x25 sky flats next to 1056x1024 frames). ISR
+      on one finds no overscan for the mismatched geometry and the stack raises
+      ``UnboundLocalError: noiseProvenanceString``; that one failed quantum
+      fails the bias combine and with it the whole night (real: 20230817).
+    - **truncated** files, shorter on disk than their headers declare.
+    - **unreadable** files whose headers cannot be parsed.
+
+    The rule is instrument-neutral: the reference is the most common shape in
+    the night itself, not a camera model, so it needs nothing from the
+    profile. Only frames SMALLER than the reference are screened; any other
+    odd shape is left for ingest to judge.
+
+    Args:
+        raw_dir: The night's raw directory.
+
+    Returns:
+        :class:`RawScreen` with accepted paths and rejected
+        ``(filename, reason)`` pairs, both sorted. Both empty if the directory
+        is missing.
+    """
+    screen = RawScreen()
+    if not raw_dir.is_dir():
+        return screen
+
+    import warnings
+
+    from astropy.io import fits
+
+    shapes: dict[Path, tuple[tuple[int, int], ...]] = {}
+    for path in sorted({p for g in _RAW_GLOBS for p in raw_dir.glob(g)}):
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                with fits.open(path, memmap=False, lazy_load_hdus=False) as hdul:
+                    shape = _fits_frame_shape(hdul)
+                    declared = _fits_declared_size(hdul)
+        except Exception as exc:  # noqa: BLE001 -- any parse failure rejects
+            screen.rejected.append((path.name, f"unreadable FITS ({exc})"))
+            continue
+        actual = path.stat().st_size
+        if actual < declared:
+            screen.rejected.append(
+                (path.name, f"truncated ({actual} of {declared} bytes)")
+            )
+            continue
+        shapes[path] = shape
+
+    counts = Counter(shapes.values())
+    reference = (
+        max(counts, key=lambda s: (counts[s], sum(nx * ny for nx, ny in s)))
+        if counts
+        else ()
+    )
+    for path, shape in shapes.items():
+        smaller = len(shape) == len(reference) and any(
+            nx < rx or ny < ry
+            for (nx, ny), (rx, ry) in zip(shape, reference, strict=True)
+        )
+        if reference and (smaller or not shape):
+            screen.rejected.append(
+                (
+                    path.name,
+                    f"subframe {_format_shape(shape)} smaller than the night's "
+                    f"{_format_shape(reference)} frames",
+                )
+            )
+        else:
+            screen.accepted.append(path)
+
+    screen.accepted.sort()
+    screen.rejected.sort()
+    return screen
+
+
+def raw_ingest_locations(raw_dir: Path) -> list[str]:
+    """Locations to hand ``butler ingest-raws`` for a night.
+
+    The directory itself when every frame passes :func:`screen_raw_frames`
+    (unchanged behaviour), otherwise the accepted files one by one. Each
+    rejected frame is logged with its reason.
+    """
+    screen = screen_raw_frames(raw_dir)
+    if not screen.rejected:
+        return [str(raw_dir)]
+    for name, reason in screen.rejected:
+        log.warning("Not ingesting %s: %s", name, reason)
+    log.warning(
+        "Ingesting %d of %d raw frames in %s",
+        len(screen.accepted),
+        len(screen.accepted) + len(screen.rejected),
+        raw_dir,
+    )
+    return [str(p) for p in screen.accepted]
 
 
 def find_aliasing_exposure_ids(

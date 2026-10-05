@@ -166,6 +166,9 @@ class TestResolveRawRuns(unittest.TestCase):
             def exists(self):
                 return True
 
+            def is_dir(self):  # the pre-ingest screen sees no frames -> no-op
+                return False
+
         try:
             mod.butler_query.list_collections = (
                 lambda config, pattern, *, prefix=None: []  # none found

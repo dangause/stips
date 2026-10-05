@@ -58,7 +58,14 @@ def _select_diff_collection(
     *,
     band: str | None,
 ) -> tuple[str | None, list[str]]:
-    """Select the newest diff collection that contains datasets for this band."""
+    """Select the diff collection(s) forced photometry should read.
+
+    With a band: the newest diff run holding that band's difference images.
+    Without one: every diff run holding difference images, newest first, as a
+    comma-joined input list. Per-band DIA writes one run per band, so taking
+    only the newest run would silently drop the other bands; listing them
+    newest-first lets a re-run win for any visit it covers.
+    """
     prof = config.require_profile()
     candidates = sorted(
         butler_query.list_collections(
@@ -69,6 +76,13 @@ def _select_diff_collection(
         or [],
         reverse=True,
     )
+    if band is None:
+        with_diffs = [
+            coll
+            for coll in candidates
+            if _collection_has_difference_images(coll, config, band=None)
+        ]
+        return (",".join(with_diffs) or None), candidates
     for coll in candidates:
         if _collection_has_difference_images(coll, config, band=band):
             return coll, candidates
