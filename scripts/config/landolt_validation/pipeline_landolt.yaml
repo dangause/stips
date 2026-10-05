@@ -12,6 +12,19 @@ env:
 object: "landolt_validation"
 bands: ["b", "v", "r", "i"]
 
+# Gaia + PS1, the SN campaigns' calibration path, so this validates the
+# photometry the paper reports. Validated 2026-10-05 (4 nights, 90 matches,
+# 7-9 standards per band): mean pipeline-minus-Landolt B +0.005, V +0.012,
+# R +0.009, I -0.008 mag; robust rms 0.08 / 0.02 / 0.08 / 0.06.
+# The fields have no single target position, so `stips run` cannot ensure
+# the refcats itself: fetch each field first,
+#   stips -c <this> refcat fetch --ra <ra> --dec <dec> --radius 0.1
+# (scripts/paper/targets.yaml `refcat_cones` lists the 11 field centres).
+# MONSTER mode is NOT equivalent: it leaves B off by -0.44 and V by +0.27.
+refcat:
+  mode: gaia_ps1
+  radius_deg: 0.1
+
 science:
   nights:
     - 20210208

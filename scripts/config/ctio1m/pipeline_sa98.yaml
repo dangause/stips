@@ -1,0 +1,58 @@
+# CTIO 1.0m / Y4KCam — calibs + science on the Landolt SA98 standard field
+# (plus SA95/SA101/SA104, Rubin 149/152) across four 2010 nights.
+#
+# Reverse-engineered from the (now-reproducible) sa98_v2_repo Butler repo:
+#   - raw source: CTIO archive nights 20100117, 20100119, 20100120, 20100121
+#   - unbinned Y4KCam (raw 4104x4104 -> CCD_BINNING unset = 1)
+#   - bands B/V/R/I plus U (raw FILTERID "U+CuSO4"); no NOIRLAB proposal filter
+#   - target SA98 Landolt standard field (RA 06:51:56.64, DEC -00:22:21.0)
+#
+# "v2" was an un-versioned rerun; this config IS the durable provenance, so the
+# repo can be regenerated and the on-disk copy freed. Standard-field photometric
+# calibration -> NO DIA/lightcurve. Drive per-stage (NOT `stips run`):
+#   .venv/bin/stips -c scripts/config/ctio1m/pipeline_sa98.yaml bootstrap
+#   .venv/bin/stips -c scripts/config/ctio1m/pipeline_sa98.yaml download 20100117 20100119 20100120 20100121
+#   .venv/bin/stips -c scripts/config/ctio1m/pipeline_sa98.yaml calibs 20100121
+#   .venv/bin/stips -c scripts/config/ctio1m/pipeline_sa98.yaml science 20100121 \
+#       --object SA98 --ra 102.986000 --dec -0.372500 --skip-coadds
+#
+# NOTE on U band: raw FILTERID is "U+CuSO4". The ctio1m profile now recognises
+# it (band u), so those frames ingest; the b/v/r/i reduction below is what the
+# standard-field calibration needs, so u is still left out of `bands`.
+env:
+  REPO: "/Users/dangause/Developer/lick/data_ctio/sa98_v2_repo"
+  STACK_DIR: "/Users/dangause/Developer/lick/lsst/lsst_stack"
+  INSTRUMENT_DIR: "/Users/dangause/Developer/lick/lsst/lsst_stack/stack/stips/instruments/ctio1m"
+  RAW_PARENT_DIR: "/Users/dangause/Developer/lick/data_ctio"
+  REFCAT_REPO: "/Users/dangause/Developer/lick/lsst/lsst_stack/stack/refcats"
+
+object: "SA98"
+ra: 102.986000
+dec: -0.372500
+
+bands: ["b", "v", "r", "i"]
+
+# template: present for run-config schema validity only; the per-stage commands
+# above never execute the template step.
+template:
+  type: ps1
+  size: 0.3
+
+science:
+  nights:
+    - 20100117
+    - 20100119
+    - 20100120
+    - 20100121
+
+options:
+  jobs: 4
+  skip_calibs: false
+  skip_science: false
+  skip_dia: true
+  forced_phot: false
+  continue_on_error: true
+  use_fallbacks: true
+
+lightcurve:
+  enabled: false

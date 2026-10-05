@@ -31,6 +31,7 @@ config.photometry_ref_loader.filterMap = {
     "oiii": "phot_g_mean",
     "gp": "phot_g_mean",
     "rp": "phot_rp_mean",
+    "ip": "phot_rp_mean",
 }
 config.photometry.applyColorTerms = True
 config.photometry.photoCatName = "gaia"  # matches the "gaia*" block in colorterms.py

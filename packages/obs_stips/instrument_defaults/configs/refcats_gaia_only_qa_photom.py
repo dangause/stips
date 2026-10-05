@@ -21,6 +21,7 @@ _gaia_band_map = {
     "oiii": "phot_g_mean",
     "gp": "phot_g_mean",
     "rp": "phot_rp_mean",
+    "ip": "phot_rp_mean",
 }
 config.referenceCatalogLoader.refObjLoader.filterMap = {
     key: flux for band, flux in _gaia_band_map.items() for key in (band, band.upper())

@@ -151,6 +151,14 @@ class InstrumentProfile:
     # ``{"g": "g"}``. The default (empty dict) means "no PS1 templates" — the safe
     # choice for an unknown fork, which then uses coadd templates for every band.
     ps1_band_map: dict[str, str] = field(default_factory=dict)
+    # Bands whose calibrated magnitudes are on the Vega system rather than AB,
+    # per refcat mode. Calibration fluxes are always stored in nJy, but the
+    # colour terms decide what system those nJy realise: Landolt-fitted terms
+    # whose constants carry the Vega-AB offsets (Nickel's gaia_ps1 B/V/R/I)
+    # yield Vega magnitudes. Example: {"gaia_ps1": ("b", "v", "r", "i")}.
+    # Consumed by the lightcurve tool (mag_system column, plot labels) and the
+    # Landolt validator (no AB->Vega shift for bands already Vega).
+    vega_bands: dict[str, tuple[str, ...]] = field(default_factory=dict)
     # Per-source external-template band policy: SOURCE NAME -> (LOCAL band ->
     # that survey's band). Distinct from ``ps1_band_map`` above, which is
     # ALSO consumed by the in-stack refcat configs via STIPS_PS1_BAND_MAP and

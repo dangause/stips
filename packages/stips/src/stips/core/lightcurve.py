@@ -34,6 +34,10 @@ class LightcurveConfig:
     x_axis: str = "mjd"  # mjd | days_since_explosion
     explosion_mjd: float | None = None
 
+    # Bands whose magnitudes are Vega (see InstrumentProfile.vega_bands);
+    # all others are AB.
+    vega_bands: tuple[str, ...] = ()
+
     _VALID_Y_AXES = ("apparent_mag", "absolute_mag", "flux_nJy", "flux_adu")
     _VALID_X_AXES = ("mjd", "days_since_explosion")
 
@@ -209,6 +213,8 @@ def run(
         args.extend(["--distance-modulus", str(lc.distance_modulus)])
     if lc.max_mag_err is not None:
         args.extend(["--max-mag-err", str(lc.max_mag_err)])
+    if lc.vega_bands:
+        args.extend(["--vega-bands", ",".join(lc.vega_bands)])
 
     if plot:
         args.append("--plot")

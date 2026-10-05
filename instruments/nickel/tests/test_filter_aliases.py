@@ -48,6 +48,17 @@ class TestNickelFilterAliases(unittest.TestCase):
             self.assertEqual(_phys(raw), "gp")
         for raw in ("RP", "rp", "R'", "r'"):
             self.assertEqual(_phys(raw), "rp")
+        for raw in ("IP", "ip", "I'", "i'"):
+            self.assertEqual(_phys(raw), "ip")
+
+    def test_malformed_sloan_card_as_the_stack_reads_it(self):
+        """2020-2023 headers carry FILTNAM = 'r'                ' . The stack's
+        FITS reader (used by ingest) returns "r", not "r'". It must still be
+        the Sloan-like filter, while uppercase stays Cousins."""
+        self.assertEqual(_phys("r"), "rp")
+        self.assertEqual(_phys("i"), "ip")
+        self.assertEqual(_phys("R"), "R")
+        self.assertEqual(_phys("I"), "I")
 
     def test_narrowband_aliases(self):
         for raw in ("HALPHA", "halpha", "H-ALPHA", "6563/100"):

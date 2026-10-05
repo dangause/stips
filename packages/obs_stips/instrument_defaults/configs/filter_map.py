@@ -32,6 +32,7 @@ for source, target in [
     # Sloan filters (closest MONSTER band)
     ("gp", "monster_ComCam_g"),
     ("rp", "monster_ComCam_r"),
+    ("ip", "monster_ComCam_i"),
     # Narrowband (approximate broadband mapping for astrometry refcat)
     ("halpha", "monster_ComCam_r"),
     ("Halpha", "monster_ComCam_r"),

@@ -38,6 +38,7 @@ config.photometry_ref_loader.filterMap = {
     "oiii": "gMeanPSFMag",
     "gp": "gMeanPSFMag",
     "rp": "rMeanPSFMag",
+    "ip": "iMeanPSFMag",
 }
 config.photometry.applyColorTerms = True
 # "ps1" matches the "ps1*" block in colorterms.py (kept consistent with the

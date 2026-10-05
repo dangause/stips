@@ -51,6 +51,14 @@ object: "CY_Aquarii"
 ra: 339.449384
 dec: 1.534391
 
+# Gaia DR3 astrometry + PS1 photometry, the same calibration path as the SN
+# campaigns, so every paper number shares one photometric system (Cousins
+# B/V/R/I on Vega; see InstrumentProfile.vega_bands). Landolt-validated on
+# 2026-10-05: BVRI mean offsets <= 0.012 mag, rms 0.02-0.08 mag.
+refcat:
+  mode: gaia_ps1
+  radius_deg: 0.2
+
 # Bands to process
 bands: ["v"]
 

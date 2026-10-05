@@ -4,6 +4,47 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
 
 ## [Unreleased]
 
+## [2.2.0] — 2026-10-05
+
+The paper-freeze release. A pre-freeze audit found and fixed calibration and
+data-loss bugs that affected published-grade numbers; every paper result is
+rebuilt from raw on this tag by `scripts/paper/rebuild.py`.
+**Migration:** re-ingest Nickel repos (r′/i′ frames now ingest as `rp`/`ip`),
+and add `rp`/`ip` to campaign `bands:`. Cousins B/V/R/I magnitudes from the
+`gaia_ps1` path are Vega; lightcurves say so in `mag_system`.
+
+### Fixed
+- **Nickel 2020–2023 r′/i′ frames were calibrated as Cousins R/I.** Their
+  headers carry a malformed card (`FILTNAM = 'r'                '`) that the
+  stack's FITS reader returns as `r`, which upper-cased to Cousins `R`. The
+  filters are Sloan-like (colour slope vs PS1 −0.03/−0.05 against −0.24/−0.35
+  for Cousins), and the Cousins terms put those magnitudes 0.23 (r) / 0.47 (i)
+  mag off PS1 AB. They are now the `rp`/`ip` physical filters and bands. **Re-
+  ingest Nickel repos.** (#42)
+- A sub-frame test readout (82×50, 57×25) in a night's raw directory crashed
+  ISR and failed the whole night; a pre-ingest screen now drops subframes,
+  truncated and unreadable files. (#41)
+- `stips fphot` without `--band` measured only the newest per-band diff run. (#41)
+- DIA matched `--object` exactly while science matched substrings, so frames
+  whose OBJECT differs in form were calibrated but never differenced. (#41)
+- The transit search ran on PSF forced photometry instead of the differential
+  lightcurve, and an empty differential result counted as success. (#43)
+- `landolt-validate` applied the AB→Vega shift to bands already on Vega, and
+  accepted sub-S/N-5 matches (noise beside an undetected standard).
+
+### Added
+- `InstrumentProfile.vega_bands` and a `mag_system` lightcurve column: Nickel
+  Cousins B/V/R/I are Vega in the `gaia_ps1` path; rp/ip and MONSTER-mode bands
+  are AB.
+- `scripts/paper/`: rebuild-from-raw driver with provenance, forced-phot
+  export, external-photometry comparison, per-filter colour-slope test. (#44)
+- `CITATION.cff`. (#44)
+
+### Changed
+- Landolt, HD 189733 and the variable-star configs calibrate with `gaia_ps1`,
+  like the SN campaigns. The Landolt target now validates that path (BVRI mean
+  offsets ≤ 0.012 mag); MONSTER mode leaves B/V 0.3–0.4 mag off.
+
 ## [2.1.0] — 2026-10-03
 
 A science-quality release. The headline is the PS1 asinh decode: every PS1

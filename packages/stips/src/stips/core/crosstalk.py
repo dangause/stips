@@ -31,6 +31,7 @@ from stips.core.pipeline import (
     find_aliasing_exposure_ids,
     get_raw_dir,
     isr_config_args,
+    raw_ingest_locations,
     validate_night,
 )
 from stips.core.stack import (
@@ -433,7 +434,7 @@ def _resolve_raw_runs(nights, config, prof, *, log_file=None) -> list[str]:
             [
                 "ingest-raws",
                 repo,
-                str(raw_dir),
+                *raw_ingest_locations(raw_dir),
                 "--transfer",
                 "copy",
                 "--output-run",

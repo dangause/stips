@@ -33,6 +33,7 @@ def run(
     collection: str | None = None,
     list_stars: bool = False,
     log_file: Path | None = None,
+    vega_bands: tuple[str, ...] = (),
 ) -> LandoltResult:
     """Run Landolt validation via the LSST stack.
 
@@ -73,6 +74,8 @@ def run(
     ]
     if list_stars:
         args.append("--list-stars")
+    if vega_bands:
+        args.extend(["--vega-bands", ",".join(vega_bands)])
 
     try:
         result = run_with_stack(args, config, capture_output=True, check=False)

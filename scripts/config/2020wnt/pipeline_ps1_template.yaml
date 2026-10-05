@@ -38,7 +38,11 @@ ra: 56.658125
 dec: 43.229250
 
 # Bands to process (PS1 templates only support r/i)
-bands: ["r", "i"]
+# Two filter families: Cousins R/I (bands r, i; Landolt-calibrated, Vega-like)
+# and the Sloan-like r'/i' used on most 2020-2023 nights (bands rp, ip; PS1 AB).
+# They are different bandpasses, so they stay separate bands; all four use
+# PS1 r/i templates (profile ps1_band_map).
+bands: ["r", "i", "rp", "ip"]
 
 # Template configuration
 # Don't pre-degrade PS1 - let the AL kernel handle PSF matching during subtraction.

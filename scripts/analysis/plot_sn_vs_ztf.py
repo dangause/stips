@@ -15,10 +15,14 @@ from __future__ import annotations
 import csv
 import json
 import subprocess
+import sys
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import paper_data  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 OUT_PATH = REPO_ROOT / "analysis" / "sn_vs_ztf_comparison.png"
@@ -31,21 +35,17 @@ OUT_POSTER_2023IXF = REPO_ROOT / "analysis" / "sn2023ixf_poster.png"
 # using STIPS' PSF-fit forced photometry. PSF-fitting on diff systematically
 # under-reports the bright-source flux by ~0.4 mag (same failure mode as the
 # HD 189733b PSF run, per CLAUDE.md). Aperture sums recover that flux.
-NICKEL_PATH_2023IXF_POSTER = (
-    Path(__file__).resolve().parents[2] / "analysis" / "lightcurve_2023ixf_aperture.csv"
-)
+# The aperture relookup is retired: on current code the PSF forced-phot flux
+# matches a curve-of-growth aperture sum to ~2% (17 px ap/PSF = 0.98-1.00 on
+# 20230817), so the poster panel now uses the same PSF lightcurve.
+NICKEL_PATH_2023IXF_POSTER = paper_data.data("lightcurve_2023ixf.csv")
 
 NICKEL_PATHS = {
     # 2023ixf: PS1 template — Nickel coadd template contains active-SN epochs
     # (days 70–206 post-explosion), contaminating early-epoch differences.
-    "SN 2023ixf": Path(
-        "/Users/dangause/Developer/lick/lsst/data/nickel/2023ixf_ps1_022226_repo/lightcurves/lightcurve_2023ixf.csv"
-    ),
-    # 2020wnt: Nickel-coadd template — built from SN-free epochs, gives much
-    # broader band coverage (b/v/r/i, ~84 detections) than the PS1 r/i version (~14).
-    "SN 2020wnt": Path(
-        "/Users/dangause/Developer/lick/lsst/data/nickel/2020wnt_nickel_template_022226_repo/lightcurves/lightcurve_2020wnt.csv"
-    ),
+    "SN 2023ixf": paper_data.data("lightcurve_2023ixf.csv"),
+    # 2020wnt: PS1 template (r/i), from the post-asinh-fix rebuild.
+    "SN 2020wnt": paper_data.data("lightcurve_2020wnt.csv"),
 }
 
 # Published BVRI photometry from Tinyanont et al. 2023 (ApJ 951:34) for

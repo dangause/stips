@@ -94,11 +94,13 @@ class TestNickelInstrument(unittest.TestCase):
         pfs = {fd.physical_filter for fd in filter_definitions}
         self.assertEqual(
             pfs,
-            {"B", "V", "R", "I", "clear", "gp", "rp", "Halpha", "OIII"},
+            {"B", "V", "R", "I", "clear", "gp", "rp", "ip", "Halpha", "OIII"},
         )
 
         bands = {fd.band for fd in filter_definitions if fd.band is not None}
-        self.assertEqual(bands, {"b", "v", "r", "i", "gp", "rp", "halpha", "oiii"})
+        self.assertEqual(
+            bands, {"b", "v", "r", "i", "gp", "rp", "ip", "halpha", "oiii"}
+        )
 
         # Ensure there are no duplicate physical_filter entries
         self.assertEqual(len(pfs), len(list(filter_definitions)))

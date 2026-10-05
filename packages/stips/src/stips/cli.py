@@ -143,6 +143,27 @@ def pass_config(f):
     return wrapper
 
 
+def _vega_bands_from_ctx(ctx: click.Context, config: cfg_module.Config) -> tuple:
+    """Bands calibrated to Vega for the -c YAML's refcat mode (else none).
+
+    The system depends on the colour terms, i.e. on ``refcat.mode``; see
+    ``InstrumentProfile.vega_bands``. Without a -c YAML there is no mode, so
+    every band is reported as AB.
+    """
+    import yaml
+
+    from stips.core.run import DEFAULT_REFCAT_MODE
+
+    config_path = (ctx.obj or {}).get("config_path")
+    profile = getattr(config, "profile", None)
+    if not config_path or profile is None:
+        return ()
+    with open(config_path) as fh:
+        raw = yaml.safe_load(fh) or {}
+    mode = (raw.get("refcat") or {}).get("mode", DEFAULT_REFCAT_MODE)
+    return tuple(getattr(profile, "vega_bands", {}).get(mode, ()))
+
+
 def _load_lightcurve_config(
     ctx: click.Context,
     repo: Path | None = None,
@@ -1294,6 +1315,7 @@ def lightcurve(
         x_axis=x_axis,
         explosion_mjd=explosion_mjd,
         distance_modulus=distance_modulus,
+        vega_bands=_vega_bands_from_ctx(ctx, config),
     )
 
     # lc_config is the single source of truth for radius/min_snr/band/dataset_type
@@ -1483,6 +1505,7 @@ def landolt_validate(
         output=output,
         collection=collection,
         list_stars=list_stars,
+        vega_bands=_vega_bands_from_ctx(ctx, config),
     )
 
     success_msg = (
