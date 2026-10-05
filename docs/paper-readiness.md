@@ -95,6 +95,43 @@ and say "consistent with", not "recovered". The period module reports a
 false-alarm probability of 0.0 and no period uncertainty, which overstates
 single-night results; it should report the peak width.
 
+## Landolt validation: reproducible, but it validates a different path  (DECISION NEEDED)
+
+The driver rebuild reproduces the June validation almost exactly (4 nights,
+76 star-visits; residual = pipeline Vega − Landolt):
+
+| Band | N | Median | Robust rms |
+|---|---|---|---|
+| B | 17 | −0.44 | 0.30 |
+| V | 17 | +0.27 | 0.08 |
+| R | 19 | −0.04 | 0.06 |
+| I | 23 | −0.04 | 0.02 |
+
+Two problems for the paper:
+
+1. **B and V are off by 0.3–0.4 mag** and have been since June. R and I are fine.
+2. **It runs in MONSTER refcat mode** (the Landolt config sets no `refcat:`),
+   while every supernova campaign runs `gaia_ps1` with the PS1 colour terms.
+   The validator adds AB→Vega offsets (R −0.21, I −0.45) and lands near zero,
+   so the MONSTER path yields AB. The PS1 path's Cousins constants (c0 −0.18,
+   −0.379) already make R/I Vega-like, so the same stars through the PS1 path
+   should come out ~0.2 / ~0.45 mag off. The validation as it stands does not
+   cover the calibration the SN photometry uses.
+
+To close it: fetch Gaia+PS1 refcats for each Landolt field (`stips refcat
+fetch --ra --dec` per field; `gaia_ps1` mode only ensures one target cone),
+rerun the Landolt target with `refcat.mode: gaia_ps1`, then pick one
+convention for Cousins bands and apply it in both paths. Not done on
+2026-10-04/05 because the Gaia archive returned errors all day.
+
+## SN 2009Y: first epoch differs between repos
+
+A fresh rebuild gives r = 14.86, 14.57 and i = 14.97; the original repo gave
+r = 15.49, 14.66 and i = 14.99. The 20090205 r point moved 0.63 mag; the
+other two agree within 0.1. Quote the fresh-rebuild values (a 0.3 mag rise
+over two days is the more plausible pre-maximum slope), and check that
+night's calibration before relying on it.
+
 ## PSF photometry is not biased low
 
 The poster stated that PSF forced photometry under-reports bright-source flux
