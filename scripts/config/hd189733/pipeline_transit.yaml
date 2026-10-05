@@ -31,6 +31,14 @@ object: "HD_189733"
 ra: 300.182108
 dec: 22.709071
 
+# Gaia DR3 astrometry + PS1 photometry, the same calibration path as the SN
+# campaigns, so every paper number shares one photometric system (Cousins
+# B/V/R/I on Vega; see InstrumentProfile.vega_bands). Landolt-validated on
+# 2026-10-05: BVRI mean offsets <= 0.012 mag, rms 0.02-0.08 mag.
+refcat:
+  mode: gaia_ps1
+  radius_deg: 0.2
+
 # B-band only (all 400 transit frames are B-band at 4s cadence)
 bands: ["b"]
 

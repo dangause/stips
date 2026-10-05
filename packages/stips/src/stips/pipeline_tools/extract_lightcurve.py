@@ -72,6 +72,11 @@ def parse_args():
     )
     parser.add_argument("--output", "-o", required=True, help="Output CSV file path")
     parser.add_argument(
+        "--vega-bands",
+        default="",
+        help="Comma-separated bands whose magnitudes are Vega (others are AB)",
+    )
+    parser.add_argument(
         "--band", help="Filter to specific band (b, v, r, i)", default=None
     )
     parser.add_argument(
@@ -212,7 +217,7 @@ def plot_light_curves(
         invert_y = False
     else:  # apparent_mag (default)
         y_col, y_err_col = "mag", "mag_err"
-        ylabel = "Apparent Magnitude (AB)"
+        ylabel = _apparent_mag_label(df)
         invert_y = True
 
     if x_axis == "days_since_explosion" and "days_since_explosion" in df.columns:
@@ -355,6 +360,17 @@ def get_photocalib_for_visit(
         # photoCalib not available for this visit
         photocalib_cache[cache_key] = (None, None)
         return None, None
+
+
+def _apparent_mag_label(df) -> str:
+    """Y label naming the magnitude system(s) present in the lightcurve."""
+    if "mag_system" not in df.columns:
+        return "Apparent Magnitude (AB)"
+    systems = sorted(set(df["mag_system"]))
+    if len(systems) == 1:
+        return f"Apparent Magnitude ({systems[0]})"
+    vega = sorted(set(df.loc[df["mag_system"] == "Vega", "band"]))
+    return f"Apparent Magnitude (Vega: {' '.join(b.upper() for b in vega)}; others AB)"
 
 
 def main():
@@ -678,6 +694,8 @@ def main():
 
     df = pd.DataFrame(all_detections)
     df = df.sort_values("mjd")
+    vega_bands = {b for b in args.vega_bands.split(",") if b}
+    df["mag_system"] = np.where(df["band"].isin(vega_bands), "Vega", "AB")
 
     # Add days_since_explosion column if explosion_mjd is provided
     if args.explosion_mjd is not None:

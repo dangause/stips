@@ -1267,6 +1267,9 @@ def _run_lightcurve_step(
     """Extract lightcurve from forced photometry or DIA sources."""
     from stips.core import dataset_types, lightcurve
 
+    run_cfg.lc_config.vega_bands = tuple(
+        config.require_profile().vega_bands.get(run_cfg.refcat_mode, ())
+    )
     use_forced_phot = run_cfg.lc_config.dataset_type.startswith(
         dataset_types.FORCED_PHOT_PREFIX
     )

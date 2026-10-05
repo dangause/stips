@@ -95,34 +95,25 @@ and say "consistent with", not "recovered". The period module reports a
 false-alarm probability of 0.0 and no period uncertainty, which overstates
 single-night results; it should report the peak width.
 
-## Landolt validation: reproducible, but it validates a different path  (DECISION NEEDED)
+## Landolt validation: BVRI good to ~0.01 mag in the SN calibration path
 
-The driver rebuild reproduces the June validation almost exactly (4 nights,
-76 star-visits; residual = pipeline Vega − Landolt):
+Rerun (2026-10-05) in `gaia_ps1` mode, the path every SN campaign uses, with
+Gaia/PS1 refcats fetched per Landolt field and matches below S/N 5 dropped:
 
-| Band | N | Median | Robust rms |
-|---|---|---|---|
-| B | 17 | −0.44 | 0.30 |
-| V | 17 | +0.27 | 0.08 |
-| R | 19 | −0.04 | 0.06 |
-| I | 23 | −0.04 | 0.02 |
+| Band | N | Standards | Mean (Vega) | Robust rms |
+|---|---|---|---|---|
+| B | 14 | 7 | +0.005 | 0.08 |
+| V | 17 | 7 | +0.012 | 0.02 |
+| R | 28 | 9 | +0.009 | 0.08 |
+| I | 31 | 9 | −0.008 | 0.06 |
 
-Two problems for the paper:
-
-1. **B and V are off by 0.3–0.4 mag** and have been since June. R and I are fine.
-2. **It runs in MONSTER refcat mode** (the Landolt config sets no `refcat:`),
-   while every supernova campaign runs `gaia_ps1` with the PS1 colour terms.
-   The validator adds AB→Vega offsets (R −0.21, I −0.45) and lands near zero,
-   so the MONSTER path yields AB. The PS1 path's Cousins constants (c0 −0.18,
-   −0.379) already make R/I Vega-like, so the same stars through the PS1 path
-   should come out ~0.2 / ~0.45 mag off. The validation as it stands does not
-   cover the calibration the SN photometry uses.
-
-To close it: fetch Gaia+PS1 refcats for each Landolt field (`stips refcat
-fetch --ra --dec` per field; `gaia_ps1` mode only ensures one target cone),
-rerun the Landolt target with `refcat.mode: gaia_ps1`, then pick one
-convention for Cousins bands and apply it in both paths. Not done on
-2026-10-04/05 because the Gaia archive returned errors all day.
+The earlier B −0.44 / V +0.27 offsets belong to MONSTER mode only, which the
+paper no longer uses: the Landolt, transit and variable-star configs now run
+`gaia_ps1` too (the extended-objects target has no single position and stays
+MONSTER; it contributes astrometry and PSF metrics only). Two caveats for
+the text: the sample is 11 standards (one per field), and two 20240625
+"matches" were noise sources beside undetected standards — the validator now
+requires S/N ≥ 5.
 
 ## SN 2009Y: first epoch differs between repos
 
@@ -144,7 +135,7 @@ template fixes (asinh decode, PSF pixel scale).
 Separately, the forced-photometry `apDiffFlux_12_0` column is NaN on every row
 in both repos checked. It is unused by the paper but should be fixed or dropped.
 
-## Photometric system: two Nickel filter families  (fixed in PR #42; one decision left)
+## Photometric system: two Nickel filter families  (PR #42; Vega/AB decided)
 
 Comparing STIPS with independent photometry exposed a systematic offset: STIPS
 i was 0.57 mag brighter than an independent reduction of the same 2023ixf
@@ -175,9 +166,11 @@ STIPS now keeps them as separate bands:
   so these magnitudes are effectively **Vega** Cousins R/I. The pipeline still
   stores them as nJy and the lightcurve tool labels them "AB".
 
-**Decision needed:** report Cousins R/I in Vega (conventional for BVRI) and
-relabel those points, or set the Cousins c0 terms to zero so every band is AB.
-Either way the lightcurves must show rp/ip and R/I as separate series.
+**Decided (2026-10-05): Cousins B/V/R/I in Vega, Sloan-like rp/ip in AB**,
+the convention SN papers use. The Cousins terms already produce Vega, so this
+was a labelling fix: `InstrumentProfile.vega_bands` declares it per refcat
+mode, lightcurves carry a `mag_system` column, plots name the systems, and
+the Landolt validator no longer shifts Vega bands a second time.
 
 **Flats.** 8 of 84 nights have science in one family with flats only in the
 other (for example 2023ixf 20230714 i′, 2020wnt 20220208 r′). Those frames were
@@ -200,12 +193,18 @@ PS1 r and i through the R colour term, which is a feature, not a fix.
 
 ## CTIO magnitudes  (DECISION NEEDED)
 
-Southern CTIO fields calibrate photometry with `refcat.mode: gaia`, whose Gaia
-colour terms are not populated, so CTIO magnitudes carry no colour correction.
-Detection, astrometry and difference imaging do not depend on this. If the
-paper quotes CTIO magnitudes (SN 2009Y above is in PS1 coverage and does not
-use the Gaia path), fit the Gaia terms first; otherwise say CTIO photometry is
-instrumental-system.
+CTIO has no colour terms in any refcat mode (`instruments/ctio1m/configs/`
+ships none, so `applyColorTerms` is off). Its magnitudes, including SN 2009Y
+above, are therefore on the PS1 AB zeropoint with the Y4KCam-versus-PS1
+bandpass difference uncorrected: for Cousins-like R/I that is a few tenths of
+a magnitude plus a colour term, the same size as the Nickel offsets fixed in
+#42. Detection, astrometry and difference imaging do not depend on it.
+
+Options: fit CTIO PS1 colour terms on the SA98 Landolt field, which is
+already reduced (`sa98_v2_repo`, `scripts/config/ctio1m/pipeline_sa98.yaml`;
+`stips-colorterms-fit` exists for this), then declare CTIO `vega_bands`; or
+quote SN 2009Y's magnitudes as PS1-calibrated with a stated ~0.2–0.5 mag
+systematic.
 
 ## Still for the author
 

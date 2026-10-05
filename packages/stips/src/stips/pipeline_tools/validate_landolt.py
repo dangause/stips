@@ -49,6 +49,11 @@ from stips.pipeline_tools._profile_resolve import (
 
 # Match radius in arcseconds
 MATCH_RADIUS_ARCSEC = 10.0
+# Minimum S/N for a match to count. The generous radius can pair a bright
+# standard that was not detected (saturated, or off the chip) with a nearby
+# noise source; real standards sit at S/N in the hundreds. Observed: two
+# 20240625 matches at S/N < 1, 4" away, gave +14 and +16 mag residuals.
+MIN_SNR = 5.0
 
 # AB-to-Vega magnitude offsets: mVega = mAB + offset
 # Derived from Blanton & Roweis (2007, AJ 133, 734) where ΔmAB = mAB - mVega,
@@ -455,6 +460,12 @@ def parse_args():
         help="Dry-run: list matched stars per visit/band, then exit (no --output required)",
     )
     parser.add_argument(
+        "--vega-bands",
+        default="",
+        help="Comma-separated bands the pipeline already calibrates to Vega "
+        "(no AB->Vega offset applied to them)",
+    )
+    parser.add_argument(
         "--instrument",
         default=None,
         help="Instrument name (default: from the INSTRUMENT_DIR profile)",
@@ -464,6 +475,7 @@ def parse_args():
 
 def main() -> int:
     args = parse_args()
+    vega_bands = {b for b in args.vega_bands.split(",") if b}
 
     instrument = resolve_instrument_name(args.instrument)
 
@@ -564,6 +576,7 @@ def main() -> int:
 
     output_rows = []
     skipped_negative_flux = 0
+    skipped_low_snr = 0
 
     # Per-band accumulators for summary
     band_residuals: dict[str, list[float]] = defaultdict(list)
@@ -608,8 +621,9 @@ def main() -> int:
             # Convert flux to AB magnitude
             pipeline_mag_ab = -2.5 * math.log10(flux_nJy / FLUX_ZERO_NJY)
 
-            # Apply AB-to-Vega offset
-            ab_to_vega_offset = AB_TO_VEGA.get(band, 0.0)
+            # Apply AB-to-Vega offset, unless the colour terms already put this
+            # band on Vega (InstrumentProfile.vega_bands for the refcat mode).
+            ab_to_vega_offset = 0.0 if band in vega_bands else AB_TO_VEGA.get(band, 0.0)
             pipeline_mag_vega = pipeline_mag_ab + ab_to_vega_offset
 
             # Magnitude error from flux error
@@ -624,6 +638,10 @@ def main() -> int:
                 if (flux_err_nJy is not None and flux_err_nJy > 0)
                 else None
             )
+
+            if snr is None or snr < MIN_SNR:
+                skipped_low_snr += 1
+                continue
 
             # Residual vs Landolt
             landolt_mag = match["landolt_mag"]
@@ -641,6 +659,7 @@ def main() -> int:
                     "band": band,
                     "pipeline_mag_AB": _fmt(pipeline_mag_ab),
                     "pipeline_mag_vega": _fmt(pipeline_mag_vega),
+                    "mag_system": "Vega" if band in vega_bands else "AB",
                     "landolt_mag": _fmt(landolt_mag),
                     "residual": _fmt(residual),
                     "pipeline_mag_err": _fmt(mag_err),
@@ -657,6 +676,12 @@ def main() -> int:
                 band_residuals[band].append(residual)
                 band_stars[band].add(star_name)
 
+    if skipped_low_snr > 0:
+        print(
+            f"[info] skipped {skipped_low_snr} match(es) below S/N {MIN_SNR:g} "
+            "(likely a noise source near an undetected standard)",
+            file=sys.stderr,
+        )
     if skipped_negative_flux > 0:
         print(
             f"[info] skipped {skipped_negative_flux} match(es) with non-positive flux",
@@ -679,6 +704,7 @@ def main() -> int:
         "band",
         "pipeline_mag_AB",
         "pipeline_mag_vega",
+        "mag_system",
         "landolt_mag",
         "residual",
         "pipeline_mag_err",
