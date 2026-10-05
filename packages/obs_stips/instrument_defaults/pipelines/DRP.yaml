@@ -148,7 +148,7 @@ tasks:
       connections.source_table_visit: single_visit_star
       connections.isolated_star_sources: isolated_star
       connections.isolated_star_cat: isolated_star_association
-      band_order: ['i', 'r', 'rp', 'v', 'gp', 'b', 'halpha', 'oiii']
+      band_order: ['i', 'r', 'ip', 'rp', 'v', 'gp', 'b', 'halpha', 'oiii']
   makeInitialVisitDetectorTable:
     class: lsst.pipe.tasks.postprocess.MakeCcdVisitTableTask
     config:

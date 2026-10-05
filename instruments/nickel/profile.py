@@ -33,10 +33,22 @@ profile = InstrumentProfile(
         "clear": None,
         "gp": "gp",
         "rp": "rp",
+        "ip": "ip",
         "Halpha": "halpha",
         "OIII": "oiii",
     },
-    # raw FITS FILTNAM value (upper-cased on lookup) -> physical_filter
+    # raw FITS FILTNAM value -> physical_filter. Lookup tries the raw value
+    # exactly, then upper-cased, so the lowercase "r"/"i" entries below are
+    # exact-match only and do not shadow Cousins "R"/"I".
+    #
+    # 2020-2023 Nickel headers write the Sloan-like filters as a malformed card,
+    # FILTNAM = 'r'                ' . astropy reads it as "r'"; the stack's
+    # FITS reader (which ingest uses) stops at the second quote and returns
+    # "r". Both must land on the Sloan-like filter: its colour slope against
+    # PS1 is -0.03 (r) / -0.05 (i) per mag of r-i, against -0.24 / -0.35 for
+    # Cousins R/I (measured 2026-10-04 on 13 2020wnt visits, see
+    # docs/paper-readiness.md). Mapping "r" to Cousins "R" calibrated every
+    # 2020-2023 SN frame with the wrong colour terms.
     filter_aliases={
         "B": "B",
         "V": "V",
@@ -49,6 +61,10 @@ profile = InstrumentProfile(
         "G'": "gp",
         "RP": "rp",
         "R'": "rp",
+        "r": "rp",  # exact match: the stack reads 'r'...' cards as "r"
+        "IP": "ip",
+        "I'": "ip",
+        "i": "ip",  # exact match, as above
         "HALPHA": "Halpha",
         "H-ALPHA": "Halpha",
         "6563/100": "Halpha",
@@ -60,7 +76,8 @@ profile = InstrumentProfile(
     # PS1 templates (LOCAL band -> PS1 band). PS1 serves grizy; Nickel's r/i
     # (Cousins R/I) map to PS1 r/i. b/v have no PS1 equivalent and fall back to
     # coadd templates in "auto" mode. This reproduces the historical r/i policy.
-    ps1_band_map={"r": "r", "i": "i"},
+    # The Sloan-like rp/ip bands take PS1 r/i templates too.
+    ps1_band_map={"r": "r", "i": "i", "rp": "r", "ip": "i"},
     # The Nickel direct-imaging camera covers ~6.3' (2048 px at 0.37"/px).
     fov_arcmin=6.3,
     header_map={

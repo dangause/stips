@@ -97,9 +97,10 @@ class TestProfileDrivenParity(unittest.TestCase):
 
     def test_nickel_ps1_band_map_pins_ri_policy(self):
         # F-011 parity: the historical "PS1 for r/i" policy is now expressed as a
-        # profile field. Nickel must map exactly r->r, i->i (and nothing else).
+        # profile field: Cousins r->r, i->i, plus the Sloan-like rp/ip bands
+        # (2020-2023 r'/i' frames), which take the same PS1 r/i templates.
         prof = _load_nickel_profile_by_path()
-        self.assertEqual(prof.ps1_band_map, {"r": "r", "i": "i"})
+        self.assertEqual(prof.ps1_band_map, {"r": "r", "i": "i", "rp": "r", "ip": "i"})
 
     def test_synthetic_profile_is_generic(self):
         c = CollectionNames("20240101", "tsX", prefix="ctio0m9")
