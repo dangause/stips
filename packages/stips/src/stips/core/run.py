@@ -1413,24 +1413,22 @@ def _run_differential_phot_step(
     prof = config.require_profile()
     repo = str(config.repo)
 
-    # Discover science collection via Butler (consistent with fphot.py pattern)
-    science_coll = None
+    # Every night's science outputs, every band group: CHAINED parents (they
+    # aggregate primary + fallback runs), newest first. This used to take the
+    # newest parent of the FIRST night only, dropping later nights of a
+    # multi-night transit and every other band group.
+    parents: list[str] = []
     for night in all_nights:
         colls = butler_query.list_collections(
             config,
             f"{prof.collection_prefix}/runs/{night}/processCcd/*",
             prefix=f"{prof.collection_prefix}/",
         )
-        if colls:
-            # Prefer CHAINED parents over individual RUNs
-            chained = [
-                c for c in colls if not c.endswith(("/run",)) and "/run_fb" not in c
-            ]
-            if chained:
-                science_coll = sorted(chained)[-1]
-            else:
-                science_coll = sorted(colls)[-1]
-            break
+        chained = [
+            c for c in colls or [] if not c.endswith("/run") and "/run_fb" not in c
+        ]
+        parents += sorted(chained or colls or [], reverse=True)
+    science_coll = ",".join(parents) if parents else None
 
     if not science_coll:
         log.warning("No science collection found, skipping differential photometry")

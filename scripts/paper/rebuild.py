@@ -282,6 +282,15 @@ class Rebuild:
         if lc_dir.is_dir() and not self.dry:
             shutil.copytree(lc_dir, products / "lightcurves", dirs_exist_ok=True)
         self.combine_metrics(products)
+        failed = [k for k, v in status.items() if v not in (0, None)]
+        if failed:
+            # Not "done": a rerun must retry it (e.g. a refcat fetch that failed
+            # offline). Marking it done made the failure permanent.
+            print(f"[{name}] failed steps {failed}; will retry on rerun", flush=True)
+            self.mark(
+                products / "target.failed.json", {"finished": now(), "status": status}
+            )
+            return
         self.mark(done, {"finished": now(), "status": status})
 
     # -- provenance --------------------------------------------------------
@@ -293,7 +302,13 @@ class Rebuild:
 
         record = {
             "written": now(),
-            "stips_describe": git("describe", "--tags", "--always", "--dirty"),
+            "stips_describe": git("describe", "--tags", "--always"),
+            # `stips run` appends to provenance/RUNS.md and runs.json in the
+            # checkout on every run; that is a run log, not code, so it must
+            # not mark the code as modified.
+            "code_modified": bool(
+                git("status", "--porcelain", "--", ".", ":!provenance")
+            ),
             "stips_commit": git("rev-parse", "HEAD"),
             "host": platform.node(),
             "python": sys.version.split()[0],
@@ -305,8 +320,8 @@ class Rebuild:
             history = json.loads(path.read_text()) if path.exists() else []
             history.append(record)
             path.write_text(json.dumps(history, indent=2))
-        if record["stips_describe"].endswith("-dirty"):
-            print("WARNING: rebuilding from a dirty checkout", file=sys.stderr)
+        if record["code_modified"]:
+            print("WARNING: rebuilding from modified code", file=sys.stderr)
 
 
 def assemble(products: Path) -> None:
