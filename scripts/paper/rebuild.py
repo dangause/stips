@@ -233,6 +233,20 @@ class Rebuild:
             rc = self.sh([STIPS, "-c", path, "run"], log)
             status = {"run": rc, **self.extract(name, spec, path, ncfg, products,
                                                 log, night)}  # fmt: skip
+            failed_extract = [
+                k for k, v in status.items() if k != "run" and v not in (0, None)
+            ]
+            if failed_extract:
+                # Never prune a night whose products were not all extracted:
+                # pruning drops the processCcd outputs extraction reads, so the
+                # loss would be permanent. Leave it unmarked so a rerun retries.
+                print(f"[{name}] {night}: extraction failed {failed_extract}; "
+                      "not pruning, will retry on rerun", flush=True)  # fmt: skip
+                self.mark(
+                    products / "nights" / f"{night}.failed.json",
+                    {"night": night, "finished": now(), "status": status},
+                )
+                continue
             if night in {str(n) for n in spec.get("keep_nights", [])}:
                 status["prune"] = "kept for figures"
             else:

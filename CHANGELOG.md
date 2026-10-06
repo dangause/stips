@@ -4,6 +4,18 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
 
 ## [Unreleased]
 
+## [2.2.1] — 2026-10-05
+
+### Fixed
+- `stips calib-metrics --night` filtered `exposure.day_obs == <night>`, but
+  Lick's `day_obs` is the UT date (night 20230618 is UT 20230619), so every
+  per-night extraction matched nothing. It now selects the night's UT
+  `day_obs` values. The paper rebuild driver no longer prunes a night whose
+  extraction failed; it marks it for retry instead. (#48)
+
+The paper's numbers are rebuilt on this release; v2.2.0's rebuild lost the
+per-night calibration metrics to this bug.
+
 ## [2.2.0] — 2026-10-05
 
 The paper-freeze release. A pre-freeze audit found and fixed calibration and
