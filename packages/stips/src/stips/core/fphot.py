@@ -143,10 +143,13 @@ def run(
     output_collections: list[str] = []
     errors: list[str] = []
 
-    # Find the processCcd collection: prefer the newest CHAINED parent (includes
-    # primary + fallback results) over individual RUN collections.
-    parent_collections = resolve_processccd_collections(config, night)
-    processccd_coll = parent_collections[0] if parent_collections else None
+    # Science runs per band group (e.g. "r,i", then "rp", then "ip"), each into
+    # its own processCcd CHAINED parent. Join ALL of them, as DIA does: taking
+    # only the newest parent hid every other band group's calexps (2023ixf rp
+    # photometry on 2 of ~17 nights in the v2.2.1 rebuild). Band groups are
+    # disjoint by filter, so the parents never offer the same dataset twice.
+    parent_collections = resolve_processccd_collections(config, night, all_parents=True)
+    processccd_coll = ",".join(parent_collections) if parent_collections else None
 
     if not processccd_coll:
         return ForcedPhotResult(
@@ -155,7 +158,7 @@ def run(
             error=f"No processCcd collection found for {night}. Run 'stips science' first.",
         )
 
-    log.info(f"Using processCcd collection: {processccd_coll}")
+    log.info(f"Using processCcd collection(s): {processccd_coll}")
 
     # Build data query. A Lick observing night spans two UT days
     # (pre-/post-midnight); include both so pre-midnight exposures are not
