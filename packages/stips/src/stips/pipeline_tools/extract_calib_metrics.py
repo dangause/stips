@@ -153,13 +153,21 @@ def _resolve_collections(butler: Butler, pattern: str) -> list[str]:
     return list(resolved)
 
 
+def _day_obs_clause(spec: str) -> str:
+    """WHERE fragment for a comma-separated list of UT day_obs values."""
+    values = [int(v) for v in str(spec).split(",") if v.strip()]
+    if len(values) == 1:
+        return f" AND exposure.day_obs = {values[0]}"
+    return f" AND exposure.day_obs IN ({', '.join(str(v) for v in values)})"
+
+
 def query_visit_summary(
     butler: Butler, collection: str, night: str | None, instrument: str
 ):
     """Yield per-detector rows from preliminary_visit_summary datasets."""
     where = f"instrument='{instrument}'"
     if night:
-        where += f" AND exposure.day_obs = {int(night)}"
+        where += _day_obs_clause(night)
 
     collections = _resolve_collections(butler, collection)
     if not collections:
@@ -235,7 +243,7 @@ def query_metadata_metrics(
 
     where = f"instrument='{instrument}'"
     if night:
-        where += f" AND exposure.day_obs = {int(night)}"
+        where += _day_obs_clause(night)
 
     collections = _resolve_collections(butler, collection)
     if not collections:
@@ -278,7 +286,7 @@ def query_refcat_residual_metrics(
 
     where = f"instrument='{instrument}'"
     if night:
-        where += f" AND exposure.day_obs = {int(night)}"
+        where += _day_obs_clause(night)
 
     collections = _resolve_collections(butler, collection)
     if not collections:
@@ -368,9 +376,15 @@ def parse_args():
         help="Collection(s) to query (wildcards ok, e.g. '<prefix>/runs/*/processCcd/*')",
     )
     parser.add_argument(
-        "--night",
-        help="Observing night YYYYMMDD (filters by exposure.day_obs). "
+        "--day-obs",
+        help="Comma-separated UT day_obs values to keep (an observing night "
+        "spans two; `stips calib-metrics --night` computes them). "
         "If omitted, all nights in the collection are included.",
+    )
+    parser.add_argument(
+        "--night",
+        help="Deprecated: a single exposure.day_obs value (despite the name, "
+        "NOT the local observing night). Use --day-obs.",
     )
     parser.add_argument(
         "--include-refcat-metrics",
@@ -397,8 +411,9 @@ def main():
     instrument = resolve_instrument_name(args.instrument)
 
     print(f"[info] querying collection: {args.collection}", file=sys.stderr)
+    args.night = args.day_obs or args.night  # the query helpers take one spec
     if args.night:
-        print(f"[info] filtering to day_obs={args.night}", file=sys.stderr)
+        print(f"[info] filtering to day_obs in ({args.night})", file=sys.stderr)
 
     # Primary: visit summary
     rows = list(query_visit_summary(butler, args.collection, args.night, instrument))
