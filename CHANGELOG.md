@@ -4,6 +4,21 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
 
 ## [Unreleased]
 
+## [2.2.2] — 2026-10-06
+
+### Fixed
+- **Forced photometry read only one band group's science.** Science runs per
+  band group (r,i / rp / ip), each into its own processCcd parent; forced
+  photometry used the newest only, so since 2.2.0 the Sloan-like rp frames
+  were never measured on most nights. It now joins every parent, as DIA does.
+  The differential-photometry step had the same flaw and also read only the
+  first night. (#51)
+- Paper rebuild driver: a whole-mode target with a failed step is retried on
+  rerun instead of being marked done; provenance ignores the run log under
+  `provenance/`. (#51)
+
+The paper's numbers are rebuilt on this release.
+
 ## [2.2.1] — 2026-10-05
 
 ### Fixed
