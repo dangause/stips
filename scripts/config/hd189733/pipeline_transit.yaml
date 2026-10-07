@@ -31,13 +31,17 @@ object: "HD_189733"
 ra: 300.182108
 dec: 22.709071
 
-# Gaia DR3 astrometry + PS1 photometry, the same calibration path as the SN
-# campaigns, so every paper number shares one photometric system (Cousins
-# B/V/R/I on Vega; see InstrumentProfile.vega_bands). Landolt-validated on
-# 2026-10-05: BVRI mean offsets <= 0.012 mag, rms 0.02-0.08 mag.
+# MONSTER refcats, NOT gaia_ps1. The transit depth is relative (differential)
+# photometry, so it does not need the SN campaigns' absolute calibration path.
+# In gaia_ps1 mode this very dense Galactic-plane field fails the primary
+# calibrateImage config on almost every visit (2026-10-07 rebuild: 370/398
+# visits fell back to dense_relaxed), whose star selection drops the B = 8.6
+# host: it is within 2" of a catalogued source in only 6% of visits, so the
+# differential task finds no target. MONSTER mode: differential lightcurve of
+# 332 points, transit depth 2.09 +/- 0.03%, S/N 83, mid-transit 7.4 min from
+# the Agol+2010 ephemeris.
 refcat:
-  mode: gaia_ps1
-  radius_deg: 0.2
+  mode: monster
 
 # B-band only (all 400 transit frames are B-band at 4s cadence)
 bands: ["b"]

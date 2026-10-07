@@ -100,3 +100,20 @@ def test_empty_differential_output_is_a_failure():
     result = _run_diff_step(0)
     assert result.differential_phot_success is False
     assert result.differential_lightcurve_path is None
+
+
+def test_failed_differential_skips_transit_instead_of_using_psf(tmp_path):
+    """A failed differential step must not silently hand BLS the PSF
+    lightcurve: for a bright host that produced a 646% 'transit' at S/N 0.9
+    (v2.2.2 rebuild)."""
+    result = _result(
+        lightcurve_path=str(tmp_path / "psf.csv"), differential_phot_success=False
+    )
+    fake = MagicMock()
+    with (
+        patch.dict(sys.modules, {"stips.core.transit": fake}),
+        patch.object(run_mod, "_get_step_log_file", return_value=None),
+    ):
+        run_mod._run_transit_step(_run_cfg(), result, dry_run=False)
+    fake.run.assert_not_called()
+    assert result.transit_result_path is None

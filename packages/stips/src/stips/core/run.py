@@ -1358,6 +1358,15 @@ def _run_transit_step(
     their visit images is unusable (HD 189733: raw fluxes span 4x and BLS
     returns a 72% "transit"). Falls back to the forced-photometry lightcurve.
     """
+    if result.differential_phot_success is False:
+        # The differential step ran and failed. Falling back to PSF forced
+        # photometry would search fluxes known to be unusable for a bright
+        # host and report a spurious transit; report the failure instead.
+        log.error(
+            "Differential photometry failed; skipping transit search rather "
+            "than running it on PSF forced photometry"
+        )
+        return
     csv = result.differential_lightcurve_path or result.lightcurve_path
     if not csv:
         log.warning("No lightcurve available, skipping transit search")
