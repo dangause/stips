@@ -49,13 +49,13 @@ object: "DY_Pegasi"
 ra: 347.213274
 dec: 17.215555
 
-# Gaia DR3 astrometry + PS1 photometry, the same calibration path as the SN
-# campaigns, so every paper number shares one photometric system (Cousins
-# B/V/R/I on Vega; see InstrumentProfile.vega_bands). Landolt-validated on
-# 2026-10-05: BVRI mean offsets <= 0.012 mag, rms 0.02-0.08 mag.
+# MONSTER refcats, NOT gaia_ps1. Periods and amplitudes are relative
+# photometry and do not need the SN campaigns' absolute calibration path. In
+# gaia_ps1 mode these crowded Galactic fields get worse astrometry: in the
+# 2026-10-07 rebuild 14 of 186 AC And visits had wrong WCS solutions, putting
+# forced photometry on blank sky. MONSTER mode gave clean lightcurves.
 refcat:
-  mode: gaia_ps1
-  radius_deg: 0.2
+  mode: monster
 
 # Bands to process
 # B and V are standard for SX Phe photometry (large B amplitude useful).
