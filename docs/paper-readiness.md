@@ -287,8 +287,8 @@ systematic.
 
 ## Still for the author
 
-- **Zenodo DOI:** connect the GitHub repo at zenodo.org so each release gets a
-  DOI; `CITATION.cff` is in place for it to read.
-- **Citation metadata:** add affiliation and ORCID to `CITATION.cff`, and
-  confirm the license is GPL-3.0-only rather than -or-later.
-- **Data deposit:** archive `products/` with the release.
+- **Zenodo DOI:** the repo is connected to Zenodo (2026-10-08); v2.2.4 is the
+  first archived release. Zenodo reads `.zenodo.json` (it ignores
+  `CITATION.cff` when that file exists), so keep the two in step.
+- **Data deposit:** the paper products go in a separate `stips-paper`
+  repository, not this one.

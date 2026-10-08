@@ -4,6 +4,23 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
 
 ## [Unreleased]
 
+## [2.2.4] — 2026-10-08
+
+The first release archived on Zenodo with a DOI; it is the version the paper
+cites. Nothing here changes a paper product: those were produced on 2.2.2 and
+2.2.3 (see `docs/paper-readiness.md`).
+
+### Fixed
+- `stips refcat fetch` exits non-zero when a catalogue fails to fetch, so the
+  paper rebuild driver retries the step instead of continuing without refcats.
+  (#56)
+
+### Changed
+- Paper figure scripts write to `<rebuild>/figures` when `STIPS_PAPER_DATA` is
+  set, and label each band with its magnitude system. (#56)
+- Citation metadata for Zenodo: `.zenodo.json`, and author affiliation and
+  ORCID in `CITATION.cff`.
+
 ## [2.2.3] — 2026-10-07
 
 ### Fixed

@@ -1,0 +1,44 @@
+{
+  "upload_type": "software",
+  "title": "STIPS: the Small Telescope Image Processing Suite",
+  "description": "<p>STIPS brings the Rubin Observatory LSST Science Pipelines to 1-meter class telescopes. It wraps the LSST reduction stack with a declarative instrument profile, prefab pipelines, and a unified command-line interface for calibration, difference imaging, forced photometry, and lightcurve extraction. Supported instruments are the Nickel 1-m at Lick Observatory and the CTIO 1.0-m with Y4KCam.</p><p>If you use STIPS, please also cite the LSST Science Pipelines it is built on.</p>",
+  "creators": [
+    {
+      "name": "Gause, Dan",
+      "affiliation": "National Radio Astronomy Observatory",
+      "orcid": "0009-0004-8062-3810"
+    },
+    {
+      "name": "Westfall, Kyle B.",
+      "affiliation": "University of California Observatories",
+      "orcid": "0000-0003-1809-6920"
+    }
+  ],
+  "license": "gpl-3.0-or-later",
+  "keywords": [
+    "astronomy",
+    "image processing",
+    "difference imaging",
+    "transients",
+    "supernovae",
+    "LSST Science Pipelines",
+    "small telescopes"
+  ],
+  "related_identifiers": [
+    {
+      "identifier": "https://pipelines.lsst.io",
+      "relation": "requires",
+      "resource_type": "software"
+    },
+    {
+      "identifier": "arXiv:1512.07914",
+      "relation": "references",
+      "resource_type": "publication-conferencepaper"
+    },
+    {
+      "identifier": "10.1093/pasj/psx080",
+      "relation": "references",
+      "resource_type": "publication-article"
+    }
+  ]
+}
