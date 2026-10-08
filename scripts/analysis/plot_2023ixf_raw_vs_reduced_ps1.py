@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """Generate poster-size 3-panel figure for SN 2023ixf — PS1-template DIA run.
 
-Same layout as plot_2023ixf_raw_vs_reduced.py but on visit 85480107 (R-band,
+Same layout as plot_2023ixf_raw_vs_reduced.py but on visit 85480145 (r′-band,
 20 s, night 20230527 / UT 20230528) processed with PS1 templates.
 
   raw → preliminary_visit_image → difference_image
@@ -25,16 +25,18 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import paper_data  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-OUT_PATH = REPO_ROOT / "analysis" / "2023ixf_raw_pvi_diff_ps1_poster.png"
+OUT_PATH = paper_data.figure("2023ixf_raw_pvi_diff_ps1_poster.png")
 
 DATA_REPO = paper_data.repo("2023ixf")
 
-# Visit 85480107 — SN 2023ixf, R-band, 20 s, night 20230527 (UT 20230528).
+# Visit 85480145 — SN 2023ixf, Sloan-like r′ (band rp), 40 s, night 20230527
+# (UT 20230528). Was 85480107, which in the v2.2.2 rebuild needed the second
+# fallback calibrateImage config and then produced no difference image.
 # The rebuild keeps this night unpruned (targets.yaml keep_nights).
-RAW_FITS = paper_data.find_file(DATA_REPO, "raw_Nickel_R_20230528_107_*.fits")
-PVI_FITS = paper_data.dataset_file(DATA_REPO, "preliminary_visit_image", 85480107)
-DIFF_FITS = paper_data.dataset_file(DATA_REPO, "difference_image", 85480107)
-SCIENCE_LABEL = "SN 2023ixf in M101 · Nickel R · 20 s · visit 85480107 · PS1 template"
+RAW_FITS = paper_data.find_file(DATA_REPO, "raw_Nickel_*_20230528_145_*.fits")
+PVI_FITS = paper_data.dataset_file(DATA_REPO, "preliminary_visit_image", 85480145)
+DIFF_FITS = paper_data.dataset_file(DATA_REPO, "difference_image", 85480145)
+SCIENCE_LABEL = "SN 2023ixf in M101 · Nickel r′ · 40 s · visit 85480145 · PS1 template"
 
 
 def log_norm(

@@ -1,4 +1,83 @@
-# Paper readiness: findings and decisions (2026-10-04)
+# Paper readiness: findings and decisions (2026-10-04 → 2026-10-08)
+
+## Final numbers — the frozen rebuild (2026-10-08)
+
+Every paper number comes from one rebuild from raw:
+`/Users/dangause/Developer/lick/data/paper_v2.2.2/` (`products/`, `figures/`,
+`configs/`, `logs/`). `products/PROVENANCE.json` records each driver run:
+
+| Targets | Code | Release |
+|---|---|---|
+| 2023ixf, 2020wnt, SN 2009Y, extended objects | ae3c77a | **v2.2.2** (tree identical, verified) |
+| HD 189733, AC And, CY Aqr, DY Peg, Landolt | ced1e94 | **v2.2.3** (tree identical, verified) |
+
+No run recorded modified code. The v2.2.2→v2.2.3 change is config only for
+the transit/variable targets (MONSTER refcats) plus a transit-step guard;
+Landolt was rerun on v2.2.3 only to recover a refcat fetch (code path
+identical). Figures regenerate with
+`STIPS_PAPER_DATA=<rebuild>/products python scripts/analysis/<script>.py`
+(the PM-corrected Landolt script runs in the stack: it needs pyarrow).
+
+**Supernovae.**
+
+| | Result |
+|---|---|
+| 2023ixf | 20/21 nights; 297 forced-phot rows (rp 153 on 17 nights, ip 115 on 15, Cousins r 20, i 9). Day 1.6 → 468. |
+| 2023ixf vs independent reduction of the same frames | i′ −0.008 mag (11 nights, scatter 0.04); r′ +0.32 (scatter 0.15) — driven by the reference's single-point r nights (agreement 0.04–0.07 where it has 3–4 points); STIPS 10 s and long exposures agree to ~0.1 |
+| 2020wnt | 30/34 nights; rp 69 rows, ip 45 |
+| 2020wnt vs Tinyanont+2023 | r′ −0.126 (14 nights, 0.13), i′ −0.123 (12 nights, 0.14): same offset in both bands, within the phase-alignment uncertainty |
+| SN 2009Y (CTIO, corrected position) | r 14.85 (MJD 54868.25), r 14.57 / i 14.96 (54870.30); S/N 137–235. PS1-calibrated, no CTIO colour terms (~0.2–0.5 mag systematic) |
+
+Present the SN lightcurves as **nightly robust medians**: 8% of 2023ixf's
+per-visit points sit beyond max(3 MAD, 0.15 mag) of their nightly median
+(passing cloud and bad-WCS frames late on 20230612, for example). Report
+rp/ip as AB and Cousins R/I as Vega (lightcurve `mag_system` column).
+
+**Exoplanet transit.** HD 189733 b, 20250802, B: 332 differential points,
+depth **2.09 ± 0.03%**, S/N 83, mid-transit −7.4 min from the Agol+2010
+ephemeris. Single night: quote depth and time, not the BLS period.
+
+**Variable stars.** AC And (193 points), CY Aqr (47), DY Peg (139) give clean
+lightcurves; with ≤ 2 h per night the periods are *consistent with* the
+published values, not measured (see below).
+
+**Calibration quality** (median per target; `products/calib_metrics/combined.csv`):
+
+| Target | Visits | Astrometric offset (mas) | PSF FWHM (″) |
+|---|---|---|---|
+| 2020wnt | 114 | 18 | 2.0 |
+| DY Peg | 140 | 24 | 2.4 |
+| 2023ixf | 326 | 30 | 2.0 |
+| CY Aqr | 48 | 30 | 2.3 |
+| extended objects | 438 | 34 | 1.9 |
+| Landolt | 106 | 39 | 2.0 |
+| AC And | 194 | 44 | 2.8 |
+| HD 189733 | 398 | 48 | 2.1 |
+| SN 2009Y (CTIO) | 3 | 81 | ~1.9 |
+
+Landolt astrometry with Gaia DR3 proper motions applied: median 34 mas (85 matches).
+
+**Landolt photometric validation** (`gaia_ps1` path, Vega, 4 nights, 10 standards):
+
+| Band | Matches | Standards | Mean | Robust rms |
+|---|---|---|---|---|
+| B | 14 | 7 | +0.005 | 0.080 |
+| V | 17 | 7 | +0.012 | 0.021 |
+| R | 28 | 9 | +0.009 | 0.076 |
+| I | 31 | 9 | −0.008 | 0.062 |
+
+**Data-quality exclusions** (all failed identically before the fixes):
+2023ixf 20230608 (blank frames, likely cloud); 2020wnt 20210228 (r′ science,
+only i′ flats), 20210916 (stack bug writing flat metadata), 20210928 (no
+biases), 20211121 (calibrateImage fails in every config).
+
+**Bugs the rebuild itself exposed, all fixed and released:** calib-metrics
+night/UT mismatch (#48); forced photometry blind to all but the newest band
+group (#51); transit/variable targets broken by gaia_ps1 in crowded fields
+(#53); `refcat fetch` exiting 0 on failure (#56, pending release).
+
+---
+
 
 What was checked before freezing STIPS for the paper, what changed, and what
 is still a decision for the author. Numbers here were measured on the code in
