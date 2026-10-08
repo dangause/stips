@@ -1662,6 +1662,15 @@ def refcat_fetch(
         click.echo("Ingested: " + ", ".join(result.collections))
     if result.error:
         click.echo(f"Issues: {result.error}")
+    failed = [
+        name
+        for name, status in (("gaia", result.gaia_status), ("ps1", result.ps1_status))
+        if status == "failed"
+    ]
+    if failed:
+        # Exit non-zero so callers (scripts, the paper rebuild driver) can
+        # retry; exiting 0 here let a PS1 outage drop a Landolt field silently.
+        raise click.ClickException(f"refcat fetch failed for: {', '.join(failed)}")
 
 
 @refcat.command("status")

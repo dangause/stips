@@ -791,7 +791,7 @@ if the repo already holds reference catalogs.
 
 ## License
 
-This package is distributed under **GPL-3.0** license.
+This package is distributed under the **GPL-3.0-or-later** license.
 
 ---
 

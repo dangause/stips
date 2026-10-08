@@ -19,7 +19,7 @@ import paper_data  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CSV_PATH = paper_data.data("calib_metrics", "combined.csv")
-OUT_PATH = REPO_ROOT / "analysis" / "psf_quality_poster.png"
+OUT_PATH = paper_data.figure("psf_quality_poster.png")
 
 NICKEL_PIXEL_ARCSEC = 0.37
 SIGMA_TO_FWHM = 2.355
