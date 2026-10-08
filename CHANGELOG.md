@@ -18,8 +18,10 @@ cites. Nothing here changes a paper product: those were produced on 2.2.2 and
 ### Changed
 - Paper figure scripts write to `<rebuild>/figures` when `STIPS_PAPER_DATA` is
   set, and label each band with its magnitude system. (#56)
-- Citation metadata for Zenodo: `.zenodo.json`, and author affiliation and
-  ORCID in `CITATION.cff`.
+- Citation metadata for Zenodo: `.zenodo.json`; `CITATION.cff` gains author
+  affiliations, ORCIDs and a second author (Kyle B. Westfall).
+- License declared as GPL-3.0-or-later (was GPL-3.0-only in `CITATION.cff`),
+  matching the LSST Science Pipelines. The license text is unchanged.
 
 ## [2.2.3] — 2026-10-07
 
