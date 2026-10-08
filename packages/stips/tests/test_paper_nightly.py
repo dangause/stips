@@ -54,7 +54,11 @@ def test_one_point_per_night_and_band(table):
         ("r", "20230612"),
         ("rp", "20230612"),
     ]
-    assert {r["band"]: r["mag_system"] for r in out} == {"ip": "AB", "r": "Vega", "rp": "AB"}
+    assert {r["band"]: r["mag_system"] for r in out} == {
+        "ip": "AB",
+        "r": "Vega",
+        "rp": "AB",
+    }
 
 
 def test_outlier_rejected_and_median_recomputed(table):
@@ -73,7 +77,10 @@ def test_single_point_keeps_its_own_error(table):
 
 def test_clip_floor_protects_tight_nights():
     # MAD ~0.005 mag: 3 MAD would reject the 0.1 mag point; the 0.15 floor keeps it.
-    rows = [_row(NIGHT_A + i / 100, "ip", m) for i, m in enumerate([14.0, 14.005, 13.995, 14.1])]
+    rows = [
+        _row(NIGHT_A + i / 100, "ip", m)
+        for i, m in enumerate([14.0, 14.005, 13.995, 14.1])
+    ]
     (out,) = nightly.nightly(rows)
     assert out["n_used"] == 4 and out["n_rejected"] == 0
 
@@ -83,7 +90,9 @@ def test_mad_is_normal_scaled(extra, n_rejected):
     # Median 13.0, raw MAD 0.1 -> scaled 0.148, limit 0.445 mag: +0.40 stays
     # (a raw-MAD limit of 0.30 would reject it), +0.50 goes.
     mags = [13.0, 13.1, 12.9, 13.0, 13.1, 12.9, 13.0, extra]
-    (out,) = nightly.nightly([_row(NIGHT_A + i / 100, "rp", m) for i, m in enumerate(mags)])
+    (out,) = nightly.nightly(
+        [_row(NIGHT_A + i / 100, "rp", m) for i, m in enumerate(mags)]
+    )
     assert out["n_rejected"] == n_rejected
 
 

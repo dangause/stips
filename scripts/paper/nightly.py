@@ -57,7 +57,9 @@ def _float(value) -> float:
     return float(value) if value not in (None, "") else math.nan
 
 
-def robust_median(mags: list[float], errs: list[float]) -> tuple[float, float, list[bool]]:
+def robust_median(
+    mags: list[float], errs: list[float]
+) -> tuple[float, float, list[bool]]:
     """(median, error of the median, keep mask) for one night and band."""
     med = statistics.median(mags)
     mad = MAD_TO_SIGMA * statistics.median(abs(m - med) for m in mags)
@@ -92,7 +94,11 @@ def nightly(rows: Iterable[dict], min_snr: float = MIN_SNR) -> list[dict]:
         mags = [float(p["mag"]) for p in pts]
         med, err, keep = robust_median(mags, [float(p["mag_err"]) for p in pts])
         kept = [p for p, k in zip(pts, keep) if k]
-        days = [float(p["days_since_explosion"]) for p in kept if p.get("days_since_explosion")]
+        days = [
+            float(p["days_since_explosion"])
+            for p in kept
+            if p.get("days_since_explosion")
+        ]
         out.append({
             "night": night,
             "band": band,
