@@ -12,7 +12,7 @@ abstract: >-
   extraction. Supported instruments are the Nickel 1-m at Lick Observatory
   and the CTIO 1.0-m with Y4KCam.
 authors:
-  - given-names: Dan
+  - given-names: Daniel
     family-names: Gause
     affiliation: "National Radio Astronomy Observatory"
     orcid: "https://orcid.org/0009-0004-8062-3810"

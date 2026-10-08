@@ -4,7 +4,7 @@
   "description": "<p>STIPS brings the Rubin Observatory LSST Science Pipelines to 1-meter class telescopes. It wraps the LSST reduction stack with a declarative instrument profile, prefab pipelines, and a unified command-line interface for calibration, difference imaging, forced photometry, and lightcurve extraction. Supported instruments are the Nickel 1-m at Lick Observatory and the CTIO 1.0-m with Y4KCam.</p><p>If you use STIPS, please also cite the LSST Science Pipelines it is built on.</p>",
   "creators": [
     {
-      "name": "Gause, Dan",
+      "name": "Gause, Daniel",
       "affiliation": "National Radio Astronomy Observatory",
       "orcid": "0009-0004-8062-3810"
     },
