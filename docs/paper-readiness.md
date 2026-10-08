@@ -32,6 +32,10 @@ Present the SN lightcurves as **nightly robust medians**: 8% of 2023ixf's
 per-visit points sit beyond max(3 MAD, 0.15 mag) of their nightly median
 (passing cloud and bad-WCS frames late on 20230612, for example). Report
 rp/ip as AB and Cousins R/I as Vega (lightcurve `mag_system` column).
+`scripts/paper/nightly.py` implements the rule (MAD normal-scaled, 1.2533·σ/√n
+error, the point's own error when n = 1); the SN figures use it and write
+`products/<sn>/lightcurve_nightly.csv` (2023ixf 36 night-band points, 2020wnt
+47). S/N < 5 nights drop out: 2020wnt days 118, 240, 301 (r′) and 386 (r′, i′).
 
 **Exoplanet transit.** HD 189733 b, 20250802, B: 332 differential points,
 depth **2.09 ± 0.03%**, S/N 83, mid-transit −7.4 min from the Agol+2010
@@ -95,7 +99,8 @@ from raw data, from the checkout it runs in, and writes:
 
 Figure scripts read `STIPS_PAPER_DATA=<out>/products` through
 `scripts/analysis/paper_data.py`. `scripts/paper/compare_external.py` writes the
-external-photometry comparison. Run the rebuild from a clean checkout of the
+external-photometry comparison, from the same nightly medians
+(`scripts/paper/nightly.py`). Run the rebuild from a clean checkout of the
 release tag, so `stips_describe` reads `v2.1.1` (or later) with no `-dirty`.
 
 ## SN 2023ixf: late-time epochs recovered
