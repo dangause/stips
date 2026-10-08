@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/dangause/stips/actions/workflows/ci.yml/badge.svg)](https://github.com/dangause/stips/actions/workflows/ci.yml)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23243456.svg)](https://doi.org/10.5281/zenodo.23243456)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](pyproject.toml)
 
 **STIPS** brings the [LSST Science Pipelines](https://pipelines.lsst.io/) to 1-meter class telescopes. It wraps the Rubin/LSST reduction stack with the per-telescope plumbing — a declarative instrument profile, prefab YAML pipelines, and a unified CLI — needed to run survey-grade calibration, difference imaging, forced photometry, and lightcurve extraction on small-telescope data, without requiring deep LSST middleware knowledge.
@@ -788,6 +789,15 @@ if the repo already holds reference catalogs.
 - **UV Package Manager**: https://docs.astral.sh/uv/
 
 ---
+
+## Citing STIPS
+
+STIPS is archived on Zenodo. The concept DOI
+[10.5281/zenodo.23243456](https://doi.org/10.5281/zenodo.23243456) always
+resolves to the latest release; cite the version you used (v2.2.4:
+[10.5281/zenodo.23243457](https://doi.org/10.5281/zenodo.23243457)).
+[`CITATION.cff`](CITATION.cff) has the full metadata. Please also cite the
+LSST Science Pipelines STIPS is built on.
 
 ## License
 
