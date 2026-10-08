@@ -4,6 +4,13 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
 
 ## [Unreleased]
 
+### Changed
+- The paper material — the rebuild driver (`scripts/paper/`), the paper's
+  figure scripts, `docs/paper-readiness.md` and the nightly-median test —
+  moved to a separate `stips-paper` repository, which also archives the
+  rebuild's products. The rebuild driver now runs a STIPS checkout given by
+  `--stips`. The diagnostic scripts in `scripts/analysis/` stay here.
+
 ## [2.2.4] — 2026-10-08
 
 The first release archived on Zenodo with a DOI; it is the version the paper

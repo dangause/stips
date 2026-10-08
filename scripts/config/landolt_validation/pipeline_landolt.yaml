@@ -19,7 +19,8 @@ bands: ["b", "v", "r", "i"]
 # The fields have no single target position, so `stips run` cannot ensure
 # the refcats itself: fetch each field first,
 #   stips -c <this> refcat fetch --ra <ra> --dec <dec> --radius 0.1
-# (scripts/paper/targets.yaml `refcat_cones` lists the 11 field centres).
+# (the stips-paper repo's scripts/paper/targets.yaml `refcat_cones` lists the
+# 11 field centres).
 # MONSTER mode is NOT equivalent: it leaves B off by -0.44 and V by +0.27.
 refcat:
   mode: gaia_ps1

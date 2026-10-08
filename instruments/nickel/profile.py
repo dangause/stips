@@ -46,9 +46,9 @@ profile = InstrumentProfile(
     # FITS reader (which ingest uses) stops at the second quote and returns
     # "r". Both must land on the Sloan-like filter: its colour slope against
     # PS1 is -0.03 (r) / -0.05 (i) per mag of r-i, against -0.24 / -0.35 for
-    # Cousins R/I (measured 2026-10-04 on 13 2020wnt visits, see
-    # docs/paper-readiness.md). Mapping "r" to Cousins "R" calibrated every
-    # 2020-2023 SN frame with the wrong colour terms.
+    # Cousins R/I (measured 2026-10-04 on 13 2020wnt visits, see #42 and the
+    # stips-paper repo's docs/paper-readiness.md). Mapping "r" to Cousins "R"
+    # calibrated every 2020-2023 SN frame with the wrong colour terms.
     filter_aliases={
         "B": "B",
         "V": "V",
