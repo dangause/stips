@@ -8,10 +8,15 @@ For SN 2023ixf, overlays ZTF (ALeRCE) detections as a temporary reference until
 the published photometry catalog is wired in.
 
 Writes a two-panel figure to analysis/sn_vs_ztf_comparison.png.
+
+STIPS points are nightly robust medians per band by default (the paper's rule,
+scripts/paper/nightly.py), and each SN's products/<sn>/lightcurve_nightly.csv
+is written alongside. Pass --per-visit to plot every visit instead.
 """
 
 from __future__ import annotations
 
+import argparse
 import csv
 import json
 import subprocess
@@ -22,6 +27,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "paper"))
+import nightly  # noqa: E402
 import paper_data  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -92,6 +99,9 @@ NICKEL_COLOR = {
 BAND_NAME = {"b": "B", "v": "V", "r": "R", "i": "I", "rp": "r\u2032", "ip": "i\u2032"}
 BAND_SYSTEM: dict[str, str] = {}
 
+# Plot nightly robust medians (True, the paper figures) or every visit.
+NIGHTLY = True
+
 
 def _band_label(band: str) -> str:
     name = BAND_NAME.get(band, band.upper())
@@ -122,6 +132,43 @@ def load_nickel(path: Path) -> list[dict]:
         if row.get("mag_system"):
             BAND_SYSTEM[row["band"]] = row["mag_system"]
     return rows
+
+
+def load_points(path: Path) -> tuple[list[dict], int]:
+    """STIPS points to plot and the number of visits left out.
+
+    Nightly mode returns one robust median per (night, band); the visits left
+    out are those below the nightly S/N cut. Per-visit mode returns rows with a
+    finite mag and mag_err < 0.5; the rest are left out.
+    """
+    visits = load_nickel(path)
+    if NIGHTLY:
+        rows = nightly.nightly(visits)
+        used = sum(r["n_used"] + r["n_rejected"] for r in rows)
+        return [nightly.format_row(r) for r in rows], len(visits) - used
+    valid = [
+        r
+        for r in visits
+        if r.get("mag")
+        and r["mag"].lower() != "nan"
+        and r.get("mag_err")
+        and r["mag_err"].lower() != "nan"
+        and float(r["mag_err"]) < 0.5
+    ]
+    return valid, len(visits) - len(valid)
+
+
+def write_nightly_products() -> None:
+    """products/<sn>/lightcurve_nightly.csv for each SN (paper tables)."""
+    for sn in NICKEL_PATHS:
+        src = paper_data.data(sn.replace("SN ", ""), "lightcurve.csv")
+        if not src.exists():
+            continue
+        with open(src, newline="") as fh:
+            rows = nightly.nightly(csv.DictReader(fh))
+        out = src.with_name("lightcurve_nightly.csv")
+        nightly.write_csv(rows, out)
+        print(f"wrote {out} ({len(rows)} night-band points)")
 
 
 def load_published_2023ixf(band: str) -> list[tuple[float, float, float]]:
@@ -180,17 +227,7 @@ def load_published(sn: str, band: str) -> list[tuple[float, float, float]]:
 
 def plot_one(ax, sn: str) -> None:
     # --- Load + filter Nickel/STIPS detections. ---
-    nickel_all = load_nickel(NICKEL_PATHS[sn])
-    nickel_valid = [
-        r
-        for r in nickel_all
-        if r.get("mag")
-        and r["mag"].lower() != "nan"
-        and r.get("mag_err")
-        and r["mag_err"].lower() != "nan"
-        and float(r["mag_err"]) < 0.5
-    ]
-    n_upper_limits = len(nickel_all) - len(nickel_valid)
+    nickel_valid, n_upper_limits = load_points(NICKEL_PATHS[sn])
     nickel_days_all = [float(r["days_since_explosion"]) for r in nickel_valid]
 
     # Window = Nickel's campaign duration; the visible legend counts match the
@@ -253,7 +290,8 @@ def plot_one(ax, sn: str) -> None:
             ecolor=NICKEL_COLOR.get(band, "black"),
             alpha=0.95,
             zorder=2,
-            label=f"STIPS {_band_label(band)} (N={len(pts)})",
+            label=f"STIPS {_band_label(band)} (N={len(pts)}"
+            + ((" night)" if len(pts) == 1 else " nights)") if NIGHTLY else ")"),
         )
 
     nickel_valid = nickel_in
@@ -328,7 +366,9 @@ def plot_one(ax, sn: str) -> None:
         ax.text(
             0.02,
             0.03,
-            f"+{n_upper_limits} Nickel non-detections not shown",
+            f"+{n_upper_limits} Nickel visits "
+            + ("below S/N 5" if NIGHTLY else "non-detections")
+            + " not shown",
             transform=ax.transAxes,
             fontsize=10,
             ha="left",
@@ -369,16 +409,7 @@ def plot_2020wnt_poster(out_path: Path) -> None:
     """
     sn = "SN 2020wnt"
 
-    nickel_all = load_nickel(NICKEL_PATHS[sn])
-    nickel_valid = [
-        r
-        for r in nickel_all
-        if r.get("mag")
-        and r["mag"].lower() != "nan"
-        and r.get("mag_err")
-        and r["mag_err"].lower() != "nan"
-        and float(r["mag_err"]) < 0.5
-    ]
+    nickel_valid, _ = load_points(NICKEL_PATHS[sn])
     nickel_days_all = [float(r["days_since_explosion"]) for r in nickel_valid]
     win_lo, win_hi = (
         (min(nickel_days_all), max(nickel_days_all))
@@ -497,16 +528,7 @@ def plot_2023ixf_poster(out_path: Path) -> None:
     MJD ~60092 (paper window). Mirrors plot_2020wnt_poster: STIPS as filled
     circles, published as triangles, R-band residual stats box above legend.
     """
-    nickel_all = load_nickel(NICKEL_PATH_2023IXF_POSTER)
-    nickel_valid = [
-        r
-        for r in nickel_all
-        if r.get("mag")
-        and r["mag"].lower() != "nan"
-        and r.get("mag_err")
-        and r["mag_err"].lower() != "nan"
-        and float(r["mag_err"]) < 0.5
-    ]
+    nickel_valid, _ = load_points(NICKEL_PATH_2023IXF_POSTER)
     nickel_days_all = [float(r["days_since_explosion"]) for r in nickel_valid]
     win_lo, win_hi = (
         (min(nickel_days_all), max(nickel_days_all))
@@ -640,12 +662,23 @@ def plot_2023ixf_poster(out_path: Path) -> None:
 
 
 def main() -> None:
+    global NIGHTLY
+    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    ap.add_argument(
+        "--per-visit",
+        action="store_true",
+        help="plot every visit instead of nightly robust medians",
+    )
+    NIGHTLY = not ap.parse_args().per_visit
+    if NIGHTLY:
+        write_nightly_products()
     fig, axes = plt.subplots(2, 1, figsize=(13, 11))
     plot_one(axes[0], "SN 2023ixf")
     plot_one(axes[1], "SN 2020wnt")
     fig.suptitle(
         "Nickel/STIPS lightcurves vs reference photometry\n"
-        "squares = STIPS,  triangles = Tinyanont+23 (2020wnt),  circles = ZTF (2023ixf)",
+        f"squares = STIPS{' nightly medians' if NIGHTLY else ''},  "
+        "triangles = Tinyanont+23 (2020wnt),  circles = ZTF (2023ixf)",
         fontsize=13,
         fontweight="bold",
     )

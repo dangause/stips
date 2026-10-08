@@ -4,6 +4,15 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
 
 ## [Unreleased]
 
+### Changed
+- The paper's supernova lightcurve figures (`scripts/analysis/plot_sn_vs_ztf.py`)
+  plot nightly robust medians per band instead of every visit, and write
+  `products/<sn>/lightcurve_nightly.csv` for the paper's tables (`--per-visit`
+  restores the old plots). Per (night, band): S/N >= 5, median, reject beyond
+  max(3 MAD, 0.15 mag), re-median, error of the median. The rule lives in
+  `scripts/paper/nightly.py`, which `compare_external.py` now shares; the
+  external-comparison offsets are unchanged. No pipeline product changes.
+
 ## [2.2.3] — 2026-10-07
 
 ### Fixed

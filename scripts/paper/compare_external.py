@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 """Quantify STIPS supernova photometry against independent references.
 
-Compares nightly-median STIPS forced photometry (difference images, PSF flux)
-with:
+Compares nightly robust-median STIPS forced photometry (difference images,
+PSF flux; scripts/paper/nightly.py) with:
 
   SN 2023ixf  an independent reduction of the same Nickel frames
               (analysis/2023ixf_nickel_phot.cat; AB mags in B V r i; rows
@@ -31,6 +31,8 @@ import statistics
 from collections import defaultdict
 from pathlib import Path
 
+from nightly import nightly
+
 ROOT = Path(__file__).resolve().parents[2]
 REF_2023IXF = ROOT / "analysis" / "2023ixf_nickel_phot.cat"
 REF_2020WNT = ROOT / "analysis" / "2020wnt_photometry_20220916"
@@ -47,29 +49,27 @@ REF_BAND = {"rp": "r", "ip": "i", "r": "r", "i": "i"}
 
 
 def stips_nightly(path: Path) -> dict[tuple[str, str], tuple[float, float, float, int]]:
-    """(day_obs, band) -> (mjd, median mag, error of the median, n)."""
-    per = defaultdict(list)
+    """(day_obs, band) -> (mjd, robust median mag, error of the median, n).
+
+    Uses the paper's nightly rule (nightly.py); its night is floor(MJD), which
+    equals day_obs for these rows.
+    """
+    points = []
     with open(path, newline="") as fh:
         for row in csv.DictReader(fh):
             if row["dataset_type"] != "forced_phot_diffim_radec":
                 continue
             flux, err = float(row["diffFlux"]), float(row["diffFluxErr"])
-            if not (math.isfinite(flux) and flux > 0 and flux / err >= MIN_SNR):
+            if not (math.isfinite(flux) and flux > 0 and err > 0):
                 continue
-            mag = AB_NJY_ZP - 2.5 * math.log10(flux)
-            per[(row["day_obs"], row["band"])].append((float(row["mjd_mid"]), mag))
-    out = {}
-    for key, pts in per.items():
-        mags = [m for _, m in pts]
-        med = statistics.median(mags)
-        spread = statistics.pstdev(mags) if len(mags) > 1 else 0.02
-        out[key] = (
-            statistics.mean(t for t, _ in pts),
-            med,
-            1.2533 * spread / math.sqrt(len(mags)),
-            len(mags),
-        )
-    return out
+            points.append(dict(mjd=row["mjd_mid"], band=row["band"],
+                               mag=AB_NJY_ZP - 2.5 * math.log10(flux),
+                               mag_err=2.5 / math.log(10) * err / flux,
+                               snr=flux / err))  # fmt: skip
+    return {
+        (r["night"], r["band"]): (r["mjd"], r["mag"], r["mag_err"], r["n_used"])
+        for r in nightly(points, min_snr=MIN_SNR)
+    }
 
 
 def robust_std(values: list[float]) -> float:
@@ -163,7 +163,8 @@ def main() -> int:
     args = ap.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
     summary = {
-        "method": "nightly median STIPS diffim PSF mag (S/N>=5) minus reference",
+        "method": "nightly robust median STIPS diffim PSF mag (S/N>=5, clipped "
+        "at max(3 MAD, 0.15 mag); nightly.py) minus reference",
         "bands": "rp/ip = Sloan-like (AB, like-for-like); r/i = Cousins (Vega-like)",
         "references": {
             "2023ixf": "independent reduction of the same Nickel frames",
