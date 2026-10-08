@@ -25,9 +25,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import paper_data  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-OUT_PATH = REPO_ROOT / "analysis" / "sn_vs_ztf_comparison.png"
-OUT_POSTER_2020WNT = REPO_ROOT / "analysis" / "sn2020wnt_poster.png"
-OUT_POSTER_2023IXF = REPO_ROOT / "analysis" / "sn2023ixf_poster.png"
+OUT_PATH = paper_data.figure("sn_vs_ztf_comparison.png")
+OUT_POSTER_2020WNT = paper_data.figure("sn2020wnt_poster.png")
+OUT_POSTER_2023IXF = paper_data.figure("sn2023ixf_poster.png")
 
 # Dedicated path for the 2023ixf poster panel — points at the aperture-flux
 # relookup CSV (analysis/aperture_relookup_2023ixf.py), which sums asymptotic
@@ -80,7 +80,24 @@ PUB_CAT_2023IXF = (
 # finite value to restrict to the paper window.
 PUB_MJD_MAX_2023IXF: float = float("inf")
 
-NICKEL_COLOR = {"r": "#d62728", "i": "#8c564b", "v": "#2ca02c"}
+NICKEL_COLOR = {
+    "r": "#d62728",  # Cousins R (Vega)
+    "i": "#8c564b",  # Cousins I (Vega)
+    "v": "#2ca02c",
+    "rp": "#ff7f0e",  # Sloan-like r' (AB)
+    "ip": "#9467bd",  # Sloan-like i' (AB)
+}
+# Display names; the photometric system comes from the lightcurve's own
+# mag_system column (see BAND_SYSTEM), so labels cannot drift from the data.
+BAND_NAME = {"b": "B", "v": "V", "r": "R", "i": "I", "rp": "r\u2032", "ip": "i\u2032"}
+BAND_SYSTEM: dict[str, str] = {}
+
+
+def _band_label(band: str) -> str:
+    name = BAND_NAME.get(band, band.upper())
+    system = BAND_SYSTEM.get(band)
+    return f"{name} ({system})" if system else name
+
 
 # ZTF (ALeRCE) reference photometry. Only SNe listed here get the ZTF overlay;
 # used while published per-target photometry is being assembled.
@@ -100,7 +117,11 @@ def fetch_ztf(oid: str) -> list[dict]:
 
 
 def load_nickel(path: Path) -> list[dict]:
-    return list(csv.DictReader(open(path)))
+    rows = list(csv.DictReader(open(path)))
+    for row in rows:
+        if row.get("mag_system"):
+            BAND_SYSTEM[row["band"]] = row["mag_system"]
+    return rows
 
 
 def load_published_2023ixf(band: str) -> list[tuple[float, float, float]]:
@@ -232,7 +253,7 @@ def plot_one(ax, sn: str) -> None:
             ecolor=NICKEL_COLOR.get(band, "black"),
             alpha=0.95,
             zorder=2,
-            label=f"STIPS {band.upper()} (N={len(pts)})",
+            label=f"STIPS {_band_label(band)} (N={len(pts)})",
         )
 
     nickel_valid = nickel_in
@@ -323,7 +344,7 @@ def plot_one(ax, sn: str) -> None:
 
     ax.invert_yaxis()
     ax.set_xlabel("Days since explosion", fontsize=12)
-    ax.set_ylabel("AB magnitude", fontsize=12)
+    ax.set_ylabel("Magnitude", fontsize=12)
     ax.set_title(f"{sn}", fontsize=14, fontweight="bold")
     ax.tick_params(labelsize=11)
     ax.grid(True, alpha=0.3)
@@ -416,7 +437,7 @@ def plot_2020wnt_poster(out_path: Path) -> None:
             ecolor=NICKEL_COLOR.get(band, "black"),
             alpha=0.95,
             zorder=2,
-            label=f"STIPS {band.upper()}",
+            label=f"STIPS {_band_label(band)}",
         )
 
     if win_hi > win_lo and win_hi != float("inf"):
@@ -425,7 +446,7 @@ def plot_2020wnt_poster(out_path: Path) -> None:
 
     ax.invert_yaxis()
     ax.set_xlabel("Days since explosion", fontsize=30)
-    ax.set_ylabel("AB magnitude", fontsize=30)
+    ax.set_ylabel("Magnitude", fontsize=30)
     ax.set_title("SN 2020wnt", fontsize=38, fontweight="bold")
     ax.tick_params(labelsize=24)
     ax.grid(True, alpha=0.3)
@@ -544,7 +565,7 @@ def plot_2023ixf_poster(out_path: Path) -> None:
             ecolor=NICKEL_COLOR.get(band, "black"),
             alpha=0.95,
             zorder=2,
-            label=f"STIPS {band.upper()}",
+            label=f"STIPS {_band_label(band)}",
         )
 
     if win_hi > win_lo and win_hi != float("inf"):
@@ -553,7 +574,7 @@ def plot_2023ixf_poster(out_path: Path) -> None:
 
     ax.invert_yaxis()
     ax.set_xlabel("Days since explosion", fontsize=30)
-    ax.set_ylabel("AB magnitude", fontsize=30)
+    ax.set_ylabel("Magnitude", fontsize=30)
     ax.set_title("SN 2023ixf", fontsize=38, fontweight="bold")
     ax.tick_params(labelsize=24)
     ax.grid(True, alpha=0.3)

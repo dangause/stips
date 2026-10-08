@@ -152,3 +152,28 @@ def test_cli_refcat_fetch_dispatches(monkeypatch):
     assert captured["ra"] == 210.91
     assert captured["radius_deg"] == 0.4
     assert captured["mode"] == "gaia_ps1"
+
+
+def test_cli_refcat_fetch_exits_nonzero_when_a_catalog_fails(monkeypatch):
+    """A failed PS1 (or Gaia) fetch must not exit 0: callers such as the paper
+    rebuild driver retry on a non-zero exit, and a silent PS1 failure on the
+    PG1323-086 Landolt field cost that night's standards (2026-10-07)."""
+    from unittest import mock
+
+    import stips.cli as cli
+    from click.testing import CliRunner
+    from stips.core.refcat import RefcatResult
+
+    monkeypatch.setattr(cli, "_load_config", lambda ctx: mock.Mock())
+    monkeypatch.setattr(
+        "stips.core.refcat.ensure_refcats",
+        lambda config, ra, dec, **k: RefcatResult(
+            mode="gaia_ps1", gaia_status="fetched", ps1_status="failed",
+            error="ps1: HTTP 503",
+        ),  # fmt: skip
+    )
+    result = CliRunner().invoke(
+        cli.cli, ["refcat", "fetch", "--ra", "201.41", "--dec", "-8.82"]
+    )
+    assert result.exit_code != 0
+    assert "ps1" in result.output

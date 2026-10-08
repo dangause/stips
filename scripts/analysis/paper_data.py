@@ -28,6 +28,17 @@ def data(*parts: str) -> Path:
     return data_root().joinpath(*parts)
 
 
+def figure(*parts: str) -> Path:
+    """Where a figure is written: ``<rebuild>/figures/`` beside a rebuild's
+    ``products/`` when ``STIPS_PAPER_DATA`` is set, else the legacy
+    ``analysis/`` folder. The parent directory is created."""
+    env = os.environ.get("STIPS_PAPER_DATA")
+    base = Path(env).parent / "figures" if env else REPO_ROOT / "analysis"
+    path = base.joinpath(*parts)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return path
+
+
 def repo(target: str) -> Path:
     """The rebuild's Butler repo for ``target`` (``<out>/repos/<target>_repo``)."""
     env = os.environ.get("STIPS_PAPER_DATA")
@@ -48,5 +59,12 @@ def find_file(repo_dir: Path, pattern: str) -> Path:
 
 
 def dataset_file(repo_dir: Path, dataset_type: str, visit: int) -> Path:
-    """The FITS file of ``dataset_type`` for ``visit`` in a repo."""
-    return find_file(repo_dir, f"{dataset_type}_*_{visit}_*.fits")
+    """The FITS file of ``dataset_type`` for ``visit`` in a repo.
+
+    The instrument name follows the dataset type and is capitalised
+    (``preliminary_visit_image_Nickel_...``), which excludes sibling datasets
+    that share the prefix (``preliminary_visit_image_background_...``,
+    ``difference_image_predetection_...``). Of several RUNs the newest
+    fallback wins (``run_fb2`` > ``run_fb1`` > ``run``), matching the chain.
+    """
+    return find_file(repo_dir, f"{dataset_type}_[A-Z]*_{visit}_*.fits")

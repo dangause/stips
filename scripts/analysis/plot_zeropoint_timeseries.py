@@ -22,7 +22,7 @@ import paper_data  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CSV_PATH = paper_data.data("calib_metrics", "combined.csv")
-OUT_PATH = REPO_ROOT / "analysis" / "calib_metrics" / "zeropoint_vs_time.png"
+OUT_PATH = paper_data.figure("calib_metrics", "zeropoint_vs_time.png")
 
 # Band → color mapping. Sloan g/r and Cousins R distinct so the eye separates them.
 BAND_COLORS = {

@@ -40,8 +40,8 @@ CSV_PATH = paper_data.data("landolt_validation_4nights.csv")
 # scripts/analysis/landolt_pm_corrected_residuals.py — Gaia DR3 positions
 # propagated to each visit's UTC-MJD, re-matched against the
 # single_visit_star_unstandardized source catalog, with cos(dec) handled on RA.
-PM_CSV_PATH = REPO_ROOT / "analysis" / "landolt_pm_corrected.csv"
-OUT_DIR = REPO_ROOT / "analysis"
+PM_CSV_PATH = paper_data.data("landolt_pm_corrected.csv")
+OUT_DIR = paper_data.figure("landolt").parent
 
 # Per-night psfSigma lookup is glob-based off the landolt_validation Butler repo.
 LANDOLT_REPO = Path(
