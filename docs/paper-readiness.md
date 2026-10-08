@@ -18,6 +18,14 @@ identical). Figures regenerate with
 `STIPS_PAPER_DATA=<rebuild>/products python scripts/analysis/<script>.py`
 (the PM-corrected Landolt script runs in the stack: it needs pyarrow).
 
+**Software citation:** the paper cites STIPS **v2.2.4**,
+[doi:10.5281/zenodo.23243457](https://doi.org/10.5281/zenodo.23243457) (concept
+DOI 10.5281/zenodo.23243456). The products (`paper_v2.2.2/products`, ~4 MB)
+were produced by v2.2.2 and v2.2.3, as tabled above; v2.2.4 adds no change to
+any product (refcat-fetch exit code, figure scripts, citation metadata). The
+products are archived alongside v2.2.4 in the separate `stips-paper`
+repository, not in this one.
+
 **Supernovae.**
 
 | | Result |
@@ -292,8 +300,12 @@ systematic.
 
 ## Still for the author
 
-- **Zenodo DOI:** the repo is connected to Zenodo (2026-10-08); v2.2.4 is the
-  first archived release. Zenodo reads `.zenodo.json` (it ignores
-  `CITATION.cff` when that file exists), so keep the two in step.
+- **Zenodo DOI:** done. v2.2.4 is
+  [10.5281/zenodo.23243457](https://doi.org/10.5281/zenodo.23243457). Every
+  later GitHub release gets its own DOI under the same concept DOI. Zenodo
+  reads `.zenodo.json` (it ignores `CITATION.cff` when that file exists), so
+  keep the two in step, and update `CITATION.cff`'s `doi`/`version` on each
+  release.
 - **Data deposit:** the paper products go in a separate `stips-paper`
-  repository, not this one.
+  repository (not yet created), with its own Zenodo DOI that references this
+  one.
