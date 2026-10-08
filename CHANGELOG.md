@@ -4,7 +4,20 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
 
 ## [Unreleased]
 
+## [2.2.4] — 2026-10-08
+
+The first release archived on Zenodo with a DOI; it is the version the paper
+cites. Nothing here changes a paper product: those were produced on 2.2.2 and
+2.2.3 (see `docs/paper-readiness.md`).
+
+### Fixed
+- `stips refcat fetch` exits non-zero when a catalogue fails to fetch, so the
+  paper rebuild driver retries the step instead of continuing without refcats.
+  (#56)
+
 ### Changed
+- Paper figure scripts write to `<rebuild>/figures` when `STIPS_PAPER_DATA` is
+  set, and label each band with its magnitude system. (#56)
 - The paper's supernova lightcurve figures (`scripts/analysis/plot_sn_vs_ztf.py`)
   plot nightly robust medians per band instead of every visit, and write
   `products/<sn>/lightcurve_nightly.csv` for the paper's tables (`--per-visit`
@@ -12,6 +25,11 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
   max(3 MAD, 0.15 mag), re-median, error of the median. The rule lives in
   `scripts/paper/nightly.py`, which `compare_external.py` now shares; the
   external-comparison offsets are unchanged. No pipeline product changes.
+  (#57)
+- Citation metadata for Zenodo: `.zenodo.json`; `CITATION.cff` gains author
+  affiliations, ORCIDs and a second author (Kyle B. Westfall).
+- License declared as GPL-3.0-or-later (was GPL-3.0-only in `CITATION.cff`),
+  matching the LSST Science Pipelines. The license text is unchanged.
 
 ## [2.2.3] — 2026-10-07
 
