@@ -25,8 +25,9 @@ export REPO="$${REPO:-}"; \
 export LSST_CONDA_ENV_NAME="$${LSST_CONDA_ENV_NAME:-}"
 endef
 
+# Spliced directly before a command (like setup_stack), so it ends with ';'.
 define envsource
-$(load_envs)
+$(load_envs);
 endef
 
 define setup_stack
