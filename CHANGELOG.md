@@ -4,6 +4,12 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
 
 ## [Unreleased]
 
+### Fixed
+- `stips refcat status` crashed in the plain venv with `ModuleNotFoundError:
+  No module named 'lsst.geom'`, because it called the HTM cone helper directly.
+  It now computes cone coverage in-stack when `lsst` is not importable, as
+  `stips refcat fetch` already did.
+
 ### Changed
 - The paper material — the rebuild driver (`scripts/paper/`), the paper's
   figure scripts, `docs/paper-readiness.md` and the nightly-median test —
