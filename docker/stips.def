@@ -28,7 +28,7 @@ From: stips:latest
 %labels
     Author Small Telescope Image Processing Suite Team
     Description Small Telescope Image Processing Suite for LSST Science Pipelines on HPC
-    Version 1.0.0
+    Version 2.3.0
     URL https://github.com/dangause/stips
 
 %help
