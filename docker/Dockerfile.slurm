@@ -58,15 +58,27 @@ RUN id slurm 2>/dev/null || useradd -r -s /sbin/nologin slurm && \
 # =============================================================================
 # STIPS packages (so compute nodes can run pipetask)
 # =============================================================================
+# Compute nodes need obs_stips, every instrument profile, and the stips source:
+# each profile.py does `from stips import ...`, and bps/sites/docker-slurm.yaml
+# puts /opt/stips/packages/stips/src on PYTHONPATH.
 WORKDIR /opt/stips
 
+COPY packages/stips/ packages/stips/
 COPY packages/obs_stips/ packages/obs_stips/
 COPY instruments/ instruments/
 
+# The import check loads each instrument as pipetask does on a compute node
+# (obs_stips set up, the stips source on PYTHONPATH, INSTRUMENT_DIR set), so a
+# missing package fails the build rather than the cluster run.
 RUN source /opt/lsst/software/stack/loadLSST.bash && \
     setup lsst_distrib && \
     pip install --no-deps -e packages/obs_stips && \
-    chmod +x /opt/stips/packages/obs_stips/instrument_defaults/pipelines/*.yaml 2>/dev/null || true
+    setup -r /opt/stips/packages/obs_stips obs_stips && \
+    for d in /opt/stips/instruments/*/; do \
+        INSTRUMENT_DIR="${d%/}" PYTHONPATH="/opt/stips/packages/stips/src:${PYTHONPATH:-}" \
+            python -c "import lsst.obs.stips.active" || exit 1; \
+    done && \
+    { chmod +x /opt/stips/packages/obs_stips/instrument_defaults/pipelines/*.yaml 2>/dev/null || true; }
 
 # Add the LSST conda env to the default PATH so Parsl's process_worker_pool.py
 # is available when Slurm jobs start on compute nodes (Slurm launches job steps

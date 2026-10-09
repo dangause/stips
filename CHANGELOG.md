@@ -55,6 +55,27 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
   with `STACK_PREFIX`). It fell back to `$STACK_DIR`, which put the new stack
   inside the existing one; the script itself no longer falls back to
   `$STACK_DIR` either.
+- The Slurm compute-node image (`docker/Dockerfile.slurm`) ships the `stips`
+  source. Every instrument profile imports `stips`, which
+  `bps/sites/docker-slurm.yaml` expects at `/opt/stips/packages/stips/src`, so
+  a compute node could not load the instrument (`ModuleNotFoundError: No
+  module named 'stips'`). The build now loads each instrument as a compute
+  node does, and a failed `pip install` fails it.
+- Containerized BPS runs the configured instrument. The `docker-slurm` and
+  `singularity-slurm` sites exported `INSTRUMENT_DIR=/opt/stips/instruments/nickel`
+  on every compute node, so a CTIO run's quanta got the Nickel profile. They
+  now export the config's `INSTRUMENT_DIR` (a path inside the container), as
+  the `slurm` site does.
+- `make declare-eups` failed with ``syntax error near unexpected token `then'``:
+  the `envsource` macro lost its trailing `;` when it began wrapping
+  `load_envs`. (`make stack-install` parsed only because `export` took its
+  next assignment as another variable.)
+- Stale text: the Apptainer definition's help gives commands the required
+  `-c <config.yaml>` and drops the removed `STIPS_PROFILE`/`.env` mechanism;
+  it and the publish workflow name the current images (`ghcr.io/dangause/stips`,
+  `oras://ghcr.io/dangause/stips-sif:<tag>`); the image description is no
+  longer Nickel-only; and step 1 of the stack-bump runbook installs
+  `lsst_distrib`, which step 2's tests set up.
 
 ## [2.2.4] — 2026-10-08
 

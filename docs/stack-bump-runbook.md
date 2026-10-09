@@ -52,10 +52,12 @@ reintroduce a hardcoded env number there.
 
 ## Bump day
 
-1. **Install the new stack side-by-side** (does not touch your current env):
+1. **Install the new stack side-by-side** (does not touch your current env).
+   `--install-distrib` also runs `eups distrib install lsst_distrib`; without
+   it the new stack has no `lsst_distrib` for step 2 to set up:
 
    ```bash
-   scripts/utilities/install_stack_version.sh --release <tag>
+   scripts/utilities/install_stack_version.sh --release <tag> --install-distrib
    # installs into $LSST_STACKS_ROOT/<tag> (or ~/lsst_stacks/<tag>)
    ```
 
