@@ -76,7 +76,8 @@ Community Forum](https://community.lsst.org/) is the place to ask.
 
 **Some exposures fail calibration**
 : Star-poor fields can defeat the primary `calibrateImage` config. Keep
-  `use_fallbacks` on and list fallback configs; see {doc}`science-configs`.
+  `use_fallbacks` on and list fallback configs; see
+  {doc}`instruments/nickel/science-configs`.
   `REPO/processing_log/` shows which configs each night needed.
 
 ## Difference imaging

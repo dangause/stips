@@ -1,4 +1,4 @@
-# Science Processing Configuration Guide
+# Science configs
 
 This document describes the tuned `calibrateImage` configuration files for science processing on the Nickel 1m telescope at Lick Observatory. These configs control PSF modeling, astrometric calibration, photometric calibration, and aperture correction within the LSST Science Pipelines' `CalibrateImageTask`.
 
@@ -265,6 +265,7 @@ Notable findings from the audit:
 
 ---
 
-## See Also
+## See also
 
-- [Architecture Overview](architecture.md) - System architecture
+- [Nickel 1-m](index.md)
+- [Configuration](../../configuration.md): the `configs.science` keys

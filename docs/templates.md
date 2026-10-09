@@ -64,7 +64,7 @@ single-epoch frames rather than deep stacks. Each request is limited to
 0.17°, so STIPS assembles a larger `size` from several requests on the same
 frame. Its *v* filter is violet, not Johnson V, so the CTIO profile leaves
 *v* unmapped. The subtraction config matters because SkyMapper seeing is no
-sharper than the science images. The {doc}`skymapper-template-validation`
+sharper than the science images. The {doc}`instruments/ctio1m/skymapper-template-validation`
 report measures what to expect.
 
 ## No template

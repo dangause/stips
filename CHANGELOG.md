@@ -10,8 +10,10 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
   group). The docs are reorganized around a reading path: what STIPS is and
   why it uses the Rubin stack, installing the Rubin stack and STIPS (natively
   or with the published container), a quickstart on public SN 2023ixf data,
-  and user guides for configuration, templates, reference catalogs, variable
-  stars and transits, outputs, logs, and clusters. The CLI reference is
+  user guides for configuration, templates, reference catalogs, variable
+  stars and transits, outputs, logs, and clusters, and a section for each
+  instrument (Nickel; CTIO / Y4KCam): data access, calibration, photometry or
+  southern fields, example campaigns, and status. The CLI reference is
   generated from `stips <command> --help` (`docs/_ext/stips_cli.py`) and the
   Python API pages by autodoc. Internal notes in `docs/` stay out of the
   build. `make docs` builds it as Read the Docs does, failing on warnings;
