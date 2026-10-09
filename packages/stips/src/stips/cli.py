@@ -640,9 +640,11 @@ def download(
         # Download all nights from the -c pipeline config
         stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml download
 
+    \b
         # Download only missing nights from config
         stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml download --missing-only
 
+    \b
         # Download specific nights
         stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml download 20240625
         stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml download 20240416 20240429

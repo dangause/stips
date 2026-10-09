@@ -1,8 +1,8 @@
 # Pipeline configuration for CY Aquarii (variable star campaign)
 #
 # Usage:
-#   nickel run scripts/config/cy_aqr/pipeline.yaml
-#   nickel run scripts/config/cy_aqr/pipeline.yaml --dry-run
+#   stips -c scripts/config/cy_aqr/pipeline.yaml run
+#   stips -c scripts/config/cy_aqr/pipeline.yaml run --dry-run
 #
 # CY Aquarii is an SX Phoenicis (SXPHE) Population II blue straggler,
 # pulsating in the fundamental mode. Recently identified as a triple system.

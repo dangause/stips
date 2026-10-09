@@ -6,14 +6,14 @@
 # nodes without native installation.
 #
 # Two-layer execution model:
-#   1. Login node: User runs `apptainer exec stips.sif nickel run config.yaml`
+#   1. Login node: User runs `apptainer exec stips.sif stips -c config.yaml` run
 #      The orchestrator runs inside the container where the LSST stack exists.
 #   2. Compute nodes: BPS/Parsl submits Slurm jobs. The commandPrefix below
 #      wraps each `pipetask` call in `apptainer exec` so compute-node commands
 #      also execute inside the container.
 #
 # Usage:
-#   nickel run config.yaml  (with options: execution: bps, site: singularity-slurm)
+#   stips -c config.yaml run  (with options: execution: bps, site: singularity-slurm)
 
 includeConfigs:
   - ../base.yaml

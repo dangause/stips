@@ -10,3 +10,9 @@ body[data-theme="dark"] .mermaid-container {
     border-radius: 0.25rem;
   }
 }
+
+/* Reference tables span the content width instead of centring at their
+   natural width, so consecutive tables line up. */
+article table.docutils {
+  width: 100%;
+}

@@ -3,7 +3,7 @@
 # BPS configuration for Slurm-based HPC clusters using Parsl.
 #
 # Usage:
-#   nickel bps submit calibs 20230519 --site slurm
+#   stips -c config.yaml bps submit calibs 20230519 --site slurm
 #
 # Customize for your cluster:
 #   - partition: Your Slurm partition name

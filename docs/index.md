@@ -1,68 +1,78 @@
 # STIPS
 
-**STIPS** — the *Small Telescope Image Processing Suite* — brings the
-[LSST Science Pipelines](https://pipelines.lsst.io/) to 1-meter class
-telescopes. It runs survey-grade calibration, difference imaging, forced
-photometry, and lightcurve extraction on small-telescope data without deep
-LSST middleware knowledge. Its main use is transient astronomy: supernova
-monitoring campaigns at the Nickel 1-m at Lick Observatory.
+**STIPS**, the *Small Telescope Image Processing Suite*, reduces imaging from
+1-meter class telescopes with the Rubin Observatory's [LSST Science
+Pipelines](https://pipelines.lsst.io/). One YAML file per target takes raw
+frames to calibrated lightcurves: calibration, astrometry and photometry,
+image subtraction, forced photometry, and period or transit searches.
 
-STIPS has three parts. The **`stips` CLI** runs every step, from calibration
-through difference imaging to lightcurves, from one YAML config.
-**`obs_stips`** turns an instrument profile into an LSST instrument at runtime
-and ships the default pipelines and configs. An **instrument profile** is a
-directory, `instruments/<name>/`, that describes one telescope, so adding a
-telescope means adding a directory rather than a package. STIPS supports the
-Nickel 1-m and the CTIO 1.0-m with Y4KCam, and targets LSST Science Pipelines
-release `v30_0_3`. See {doc}`architecture`.
+STIPS was built for supernova follow-up with the Nickel 1-m at Lick
+Observatory, and supports any similar telescope whose camera is described in
+a short profile. {doc}`overview` explains what it does, why it exists, and why
+it is built on the Rubin stack.
 
 ::::{grid} 1 2 2 2
 :gutter: 3
 
-:::{grid-item-card} Get started
-:link: getting-started
+:::{grid-item-card} What is STIPS?
+:link: overview
 :link-type: doc
-Install STIPS and run a first pipeline.
+Why it exists, what it is for, and why the Rubin stack.
 :::
 
-:::{grid-item-card} Run a campaign
-:link: new-campaign
+:::{grid-item-card} Install
+:link: installation
 :link-type: doc
-Target, nights, template strategy, and the one-command run.
+The Rubin stack and STIPS, natively or as one container.
+:::
+
+:::{grid-item-card} Quickstart
+:link: quickstart
+:link-type: doc
+Reduce three nights of SN 2023ixf, from archive to lightcurve.
 :::
 
 :::{grid-item-card} Add a telescope
 :link: forking-stips
 :link-type: doc
-A declarative profile directory for your own 1-m.
-:::
-
-:::{grid-item-card} CLI reference
-:link: reference/cli
-:link-type: doc
-Every command and option, from `--help`.
+Describe your camera in a profile directory.
 :::
 ::::
+
+```{toctree}
+:maxdepth: 2
+:caption: Introduction
+:hidden:
+
+What is STIPS? <overview>
+How STIPS works <how-it-works>
+```
 
 ```{toctree}
 :maxdepth: 2
 :caption: Getting started
 :hidden:
 
-Installation and first run <getting-started>
-New campaign <new-campaign>
+Install the Rubin stack <install-rubin-stack>
+Install STIPS <installation>
+Quickstart <quickstart>
 ```
 
 ```{toctree}
 :maxdepth: 2
-:caption: Guide
+:caption: User guide
 :hidden:
 
+Set up a campaign <new-campaign>
 Configuration <configuration>
+Templates <templates>
+Reference catalogs <reference-catalogs>
+Variable stars and transits <time-series>
 Science configs <science-configs>
-Logging <logging>
+Outputs <outputs>
+Logs and debugging <logging>
+Running on a cluster <hpc>
 Troubleshooting <troubleshooting>
-Architecture <architecture>
 ```
 
 ```{toctree}
@@ -71,25 +81,27 @@ Architecture <architecture>
 :hidden:
 
 Adding a telescope <forking-stips>
-Instrument contract <instrument-contract>
-Instrument abstraction <obs-abstraction>
+How profiles become instruments <obs-abstraction>
+Instrument tests <instrument-contract>
 Crosstalk <crosstalk>
 ```
 
 ```{toctree}
 :maxdepth: 2
-:caption: Operations
+:caption: Developer guide
 :hidden:
 
-HPC, Docker, and Slurm <architecture-bps-docker-slurm>
-Stack-bump runbook <stack-bump-runbook>
+Development <development>
+Code architecture <architecture>
+Cluster architecture <architecture-bps-docker-slurm>
+Stack upgrades <stack-bump-runbook>
 Refcat validation <refcat-validation-runbook>
 Migrations <migrations>
 ```
 
 ```{toctree}
 :maxdepth: 2
-:caption: Validation
+:caption: Validation reports
 :hidden:
 
 SkyMapper templates <skymapper-template-validation>

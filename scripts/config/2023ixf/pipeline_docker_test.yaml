@@ -4,8 +4,8 @@
 # Uses container paths (not host paths).
 #
 # Usage (inside STIPS container):
-#   nickel run /opt/stips/scripts/config/2023ixf/pipeline_docker_test.yaml
-#   nickel run /opt/stips/scripts/config/2023ixf/pipeline_docker_test.yaml --dry-run
+#   stips -c /opt/stips/scripts/config/2023ixf/pipeline_docker_test.yaml run
+#   stips -c /opt/stips/scripts/config/2023ixf/pipeline_docker_test.yaml run --dry-run
 
 # =============================================================================
 # Environment Configuration (container paths)

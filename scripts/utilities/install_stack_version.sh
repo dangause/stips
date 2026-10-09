@@ -7,7 +7,7 @@
 # Notes:
 # - This is a thin convenience wrapper around `lsstinstall`. It does not modify
 #   your existing stack; it installs into a separate prefix so you can point
-#   `.env:STACK_DIR` at the new version when you want to use it.
+#   STACK_DIR (in a config's env: block) at the new version when you want to use it.
 # - You need network access and `lsstinstall` available. If missing, download
 #   it from https://raw.githubusercontent.com/lsst/lsst/main/scripts/lsstinstall/lsstinstall
 
@@ -105,8 +105,6 @@ fi
 cat <<DONE
 [ok] Installed $RELEASE at $TARGET
 
-To use it, update .env:
-  STACK_DIR=$TARGET
-
-Then rerun your pipeline commands (they source .env and load the stack).
+To use it, set STACK_DIR in your config's env: block:
+  STACK_DIR: $TARGET
 DONE

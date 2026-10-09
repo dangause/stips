@@ -1,8 +1,8 @@
 # Full pipeline configuration for SN 2023ixf using Nickel coadd templates
 #
 # Usage:
-#   nickel run scripts/config/2023ixf/pipeline_nickel_template.yaml
-#   nickel run scripts/config/2023ixf/pipeline_nickel_template.yaml --dry-run
+#   stips -c scripts/config/2023ixf/pipeline_nickel_template.yaml run
+#   stips -c scripts/config/2023ixf/pipeline_nickel_template.yaml run --dry-run
 #
 # This orchestrates the full DIA pipeline:
 #   0. Bootstrap repository (automatic if needed)

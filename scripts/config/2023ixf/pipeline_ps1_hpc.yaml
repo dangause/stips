@@ -8,11 +8,11 @@
 #   2. Convert to SIF:        singularity build stips.sif docker-daemon://stips:latest
 #   3. Transfer to cluster:   scp stips.sif cluster:/scratch/images/
 #   4. Bootstrap on login:    apptainer exec --bind /scratch stips.sif \
-#                               nickel bootstrap --env-file /scratch/config/.env.hpc
+#                               stips -c /scratch/config/pipeline_ps1_hpc.yaml bootstrap
 #   5. Run pipeline:          apptainer exec --bind /scratch stips.sif \
-#                               nickel run /scratch/config/pipeline_ps1_hpc.yaml
+#                               stips -c /scratch/config/pipeline_ps1_hpc.yaml run
 #
-# The orchestrator (nickel run) runs inside the container on the login node.
+# The orchestrator (stips run) runs inside the container on the login node.
 # BPS/Parsl submits Slurm jobs whose commandPrefix wraps pipetask in
 # `apptainer exec` so compute nodes also run inside the container.
 

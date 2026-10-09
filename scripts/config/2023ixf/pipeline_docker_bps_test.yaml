@@ -4,8 +4,8 @@
 # Processes all 22 public 2023ixf nights with PS1 templates.
 #
 # Usage (inside STIPS container):
-#   nickel run /opt/stips/scripts/config/2023ixf/pipeline_docker_bps_test.yaml
-#   nickel run /opt/stips/scripts/config/2023ixf/pipeline_docker_bps_test.yaml --dry-run
+#   stips -c /opt/stips/scripts/config/2023ixf/pipeline_docker_bps_test.yaml run
+#   stips -c /opt/stips/scripts/config/2023ixf/pipeline_docker_bps_test.yaml run --dry-run
 
 # =============================================================================
 # Environment Configuration (container paths)

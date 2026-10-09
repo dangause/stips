@@ -4,8 +4,8 @@
 # Runs on the local machine using Parsl's ThreadPoolExecutor.
 #
 # Usage:
-#   nickel bps submit calibs 20230519 --site local
-#   nickel bps submit science 20230519 --site local --dry-run
+#   stips -c config.yaml bps submit calibs 20230519 --site local
+#   stips -c config.yaml bps submit science 20230519 --site local --dry-run
 
 includeConfigs:
   - ../base.yaml

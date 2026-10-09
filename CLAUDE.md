@@ -92,7 +92,7 @@ stips/
 │   └── utilities/          # Helper scripts
 ├── bps/                    # BPS configs (base.yaml, sites/, pipelines/)
 ├── docker/                 # Dockerfile(s), docker-compose, Singularity def
-├── docs/                   # architecture.md, getting-started.md, forking-stips.md, audit/, ...
+├── docs/                   # Sphinx site (conf.py, index.md), installation.md, forking-stips.md, audit/, ...
 └── pyproject.toml          # uv workspace
 ```
 
@@ -595,5 +595,6 @@ class, same for every fork).
 - Target configs: `scripts/config/{target}/`
 - Adding a new instrument: `docs/forking-stips.md`
 - Stack-upgrade runbook: `docs/stack-bump-runbook.md`
-- Architecture / getting-started: `docs/architecture.md`, `docs/getting-started.md`
+- Architecture / installation: `docs/architecture.md`, `docs/install-rubin-stack.md`, `docs/installation.md`
+- Docs site (Sphinx + MyST + furo, Read the Docs): `docs/conf.py`, sidebar in `docs/index.md`; build with `make docs`
 - Audit reports: `docs/audit/`

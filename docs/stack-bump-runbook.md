@@ -29,7 +29,9 @@ When the supported release moves, update **all** of these together:
 | `docker/Dockerfile.hpc:30` | `ARG LSST_TAG=v30_0_3` |
 | `docker/Dockerfile.slurm:12` | `ARG LSST_TAG=v30_0_3` |
 | `README.md` (Supported LSST stack blockquote) | release + CI weekly + canary |
-| `docs/getting-started.md` (Prerequisites, item 2) | release + CI weekly |
+| `docs/install-rubin-stack.md` (version note, install commands, Docker tag) | release + CI weekly |
+| `docs/installation.md` (container section), `docs/how-it-works.md` (Rubin stack) | release |
+| `docs/development.md` (Tests) | CI weekly |
 
 The `stack-canary.yml` default (`al9-w_latest`) is intentionally floating and is
 **not** bumped by hand.
