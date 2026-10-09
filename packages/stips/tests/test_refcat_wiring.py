@@ -177,3 +177,45 @@ def test_cli_refcat_fetch_exits_nonzero_when_a_catalog_fails(monkeypatch):
     )
     assert result.exit_code != 0
     assert "ps1" in result.output
+
+
+def test_cli_refcat_status_computes_coverage_in_stack(monkeypatch):
+    """``refcat status`` must not need ``lsst`` in the venv, same as ``fetch``.
+
+    It called ``stips_refcats.cones_to_htm`` directly, which imports
+    ``lsst.geom`` and so crashed in the plain venv with ModuleNotFoundError.
+    It must use the venv-safe HTM path (in-stack snippet fallback) instead.
+    """
+    from unittest import mock
+
+    import stips.cli as cli
+    import stips.core.refcat as rc
+    from click.testing import CliRunner
+
+    def _no_lsst(cones, depth=7):
+        raise ModuleNotFoundError("No module named 'lsst.geom'")
+
+    scripts = []
+
+    def _fake_stack_json(script, config):
+        scripts.append(script)
+        return [100, 101, 102]
+
+    present = {"gaia_dr3": [100, 101, 102], "panstarrs1_dr2": [100]}
+    monkeypatch.setattr(cli, "_load_config", lambda ctx: mock.Mock())
+    monkeypatch.setattr(rc, "cones_to_htm", _no_lsst)
+    monkeypatch.setattr(rc, "run_butler_python_json", _fake_stack_json)
+    monkeypatch.setattr(
+        rc.butler_query,
+        "dataset_data_id_values",
+        lambda config, dataset_type, collections, dimension: present[dataset_type],
+    )
+    result = CliRunner().invoke(
+        cli.cli, ["refcat", "status", "--ra", "210.91", "--dec", "54.31"]
+    )
+    assert result.exit_code == 0, result.output
+    # HTM coverage came from the in-stack snippet, for the requested cone.
+    assert len(scripts) == 1 and "HtmIndexer" in scripts[0]
+    assert "(210.91, 54.31, 0.3)" in scripts[0]
+    assert "gaia_dr3: 3/3 trixels present" in result.output
+    assert "panstarrs1_dr2: 1/3 trixels present" in result.output

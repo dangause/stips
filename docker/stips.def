@@ -2,6 +2,9 @@
 #
 # For HPC environments that require Singularity instead of Docker.
 #
+# Pull a release's prebuilt image (published by docker-publish.yml):
+#   singularity pull stips.sif oras://ghcr.io/dangause/stips-sif:<tag>
+#
 # Build from Docker image:
 #   # First build Docker image
 #   docker build -t stips:latest -f docker/Dockerfile .
@@ -10,13 +13,14 @@
 #   singularity build stips.sif docker-daemon://stips:latest
 #
 # Build directly (if Singularity can access container registry):
-#   singularity build stips.sif docker://ghcr.io/lick-observatory/stips:latest
+#   singularity build stips.sif docker://ghcr.io/dangause/stips:latest
 #
 # Usage:
 #   singularity run -B /path/to/repo:/data/repo \
 #                   -B /path/to/raw:/data/raw \
 #                   -B /path/to/refcats:/data/refcats \
-#                   stips.sif stips calibs 20230519
+#                   -B /path/to/config:/config \
+#                   stips.sif stips -c /config/target.yaml calibs 20230519
 
 Bootstrap: docker
 From: stips:latest
@@ -29,20 +33,34 @@ From: stips:latest
 
 %help
     Small Telescope Image Processing Suite (STIPS) Container
-    ========================================
+    ========================================================
 
-    This container provides the Small Telescope Image Processing Suite for processing
-    data from the Nickel 1-meter telescope using LSST Science Pipelines.
+    This container runs the LSST Science Pipelines on data from 1-meter class
+    telescopes. Every instrument profile is in the image under
+    /opt/stips/instruments/ (nickel, ctio1m).
+
+    Every stips command takes a config file with -c. Its env: block gives the
+    paths inside the container and picks the instrument:
+
+        env:
+          REPO: /data/repo
+          STACK_DIR: /opt/lsst/software/stack
+          INSTRUMENT_DIR: /opt/stips/instruments/nickel   # or .../ctio1m
+          RAW_PARENT_DIR: /data/raw
+          REFCAT_REPO: /data/refcats
 
     USAGE:
+        # Run the whole pipeline the config describes
+        singularity run stips.sif stips -c /config/target.yaml run
+
         # Run calibrations
-        singularity run stips.sif stips calibs 20230519
+        singularity run stips.sif stips -c /config/target.yaml calibs 20230519
 
         # Run science processing
-        singularity run stips.sif stips science 20230519
+        singularity run stips.sif stips -c /config/target.yaml science 20230519
 
         # Run difference imaging
-        singularity run stips.sif stips dia 20230519 --auto --band r
+        singularity run stips.sif stips -c /config/target.yaml dia 20230519 --auto --band r
 
         # Interactive shell
         singularity shell stips.sif
@@ -54,35 +72,26 @@ From: stips:latest
         -B /path/to/butler/repo:/data/repo      Butler repository
         -B /path/to/raw/data:/data/raw          Raw FITS files
         -B /path/to/refcats:/data/refcats       Reference catalogs
+        -B /path/to/config:/config              Config file(s) passed with -c
 
     OPTIONAL BIND MOUNTS:
-        -B /path/to/config:/config              Configuration files (.env)
         -B /path/to/outputs:/data/outputs       Output directory
-
-    ENVIRONMENT VARIABLES:
-        REPO=/data/repo
-        RAW_PARENT_DIR=/data/raw
-        REFCAT_REPO=/data/refcats
-        STIPS_PROFILE=<profile>                   Load .env.<profile> from /config
 
     EXAMPLES:
         # Basic processing
         singularity run -B /scratch/repo:/data/repo \
                         -B /archive/raw:/data/raw \
                         -B /common/refcats:/data/refcats \
-                        stips.sif stips calibs 20230519
-
-        # With profile configuration
-        singularity run -B /scratch/repo:/data/repo \
-                        -B /archive/raw:/data/raw \
-                        -B /common/refcats:/data/refcats \
                         -B ./config:/config \
-                        --env STIPS_PROFILE=2023ixf \
-                        stips.sif stips dia 20230519 --auto
+                        stips.sif stips -c /config/2023ixf.yaml calibs 20230519
+
+        # Difference imaging
+        singularity run -B ... \
+                        stips.sif stips -c /config/2023ixf.yaml dia 20230519 --auto
 
         # BPS submission (local testing)
         singularity run -B ... \
-                        stips.sif stips bps submit science 20230519 --site local
+                        stips.sif stips -c /config/2023ixf.yaml bps submit science 20230519 --site local
 
 %environment
     # Standard environment variables. The instrument's EUPS packages
