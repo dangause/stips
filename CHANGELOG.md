@@ -9,6 +9,22 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
   No module named 'lsst.geom'`, because it called the HTM cone helper directly.
   It now computes cone coverage in-stack when `lsst` is not importable, as
   `stips refcat fetch` already did.
+- `make stack-install` (`scripts/utilities/install_stack_version.sh`) failed
+  before installing anything: it ran `lsstinstall -T <dir> <tag>`, and current
+  `lsstinstall` takes the EUPS tag as `-T` and rejects positional arguments. It
+  now follows Rubin's documented flow: create `<prefix>/<tag>`, run
+  `lsstinstall -P -T <tag>` inside it (`-P`: the new stack gets its own conda
+  rather than reusing one active in the calling shell), then optionally
+  `eups distrib install` (`--install-distrib` / `INSTALL_DISTRIB=1`).
+  `--python` maps to `lsstinstall -y`; it passed `-P`, which no longer takes a
+  version. A failed `lsstinstall` exits non-zero instead of reporting success,
+  rerunning with `--install-distrib` on a bootstrapped directory installs
+  `lsst_distrib` instead of skipping, and the download hint points at
+  https://ls.st/lsstinstall (the old URL is a 404).
+- `make stack-install` installs into `~/lsst_stacks/<TAG>` by default (override
+  with `STACK_PREFIX`). It fell back to `$STACK_DIR`, which put the new stack
+  inside the existing one; the script itself no longer falls back to
+  `$STACK_DIR` either.
 
 ### Changed
 - The paper material — the rebuild driver (`scripts/paper/`), the paper's
