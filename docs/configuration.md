@@ -73,7 +73,7 @@ defaults (`packages/obs_stips/instrument_defaults/configs/`).
 
 | Key | Task |
 |---|---|
-| `science.calibrate_image` | `calibrateImage`; see {doc}`science-configs` |
+| `science.calibrate_image` | `calibrateImage`; see {doc}`instruments/nickel/science-configs` for Nickel's |
 | `science.calibrate_image_fallbacks` | Configs to retry failed exposures with, in order |
 | `science.colorterms` | Colour terms for photometric calibration |
 | `dia.subtract_images` | Image subtraction |

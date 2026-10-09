@@ -68,7 +68,6 @@ Configuration <configuration>
 Templates <templates>
 Reference catalogs <reference-catalogs>
 Variable stars and transits <time-series>
-Science configs <science-configs>
 Outputs <outputs>
 Logs and debugging <logging>
 Running on a cluster <hpc>
@@ -80,6 +79,8 @@ Troubleshooting <troubleshooting>
 :caption: Instruments
 :hidden:
 
+Nickel 1-m <instruments/nickel/index>
+CTIO 1.0-m / Y4KCam <instruments/ctio1m/index>
 Adding a telescope <forking-stips>
 How profiles become instruments <obs-abstraction>
 Instrument tests <instrument-contract>
@@ -97,15 +98,6 @@ Cluster architecture <architecture-bps-docker-slurm>
 Stack upgrades <stack-bump-runbook>
 Refcat validation <refcat-validation-runbook>
 Migrations <migrations>
-```
-
-```{toctree}
-:maxdepth: 2
-:caption: Validation reports
-:hidden:
-
-SkyMapper templates <skymapper-template-validation>
-Template colour terms <template-colorterm-fit>
 ```
 
 ```{toctree}

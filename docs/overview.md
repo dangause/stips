@@ -91,8 +91,8 @@ and make good starting points for your own.
 
 | Telescope | Camera | Raw data |
 |---|---|---|
-| Nickel 1-m, Lick Observatory (reference) | Single-amplifier 1024 × 1024 CCD, 0.37″/pixel | [Lick archive](https://archive.ucolick.org/archive/) |
-| CTIO 1.0-m with Y4KCam | Four-amplifier 4064 × 4064 CCD, unbinned or 2 × 2 binned | [NOIRLab Astro Data Archive](https://astroarchive.noirlab.edu/) |
+| [Nickel 1-m](instruments/nickel/index.md), Lick Observatory (reference) | Single-amplifier 1024 × 1024 CCD, 0.37″/pixel | [Lick archive](https://archive.ucolick.org/archive/) |
+| [CTIO 1.0-m with Y4KCam](instruments/ctio1m/index.md) | Four-amplifier 4064 × 4064 CCD, unbinned or 2 × 2 binned | [NOIRLab Astro Data Archive](https://astroarchive.noirlab.edu/) |
 
 Another telescope can be added with a profile directory; see
 {doc}`forking-stips`.

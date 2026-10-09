@@ -505,7 +505,7 @@ For **templates**, southern fields have two options, in order of preference:
 
    SkyMapper is **explicit-only** — `template.type: auto` never selects it.
 
-   **Measured on NGC2298 (see `docs/skymapper-template-validation.md`).** The
+   **Measured on NGC2298 (see `docs/instruments/ctio1m/skymapper-template-validation.md`).** The
    cutout covers only **~16% of a Y4KCam field** (85% of each difference image is
    `NO_DATA`), so only same-footprint comparisons are meaningful. Within that
    footprint SkyMapper recovers **51% of the coadd's sources at ~30% purity**.
