@@ -1,112 +1,108 @@
 # STIPS
 
-**The Small Telescope Image Processing Suite** brings the
+**STIPS** — the *Small Telescope Image Processing Suite* — brings the
 [LSST Science Pipelines](https://pipelines.lsst.io/) to 1-meter class
-telescopes.
+telescopes. It runs survey-grade calibration, difference imaging, forced
+photometry, and lightcurve extraction on small-telescope data without deep
+LSST middleware knowledge. Its main use is transient astronomy: supernova
+monitoring campaigns at the Nickel 1-m at Lick Observatory.
 
-STIPS wraps the Rubin/LSST reduction stack with the per-telescope plumbing a
-small observatory needs — a declarative instrument profile, prefab YAML
-pipelines, and a unified `stips` command-line interface — so you can run
-survey-grade calibration, difference imaging, forced photometry, and lightcurve
-extraction without deep LSST middleware knowledge. Its primary use case is
-transient astronomy: supernova monitoring campaigns at the Nickel 1-m at Lick
-Observatory.
+STIPS has three parts. The **`stips` CLI** runs every step, from calibration
+through difference imaging to lightcurves, from one YAML config.
+**`obs_stips`** turns an instrument profile into an LSST instrument at runtime
+and ships the default pipelines and configs. An **instrument profile** is a
+directory, `instruments/<name>/`, that describes one telescope, so adding a
+telescope means adding a directory rather than a package. STIPS supports the
+Nickel 1-m and the CTIO 1.0-m with Y4KCam, and targets LSST Science Pipelines
+release `v30_0_3`. See {doc}`architecture`.
 
-[![CI](https://github.com/dangause/stips/actions/workflows/ci.yml/badge.svg)](https://github.com/dangause/stips/actions/workflows/ci.yml)
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23243456.svg)](https://doi.org/10.5281/zenodo.23243456)
-[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://github.com/dangause/stips/blob/main/LICENSE)
+::::{grid} 1 2 2 2
+:gutter: 3
 
-<div class="grid cards" markdown>
+:::{grid-item-card} Get started
+:link: getting-started
+:link-type: doc
+Install STIPS and run a first pipeline.
+:::
 
--   :material-rocket-launch: **Getting started**
+:::{grid-item-card} Run a campaign
+:link: new-campaign
+:link-type: doc
+Target, nights, template strategy, and the one-command run.
+:::
 
-    ---
+:::{grid-item-card} Add a telescope
+:link: forking-stips
+:link-type: doc
+A declarative profile directory for your own 1-m.
+:::
 
-    Install STIPS, point it at an LSST stack, and run your first pipeline.
+:::{grid-item-card} CLI reference
+:link: reference/cli
+:link-type: doc
+Every command and option, from `--help`.
+:::
+::::
 
-    [:octicons-arrow-right-24: Getting started](getting-started.md)
+```{toctree}
+:maxdepth: 2
+:caption: Getting started
+:hidden:
 
--   :material-star-shooting: **New campaign**
-
-    ---
-
-    Set up a new transient target: coordinates, nights, and template strategy.
-
-    [:octicons-arrow-right-24: New campaign](new-campaign.md)
-
--   :material-telescope: **Add a telescope**
-
-    ---
-
-    Bring STIPS to your own 1-m with a declarative profile directory.
-
-    [:octicons-arrow-right-24: Adding a telescope](forking-stips.md)
-
--   :material-console: **CLI reference**
-
-    ---
-
-    Every `stips` command and option, generated from the source.
-
-    [:octicons-arrow-right-24: CLI reference](reference/cli.md)
-
-</div>
-
-## Supported instruments
-
-| Instrument | Status | Notes |
-|---|---|---|
-| **Nickel 1-m**, Lick Observatory | Reference | Single CCD, B/V/R/I; Lick archive fetch. Used for active SN, exoplanet, and variable-star follow-up. |
-| **CTIO 1.0m / Y4KCam** | Validated | 4-amp camera, on-chip binning (4064² and 2072²), B/V/R/I; NOIRLab Astro Data Archive fetch. |
-| **Your 1-m** | Add one | Drop a declarative profile into `instruments/<name>/` — no per-instrument LSST `obs_` package. See [Adding a telescope](forking-stips.md). |
-
-!!! info "Supported LSST stack"
-    STIPS targets LSST Science Pipelines release **`v30_0_3`** — the version
-    the Docker images build on and the docs are validated against. CI pins the
-    weekly `w_2025_32`, and a scheduled canary tracks `w_latest`. Before
-    upgrading, follow the [stack-bump runbook](stack-bump-runbook.md).
-
-## What it does
-
-```mermaid
-flowchart LR
-    A[Bootstrap] --> B[Calibs] --> C[Science] --> D[DIA]
-    T[Templates] --> D
-    D --> E[Forced phot] --> F[Lightcurve]
+Installation and first run <getting-started>
+New campaign <new-campaign>
 ```
 
-- **Calibration** — nightly bias and flat construction, curated defect masks,
-  crosstalk for multi-amp cameras.
-- **Single-frame processing** — ISR, source detection, astrometric (Gaia DR3)
-  and photometric (PS1 or Gaia) calibration, with automatic fallback configs.
-- **Templates** — Pan-STARRS1 cutouts in the north; same-instrument coadds or
-  SkyMapper cutouts in the south.
-- **Difference imaging** — per night, per band, so a failure in one band does
-  not block the others.
-- **Forced photometry and lightcurves** — at the target's coordinates, on
-  difference or direct images.
-- **Scale-out** — one YAML drives the whole campaign locally, or on Slurm or
-  HTCondor through BPS; Docker and Singularity images are provided.
+```{toctree}
+:maxdepth: 2
+:caption: Guide
+:hidden:
 
-## Quick start
-
-```bash
-# Install the framework (stips + obs_stips); instruments load by path
-uv sync --group dev
-
-# Run a full campaign from one self-contained YAML
-stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml run
-
-# ...or step by step, with the same config
-stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml calibs 20230519
-stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml science 20230519
-stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml dia 20230519 --auto
+Configuration <configuration>
+Science configs <science-configs>
+Logging <logging>
+Troubleshooting <troubleshooting>
+Architecture <architecture>
 ```
 
-The [configuration page](configuration.md) explains the YAML, and the
-[getting started guide](getting-started.md) walks through a first run.
+```{toctree}
+:maxdepth: 2
+:caption: Instruments
+:hidden:
 
-## Citing
+Adding a telescope <forking-stips>
+Instrument contract <instrument-contract>
+Instrument abstraction <obs-abstraction>
+Crosstalk <crosstalk>
+```
 
-If you use STIPS in your research, please cite it — see
-[Citing STIPS](citing.md).
+```{toctree}
+:maxdepth: 2
+:caption: Operations
+:hidden:
+
+HPC, Docker, and Slurm <architecture-bps-docker-slurm>
+Stack-bump runbook <stack-bump-runbook>
+Refcat validation <refcat-validation-runbook>
+Migrations <migrations>
+```
+
+```{toctree}
+:maxdepth: 2
+:caption: Validation
+:hidden:
+
+SkyMapper templates <skymapper-template-validation>
+Template colour terms <template-colorterm-fit>
+```
+
+```{toctree}
+:maxdepth: 2
+:caption: Reference
+:hidden:
+
+CLI reference <reference/cli>
+Python API <reference/python-api>
+Changelog <changelog>
+Citing STIPS <citing>
+```

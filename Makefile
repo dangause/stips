@@ -124,12 +124,12 @@ format: ## Ruff format across the workspace
 	$(PYTHON) -m ruff format .
 
 .PHONY: docs
-docs: ## Build the docs site into site/, failing on warnings as Read the Docs does
-	uv run --with-requirements docs/requirements.txt mkdocs build --strict
+docs: ## Build the docs site into docs/_build/html, failing on warnings as Read the Docs does
+	uv run --group docs sphinx-build -W --keep-going -b html docs docs/_build/html
 
 .PHONY: docs-serve
 docs-serve: ## Serve the docs site with live reload on http://127.0.0.1:8000
-	uv run --with-requirements docs/requirements.txt mkdocs serve
+	uv run --group docs sphinx-autobuild docs docs/_build/html
 
 .PHONY: test
 test: ## Run pytest suite (requires stack env)

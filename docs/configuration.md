@@ -48,10 +48,12 @@ env:
 | `LICK_ARCHIVE_DIR` | Path to the Lick archive client (Nickel `download`) |
 | `NOIRLAB_PROPOSAL` | Proposal-id filter for the CTIO NOIRLab `download` |
 
-!!! warning "Removed keys"
-    `INSTRUMENT_PACKAGE` and `OBS_NICKEL` are gone. A lingering
-    `INSTRUMENT_PACKAGE` raises an error telling you to set `INSTRUMENT_DIR`
-    to the directory containing your instrument's `profile.py`.
+:::{admonition} Removed keys
+:class: warning
+`INSTRUMENT_PACKAGE` and `OBS_NICKEL` are gone. A lingering
+`INSTRUMENT_PACKAGE` raises an error telling you to set `INSTRUMENT_DIR`
+to the directory containing your instrument's `profile.py`.
+:::
 
 ## The pipeline sections
 
@@ -102,12 +104,14 @@ lightcurve:
   # distance_modulus: 29.05        # needed for absolute_mag
 ```
 
-!!! tip "Use full-precision coordinates"
-    Convert the target's TNS sexagesimal position to decimal degrees with 6+
-    decimal places (e.g. `14:03:38.580, +54:18:42.10` →
-    `210.910750, 54.311694`). Rounding to 2 decimals is a 5–17″ offset —
-    enough to miss a point source on Nickel's 0.37″/pixel scale. The symptom
-    is uniformly negative forced-photometry flux.
+:::{admonition} Use full-precision coordinates
+:class: tip
+Convert the target's TNS sexagesimal position to decimal degrees with 6+
+decimal places (e.g. `14:03:38.580, +54:18:42.10` →
+`210.910750, 54.311694`). Rounding to 2 decimals is a 5–17″ offset —
+enough to miss a point source on Nickel's 0.37″/pixel scale. The symptom
+is uniformly negative forced-photometry flux.
+:::
 
 ### Template types
 

@@ -112,5 +112,5 @@ docs/aas246-iposter-*.md
 docs/logging-improvements.md
 docs/methods-handout.*
 
-# MkDocs build output (make docs)
-/site/
+# Sphinx build output (make docs)
+docs/_build/
