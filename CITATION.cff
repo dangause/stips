@@ -21,17 +21,21 @@ authors:
     affiliation: "University of California Observatories"
     orcid: "https://orcid.org/0000-0003-1809-6920"
 repository-code: "https://github.com/dangause/stips"
-doi: "10.5281/zenodo.23243457"
+url: "https://stips-lsst.readthedocs.io"
+doi: "10.5281/zenodo.23270726"
 identifiers:
   - type: doi
-    value: "10.5281/zenodo.23243457"
-    description: "This version (v2.2.4)"
+    value: "10.5281/zenodo.23270726"
+    description: "This version (v2.3.0)"
   - type: doi
     value: "10.5281/zenodo.23243456"
     description: "All versions (concept DOI; resolves to the latest)"
+  - type: doi
+    value: "10.5281/zenodo.23243457"
+    description: "v2.2.4"
 license: GPL-3.0-or-later
-version: 2.2.4
-date-released: "2026-10-08"
+version: 2.3.0
+date-released: "2026-10-09"
 keywords:
   - astronomy
   - image processing

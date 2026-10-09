@@ -4,6 +4,12 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
 
 ## [Unreleased]
 
+## [2.3.0] — 2026-10-09
+
+A documentation site (<https://stips-lsst.readthedocs.io>), and fixes for
+problems a new user hits installing and first running STIPS. No pipeline,
+task or calibration-config changes.
+
 ### Added
 - A documentation site for Read the Docs: Sphinx with MyST markdown and the
   furo theme (`docs/conf.py`, `.readthedocs.yaml`, a uv `docs` dependency

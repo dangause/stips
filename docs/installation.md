@@ -18,7 +18,7 @@ Each STIPS release is published as a Docker image with the Rubin stack
 (`v30_0_3`) and STIPS already set up:
 
 ```bash
-docker pull ghcr.io/dangause/stips:2.2.4
+docker pull ghcr.io/dangause/stips:2.3.0
 ```
 
 Run commands by mounting your data at the image's standard paths:
@@ -30,7 +30,7 @@ docker run --rm \
   -v /path/to/refcats:/data/refcats \
   -v "$PWD":/config:ro \
   -v "$PWD/logs":/opt/stips/logs \
-  ghcr.io/dangause/stips:2.2.4 \
+  ghcr.io/dangause/stips:2.3.0 \
   stips -c /config/target.yaml run
 ```
 
@@ -49,7 +49,7 @@ On a cluster, use the [Apptainer](https://apptainer.org/docs/user/latest/)
 build of the same image, with the same bind mounts:
 
 ```bash
-apptainer pull stips.sif oras://ghcr.io/dangause/stips-sif:v2.2.4
+apptainer pull stips.sif oras://ghcr.io/dangause/stips-sif:v2.3.0
 apptainer run --bind /path/to/repo:/data/repo,/path/to/raw:/data/raw,/path/to/refcats:/data/refcats,$PWD:/config,$PWD/logs:/opt/stips/logs \
   stips.sif stips -c /config/target.yaml run
 ```
