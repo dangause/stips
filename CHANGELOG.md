@@ -20,6 +20,13 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
   rebuild's products. The rebuild driver now runs a STIPS checkout given by
   `--stips`. The diagnostic scripts in `scripts/analysis/` stay here.
 
+### Fixed
+- `stips download` works for Nickel in a fresh install again. The vendored
+  Lick archive client that the download hook imports needs `tenacity`, which
+  stopped being installed when the archive left the `packages/*` workspace in
+  2.0.0, so the download failed with `No module named 'tenacity'`.
+  `packages/stips` now declares it.
+
 ## [2.2.4] — 2026-10-08
 
 The first release archived on Zenodo with a DOI; it is the version the paper

@@ -2822,6 +2822,7 @@ dependencies = [
     { name = "rich" },
     { name = "scipy" },
     { name = "stips-refcats" },
+    { name = "tenacity" },
 ]
 
 [package.optional-dependencies]
@@ -2847,6 +2848,7 @@ requires-dist = [
     { name = "scipy" },
     { name = "sse-starlette", marker = "extra == 'dashboard'", specifier = ">=1.8.0" },
     { name = "stips-refcats", editable = "packages/refcats" },
+    { name = "tenacity", specifier = ">=8.0.0" },
     { name = "uvicorn", extras = ["standard"], marker = "extra == 'dashboard'", specifier = ">=0.24.0" },
 ]
 provides-extras = ["dashboard"]
@@ -2888,6 +2890,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/91/fb/b7dff13369dfd64c58253b44355d4ba1553487407a965ebd15e4a5a3b277/symbolicmode-2.0.1.tar.gz", hash = "sha256:9f3e4bfa7ad0709fd3b21cfb0a6e6ef9d842eca29460e4796b5e65e72d49ba55", size = 10622, upload-time = "2023-10-25T01:14:49.115Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/00/7a/8b1ab26a95299b372fa225b046b993017a64ea90020e33754ce66b6d8f6d/symbolicmode-2.0.1-py3-none-any.whl", hash = "sha256:1f88547b48eb7551c19b459b771b8f4de27f0109dedf68c7f0aea4caeadf85d1", size = 9976, upload-time = "2023-10-25T01:14:47.33Z" },
+]
+
+[[package]]
+name = "tenacity"
+version = "9.1.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/0a/d4/2b0cd0fe285e14b36db076e78c93766ff1d529d70408bd1d2a5a84f1d929/tenacity-9.1.2.tar.gz", hash = "sha256:1169d376c297e7de388d18b4481760d478b0e99a777cad3a9c86e556f4b697cb", size = 48036, upload-time = "2025-04-02T08:25:09.966Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e5/30/643397144bfbfec6f6ef821f36f33e57d35946c44a2352d3c9f0ae847619/tenacity-9.1.2-py3-none-any.whl", hash = "sha256:f77bf36710d8b73a50b2dd155c97b870017ad21afe6ab300326b0371b3b05138", size = 28248, upload-time = "2025-04-02T08:25:07.678Z" },
 ]
 
 [[package]]
