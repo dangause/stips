@@ -60,7 +60,8 @@ COPY docker/slurm/slurm.conf /etc/slurm/slurm.conf
 # Using a single RUN to keep layers minimal
 # --no-deps keeps pip from touching LSST-managed packages, so the runtime deps
 # the LSST environment lacks are installed explicitly:
-#   - tenacity: the Nickel download hook's vendored Lick archive client
+#   - tenacity (pinned to the version in uv.lock): the Nickel download hook's
+#     vendored Lick archive client
 #   - fastapi, uvicorn, jinja2, sse-starlette: the dashboard
 # stips-refcats (packages/refcats) is the on-demand Gaia/PS1 refcat fetch that
 # `stips run` imports in refcat.mode gaia_ps1/gaia. The import check fails the
@@ -71,7 +72,7 @@ RUN source /opt/lsst/software/stack/loadLSST.bash && \
     pip install --no-deps -e packages/refcats && \
     pip install --no-deps -e packages/stips && \
     pip install --no-deps -e packages/obs_stips && \
-    pip install tenacity && \
+    pip install "tenacity==9.1.2" && \
     pip install fastapi "uvicorn[standard]" jinja2 sse-starlette && \
     python -c "import stips.cli, stips_refcats, astroquery, tenacity, fastapi, uvicorn, sse_starlette" && \
     { chmod +x /opt/stips/scripts/pipeline/*.sh 2>/dev/null || true; }

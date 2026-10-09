@@ -13,7 +13,19 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
   Docs does, failing on warnings; `make docs-serve` previews it, and a CI job
   runs the same build.
 
+### Changed
+- The paper material — the rebuild driver (`scripts/paper/`), the paper's
+  figure scripts, `docs/paper-readiness.md` and the nightly-median test —
+  moved to a separate `stips-paper` repository, which also archives the
+  rebuild's products. The rebuild driver now runs a STIPS checkout given by
+  `--stips`. The diagnostic scripts in `scripts/analysis/` stay here.
+
 ### Fixed
+- `stips download` works for Nickel in a fresh install again. The vendored
+  Lick archive client that the download hook imports needs `tenacity`, which
+  stopped being installed when the archive left the `packages/*` workspace in
+  2.0.0, so the download failed with `No module named 'tenacity'`.
+  `packages/stips` now declares it.
 - The container image can fetch refcats on demand and run every instrument.
   It installs `stips-refcats` (which `refcat.mode: gaia_ps1` and `gaia` need)
   and `tenacity` (the Nickel download's archive client), and it ships all of
@@ -23,6 +35,26 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
   BSD-3-Clause, and published images said GPL-3.0). A failed `pip install`
   now fails the image build. The HPC and Slurm images ship every instrument
   too.
+- `stips refcat status` crashed in the plain venv with `ModuleNotFoundError:
+  No module named 'lsst.geom'`, because it called the HTM cone helper directly.
+  It now computes cone coverage in-stack when `lsst` is not importable, as
+  `stips refcat fetch` already did.
+- `make stack-install` (`scripts/utilities/install_stack_version.sh`) failed
+  before installing anything: it ran `lsstinstall -T <dir> <tag>`, and current
+  `lsstinstall` takes the EUPS tag as `-T` and rejects positional arguments. It
+  now follows Rubin's documented flow: create `<prefix>/<tag>`, run
+  `lsstinstall -P -T <tag>` inside it (`-P`: the new stack gets its own conda
+  rather than reusing one active in the calling shell), then optionally
+  `eups distrib install` (`--install-distrib` / `INSTALL_DISTRIB=1`).
+  `--python` maps to `lsstinstall -y`; it passed `-P`, which no longer takes a
+  version. A failed `lsstinstall` exits non-zero instead of reporting success,
+  rerunning with `--install-distrib` on a bootstrapped directory installs
+  `lsst_distrib` instead of skipping, and the download hint points at
+  https://ls.st/lsstinstall (the old URL is a 404).
+- `make stack-install` installs into `~/lsst_stacks/<TAG>` by default (override
+  with `STACK_PREFIX`). It fell back to `$STACK_DIR`, which put the new stack
+  inside the existing one; the script itself no longer falls back to
+  `$STACK_DIR` either.
 - The Slurm compute-node image (`docker/Dockerfile.slurm`) ships the `stips`
   source. Every instrument profile imports `stips`, which
   `bps/sites/docker-slurm.yaml` expects at `/opt/stips/packages/stips/src`, so
@@ -44,13 +76,6 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
   `oras://ghcr.io/dangause/stips-sif:<tag>`); the image description is no
   longer Nickel-only; and step 1 of the stack-bump runbook installs
   `lsst_distrib`, which step 2's tests set up.
-
-### Changed
-- The paper material — the rebuild driver (`scripts/paper/`), the paper's
-  figure scripts, `docs/paper-readiness.md` and the nightly-median test —
-  moved to a separate `stips-paper` repository, which also archives the
-  rebuild's products. The rebuild driver now runs a STIPS checkout given by
-  `--stips`. The diagnostic scripts in `scripts/analysis/` stay here.
 
 ## [2.2.4] — 2026-10-08
 

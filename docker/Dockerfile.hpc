@@ -48,16 +48,17 @@ COPY scripts/ /opt/stips/scripts/
 COPY bps/ /opt/stips/bps/
 
 # --no-deps keeps pip from touching LSST-managed packages; tenacity (the Nickel
-# download hook's Lick archive client) is the one runtime dep the LSST
-# environment lacks. stips-refcats is the on-demand Gaia/PS1 refcat fetch. The
-# import check fails the build if a runtime dep is missing.
+# download hook's Lick archive client, pinned to the version in uv.lock) is the
+# one runtime dep the LSST environment lacks. stips-refcats is the on-demand
+# Gaia/PS1 refcat fetch. The import check fails the build if a runtime dep is
+# missing.
 RUN source /opt/lsst/software/stack/loadLSST.bash && \
     setup lsst_distrib && \
     cd /opt/stips && \
     pip install --no-deps -e packages/refcats && \
     pip install --no-deps -e packages/stips && \
     pip install --no-deps -e packages/obs_stips && \
-    pip install tenacity && \
+    pip install "tenacity==9.1.2" && \
     python -c "import stips.cli, stips_refcats, astroquery, tenacity" && \
     { chmod +x /opt/stips/scripts/pipeline/*.sh 2>/dev/null || true; }
 
