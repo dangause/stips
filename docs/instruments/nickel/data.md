@@ -14,7 +14,6 @@ env:
 ```
 
 ```bash
-uv pip install tenacity                       # needed by the archive client
 stips -c target.yaml download                 # every night in the config
 stips -c target.yaml download 20230519        # one night
 stips -c target.yaml download --missing-only  # nights not yet on disk

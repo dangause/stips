@@ -62,7 +62,6 @@ exists.
 ## 2. Download the raw frames
 
 ```bash
-uv pip install tenacity          # needed by the Lick archive client
 stips -c sn2023ixf.yaml download
 ```
 

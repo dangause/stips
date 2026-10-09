@@ -17,9 +17,6 @@ Community Forum](https://community.lsst.org/) is the place to ask.
 **`ModuleNotFoundError` after moving the checkout**
 : The `.venv` records absolute paths. Rebuild it: `rm -rf .venv && uv sync`.
 
-**`No module named 'tenacity'` from `stips download`**
-: The vendored Lick archive client needs it: `uv pip install tenacity`.
-
 **`No config provided`**
 : Every command needs `-c <config.yaml>` before the command name:
   `stips -c target.yaml calibs 20230519`.

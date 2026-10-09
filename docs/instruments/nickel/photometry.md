@@ -43,6 +43,22 @@ which runs `stips-colorterms-fit`.
 Each lightcurve row records its system in the `mag_system` column, and the
 plot labels it.
 
+## Accuracy
+
+On four nights of Landolt standards (90 measurements, 7 to 9 standards per
+band; checked 5 October 2026), `gaia_ps1` calibration agrees with the
+published magnitudes to within 0.012 mag on average:
+
+| Band | Mean, STIPS − Landolt | Robust scatter |
+|---|---|---|
+| B | +0.005 | 0.08 |
+| V | +0.012 | 0.02 |
+| R | +0.009 | 0.08 |
+| I | −0.008 | 0.06 |
+
+MONSTER mode does not reach this: it leaves B off by −0.44 mag and V by
++0.27 mag. Use `gaia_ps1` for Nickel photometry.
+
 ## Checking the calibration
 
 - `stips calib-metrics -o metrics.csv` writes each visit's astrometric and

@@ -52,9 +52,16 @@ setup lsst_distrib
 - For one installation shared by several users, see Rubin's notes on [shared
   installations](https://pipelines.lsst.io/install/lsstinstall.html#setting-unix-permissions-for-shared-installations).
 
-To keep several releases side by side, install each into its own directory
-(for example `~/lsst_stacks/v30_0_3`) and point each config's `STACK_DIR` at
-the one it should use.
+To keep several releases side by side, STIPS's wrapper installs each into
+its own directory, with its own conda environment:
+
+```bash
+make stack-install TAG=v30_0_3 INSTALL_DISTRIB=1    # into ~/lsst_stacks/v30_0_3
+```
+
+It needs `lsstinstall` on your `PATH` or in `~/lsst_stacks/`;
+`STACK_PREFIX` changes the location. Point each config's `STACK_DIR` at the
+release it should use.
 
 ## Check the installation
 
