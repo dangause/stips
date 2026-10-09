@@ -1,0 +1,147 @@
+site_name: STIPS
+site_description: >-
+  The Small Telescope Image Processing Suite — the LSST Science Pipelines for
+  1-meter class telescopes.
+site_author: Daniel Gause
+# Read the Docs sets the canonical URL per version (/en/latest/, /en/stable/, ...).
+site_url: !ENV [READTHEDOCS_CANONICAL_URL, "https://stips-lsst.readthedocs.io/en/latest/"]
+repo_url: https://github.com/dangause/stips
+repo_name: dangause/stips
+edit_uri: edit/dev/docs/
+copyright: Copyright &copy; STIPS contributors — GPL-3.0
+
+docs_dir: docs
+
+# docs/ also holds internal working notes (design plans, audits, poster drafts,
+# one-off findings). They stay in the repo but are not published.
+exclude_docs: |
+  README.md
+  requirements.txt
+  diagrams/
+  aas246-*.md
+  poster-*.md
+  methods-handout.*
+  audit/
+  plans/
+  superpowers/
+  ctio-amp-a01-finding.md
+  calibration_metrics_assessment.md
+  logging-improvements.md
+  pipeline-brittleness-and-modernization.md
+
+theme:
+  name: material
+  icon:
+    logo: material/telescope
+    repo: fontawesome/brands/github
+  palette:
+    - media: "(prefers-color-scheme)"
+      toggle:
+        icon: material/brightness-auto
+        name: Switch to light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: deep orange
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: deep orange
+      toggle:
+        icon: material/brightness-4
+        name: Switch to system preference
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - navigation.indexes
+    - navigation.footer
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.action.edit
+    - toc.follow
+
+hooks:
+  - scripts/docs/mkdocs_hooks.py
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [packages/stips/src]
+          options:
+            docstring_style: google
+            show_source: false
+            show_root_heading: true
+            show_root_full_path: false
+            members_order: source
+            separate_signature: true
+            show_signature_annotations: true
+            merge_init_into_class: true
+            filters: ["!^_"]
+
+markdown_extensions:
+  - abbr
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets:
+      base_path: [docs, .]
+      check_paths: true
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+
+nav:
+  - Home: index.md
+  - User guide:
+      - Getting started: getting-started.md
+      - Configuration: configuration.md
+      - New campaign: new-campaign.md
+      - Science configs: science-configs.md
+      - Logging: logging.md
+      - Troubleshooting: troubleshooting.md
+  - Instruments:
+      - Adding a telescope: forking-stips.md
+      - Instrument contract: instrument-contract.md
+      - Instrument abstraction: obs-abstraction.md
+      - Crosstalk: crosstalk.md
+  - Operations:
+      - HPC, Docker & Slurm: architecture-bps-docker-slurm.md
+      - Stack-bump runbook: stack-bump-runbook.md
+      - Refcat validation: refcat-validation-runbook.md
+      - Migrations: migrations.md
+  - Validation:
+      - SkyMapper templates: skymapper-template-validation.md
+      - Template colour terms: template-colorterm-fit.md
+  - Architecture: architecture.md
+  - Reference:
+      - CLI: reference/cli.md
+      - Python API:
+          - Instrument profile: reference/api/profile.md
+          - Collection names: reference/api/collections.md
+          - Configuration loader: reference/api/config.md
+          - Dataset types: reference/api/dataset-types.md
+      - Changelog: changelog.md
+      - Citing STIPS: citing.md
