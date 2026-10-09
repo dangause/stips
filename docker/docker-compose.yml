@@ -10,11 +10,14 @@
 #
 #   # Dashboard is now live at http://localhost:8080
 #
-#   # Run a pipeline (dashboard shows live progress)
-#   docker exec stips-processing stips-exec stips run /opt/stips/scripts/config/2023ixf/pipeline_docker_test.yaml
+#   # Run a pipeline (dashboard shows live progress). Every stips command
+#   # takes its config via the group flag: stips -c <config.yaml> <command>
+#   docker exec stips-processing stips-exec \
+#     stips -c /opt/stips/scripts/config/2023ixf/pipeline_docker_test.yaml run
 #
 #   # Or run individual commands
-#   docker exec stips-processing stips-exec stips calibs 20230519
+#   docker exec stips-processing stips-exec \
+#     stips -c /opt/stips/scripts/config/2023ixf/pipeline_docker_test.yaml calibs 20230519
 #
 #   # Interactive shell (with LSST stack activated)
 #   docker exec -it stips-processing stips-exec bash
