@@ -5,10 +5,13 @@ which changes both the reference catalog and the template.
 
 ## Reference catalogs
 
-| Field | `refcat.mode` | Calibrated against |
+| Field | Use `refcat.mode` | Calibrated against |
 |---|---|---|
-| North of −30° (SA98 at −0.4°, SN 2009Y at −17°) | `gaia_ps1` | Gaia for astrometry, Pan-STARRS for photometry |
+| North of −30° (SN 2009Y at −17°) | `gaia_ps1` | Gaia for astrometry, Pan-STARRS for photometry |
 | South of −30° (NGC 2298 at −36°) | `gaia` | Gaia for both |
+
+The SA98 and other standard-field configs set no mode, so they use the
+default, MONSTER.
 
 With `gaia`, each band is calibrated against the nearest Gaia band (B against
 BP, V against G, R and I against RP). Colour terms would correct for the

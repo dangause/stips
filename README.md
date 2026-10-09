@@ -370,7 +370,7 @@ stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml bootstrap
 # The bootstrap step:
 # - Creates Butler repository
 # - Registers Nickel instrument
-# - Ingests reference catalogs (Gaia DR3, PS1, the_monster)
+# - Ingests the MONSTER reference catalog (Gaia/PS1 are fetched on demand by `run`)
 # - Registers the Nickel skymap
 ```
 

@@ -287,8 +287,8 @@ templates/deep/tract{N}/{band}                        # RUN: Nickel coadd templa
 
 ### Pipeline Workflow
 
-1. **Bootstrap** — Create repo, register instrument, ingest refcats (Gaia DR3,
-   PS1), register skymap.
+1. **Bootstrap** — Create repo, register instrument, ingest the MONSTER refcat
+   shards, register skymap (Gaia/PS1 are fetched on demand by `stips run`).
 2. **Templates** — PS1 template ingestion (r/i) or Nickel coadd template building
    (b/v/r/i).
 3. **Calibs** — Ingest raws, build bias/flat, certify calibrations.
