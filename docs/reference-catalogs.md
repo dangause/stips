@@ -16,6 +16,11 @@ refcat:
   radius_deg: 0.3      # cone fetched around ra/dec; cover your dithers
 ```
 
+For Nickel, `gaia_ps1` is the mode checked against Landolt standards; see
+{doc}`instruments/nickel/photometry`. On-demand fetching covers one cone
+around `ra`/`dec`. For a config spanning several fields, fetch each field
+first with `stips refcat fetch`.
+
 ## MONSTER shards
 
 Setting up a repository (`stips bootstrap`, or the first step of `stips run`)
@@ -72,9 +77,11 @@ and ingests only what is missing. This needs network access to the Gaia
 archive and MAST. If the fetch fails, the run stops with the cause instead of
 failing every night later.
 
-To fetch a cone by hand, for example before running steps individually:
+To check or fetch a cone by hand, for example before running steps
+individually:
 
 ```bash
+stips -c target.yaml refcat status --ra 210.910750 --dec 54.311694   # ingested sky cells
 stips -c target.yaml refcat fetch --ra 210.910750 --dec 54.311694 --radius 0.3
 ```
 

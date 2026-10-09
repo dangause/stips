@@ -6,7 +6,7 @@ There are two ways to run STIPS:
 |---|---|---|
 | What you install | One image: the Rubin stack plus STIPS | The Rubin stack, then STIPS from source |
 | Best for | Trying STIPS, clusters, Windows | Development, custom instruments, Linux or macOS workstations |
-| Instruments included | Nickel | All in the repository, plus your own |
+| Instruments included | All in the repository | All in the repository, plus your own |
 
 Either way you also need reference catalogs and raw data; see
 [](#what-else-you-need).
@@ -55,10 +55,9 @@ apptainer run --bind /path/to/repo:/data/repo,/path/to/raw:/data/raw,/path/to/re
 ```
 
 :::{note}
-The image ships the Nickel profile only. For another instrument, mount its
-directory and point `INSTRUMENT_DIR` at it. The image does not include the
-Gaia/PS1 fetch tools, so use MONSTER reference catalogs with it (see
-{doc}`reference-catalogs`).
+The image ships every instrument in the repository, with Nickel as the
+default. For CTIO, set `INSTRUMENT_DIR: /opt/stips/instruments/ctio1m`; for
+your own instrument, mount its directory and point `INSTRUMENT_DIR` at it.
 :::
 
 ## Native install
