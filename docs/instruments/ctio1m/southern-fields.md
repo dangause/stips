@@ -7,8 +7,11 @@ which changes both the reference catalog and the template.
 
 | Field | Use `refcat.mode` | Calibrated against |
 |---|---|---|
-| North of −30° (SN 2009Y at −17°) | `gaia_ps1` | Gaia for astrometry, Pan-STARRS for photometry |
-| South of −30° (NGC 2298 at −36°) | `gaia` | Gaia for both |
+| North of −30°, R and I only (SN 2009Y at −17°) | `gaia_ps1` | Gaia for astrometry, Pan-STARRS for photometry |
+| Anywhere, B, V, R, I | `gaia` | Gaia for both |
+
+For CTIO, `gaia_ps1` calibrates only R and I; B and V need `gaia` or
+MONSTER, and U has no reference in any mode.
 
 The SA98 and other standard-field configs set no mode, so they use the
 default, MONSTER.

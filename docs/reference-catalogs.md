@@ -16,7 +16,17 @@ refcat:
   radius_deg: 0.3      # cone fetched around ra/dec; cover your dithers
 ```
 
-For Nickel, `gaia_ps1` is the mode checked against Landolt standards; see
+Not every band can be calibrated in every mode. A band needs a reference
+filter, and with colour terms it needs a term for that catalog too. Bands
+that have neither fail calibration. As configured today:
+
+| Instrument | `monster` | `gaia_ps1` | `gaia` |
+|---|---|---|---|
+| Nickel | B, V, R, I, g′, r′, Hα, [OIII] | B, V, R, I, r′, i′ | None yet: its Gaia colour terms name columns the catalog lacks |
+| CTIO | B, V, R, I | R, I | B, V, R, I |
+
+MONSTER cannot calibrate Nickel i′, and no mode calibrates CTIO U. For
+Nickel, `gaia_ps1` is the mode checked against Landolt standards; see
 {doc}`instruments/nickel/photometry`. On-demand fetching covers one cone
 around `ra`/`dec`. For a config spanning several fields, fetch each field
 first with `stips refcat fetch`.
