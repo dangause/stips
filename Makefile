@@ -25,8 +25,9 @@ export REPO="$${REPO:-}"; \
 export LSST_CONDA_ENV_NAME="$${LSST_CONDA_ENV_NAME:-}"
 endef
 
+# Spliced directly before a command (like setup_stack), so it ends with ';'.
 define envsource
-$(load_envs)
+$(load_envs);
 endef
 
 define setup_stack
@@ -101,14 +102,12 @@ declare-eups: ## Declare obs_stips + the active instrument's EUPS packages in th
 	  done'
 
 .PHONY: stack-install
-stack-install: ## Install an LSST stack release (TAG=w_2025_10 or r_28_0_0). Does not touch existing stack.
+stack-install: ## Install an LSST stack release into STACK_PREFIX/TAG (default ~/lsst_stacks/TAG; e.g. TAG=v30_0_3, INSTALL_DISTRIB=1 adds lsst_distrib). Does not touch existing stack.
 ifndef TAG
-	$(error TAG is required, e.g. TAG=w_2025_10)
+	$(error TAG is required, e.g. TAG=v30_0_3)
 endif
 	$(SHELL) -lc '$(envsource) \
-	  prefix="$${STACK_PREFIX:-}"; \
-	  if [[ -z "$$prefix" && -n "$$STACK_DIR" ]]; then prefix="$$STACK_DIR"; fi; \
-	  if [[ -z "$$prefix" ]]; then prefix="$$HOME/lsst_stacks"; fi; \
+	  prefix="$${STACK_PREFIX:-$$HOME/lsst_stacks}"; \
 	  ./scripts/utilities/install_stack_version.sh --release $(TAG) --prefix "$$prefix" $(if $(INSTALL_DISTRIB),--install-distrib,)'
 
 # =============================================================================
@@ -122,6 +121,14 @@ lint: ## Ruff lint across the workspace
 .PHONY: format
 format: ## Ruff format across the workspace
 	$(PYTHON) -m ruff format .
+
+.PHONY: docs
+docs: ## Build the docs site into docs/_build/html, failing on warnings as Read the Docs does
+	uv run --group docs sphinx-build -W --keep-going -b html docs docs/_build/html
+
+.PHONY: docs-serve
+docs-serve: ## Serve the docs site with live reload on http://127.0.0.1:8000
+	uv run --group docs sphinx-autobuild docs docs/_build/html
 
 .PHONY: test
 test: ## Run pytest suite (requires stack env)

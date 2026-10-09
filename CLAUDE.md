@@ -92,7 +92,7 @@ stips/
 │   └── utilities/          # Helper scripts
 ├── bps/                    # BPS configs (base.yaml, sites/, pipelines/)
 ├── docker/                 # Dockerfile(s), docker-compose, Singularity def
-├── docs/                   # architecture.md, getting-started.md, forking-stips.md, audit/, ...
+├── docs/                   # Sphinx site (conf.py, index.md), installation.md, forking-stips.md, audit/, ...
 └── pyproject.toml          # uv workspace
 ```
 
@@ -287,8 +287,8 @@ templates/deep/tract{N}/{band}                        # RUN: Nickel coadd templa
 
 ### Pipeline Workflow
 
-1. **Bootstrap** — Create repo, register instrument, ingest refcats (Gaia DR3,
-   PS1), register skymap.
+1. **Bootstrap** — Create repo, register instrument, ingest the MONSTER refcat
+   shards, register skymap (Gaia/PS1 are fetched on demand by `stips run`).
 2. **Templates** — PS1 template ingestion (r/i) or Nickel coadd template building
    (b/v/r/i).
 3. **Calibs** — Ingest raws, build bias/flat, certify calibrations.
@@ -505,7 +505,7 @@ For **templates**, southern fields have two options, in order of preference:
 
    SkyMapper is **explicit-only** — `template.type: auto` never selects it.
 
-   **Measured on NGC2298 (see `docs/skymapper-template-validation.md`).** The
+   **Measured on NGC2298 (see `docs/instruments/ctio1m/skymapper-template-validation.md`).** The
    cutout covers only **~16% of a Y4KCam field** (85% of each difference image is
    `NO_DATA`), so only same-footprint comparisons are meaningful. Within that
    footprint SkyMapper recovers **51% of the coadd's sources at ~30% purity**.
@@ -595,5 +595,6 @@ class, same for every fork).
 - Target configs: `scripts/config/{target}/`
 - Adding a new instrument: `docs/forking-stips.md`
 - Stack-upgrade runbook: `docs/stack-bump-runbook.md`
-- Architecture / getting-started: `docs/architecture.md`, `docs/getting-started.md`
+- Architecture / installation: `docs/architecture.md`, `docs/install-rubin-stack.md`, `docs/installation.md`
+- Docs site (Sphinx + MyST + furo, Read the Docs): `docs/conf.py`, sidebar in `docs/index.md`; build with `make docs`
 - Audit reports: `docs/audit/`

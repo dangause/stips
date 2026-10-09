@@ -1,413 +1,92 @@
-# Starting a New Observing Campaign
+# Set up a campaign
 
-This guide walks you through setting up STIPS for a new transient target (supernova, nova, or other variable source).
+A campaign is one target observed over many nights. This page goes from a new
+target to a lightcurve; {doc}`quickstart` shows the same flow on a worked
+example.
 
-## Overview
+## 1. Collect what you need
 
-Starting a new campaign involves:
+| | Example | Notes |
+|---|---|---|
+| Name | `2023ixf` | Selects frames by their `OBJECT` header; see below |
+| RA, Dec | `210.910750`, `54.311694` | Decimal degrees at full precision; see below |
+| Nights | `20230519`, `20230521`, … | Local date at the start of each night |
+| Bands | `r`, `i` | The profile's band names |
+| Template | `ps1` | See {doc}`templates` |
 
-1. **Gathering information** about your target
-2. **Creating a configuration file** for your campaign
-3. **Acquiring and organizing data**
-4. **Running the pipeline**
-5. **Validating results**
+Each night, STIPS processes the frames of one `OBJECT` value: the one that
+contains `object`, ignoring case; if several do, the exact match, or else
+the first.
+Frames logged under another spelling that night (`SN2023ixf` beside
+`2023ixf`) are skipped, so check the headers of nights with inconsistent
+names.
 
-```mermaid
-flowchart LR
-    A[Identify Target] --> B[Create Config]
-    B --> C[Get Data]
-    C --> D[Run Pipeline]
-    D --> E[Validate]
-    E --> F[Iterate]
-    F --> B
-```
+:::{admonition} Use full-precision coordinates
+:class: warning
+Convert the TNS position (`14:03:38.580 +54:18:42.10`) to decimal degrees
+with six or more decimals (`210.910750, 54.311694`). Rounding to two
+decimals moves the measurement by up to 17″, enough to miss a point source
+on Nickel's 0.37″ pixels. The symptom is a lightcurve of consistently
+negative flux: the host galaxy's background instead of the supernova.
+:::
 
-## Step 1: Gather Target Information
+## 2. Write the config
 
-Before creating your configuration, collect:
-
-### Required Information
-
-| Field | Example | Where to Find |
-|-------|---------|---------------|
-| Object name | `2023ixf` | TNS, IAU Circulars |
-| RA (degrees) | `210.910750` | TNS, Simbad |
-| Dec (degrees) | `54.311694` | TNS, Simbad |
-| Observation nights | `20230519, 20230521, ...` | Lick archive, observing logs |
-
-### Template Strategy
-
-Choose your template approach:
-
-| Template Type | When to Use | Bands Available |
-|---------------|-------------|-----------------|
-| **PS1** | Quick start, no late-time Nickel data | r, i only |
-| **Nickel Coadd** | Better PSF matching, have late-time data | B, V, R, I |
-
-For PS1 templates, the SN must be faded or not present in PS1 imaging (pre-2014).
-
-For Nickel coadd templates, you need observations after the transient has faded.
-
-## Step 2: Create Your Campaign Directory
-
-```bash
-# Create campaign directory
-mkdir -p scripts/config/my_target
-
-# Copy an example config as starting point
-cp scripts/config/2023ixf/pipeline_ps1_template.yaml \
-   scripts/config/my_target/pipeline.yaml
-```
-
-## Step 3: Edit the Configuration File
-
-Open `scripts/config/my_target/pipeline.yaml` and customize:
-
-### Environment Section
+Copy the closest example from
+[`scripts/config/`](https://github.com/dangause/stips/tree/main/scripts/config)
+(`2023ixf/pipeline_ps1_template.yaml` for a northern supernova) and edit it:
 
 ```yaml
-env:
-  # Butler repository for this campaign (create new or use existing)
-  REPO: "/path/to/data/my_target_repo"
+env: { ... }               # as in Installation
 
-  # LSST stack location
-  STACK_DIR: "/path/to/lsst_stack"
-
-  # Declarative instrument directory (instruments/<name>/)
-  INSTRUMENT_DIR: "/path/to/stips/instruments/nickel"
-
-  # Parent directory containing YYYYMMDD/raw/ subdirectories
-  RAW_PARENT_DIR: "/path/to/nickel/raw_data"
-
-  # Reference catalogs repository
-  REFCAT_REPO: "/path/to/refcats"
-```
-
-### Target Section
-
-```yaml
-# Object name (used for filtering FITS headers)
-# Matching is case-insensitive and partial (e.g., "2023ixf" matches "SN2023ixf")
 object: "my_target"
-
-# J2000 coordinates in decimal degrees
 ra: 123.456789
 dec: 45.678901
-
-# Bands to process (B, V for PS1 templates must use Nickel coadds)
-bands: ["r", "i"]
-```
-
-### Template Section
-
-For PS1 templates:
-
-```yaml
-template:
-  type: ps1
-  degrade_seeing: 2.0  # Convolve PS1 to ~2" to match Nickel seeing
-```
-
-For Nickel coadd templates:
-
-```yaml
-template:
-  type: coadd
-  # List nights when the transient had faded
-  nights:
-    - "20240601"
-    - "20240615"
-    - "20240701"
-```
-
-### Nights Section
-
-List all observation nights as a simple list of `YYYYMMDD` local dates under
-`science:`:
-
-```yaml
-science:
-  nights:
-    # Night in YYYYMMDD format (local date at start of night)
-    - 20230519
-    - 20230521
-    - 20230525
-```
-
-All bands from your top-level `bands:` are processed for every night. To exclude
-specific bad exposures, don't list them here — use `stips science --bad` (see
-[Exclude Bad Exposures](#exclude-bad-exposures) below).
-
-> The older `nights: {20230519: {r: [], i: []}, ...}` mapping form is still
-> accepted for backward compatibility, but only its night *keys* are read — the
-> per-band/per-visit values are ignored. Prefer the list form above.
-
-### Options Section
-
-```yaml
-options:
-  jobs: 8                  # Parallel processing jobs
-  skip_calibs: false       # Set true if calibs already built
-  skip_science: false      # Set true if science already processed
-  skip_dia: false          # Set true if DIA already done
-  forced_phot: true        # Run forced photometry at coordinates
-  continue_on_error: true  # Continue if one night fails
-  use_fallbacks: true      # Try fallback configs on astrometry failure
-
-# Lightcurve extraction and display
-lightcurve:
-  enabled: true
-  dataset_type: forced_phot_diffim_radec
-  min_snr: 1
-  max_mag_err: 1.0              # Filter noisy points from plot (CSV keeps all)
-  y_axis: apparent_mag          # apparent_mag, absolute_mag, flux_nJy, flux_adu
-  x_axis: days_since_explosion  # mjd or days_since_explosion
-  explosion_mjd: 60000.0        # Required for days_since_explosion
-```
-
-### Pipeline Configs (Optional)
-
-Override default pipeline configurations:
-
-```yaml
-configs:
-  science:
-    calibrate_image: calibrateImage/tuned_configs/2023ixf_relaxed.py
-    calibrate_image_fallbacks:
-      - calibrateImage/tuned_configs/2023ixf_relaxed_psfex_sparse.py
-  dia:
-    subtract_images: dia/subtractImages.py
-    detect_and_measure: dia/detectAndMeasure.py
-```
-
-## Step 4: Acquire Data
-
-### From the Lick Archive
-
-```bash
-# Download each night
-stips -c scripts/config/my_target/pipeline.yaml download 20230519
-stips -c scripts/config/my_target/pipeline.yaml download 20230521
-# ... etc
-```
-
-### Verify Data Structure
-
-```bash
-# Check that raw data exists
-ls -la /path/to/raw_data/20230519/raw/
-
-# Should see FITS files like:
-# d0519_0001.fits  (bias)
-# d0519_0050.fits  (flat)
-# d0519_0100.fits  (science)
-```
-
-### Check for Required Frames
-
-Each night should have:
-- **Bias frames** (IMAGETYP = 'zero' or similar)
-- **Flat frames** for each band you're processing
-- **Science frames** of your target
-
-## Step 5: Run the Pipeline
-
-### Dry Run First
-
-```bash
-stips -c scripts/config/my_target/pipeline.yaml run --dry-run
-```
-
-This shows what would be executed without running anything.
-
-### Full Run
-
-```bash
-stips -c scripts/config/my_target/pipeline.yaml run
-```
-
-### Monitor Progress
-
-The pipeline outputs progress to stdout. For long runs, consider:
-
-```bash
-stips -c scripts/config/my_target/pipeline.yaml run 2>&1 | tee pipeline.log
-```
-
-## Step 6: Check Results
-
-### Processing Logs
-
-Check for failures in `{REPO}/processing_log/`:
-
-```bash
-ls /path/to/my_target_repo/processing_log/
-# 20230519_science_20240115T103045.json
-# 20230521_science_20240115T104512.json
-```
-
-View a log:
-
-```bash
-cat /path/to/my_target_repo/processing_log/20230519_science_*.json | python -m json.tool
-```
-
-### Light Curve Files
-
-```bash
-ls /path/to/my_target_repo/lightcurves/
-# my_target_r_lightcurve.csv
-# my_target_r_lightcurve.png
-# my_target_i_lightcurve.csv
-# my_target_i_lightcurve.png
-```
-
-### Quick Validation
-
-```python
-import pandas as pd
-import matplotlib.pyplot as plt
-
-# Load light curve
-lc = pd.read_csv("/path/to/repo/lightcurves/my_target_r_lightcurve.csv")
-
-# Quick plot
-plt.errorbar(lc['mjd'], lc['mag'], yerr=lc['mag_err'], fmt='o')
-plt.gca().invert_yaxis()
-plt.xlabel('MJD')
-plt.ylabel('r magnitude')
-plt.show()
-```
-
-## Step 7: Iterate and Refine
-
-Common refinements:
-
-### Add More Nights
-
-Edit the `science: nights:` list and re-run. Use `skip_calibs: true` and `skip_science: true` for nights already processed.
-
-### Exclude Bad Exposures
-
-If certain exposures have issues (tracking, clouds, etc.), exclude them by
-exposure ID when processing that night standalone — the `science: nights:` list
-takes whole nights only:
-
-```bash
-stips -c scripts/config/my_target/pipeline.yaml science 20230519 --bad 12345,12346
-```
-
-(Exposures whose headers place them far from the target RA/Dec are excluded
-automatically during `stips run`; `--bad` is for the rest.)
-
-### Try Different Template
-
-If PS1 template has issues, switch to Nickel coadd:
-
-```yaml
-template:
-  type: coadd
-  nights:
-    - "20231101"  # Late-time observations
-```
-
-### Adjust Pipeline Configs
-
-For difficult fields (crowded, poor seeing), try relaxed configs:
-
-```yaml
-configs:
-  science:
-    calibrate_image: calibrateImage/tuned_configs/2023ixf_relaxed_psfex_sparse.py
-```
-
-## Example: Complete 2024abc Campaign Config
-
-```yaml
-# Pipeline configuration for hypothetical SN 2024abc
-env:
-  REPO: "/data/nickel/2024abc_repo"
-  STACK_DIR: "/opt/lsst/stack"
-  INSTRUMENT_DIR: "/home/user/stips/instruments/nickel"
-  RAW_PARENT_DIR: "/data/nickel/raw"
-  REFCAT_REPO: "/data/refcats"
-
-object: "2024abc"
-ra: 185.7289
-dec: 12.3456
 bands: ["r", "i"]
 
 template:
   type: ps1
-  degrade_seeing: 2.0
+  size: 0.4
 
 science:
-  nights:
-    - 20240115
-    - 20240118
-    - 20240122
-    - 20240130
-
-configs:
-  science:
-    calibrate_image: calibrateImage/tuned_configs/2023ixf_relaxed.py
-    calibrate_image_fallbacks:
-      - calibrateImage/tuned_configs/2023ixf_relaxed_psfex_sparse.py
-
-options:
-  jobs: 8
-  forced_phot: true
-  continue_on_error: true
-  use_fallbacks: true
-
-lightcurve:
-  enabled: true
-  dataset_type: forced_phot_diffim_radec
-  min_snr: 1
-  max_mag_err: 1.0
-  y_axis: apparent_mag
-  x_axis: days_since_explosion
-  explosion_mjd: 60300.0       # Update to your target's explosion date
+  nights: [20240101, 20240105, 20240112]
 ```
 
-## Troubleshooting
+{doc}`configuration` lists every key. For variable stars and transits, see
+{doc}`time-series`.
 
-### No science frames found for object
-
-Check that the OBJECT header in your FITS files matches (partial, case-insensitive):
+## 3. Get the data
 
 ```bash
-# Check FITS header
-python -c "from astropy.io import fits; print(fits.getheader('frame.fits')['OBJECT'])"
+stips -c my_target.yaml download                  # every night in the config
+stips -c my_target.yaml download --missing-only   # only nights not yet on disk
 ```
 
-### Science qgraph fails with "FileNotFoundError: astrometry_ref_cat"
+Each night needs biases, flats in every band you process, and the science
+frames, under `RAW_PARENT_DIR/<night>/raw/`. Data from anywhere other than
+the instrument's archive can be copied there by hand.
 
-This is caused by exposures with incorrect coordinates in their FITS headers (the Nickel telescope's DEC keyword sometimes gets stuck at a previous pointing's value). When using `stips run`, the `ra`/`dec` from your YAML config automatically triggers pre-flight coordinate validation, which excludes bad exposures before building the qgraph.
-
-If running `stips science` standalone, pass `--ra` and `--dec`:
+## 4. Run
 
 ```bash
-stips -c scripts/config/my_target/pipeline.yaml science 20230519 \
-    --object 2023ixf --ra 210.910750 --dec 54.311694
+stips -c my_target.yaml run --dry-run
+stips -c my_target.yaml run
 ```
 
-If instead the whole run aborts before science with a refcat error, the on-demand Gaia/PS1 fetch failed. In `gaia_ps1` mode `stips run` fails fast with the root cause (no network, missing fetch dependencies, or a southern field with no PS1 coverage) rather than continuing into opaque per-night science failures. Fix the cause, or set `refcat.mode: monster` if the repo already holds reference catalogs.
+A failed night does not stop the others (`options.continue_on_error`, on by
+default), and the summary at the end lists what failed. Exposures whose
+headers place them far from the target are dropped automatically.
 
-### Astrometry failures
+Each run reprocesses every listed night into new collections and rebuilds
+coadd templates; survey templates and reference catalogs are reused.
+`options.skip_calibs`, `skip_science`, and `skip_dia` skip a stage for every
+night, which saves time when only a later stage needs redoing.
 
-Try the relaxed PSF configs or exclude problematic frames.
+## 5. Check and iterate
 
-### Template subtraction artifacts
-
-- Check template and science image seeing match
-- Try increasing `degrade_seeing` for PS1 templates
-- Consider building Nickel coadd template instead
-
-### Light curve has gaps
-
-Some nights may have failed. Check processing logs and re-run failed nights individually.
-
-## See Also
-
-- [Pipeline Flow](diagrams/pipeline-flow.mmd) - Visual pipeline overview
+- Inspect `REPO/lightcurves/lightcurve_<object>.csv` and its plot; see
+  {doc}`outputs`.
+- Exclude bad exposures by ID with `stips science <night> --bad <id>,<id>`.
+- To add nights, append them to `science.nights` and run again.
+- Remove results before redoing a step differently with `stips clean`; see
+  {doc}`outputs`.

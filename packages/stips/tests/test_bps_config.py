@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
@@ -332,3 +335,45 @@ class TestDockerSlurmSiteConfig:
         content = (bps_dir / "docker-slurm.yaml").read_text()
         # Should reference 4 cores — conservative for Docker
         assert "cores_per_node: 4" in content
+
+
+class TestContainerSitesInstrumentDir:
+    """Container sites run the configured instrument, not always Nickel."""
+
+    @pytest.mark.parametrize("site", ["docker-slurm", "singularity-slurm"])
+    @pytest.mark.parametrize("instrument", ["ctio1m", "nickel"])
+    def test_compute_nodes_export_config_instrument_dir(
+        self, tmp_path, site, instrument
+    ):
+        """The compute-node commands export the config's INSTRUMENT_DIR as is.
+
+        In the container configs INSTRUMENT_DIR is a path inside the image.
+        """
+        from types import SimpleNamespace
+
+        from stips.core import bps as bps_mod
+
+        container_dir = f"/opt/stips/instruments/{instrument}"
+        config = MagicMock()
+        config.instrument_dir = Path(container_dir)
+        config.repo = tmp_path / "repo"
+        config.stack_dir = Path("/opt/lsst/software/stack")
+        config.cp_pipe_dir = None
+        config.raw_parent_dir = Path("/data/raw")
+        config.refcat_repo = Path("/data/refcats")
+        config.require_profile.return_value = SimpleNamespace(
+            name=instrument, obs_data_package="", ps1_band_map={"r": "r"}
+        )
+        # The container path does not exist here, so find_bps_config() cannot
+        # derive the bps/ directory from it; point it at this checkout's.
+        science_yaml = REPO_ROOT / "bps" / "pipelines" / "science.yaml"
+        with patch.object(bps_mod, "find_bps_config", return_value=science_yaml):
+            bps_mod.render_bps_config(
+                bps_mod.BPSConfig(pipeline="science", night="20070321", site=site),
+                config,
+                tmp_path / "submit",
+            )
+
+        site_text = (tmp_path / "submit" / "sites" / f"{site}.yaml").read_text()
+        exported = re.findall(r'export INSTRUMENT_DIR="?([^";\s]+)', site_text)
+        assert exported == [container_dir]

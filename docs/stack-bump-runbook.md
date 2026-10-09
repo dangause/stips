@@ -2,7 +2,7 @@
 
 A concrete checklist for moving STIPS to a new LSST Science Pipelines version.
 It exists because the supported version lives in several places that drift out
-of sync (finding **F-025** in [`docs/audit/findings-2026-07-10.md`](audit/findings-2026-07-10.md),
+of sync (finding **F-025** in [`docs/audit/findings-2026-07-10.md`](https://github.com/dangause/stips/blob/main/docs/audit/findings-2026-07-10.md),
 "Version-bump runbook" section).
 
 ## Version-truth statement
@@ -29,7 +29,9 @@ When the supported release moves, update **all** of these together:
 | `docker/Dockerfile.hpc:30` | `ARG LSST_TAG=v30_0_3` |
 | `docker/Dockerfile.slurm:12` | `ARG LSST_TAG=v30_0_3` |
 | `README.md` (Supported LSST stack blockquote) | release + CI weekly + canary |
-| `docs/getting-started.md` (Prerequisites, item 2) | release + CI weekly |
+| `docs/install-rubin-stack.md` (version note, install commands, Docker tag) | release + CI weekly |
+| `docs/installation.md` (container section), `docs/how-it-works.md` (Rubin stack) | release |
+| `docs/development.md` (Tests) | CI weekly |
 
 The `stack-canary.yml` default (`al9-w_latest`) is intentionally floating and is
 **not** bumped by hand.
@@ -46,16 +48,18 @@ reintroduce a hardcoded env number there.
   next weekly breaks something before you move the CI pin.
 - Skim the LSST release notes for renamed dataset types and config fields. STIPS
   concentrates dataset-type names in
-  [`packages/stips/src/stips/core/dataset_types.py`](../packages/stips/src/stips/core/dataset_types.py)
+  [`packages/stips/src/stips/core/dataset_types.py`](https://github.com/dangause/stips/blob/main/packages/stips/src/stips/core/dataset_types.py)
   and asserts them in `packages/stips/tests/test_dataset_types.py`; a rename is a
   single edit there.
 
 ## Bump day
 
-1. **Install the new stack side-by-side** (does not touch your current env):
+1. **Install the new stack side-by-side** (does not touch your current env).
+   `--install-distrib` also runs `eups distrib install lsst_distrib`; without
+   it the new stack has no `lsst_distrib` for step 2 to set up:
 
    ```bash
-   scripts/utilities/install_stack_version.sh --release <tag>
+   scripts/utilities/install_stack_version.sh --release <tag> --install-distrib
    # installs into $LSST_STACKS_ROOT/<tag> (or ~/lsst_stacks/<tag>)
    ```
 

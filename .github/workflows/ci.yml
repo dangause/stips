@@ -71,3 +71,25 @@ jobs:
         run: |
           . .venv/bin/activate
           tox
+
+  docs:
+    # Same install and build as Read the Docs (.readthedocs.yaml): the `docs`
+    # dependency group via uv, warnings as errors.
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Install Python 3.12
+        run: uv python install 3.12
+
+      - name: Sync docs deps
+        run: uv sync --frozen --python 3.12 --group docs
+
+      - name: Build site (warnings are errors)
+        run: uv run --frozen sphinx-build -W --keep-going -b html docs docs/_build/html

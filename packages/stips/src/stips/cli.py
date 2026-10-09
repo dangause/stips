@@ -351,7 +351,7 @@ def measure_crosstalk(
 
     \b
     Example:
-        stips -c scripts/config/ctio1m/pipeline.yaml measure-crosstalk 20070321 20070322
+        stips -c scripts/config/ctio1m/pipeline_calibs_science.yaml measure-crosstalk 20070321 20070322
     """
     from pathlib import Path
 
@@ -640,9 +640,11 @@ def download(
         # Download all nights from the -c pipeline config
         stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml download
 
+    \b
         # Download only missing nights from config
         stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml download --missing-only
 
+    \b
         # Download specific nights
         stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml download 20240625
         stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml download 20240416 20240429
@@ -1690,7 +1692,9 @@ def refcat_status(
     """Report Gaia/PS1 coverage for a target cone without fetching."""
     from stips.core import refcat as refcat_mod
 
-    needed = set(refcat_mod.cones_to_htm([(ra, dec, radius_deg)], depth=7))
+    # Venv-safe, same as ``refcat fetch``: computed in-stack when ``lsst`` is
+    # not importable here (calling ``cones_to_htm`` directly crashed the venv).
+    needed = refcat_mod._cones_to_htm_ids(config, [(ra, dec, radius_deg)], depth=7)
     for name in (refcat_mod.GAIA_DATASET, refcat_mod.PS1_DATASET):
         present = refcat_mod.present_trixels(config, name)
         have = len(needed & present)

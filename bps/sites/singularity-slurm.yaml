@@ -6,14 +6,14 @@
 # nodes without native installation.
 #
 # Two-layer execution model:
-#   1. Login node: User runs `apptainer exec stips.sif nickel run config.yaml`
+#   1. Login node: User runs `apptainer exec stips.sif stips -c config.yaml` run
 #      The orchestrator runs inside the container where the LSST stack exists.
 #   2. Compute nodes: BPS/Parsl submits Slurm jobs. The commandPrefix below
 #      wraps each `pipetask` call in `apptainer exec` so compute-node commands
 #      also execute inside the container.
 #
 # Usage:
-#   nickel run config.yaml  (with options: execution: bps, site: singularity-slurm)
+#   stips -c config.yaml run  (with options: execution: bps, site: singularity-slurm)
 
 includeConfigs:
   - ../base.yaml
@@ -71,13 +71,16 @@ site:
     #
     # Bind mounts: repo, raw data, refcats, and the Parsl run directory
     # are all bind-mounted into the container so pipetask can access them.
+    #
+    # INSTRUMENT_DIR is the config's, a path inside the image such as
+    # /opt/stips/instruments/ctio1m (every profile under instruments/ is in it).
     commandPrefix: |
       module load apptainer 2>/dev/null || module load singularity 2>/dev/null || true
       _STIPS_IMAGE="{container_image}"
       _STIPS_BIND="{repo},{raw_parent_dir},{refcat_repo},{run_dir}"
       pipetask() {
           apptainer exec --bind "$_STIPS_BIND" "$_STIPS_IMAGE" \
-            bash -c 'source /opt/lsst/software/stack/loadLSST.bash && setup lsst_distrib && setup -r /opt/stips/packages/obs_stips obs_stips 2>/dev/null; export INSTRUMENT_DIR=/opt/stips/instruments/nickel; for pkg_dir in "$INSTRUMENT_DIR"/*/; do [ -d "${pkg_dir}ups" ] || continue; for tbl in "${pkg_dir}ups/"*.table; do [ -e "$tbl" ] || continue; setup -r "${pkg_dir%/}" "$(basename "$tbl" .table)" 2>/dev/null || true; done; done; export PYTHONPATH=/opt/stips/packages/stips/src:${PYTHONPATH:-}; export STIPS_DEFAULTS=/opt/stips/packages/obs_stips/instrument_defaults; export NUMEXPR_MAX_THREADS=1; command pipetask "$@"' _ "$@"
+            bash -c 'source /opt/lsst/software/stack/loadLSST.bash && setup lsst_distrib && setup -r /opt/stips/packages/obs_stips obs_stips 2>/dev/null; export INSTRUMENT_DIR="{instrument_dir}"; for pkg_dir in "$INSTRUMENT_DIR"/*/; do [ -d "${pkg_dir}ups" ] || continue; for tbl in "${pkg_dir}ups/"*.table; do [ -e "$tbl" ] || continue; setup -r "${pkg_dir%/}" "$(basename "$tbl" .table)" 2>/dev/null || true; done; done; export PYTHONPATH=/opt/stips/packages/stips/src:${PYTHONPATH:-}; export STIPS_DEFAULTS=/opt/stips/packages/obs_stips/instrument_defaults; export NUMEXPR_MAX_THREADS=1; command pipetask "$@"' _ "$@"
       }
 
     # Run directory for Parsl (must be on shared filesystem)

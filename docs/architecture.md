@@ -400,7 +400,7 @@ it — a fork must set `template.type: skymapper` explicitly, and only after
 confirming no SN-free epochs exist for a same-instrument coadd. Validation on
 NGC2298 measured **51% recall at ~30% purity within the template footprint**,
 which covers only ~16% of a Y4KCam field
-(`docs/skymapper-template-validation.md`). See the
+(`docs/instruments/ctio1m/skymapper-template-validation.md`). See the
 "Southern fields have no PS1 coverage" gotcha in `CLAUDE.md` for the full
 verified-limits list.
 
@@ -504,6 +504,6 @@ The framework is two packages plus declarative instrument directories. `stips` (
 
 ## See Also
 
-- [Pipeline Flow Diagram](diagrams/pipeline-flow.mmd)
-- [CLI Commands Diagram](diagrams/cli-commands.mmd)
-- [Butler Collections Diagram](diagrams/butler-collections.mmd)
+- [Configuration](configuration.md) - Config file and Butler collection layout
+- [CLI reference](reference/cli.md) - Every command and option
+- [Instrument abstraction](obs-abstraction.md) - How profiles become LSST instruments

@@ -68,7 +68,7 @@ the matrix is declared.
 If you have no known coefficients, measure them from data:
 
 ```bash
-stips -p ctio1m measure-crosstalk 20070321 20070322
+stips -c scripts/config/ctio1m/pipeline_calibs_science.yaml measure-crosstalk 20070321 20070322
 ```
 
 This runs cp_pipe's `cpCrosstalk` pipeline (ISR → extract → solve) over the given

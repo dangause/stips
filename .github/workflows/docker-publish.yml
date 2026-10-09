@@ -4,12 +4,13 @@
 #
 # Triggers:
 #   - Push to main branch (builds :latest)
-#   - Version tags v* (builds :v1.0.0, :v1.0, :v1)
+#   - Version tags v* (builds :1.0.0, :1.0, :1 — no leading v)
 #   - Manual workflow dispatch
 #
 # Images are published to:
-#   ghcr.io/lick-observatory/stips:latest
-#   ghcr.io/lick-observatory/stips:v1.0.0
+#   ghcr.io/dangause/stips:latest
+#   ghcr.io/dangause/stips:1.0.0
+#   oras://ghcr.io/dangause/stips-sif:v1.0.0   (Apptainer/Singularity, release tags)
 
 name: Build and Publish Docker Image
 
@@ -95,10 +96,14 @@ jobs:
             type=sha,prefix=,enable={{is_default_branch}}
             # Include branch name for PRs
             type=ref,event=pr
+          # These labels override the Dockerfile's LABELs. licenses is set
+          # explicitly because the action otherwise fills it from GitHub's
+          # license detection ("GPL-3.0"), not the declared GPL-3.0-or-later.
           labels: |
             org.opencontainers.image.title=Small Telescope Image Processing Suite
-            org.opencontainers.image.description=LSST Science Pipelines for Nickel telescope data
+            org.opencontainers.image.description=LSST Science Pipelines for 1-meter class telescope data
             org.opencontainers.image.vendor=Lick Observatory
+            org.opencontainers.image.licenses=GPL-3.0-or-later
 
       - name: Determine LSST tag
         id: lsst

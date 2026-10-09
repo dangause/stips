@@ -3,8 +3,8 @@
 # Perform image subtraction for transient detection.
 #
 # Usage:
-#   nickel bps submit dia 20230519 --site slurm --band r
-#   nickel bps submit dia 20230519 --site slurm --band r --template templates/ps1/r
+#   stips -c config.yaml bps submit dia 20230519 --site slurm --band r
+#   stips -c config.yaml bps submit dia 20230519 --site slurm --band r --template templates/ps1/r
 #
 # Variables:
 #   {night}               - Observing night (YYYYMMDD)

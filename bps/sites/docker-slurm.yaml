@@ -4,8 +4,10 @@
 # Conservative resources for containerized single-node cluster.
 #
 # Usage:
-#   nickel run config.yaml --site docker-slurm
-#   nickel bps submit calibs 20230519 --site docker-slurm
+#   stips -c config.yaml run  (with options: execution: bps, site: docker-slurm)
+#
+# The CLI's --site options (stips run, stips bps submit) do not include the
+# container sites; select this one in the config YAML.
 
 includeConfigs:
   - ../base.yaml
@@ -53,10 +55,12 @@ site:
       source /opt/lsst/software/stack/loadLSST.bash
       setup lsst_distrib
       # STIPS framework: obs_stips (LSST glue) + stips (core, src-layout).
-      # The instrument is declarative (loaded by path from INSTRUMENT_DIR).
+      # The instrument is declarative (loaded by path from INSTRUMENT_DIR):
+      # the config's INSTRUMENT_DIR, a path inside the container such as
+      # /opt/stips/instruments/ctio1m.
       setup -r /opt/stips/packages/obs_stips obs_stips 2>/dev/null || true
       export PYTHONPATH=/opt/stips/packages/stips/src:${PYTHONPATH:-}
-      export INSTRUMENT_DIR=/opt/stips/instruments/nickel
+      export INSTRUMENT_DIR="{instrument_dir}"
       # Set up the active instrument's EUPS packages (curated calibration data,
       # etc.): any subdir of INSTRUMENT_DIR with a ups/<name>.table is an
       # instrument-owned product, set up by its table (product) name. Generic:
