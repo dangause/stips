@@ -4,6 +4,17 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
 
 ## [Unreleased]
 
+### Fixed
+- The container image can fetch refcats on demand and run every instrument.
+  It installs `stips-refcats` (which `refcat.mode: gaia_ps1` and `gaia` need)
+  and `tenacity` (the Nickel download's archive client), and it ships all of
+  `instruments/`, so `INSTRUMENT_DIR=/opt/stips/instruments/ctio1m` works.
+  Nickel stays the default. `stips-exec` keeps the container's
+  `INSTRUMENT_DIR`. The image is labelled GPL-3.0-or-later (it said
+  BSD-3-Clause, and published images said GPL-3.0). A failed `pip install`
+  now fails the image build. The HPC and Slurm images ship every instrument
+  too.
+
 ### Changed
 - The paper material — the rebuild driver (`scripts/paper/`), the paper's
   figure scripts, `docs/paper-readiness.md` and the nightly-median test —

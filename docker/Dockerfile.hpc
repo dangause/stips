@@ -15,7 +15,8 @@
 #     stips:hpc bash
 #
 # Test BPS parallel execution (simulates HPC):
-#   stips bps submit science 20230519 --site local
+#   stips -c /opt/stips/scripts/config/2023ixf/pipeline_docker_test.yaml \
+#     bps submit science 20230519 --site local
 #
 # How it works:
 # - BPS uses Parsl for workflow execution
@@ -41,16 +42,24 @@ WORKDIR /opt/stips
 
 COPY packages/stips/ packages/stips/
 COPY packages/obs_stips/ packages/obs_stips/
-COPY instruments/nickel/ instruments/nickel/
+COPY packages/refcats/ packages/refcats/
+COPY instruments/ instruments/
 COPY scripts/ /opt/stips/scripts/
 COPY bps/ /opt/stips/bps/
 
+# --no-deps keeps pip from touching LSST-managed packages; tenacity (the Nickel
+# download hook's Lick archive client) is the one runtime dep the LSST
+# environment lacks. stips-refcats is the on-demand Gaia/PS1 refcat fetch. The
+# import check fails the build if a runtime dep is missing.
 RUN source /opt/lsst/software/stack/loadLSST.bash && \
     setup lsst_distrib && \
     cd /opt/stips && \
+    pip install --no-deps -e packages/refcats && \
     pip install --no-deps -e packages/stips && \
     pip install --no-deps -e packages/obs_stips && \
-    chmod +x /opt/stips/scripts/pipeline/*.sh 2>/dev/null || true
+    pip install tenacity && \
+    python -c "import stips.cli, stips_refcats, astroquery, tenacity" && \
+    { chmod +x /opt/stips/scripts/pipeline/*.sh 2>/dev/null || true; }
 
 # =============================================================================
 # Entrypoint
@@ -62,7 +71,9 @@ RUN chmod +x /opt/stips/docker/entrypoint.sh
 RUN mkdir -p /data/repo /data/raw /data/refcats /data/outputs /config
 
 # Environment
-# The instrument's EUPS packages (obs_nickel_data, testdata_nickel, ...) are
+# Every profile under instruments/ is in the image; Nickel is the default
+# INSTRUMENT_DIR (override with e.g. -e INSTRUMENT_DIR=/opt/stips/instruments/ctio1m).
+# The instrument's EUPS packages (obs_nickel_data, obs_ctio1m_data, ...) are
 # discovered UNDER INSTRUMENT_DIR by entrypoint.sh, so there is no
 # per-instrument data-package ENV to bake here.
 ENV STIPS_ROOT=/opt/stips
