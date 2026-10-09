@@ -71,3 +71,24 @@ jobs:
         run: |
           . .venv/bin/activate
           tox
+
+  docs:
+    # Same install and strict build as Read the Docs (.readthedocs.yaml), so a
+    # broken link or missing page fails the PR rather than the published site.
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install docs toolchain + stips
+        run: |
+          python -m pip install -U pip
+          pip install -r docs/requirements.txt ./packages/refcats ./packages/stips
+
+      - name: Build docs (strict)
+        run: mkdocs build --strict

@@ -1,6 +1,7 @@
 # STIPS — The Small Telescope Image Processing Suite
 
 [![CI](https://github.com/dangause/stips/actions/workflows/ci.yml/badge.svg)](https://github.com/dangause/stips/actions/workflows/ci.yml)
+[![Docs](https://readthedocs.org/projects/stips-lsst/badge/?version=latest)](https://stips-lsst.readthedocs.io/en/latest/)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23243456.svg)](https://doi.org/10.5281/zenodo.23243456)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](pyproject.toml)
@@ -12,6 +13,8 @@
 - ✅ **Nickel 1-m** at Lick Observatory — reference implementation, used in active SN, exoplanet, and variable-star follow-up
 - ✅ **CTIO 1.0m / Y4KCam** — second instrument; validated end-to-end on archival standard-star data. Exercises the framework's **multi-amplifier camera** support (4-amp, central-cross overscan), **on-chip binning** (unbinned 4064² and 2×2-binned 2072²), **multi-band** B/V/R/I reductions, and a **NOIRLab Astro Data Archive** fetch hook.
 - ➕ **Other 1-m telescopes** — add one by dropping a declarative profile under `instruments/<name>/` (a `profile.py` + camera + hooks, loaded by path — no per-instrument LSST `obs_` package). The framework core and science pipelines work unchanged. See the [forking guide](docs/forking-stips.md).
+
+**Documentation:** <https://stips-lsst.readthedocs.io>
 
 > The CLI is `stips`. The active instrument is a declarative profile under `instruments/<name>/`, selected at runtime via the `INSTRUMENT_DIR` path in your config's `env:` block (the reference profile is `instruments/nickel`).
 
