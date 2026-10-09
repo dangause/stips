@@ -259,7 +259,7 @@ sequenceDiagram
 
     CLI->>Stack: run_with_stack(config)
     Note over Stack: export INSTRUMENT_DIR=instruments/nickel
-    Stack->>Sub: bash: source loader; setup; run command
+    Stack->>Sub: bash: source loader#59; setup#59; run command
     Sub->>Active: import (register-instrument)
     Active->>Active: load_profile_from_dir($INSTRUMENT_DIR)
     Active-->>Sub: concrete Instrument bound to Nickel profile
@@ -369,7 +369,7 @@ sequenceDiagram
     Cfg-->>CLI: Config(profile=...)
     CLI->>Stack: build setup script
     Note over Stack: export REPO / STACK_DIR / RAW_PARENT_DIR<br/>export INSTRUMENT_DIR  ← keystone<br/>export SKYMAP_* / CCD_BINNING (from profile)<br/>setup obs_stips, stips, obs_data_package
-    Stack-->>Sh: source loadLSST; setup; <pipetask ...>
+    Stack-->>Sh: source loadLSST#59; setup#59; #lt;pipetask ...#gt;
     Sh->>Sh: import lsst.obs.stips.active → re-resolve profile
     Sh-->>U: pipeline runs as the active instrument
 ```

@@ -5,13 +5,18 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
 ## [Unreleased]
 
 ### Added
-- A documentation site for Read the Docs (MkDocs + Material, `mkdocs.yml`,
-  `.readthedocs.yaml`): new home, configuration, troubleshooting and citing
-  pages, a CLI reference generated from `stips <command> --help`, and API pages
-  for the profile, collection-name, config and dataset-type modules. Internal
-  notes in `docs/` stay out of the build. `make docs` builds it as Read the
-  Docs does, failing on warnings; `make docs-serve` previews it, and a CI job
-  runs the same build.
+- A documentation site for Read the Docs: Sphinx with MyST markdown and the
+  furo theme (`docs/conf.py`, `.readthedocs.yaml`, a uv `docs` dependency
+  group). New home, configuration, troubleshooting and citing pages, a CLI
+  reference generated at build time from `stips <command> --help`
+  (`docs/_ext/stips_cli.py`), and autodoc pages for the profile,
+  collection-name, config and dataset-type modules. Internal notes in `docs/`
+  stay out of the build. `make docs` builds it as Read the Docs does, failing
+  on warnings; `make docs-serve` previews it, and a CI job runs the same build.
+
+### Fixed
+- Two sequence diagrams in `docs/obs-abstraction.md` did not render: a `;` in
+  a Mermaid message ends the statement. They now escape it as `#59;`.
 
 ### Changed
 - The paper material — the rebuild driver (`scripts/paper/`), the paper's
