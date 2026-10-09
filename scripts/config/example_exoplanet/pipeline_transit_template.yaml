@@ -1,8 +1,8 @@
 # Example pipeline configuration for an exoplanet transit campaign
 #
 # Usage:
-#   nickel run scripts/config/example_exoplanet/pipeline_transit_template.yaml
-#   nickel run scripts/config/example_exoplanet/pipeline_transit_template.yaml --dry-run
+#   stips -c scripts/config/example_exoplanet/pipeline_transit_template.yaml run
+#   stips -c scripts/config/example_exoplanet/pipeline_transit_template.yaml run --dry-run
 #
 # This is a TEMPLATE - copy and customize for your target:
 #   1. Replace object/ra/dec with your exoplanet host coordinates

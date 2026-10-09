@@ -1,8 +1,8 @@
 # Pipeline configuration for AC Andromedae (variable star campaign)
 #
 # Usage:
-#   nickel run scripts/config/ac_and/pipeline.yaml
-#   nickel run scripts/config/ac_and/pipeline.yaml --dry-run
+#   stips -c scripts/config/ac_and/pipeline.yaml run
+#   stips -c scripts/config/ac_and/pipeline.yaml run --dry-run
 #
 # AC Andromedae is a triple-mode high-amplitude Delta Scuti (HADS) star,
 # sometimes classified as an anomalous RR Lyrae. It pulsates simultaneously

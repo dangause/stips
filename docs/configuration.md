@@ -1,162 +1,115 @@
 # Configuration
 
-STIPS has **one** config source: the YAML file you pass with the group-level
-`-c/--config` flag. Its `env:` block supplies paths, and the rest of the file
-drives `stips run`. There are no `.env` files, no `-p/--profile` flag, and no
-`os.environ` fallback for config values.
+Each target has one YAML file, passed to every command with `-c`. The `env:`
+block says where things are; the other sections say what to process. There
+is no other configuration source: no `.env` files and no environment
+variables.
 
 ```bash
-# Show and validate the configuration, then run a step with it
-stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml env
-stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml calibs 20230519
+stips -c target.yaml env            # show the resolved paths and any problems
+stips -c target.yaml run            # process the whole campaign
 ```
 
-Per-target configs live in `scripts/config/<target>/`. Each one is
-self-contained, so switching targets means passing a different file.
+The {doc}`quickstart` has a complete example, and
+[`scripts/config/`](https://github.com/dangause/stips/tree/main/scripts/config)
+has many more.
 
-## The `env:` block
+## `env`
 
-```yaml
-env:
-  REPO: /path/to/butler/repo
-  STACK_DIR: /path/to/lsst_stack
-  INSTRUMENT_DIR: /path/to/stips/instruments/nickel
-  RAW_PARENT_DIR: /path/to/raw/data        # contains YYYYMMDD/raw/
-  REFCAT_REPO: /path/to/refcats            # optional
-  CP_PIPE_DIR: "${STACK_DIR}/cp_pipe"      # optional
-  # CCD_BINNING: 2                         # optional; for 2x2-binned raws
-```
-
-`${VAR}` references expand against other keys in the same block.
-
-### Required keys
-
-| Key | Description |
-|---|---|
-| `REPO` | Path to the Butler repository |
-| `STACK_DIR` | Path to the LSST stack installation |
-| `INSTRUMENT_DIR` | Path to the active instrument profile directory (e.g. `instruments/nickel`, `instruments/ctio1m`); must contain `profile.py` |
-| `RAW_PARENT_DIR` | Parent directory for raw data (contains `YYYYMMDD/raw/`) |
-
-### Optional keys
-
-| Key | Description |
-|---|---|
-| `REFCAT_REPO` | Path to a reference catalog repository |
-| `CP_PIPE_DIR` | Path to `cp_pipe`; auto-discovered from the stack if unset |
-| `CCD_BINNING` | On-chip binning factor; scales the camera geometry (default `1`) |
-| `LICK_ARCHIVE_DIR` | Path to the Lick archive client (Nickel `download`) |
-| `NOIRLAB_PROPOSAL` | Proposal-id filter for the CTIO NOIRLab `download` |
-
-:::{admonition} Removed keys
-:class: warning
-`INSTRUMENT_PACKAGE` and `OBS_NICKEL` are gone. A lingering
-`INSTRUMENT_PACKAGE` raises an error telling you to set `INSTRUMENT_DIR`
-to the directory containing your instrument's `profile.py`.
-:::
-
-## The pipeline sections
-
-`stips run` reads the rest of the file to orchestrate a whole campaign.
-
-```yaml
-object: "2023ixf"       # partial, case-insensitive match on FITS OBJECT
-ra: 210.910750          # full TNS precision — see below
-dec: 54.311694
-bands: ["r", "i"]
-
-template:
-  type: ps1             # ps1 | coadd | skymapper | auto | none
-  size: 0.4             # PS1 cutout size in degrees
-  degrade_seeing: 2.0   # optional: convolve PS1 to match the science seeing
-  nights: [...]         # coadd type only: SN-free template nights
-
-science:
-  nights: [20230519, 20230521, 20230523]
-
-configs:                # optional; resolved instrument-dir-first
-  science:
-    calibrate_image: calibrateImage/tuned_configs/dense_strict.py
-    calibrate_image_fallbacks:
-      - calibrateImage/tuned_configs/dense_relaxed.py
-      - calibrateImage/tuned_configs/sparse_relaxed.py
-    colorterms: apply_colorterms.py
-  dia:
-    subtract_images: dia/subtractImages_ps1.py
-    detect_and_measure: dia/detectAndMeasure.py
-
-options:
-  jobs: 6
-  concurrent_nights: 3
-  forced_phot: true
-  forced_phot_image_type: diffim   # visit | diffim | both
-  continue_on_error: true
-  use_fallbacks: true              # retry with fallback configs
-
-lightcurve:
-  enabled: true
-  dataset_type: forced_phot_diffim_radec
-  min_snr: 2
-  max_mag_err: 1.0
-  y_axis: apparent_mag             # or absolute_mag, flux_nJy, flux_adu
-  x_axis: days_since_explosion     # or mjd
-  explosion_mjd: 60082.75          # needed for days_since_explosion
-  # distance_modulus: 29.05        # needed for absolute_mag
-```
-
-:::{admonition} Use full-precision coordinates
-:class: tip
-Convert the target's TNS sexagesimal position to decimal degrees with 6+
-decimal places (e.g. `14:03:38.580, +54:18:42.10` →
-`210.910750, 54.311694`). Rounding to 2 decimals is a 5–17″ offset —
-enough to miss a point source on Nickel's 0.37″/pixel scale. The symptom
-is uniformly negative forced-photometry flux.
-:::
-
-### Template types
-
-| `template.type` | Bands | When to use |
+| Key | Required | Meaning |
 |---|---|---|
-| `ps1` | r, i | Northern fields (Dec ≳ −30°). The default for most campaigns. |
-| `coadd` | all | A same-instrument coadd from SN-free nights. Preferred for southern fields. |
-| `skymapper` | r, i | Southern fields with no SN-free epochs. Explicit only — see [SkyMapper templates](skymapper-template-validation.md). |
-| `auto` | all | PS1 for the PS1-eligible bands, a coadd from `template.nights` for the rest. Never selects SkyMapper. |
-| `none` | — | Skip templates entirely (calibs + science only, no DIA). |
+| `REPO` | yes | Butler repository; created by the first run |
+| `STACK_DIR` | yes | Rubin stack installation: the directory containing `loadLSST.sh` |
+| `INSTRUMENT_DIR` | yes | Instrument profile directory, containing `profile.py` |
+| `RAW_PARENT_DIR` | yes | Raw data, as `<night>/raw/*.fits` |
+| `REFCAT_REPO` | for bootstrap | MONSTER shard directory; see {doc}`reference-catalogs` |
+| `CP_PIPE_DIR` | no | `cp_pipe` location; found from the stack if unset |
+| `CCD_BINNING` | no | On-chip binning factor of the raws, such as `2`; default `1` |
+| `LICK_ARCHIVE_DIR` | Nickel `download` | The Lick archive client, normally `instruments/nickel/vendor/lick_searchable_archive` |
+| `NOIRLAB_PROPOSAL` | no | Restrict CTIO `download` to one proposal ID |
 
-## Pipeline and config resolution
+Values can refer to other keys in the block, as in
+`CP_PIPE_DIR: "${STACK_DIR}/cp_pipe"`. The old `INSTRUMENT_PACKAGE` key is
+rejected with a message to use `INSTRUMENT_DIR`.
 
-Pipelines and config overrides resolve **instrument directory first, then the
-framework default**. A fork overrides one file by dropping a same-named file
-into its own `instruments/<name>/pipelines/` or `configs/`; everything else
-inherits the defaults in `packages/obs_stips/instrument_defaults/`. The
-[science configs page](science-configs.md) covers the `calibrateImage` tuning
-files, and [Adding a telescope](forking-stips.md) covers what a fork must
-review.
+## Target
 
-## Butler collections
+| Key | Meaning |
+|---|---|
+| `object` | Selects frames by `OBJECT` header: per night, the one value containing it, or the exact match if several do |
+| `ra`, `dec` | Target position in decimal degrees, at full precision (six or more decimals) |
+| `bands` | Bands to process, using the profile's names (Nickel: `b`, `v`, `r`, `i`, …) |
 
-Collection names come from the profile's `collection_prefix` (`Nickel` for the
-reference profile). Downstream steps should read the **CHAINED parent**
-`processCcd/{ts}`, which includes the primary config and any fallback runs.
+## `science`
 
-| Collection | Type | Contents |
+| Key | Meaning |
+|---|---|
+| `nights` | Observing nights to process, as `YYYYMMDD` local dates |
+
+## `template`
+
+| Key | Default | Meaning |
 |---|---|---|
-| `Nickel/raw/{night}/{ts}` | RUN | Ingested raws |
-| `Nickel/cp/{night}/{bias,flat}/{ts}/run` | RUN | Constructed calibs |
-| `Nickel/calib/{night}` | CALIBRATION | Certified calibrations |
-| `Nickel/calib/current` | CHAINED | Unified calibration chain |
-| `Nickel/calib/curated` | CHAINED | Camera geometry and defects |
-| `Nickel/runs/{night}/processCcd/{ts}` | CHAINED | Science outputs — **use this** |
-| `Nickel/runs/{night}/processCcd/{ts}/run` | RUN | Primary `calibrateImage` config |
-| `Nickel/runs/{night}/processCcd/{ts}/run_fb1` | RUN | Fallback 1, if used |
-| `Nickel/runs/{night}/diff/{ts}/run` | RUN | Difference imaging |
-| `Nickel/runs/{night}/forcedPhotRaDec/{ts}/diffim_{band}` | RUN | Forced photometry on difference images |
-| `templates/ps1/{band}` | RUN | PS1 templates |
-| `templates/deep/tract{N}/{band}` | RUN | Coadd templates |
+| `type` | `ps1` | `ps1`, `coadd`, `auto`, `skymapper`, or `none`; see {doc}`templates` |
+| `size` | `0.3` | Survey cutout side, in degrees |
+| `degrade_seeing` | | Blur a survey template to this FWHM, in arcsec |
+| `nights` | | Template nights, for `coadd` and `auto` |
+| `mjd_start`, `mjd_end` | | Restrict survey frames to an MJD range |
+| `unity_photocalib` | `false` | Force the PS1 template's photometric calibration to 1 |
 
-## Observing night vs. UT day
+## `refcat`
 
-Collections use the **local observing night** for readability; Butler queries
-use the UT `day_obs`. The profile's `night_to_dayobs_offset_days` maps one to
-the other (`1` for both Nickel and CTIO: night `20230519` → `day_obs`
-`20230520`).
+| Key | Default | Meaning |
+|---|---|---|
+| `mode` | `monster` | `monster`, `gaia_ps1`, or `gaia`; see {doc}`reference-catalogs` |
+| `radius_deg` | `0.3` | Radius of the cone fetched around `ra`/`dec` |
+| `gaia_quality` | | Gaia cuts, such as `{ruwe_max: 1.4, require_5param: true}` |
+
+## `configs`
+
+Override the configuration of individual pipeline tasks. Each path is looked
+up in the instrument's `configs/` directory first, then in the framework
+defaults (`packages/obs_stips/instrument_defaults/configs/`).
+
+| Key | Task |
+|---|---|
+| `science.calibrate_image` | `calibrateImage`; see {doc}`science-configs` |
+| `science.calibrate_image_fallbacks` | Configs to retry failed exposures with, in order |
+| `science.colorterms` | Colour terms for photometric calibration |
+| `dia.subtract_images` | Image subtraction |
+| `dia.detect_and_measure` | Detection and measurement on difference images |
+| `coadd.make_direct_warp`, `coadd.select_template_coadd_visits`, `coadd.select_deep_coadd_visits` | Coadd templates |
+
+## `options`
+
+| Key | Default | Meaning |
+|---|---|---|
+| `jobs` | `8` | Parallel processes per step |
+| `concurrent_nights` | `0` | Nights processed at once; `0` processes them one after another |
+| `continue_on_error` | `true` | Keep going when a night or band fails |
+| `use_fallbacks` | `true` | Retry failed exposures with `calibrate_image_fallbacks` |
+| `skip_calibs`, `skip_science`, `skip_dia` | `false` | Skip a stage for every night |
+| `rebuild_templates` | `false` | Re-fetch survey templates that already exist; coadd templates are rebuilt every run |
+| `forced_phot` | `true` | Run forced photometry |
+| `forced_phot_image_type` | depends on `pipeline_type` | `diffim`, `visit`, or `both` |
+| `pipeline_type` | `supernova` | `supernova`, `variable`, or `transit`; see {doc}`time-series` |
+| `period_search`, `period_min`, `period_max`, `period_samples` | `false`, `0.1`, `100`, `10000` | Lomb–Scargle period search; periods in days |
+| `transit_search`, `transit_duration_min`, `transit_duration_max` | on for `transit`, `0.5`, `6` | BLS transit search; durations in hours |
+| `execution`, `site` | `local`, `local` | Run on a cluster; see {doc}`hpc` |
+| `container_image` | | Apptainer image, for the `singularity-slurm` site |
+| `bps_poll_interval`, `bps_timeout` | `5`, `7200` | Cluster status polling and per-stage timeout, in seconds |
+
+## `lightcurve`
+
+| Key | Default | Meaning |
+|---|---|---|
+| `enabled` | `true` | Extract a lightcurve at the end of the run |
+| `dataset_type` | `dia_source_unfiltered` | `forced_phot_diffim_radec` (forced photometry, recommended) or `dia_source_unfiltered` (DIA detections) |
+| `min_snr` | `3` | Drop measurements below this signal-to-noise ratio |
+| `max_mag_err` | | Hide points with larger errors from the plot; the CSV keeps them |
+| `radius` | `1.0` | Match radius around the target, in arcsec |
+| `band` | all | Only this band |
+| `y_axis` | `apparent_mag` | `apparent_mag`, `absolute_mag`, `flux_nJy`, or `flux_adu` |
+| `distance_modulus` | | Needed for `absolute_mag` |
+| `x_axis` | `mjd` | `mjd` or `days_since_explosion` |
+| `explosion_mjd` | | Needed for `days_since_explosion` |

@@ -1,8 +1,8 @@
 # Bulk calibration + science processing for 12 new Nickel nights
 #
 # Usage:
-#   nickel run scripts/config/extended_objects/pipeline_calibs_science.yaml
-#   nickel run scripts/config/extended_objects/pipeline_calibs_science.yaml --dry-run
+#   stips -c scripts/config/extended_objects/pipeline_calibs_science.yaml run
+#   stips -c scripts/config/extended_objects/pipeline_calibs_science.yaml run --dry-run
 #
 # These nights span multiple observing programs (2023B-2025B) and include
 # extended objects (galaxies, nebulae, clusters), narrowband imaging,

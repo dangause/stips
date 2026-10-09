@@ -7,16 +7,22 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
 ### Added
 - A documentation site for Read the Docs: Sphinx with MyST markdown and the
   furo theme (`docs/conf.py`, `.readthedocs.yaml`, a uv `docs` dependency
-  group). New home, configuration, troubleshooting and citing pages, a CLI
-  reference generated at build time from `stips <command> --help`
-  (`docs/_ext/stips_cli.py`), and autodoc pages for the profile,
-  collection-name, config and dataset-type modules. Internal notes in `docs/`
-  stay out of the build. `make docs` builds it as Read the Docs does, failing
-  on warnings; `make docs-serve` previews it, and a CI job runs the same build.
+  group). The docs are reorganized around a reading path: what STIPS is and
+  why it uses the Rubin stack, installing the Rubin stack and STIPS (natively
+  or with the published container), a quickstart on public SN 2023ixf data,
+  and user guides for configuration, templates, reference catalogs, variable
+  stars and transits, outputs, logs, and clusters. The CLI reference is
+  generated from `stips <command> --help` (`docs/_ext/stips_cli.py`) and the
+  Python API pages by autodoc. Internal notes in `docs/` stay out of the
+  build. `make docs` builds it as Read the Docs does, failing on warnings;
+  `make docs-serve` previews it, and a CI job runs the same build.
 
 ### Fixed
 - Two sequence diagrams in `docs/obs-abstraction.md` did not render: a `;` in
   a Mermaid message ends the statement. They now escape it as `#59;`.
+- `stips download --help` ran its examples together; the example configs'
+  usage comments still showed the removed `nickel` command; and
+  `install_stack_version.sh` pointed at the removed `.env` files.
 
 ### Changed
 - The paper material — the rebuild driver (`scripts/paper/`), the paper's

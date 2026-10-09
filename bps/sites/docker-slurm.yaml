@@ -4,8 +4,8 @@
 # Conservative resources for containerized single-node cluster.
 #
 # Usage:
-#   nickel run config.yaml --site docker-slurm
-#   nickel bps submit calibs 20230519 --site docker-slurm
+#   stips -c config.yaml run --site docker-slurm
+#   stips -c config.yaml bps submit calibs 20230519 --site docker-slurm
 
 includeConfigs:
   - ../base.yaml

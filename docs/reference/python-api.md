@@ -18,7 +18,7 @@ references, and the `@hook` decorator for quirk functions. See
 ## Collection names (`stips.collections`)
 
 Every Butler collection name STIPS reads or writes, parameterized by the
-profile's `collection_prefix`. See {doc}`../configuration` for the layout.
+profile's `collection_prefix`. See {doc}`../outputs` for the layout.
 
 ```{eval-rst}
 .. automodule:: stips.collections

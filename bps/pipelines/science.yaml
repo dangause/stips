@@ -3,8 +3,8 @@
 # Process science frames: ISR, WCS fitting, photometric calibration.
 #
 # Usage:
-#   nickel bps submit science 20230519 --site slurm
-#   nickel bps submit science 20230519 --site slurm --object 2023ixf
+#   stips -c config.yaml bps submit science 20230519 --site slurm
+#   stips -c config.yaml bps submit science 20230519 --site slurm --object 2023ixf
 #
 # Variables:
 #   {night}        - Observing night (YYYYMMDD)

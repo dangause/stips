@@ -3,7 +3,7 @@
 # BPS configuration for HTCondor-based clusters.
 #
 # Usage:
-#   nickel bps submit calibs 20230519 --site htcondor
+#   stips -c config.yaml bps submit calibs 20230519 --site htcondor
 
 includeConfigs:
   - ../base.yaml

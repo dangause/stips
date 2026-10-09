@@ -7,8 +7,8 @@
 # Transit window: ingress 05:57 UT, midpoint 06:51 UT, egress 07:46 UT (Aug 3)
 #
 # Usage:
-#   nickel run scripts/config/hd189733/pipeline_transit.yaml
-#   nickel run scripts/config/hd189733/pipeline_transit.yaml --dry-run
+#   stips -c scripts/config/hd189733/pipeline_transit.yaml run
+#   stips -c scripts/config/hd189733/pipeline_transit.yaml run --dry-run
 
 # =============================================================================
 # Environment Configuration
