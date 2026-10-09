@@ -351,7 +351,7 @@ def measure_crosstalk(
 
     \b
     Example:
-        stips -c scripts/config/ctio1m/pipeline.yaml measure-crosstalk 20070321 20070322
+        stips -c scripts/config/ctio1m/pipeline_calibs_science.yaml measure-crosstalk 20070321 20070322
     """
     from pathlib import Path
 

@@ -111,3 +111,6 @@ docs/superpowers/
 docs/aas246-iposter-*.md
 docs/logging-improvements.md
 docs/methods-handout.*
+
+# MkDocs build output (make docs)
+/site/

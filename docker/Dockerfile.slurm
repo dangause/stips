@@ -61,7 +61,7 @@ RUN id slurm 2>/dev/null || useradd -r -s /sbin/nologin slurm && \
 WORKDIR /opt/stips
 
 COPY packages/obs_stips/ packages/obs_stips/
-COPY instruments/nickel/ instruments/nickel/
+COPY instruments/ instruments/
 
 RUN source /opt/lsst/software/stack/loadLSST.bash && \
     setup lsst_distrib && \

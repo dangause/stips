@@ -2,6 +2,9 @@
 
 Welcome to the STIPS documentation. This guide will help you understand, set up, and use STIPS for processing Nickel telescope data.
 
+> These pages are published at <https://stips-lsst.readthedocs.io>, built with
+> MkDocs from `mkdocs.yml` at the repo root. Preview locally with `make docs-serve`.
+
 ## Quick Links
 
 | I want to... | Read this |
@@ -139,7 +142,8 @@ stips -c config.yaml bps status RUN_ID
 Documentation source files are in `docs/`. To contribute:
 
 1. Edit Markdown files directly
-2. For diagrams, edit `.mmd` files (Mermaid syntax)
-3. Submit a pull request
+2. Add new user-facing pages to the `nav:` in `mkdocs.yml`
+3. Check the site builds cleanly with `make docs` (Read the Docs fails on warnings)
+4. Submit a pull request
 
 Diagrams use [Mermaid](https://mermaid.js.org/) syntax and render automatically on GitHub.
