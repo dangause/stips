@@ -244,6 +244,6 @@ rm -rf .venv && uv sync --group dev
 
 ## Getting Help
 
-- Check existing [pipeline configs](../scripts/config/) for examples
-- Review [processing logs](../README.md#processing-logs) when things fail
+- Check existing [pipeline configs](https://github.com/dangause/stips/tree/main/scripts/config) for examples
+- Review [processing logs](logging.md) when things fail
 - Open an issue on GitHub for bugs or questions

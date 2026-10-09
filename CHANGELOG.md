@@ -4,7 +4,28 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
 
 ## [Unreleased]
 
+### Added
+- A documentation site for Read the Docs (MkDocs + Material, `mkdocs.yml`,
+  `.readthedocs.yaml`): new home, configuration, troubleshooting and citing
+  pages, a CLI reference generated from `stips <command> --help`, and API pages
+  for the profile, collection-name, config and dataset-type modules. Internal
+  notes in `docs/` stay out of the build. `make docs` builds it as Read the
+  Docs does, failing on warnings; `make docs-serve` previews it, and a CI job
+  runs the same build.
+
+### Changed
+- The paper material — the rebuild driver (`scripts/paper/`), the paper's
+  figure scripts, `docs/paper-readiness.md` and the nightly-median test —
+  moved to a separate `stips-paper` repository, which also archives the
+  rebuild's products. The rebuild driver now runs a STIPS checkout given by
+  `--stips`. The diagnostic scripts in `scripts/analysis/` stay here.
+
 ### Fixed
+- `stips download` works for Nickel in a fresh install again. The vendored
+  Lick archive client that the download hook imports needs `tenacity`, which
+  stopped being installed when the archive left the `packages/*` workspace in
+  2.0.0, so the download failed with `No module named 'tenacity'`.
+  `packages/stips` now declares it.
 - The container image can fetch refcats on demand and run every instrument.
   It installs `stips-refcats` (which `refcat.mode: gaia_ps1` and `gaia` need)
   and `tenacity` (the Nickel download's archive client), and it ships all of
@@ -14,13 +35,6 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
   BSD-3-Clause, and published images said GPL-3.0). A failed `pip install`
   now fails the image build. The HPC and Slurm images ship every instrument
   too.
-
-### Changed
-- The paper material — the rebuild driver (`scripts/paper/`), the paper's
-  figure scripts, `docs/paper-readiness.md` and the nightly-median test —
-  moved to a separate `stips-paper` repository, which also archives the
-  rebuild's products. The rebuild driver now runs a STIPS checkout given by
-  `--stips`. The diagnostic scripts in `scripts/analysis/` stay here.
 
 ## [2.2.4] — 2026-10-08
 
