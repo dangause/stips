@@ -797,7 +797,8 @@ if the repo already holds reference catalogs.
 
 STIPS is archived on Zenodo. The concept DOI
 [10.5281/zenodo.23243456](https://doi.org/10.5281/zenodo.23243456) always
-resolves to the latest release; cite the version you used (v2.2.4:
+resolves to the latest release; cite the version you used (v2.3.0:
+[10.5281/zenodo.23270726](https://doi.org/10.5281/zenodo.23270726); v2.2.4:
 [10.5281/zenodo.23243457](https://doi.org/10.5281/zenodo.23243457)).
 [`CITATION.cff`](CITATION.cff) has the full metadata. Please also cite the
 LSST Science Pipelines STIPS is built on.
