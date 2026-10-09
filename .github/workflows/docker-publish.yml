@@ -95,10 +95,14 @@ jobs:
             type=sha,prefix=,enable={{is_default_branch}}
             # Include branch name for PRs
             type=ref,event=pr
+          # These labels override the Dockerfile's LABELs. licenses is set
+          # explicitly because the action otherwise fills it from GitHub's
+          # license detection ("GPL-3.0"), not the declared GPL-3.0-or-later.
           labels: |
             org.opencontainers.image.title=Small Telescope Image Processing Suite
             org.opencontainers.image.description=LSST Science Pipelines for Nickel telescope data
             org.opencontainers.image.vendor=Lick Observatory
+            org.opencontainers.image.licenses=GPL-3.0-or-later
 
       - name: Determine LSST tag
         id: lsst
