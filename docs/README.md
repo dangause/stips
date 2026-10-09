@@ -1,149 +1,26 @@
-# Small Telescope Image Processing Suite Documentation
+# STIPS documentation
 
-Welcome to the STIPS documentation. This guide will help you understand, set up, and use STIPS for processing Nickel telescope data.
+These pages are published at <https://stips-lsst.readthedocs.io>. They are
+MyST Markdown, built with Sphinx (`docs/conf.py`); preview them locally with
+`make docs-serve`.
 
-> These pages are published at <https://stips-lsst.readthedocs.io>, built with
-> MkDocs from `mkdocs.yml` at the repo root. Preview locally with `make docs-serve`.
+| Start here | |
+|---|---|
+| [What is STIPS?](overview.md) | Why it exists, what it is for, and why the Rubin stack |
+| [Install the Rubin stack](install-rubin-stack.md) | The LSST Science Pipelines, release `v30_0_3` |
+| [Install STIPS](installation.md) | Native install or the container |
+| [Quickstart](quickstart.md) | Three nights of SN 2023ixf, from archive to lightcurve |
 
-## Quick Links
+The site's sidebar, which lists every page in order, is the set of `toctree`
+blocks in [`index.md`](index.md).
 
-| I want to... | Read this |
-|--------------|-----------|
-| Get started quickly | [Getting Started](getting-started.md) |
-| Set up a new transient campaign | [New Campaign Guide](new-campaign.md) |
-| Understand how STIPS works | [Architecture Overview](architecture.md) |
+## Contributing to the docs
 
-## Documentation Map
+1. Edit or add Markdown files here.
+2. Add new user-facing pages to a toctree in `index.md`.
+3. Check the build with `make docs`, which fails on any warning, as Read the
+   Docs does.
+4. Open a pull request against `dev`.
 
-```
-docs/
-├── README.md              ← You are here
-├── getting-started.md     # Installation & first pipeline
-├── new-campaign.md        # Setting up new transient targets
-├── architecture.md        # System design & internals
-├── architecture-bps-docker-slurm.md  # BPS/Docker/Slurm deployment
-├── science-configs.md     # CalibrateImage tuning & fallbacks
-├── logging.md             # Log directory structure
-├── logging-improvements.md  # Log splitting & improvements
-└── diagrams/
-    ├── architecture.mmd   # Component diagram
-    ├── pipeline-flow.mmd  # Data flow diagram
-    ├── cli-commands.mmd   # CLI structure diagram
-    ├── butler-collections.mmd  # Butler structure
-    └── new-campaign.mmd   # Campaign setup workflow
-```
-
-## Guides
-
-### [Getting Started](getting-started.md)
-
-**Start here if you're new to STIPS.**
-
-- Prerequisites and installation
-- Running your first pipeline
-- Understanding outputs
-- Common issues
-
-### [New Campaign Guide](new-campaign.md)
-
-**Setting up STIPS for a new transient target.**
-
-- Gathering target information
-- Creating configuration files
-- Choosing template strategy
-- Running and validating
-
-### [Architecture Overview](architecture.md)
-
-**Understanding STIPS internals.**
-
-- Package structure
-- Data flow
-- Design patterns
-- Extension points
-
-### [BPS/Docker/Slurm Deployment](architecture-bps-docker-slurm.md)
-
-**Running pipelines on HPC clusters.**
-
-- Docker container architecture
-- Slurm cluster setup
-- BPS configuration and submission
-- Troubleshooting HPC deployments
-
-### [Science Configs](science-configs.md)
-
-**Tuning calibrateImage and fallback strategies.**
-
-- Primary vs fallback configurations
-- Dense/sparse star field tuning
-- Strict/relaxed thresholds
-
-## Diagrams
-
-The `diagrams/` directory contains Mermaid diagrams that can be rendered in:
-- GitHub (automatic rendering)
-- VS Code with Mermaid extension
-- [Mermaid Live Editor](https://mermaid.live)
-
-| Diagram | Description |
-|---------|-------------|
-| [architecture.mmd](diagrams/architecture.mmd) | Component and layer diagram |
-| [pipeline-flow.mmd](diagrams/pipeline-flow.mmd) | Data processing flow |
-| [cli-commands.mmd](diagrams/cli-commands.mmd) | CLI command structure |
-| [butler-collections.mmd](diagrams/butler-collections.mmd) | Butler repository layout |
-| [new-campaign.mmd](diagrams/new-campaign.mmd) | Campaign setup workflow |
-
-## Quick Reference
-
-### Minimal Pipeline
-
-```bash
-# Install
-uv sync --group dev
-
-# Run complete pipeline
-stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml run
-```
-
-### Step-by-Step
-
-```bash
-stips -c config.yaml bootstrap        # Initialize repo
-stips -c config.yaml calibs 20230519  # Build calibrations
-stips -c config.yaml science 20230519 # Process science
-stips -c config.yaml dia 20230519 --auto       # Difference imaging
-stips -c config.yaml fphot 20230519 --ra R --dec D  # Forced photometry
-stips -c config.yaml lightcurve --collections ...   # Extract light curve
-```
-
-### With Docker
-
-```bash
-docker-compose run --rm stips stips -c config.yaml run
-```
-
-### On HPC
-
-```bash
-stips -c config.yaml bps submit science 20230519 --site slurm
-stips -c config.yaml bps status RUN_ID
-```
-
-## Getting Help
-
-1. Check the relevant guide above
-2. Look at example configs in `scripts/config/`
-3. Check processing logs in `logs/{RUN_ID}/`
-4. Open an issue on GitHub
-
-## Contributing to Docs
-
-Documentation source files are in `docs/`. To contribute:
-
-1. Edit Markdown files directly
-2. Add new user-facing pages to the `nav:` in `mkdocs.yml`
-3. Check the site builds cleanly with `make docs` (Read the Docs fails on warnings)
-4. Submit a pull request
-
-Diagrams use [Mermaid](https://mermaid.js.org/) syntax and render automatically on GitHub.
+Working notes that are not part of the site (audits, plans, one-off findings)
+also live in this folder; `docs/conf.py` excludes them from the build.

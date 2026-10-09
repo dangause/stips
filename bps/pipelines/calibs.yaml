@@ -3,7 +3,7 @@
 # Build nightly calibration products (bias, flat, defects).
 #
 # Usage:
-#   nickel bps submit calibs 20230519 --site slurm
+#   stips -c config.yaml bps submit calibs 20230519 --site slurm
 #
 # Variables:
 #   {night}        - Observing night (YYYYMMDD)

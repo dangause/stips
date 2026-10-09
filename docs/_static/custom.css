@@ -1,0 +1,18 @@
+/* The guides' Mermaid diagrams set light node fills, so in dark mode they keep
+   Mermaid's light theme (conf.py: mermaid_dark_theme) on a light panel. */
+body[data-theme="dark"] .mermaid-container {
+  background: #fff;
+  border-radius: 0.25rem;
+}
+@media (prefers-color-scheme: dark) {
+  body:not([data-theme="light"]) .mermaid-container {
+    background: #fff;
+    border-radius: 0.25rem;
+  }
+}
+
+/* Reference tables span the content width instead of centring at their
+   natural width, so consecutive tables line up. */
+article table.docutils {
+  width: 100%;
+}

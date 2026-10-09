@@ -5,13 +5,19 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
 ## [Unreleased]
 
 ### Added
-- A documentation site for Read the Docs (MkDocs + Material, `mkdocs.yml`,
-  `.readthedocs.yaml`): new home, configuration, troubleshooting and citing
-  pages, a CLI reference generated from `stips <command> --help`, and API pages
-  for the profile, collection-name, config and dataset-type modules. Internal
-  notes in `docs/` stay out of the build. `make docs` builds it as Read the
-  Docs does, failing on warnings; `make docs-serve` previews it, and a CI job
-  runs the same build.
+- A documentation site for Read the Docs: Sphinx with MyST markdown and the
+  furo theme (`docs/conf.py`, `.readthedocs.yaml`, a uv `docs` dependency
+  group). The docs are reorganized around a reading path: what STIPS is and
+  why it uses the Rubin stack, installing the Rubin stack and STIPS (natively
+  or with the published container), a quickstart on public SN 2023ixf data,
+  user guides for configuration, templates, reference catalogs, variable
+  stars and transits, outputs, logs, and clusters, and a section for each
+  instrument (Nickel; CTIO / Y4KCam): data access, calibration, photometry or
+  southern fields, example campaigns, and status. The CLI reference is
+  generated from `stips <command> --help` (`docs/_ext/stips_cli.py`) and the
+  Python API pages by autodoc. Internal notes in `docs/` stay out of the
+  build. `make docs` builds it as Read the Docs does, failing on warnings;
+  `make docs-serve` previews it, and a CI job runs the same build.
 
 ### Changed
 - The paper material — the rebuild driver (`scripts/paper/`), the paper's
@@ -76,6 +82,11 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
   `oras://ghcr.io/dangause/stips-sif:<tag>`); the image description is no
   longer Nickel-only; and step 1 of the stack-bump runbook installs
   `lsst_distrib`, which step 2's tests set up.
+- Two sequence diagrams in `docs/obs-abstraction.md` did not render: a `;` in
+  a Mermaid message ends the statement. They now escape it as `#59;`.
+- `stips download --help` ran its examples together; the example configs'
+  usage comments still showed the removed `nickel` command; and
+  `install_stack_version.sh` pointed at the removed `.env` files.
 
 ## [2.2.4] — 2026-10-08
 

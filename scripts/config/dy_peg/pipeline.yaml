@@ -1,8 +1,8 @@
 # Pipeline configuration for DY Pegasi (variable star campaign)
 #
 # Usage:
-#   nickel run scripts/config/dy_peg/pipeline.yaml
-#   nickel run scripts/config/dy_peg/pipeline.yaml --dry-run
+#   stips -c scripts/config/dy_peg/pipeline.yaml run
+#   stips -c scripts/config/dy_peg/pipeline.yaml run --dry-run
 #
 # DY Pegasi is an SX Phoenicis (SXPHE) double-mode pulsating variable star,
 # in a binary system with an evolved companion (likely a hot white dwarf).

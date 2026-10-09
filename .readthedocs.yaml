@@ -1,4 +1,7 @@
-# Read the Docs configuration: https://docs.readthedocs.io/en/stable/config-file/v2.html
+# Read the Docs build config. Installs the `docs` dependency group with uv
+# (RTD supports uv natively in python.install) and builds docs/conf.py.
+# Warnings fail the build so a broken cross-reference is caught here, not
+# noticed on the live site.
 version: 2
 
 build:
@@ -6,16 +9,13 @@ build:
   tools:
     python: "3.12"
 
-mkdocs:
-  configuration: mkdocs.yml
-  fail_on_warning: true
-
 python:
   install:
-    - requirements: docs/requirements.txt
-    # The CLI reference imports stips.cli; stips depends on the workspace
-    # package stips-refcats, so install that first. Neither needs the LSST stack.
-    - method: pip
-      path: packages/refcats
-    - method: pip
-      path: packages/stips
+    - method: uv
+      command: sync
+      groups:
+        - docs
+
+sphinx:
+  configuration: docs/conf.py
+  fail_on_warning: true
