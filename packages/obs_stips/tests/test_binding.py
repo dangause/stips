@@ -29,8 +29,14 @@ def test_nameplate_binds_profile_with_its_own_class_path():
 
     m = importlib.import_module("instruments.demo_instrument.instrument")
     assert m.Instrument.getName() == "DemoFix"
-    assert get_full_type_name(m.Instrument) == "instruments.demo_instrument.instrument.Instrument"
-    assert get_full_type_name(m.RawFormatter) == "instruments.demo_instrument.instrument.RawFormatter"
+    assert (
+        get_full_type_name(m.Instrument)
+        == "instruments.demo_instrument.instrument.Instrument"
+    )
+    assert (
+        get_full_type_name(m.RawFormatter)
+        == "instruments.demo_instrument.instrument.RawFormatter"
+    )
     assert m.Instrument.instrumentDir == FIX.resolve()
     assert m.Translator.name == "DemoFix"
     assert m.Instrument.translatorClass is m.Translator
