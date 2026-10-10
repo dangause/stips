@@ -54,7 +54,7 @@ This document describes the architecture of STIPS — the Small Telescope Image 
 
 ## Package Structure
 
-STIPS is a monorepo organized around a two-package framework split — the CLI/tooling (`stips`) and the instrument-agnostic LSST glue (`obs_stips`) — plus a curated data package (`obs_nickel_data`). A telescope is **not** a code package: it is a declarative `instruments/<name>/` directory (a `profile.py` alongside `camera/`, `configs/`, and `pipelines/`). `instruments/nickel/` is the reference. The active instrument is chosen via the `INSTRUMENT_DIR` environment variable (e.g. `/path/to/instruments/nickel`); the tooling loads `<dir>/profile.py` by path and drives all collection names, Butler queries, and skymap behavior from it. `obs_stips` synthesizes the concrete LSST instrument/translator/formatter from that profile at import time, and Butler registers it under the fixed class name `lsst.obs.stips.active.Instrument`.
+STIPS is a monorepo organized around a two-package framework split — the CLI/tooling (`stips`) and the instrument-agnostic LSST glue (`obs_stips`) — plus a curated data package (`obs_nickel_data`). A telescope is **not** a code package: it is a declarative `instruments/<name>/` directory (a `profile.py` alongside `camera/`, `configs/`, and `pipelines/`). `instruments/nickel/` is the reference. The active instrument is chosen via `INSTRUMENT_DIR`; the tooling imports `instruments/<name>/profile.py` by name and drives all collection names, Butler queries, and skymap behavior from it. `obs_stips` binds the profile onto its generic instrument/translator/formatter when `instruments/<name>/instrument.py` is imported, and Butler registers that module's `Instrument` — a class path unique to the instrument.
 
 ### 1. stips (Framework Core, CLI & Tooling)
 
@@ -95,8 +95,8 @@ obs_stips/
     ├── instrument.py       # Generic StipsInstrument base
     ├── translator.py       # Generic StipsTranslator base
     ├── formatter.py        # Generic StipsRawFormatter base
-    ├── profile_loader.py   # Load instruments/<name>/profile.py by path (INSTRUMENT_DIR)
-    ├── active.py           # Synthesizes lsst.obs.stips.active.Instrument from the profile
+    ├── binding.py          # bind(): profile -> Instrument/Translator/RawFormatter
+    ├── active.py           # legacy shim (INSTRUMENT_DIR -> nameplate)
     ├── plotting.py         # Shared plotting helpers
     └── tasks/              # Shared PipelineTasks (lsst.obs.stips.tasks.*)
         ├── forcedPhotRaDec.py
@@ -104,15 +104,16 @@ obs_stips/
         └── diaLightcurve*.py
 ```
 
-`active.py` reads `INSTRUMENT_DIR`, loads the profile by path, and binds it onto the generic base classes to produce `Instrument` / `Translator` / `RawFormatter`. Butler stores the FQN `lsst.obs.stips.active.Instrument` and re-imports it whenever it needs to re-instantiate the instrument — each import re-resolves the profile from `INSTRUMENT_DIR`, so there is no per-telescope instrument class or package to register.
+`instruments/<name>/instrument.py` calls `binding.bind(__name__)`, which imports the sibling profile and builds the three bound classes with that module as their `__module__`. Butler stores `instruments.<name>.instrument.Instrument` and re-imports it through `PYTHONPATH` alone.
 
 ### 3. instruments/nickel (Reference Instrument)
 
-The Nickel telescope is a declarative directory — no code package, no `lsst.obs.nickel`. It is a `profile.py` plus the camera geometry, pipelines, and configs that the generic `obs_stips` machinery loads by path (`INSTRUMENT_DIR`):
+The Nickel telescope is a declarative directory — no code package, no `lsst.obs.nickel`. It is a `profile.py` and a three-line `instrument.py` nameplate plus the camera geometry, pipelines, and configs; the generic `obs_stips` machinery imports it by name (`instruments.nickel`):
 
 ```
 instruments/nickel/
 ├── profile.py             # InstrumentProfile + @hook quirks (the profile)
+├── instrument.py          # Butler nameplate: bind(__name__) (identical in every instrument)
 ├── fetch.py               # Optional co-located hook (raw-data fetch)
 ├── camera/
 │   └── nickel.yaml        # Camera geometry (1024×1024 CCD)
@@ -134,7 +135,7 @@ adds its own `instruments/<x>/pipelines/` or `configs/` only to override
 individual files (resolved instrument-dir-first, else framework default); see
 `packages/obs_stips/instrument_defaults/README.md` for the tiering contract.
 
-There are no instrument/translator/formatter subclasses here — `obs_stips` synthesizes those from `profile.py` at import time (see `active.py` above). The instrument and translator quirks that used to live in a `lsst.obs.nickel` package are expressed declaratively via the `InstrumentProfile` fields and `@hook`s in `profile.py`.
+There are no instrument/translator/formatter subclasses here — `obs_stips` synthesizes those from `profile.py` when the nameplate is imported (see `binding.py` above). The instrument and translator quirks that used to live in a `lsst.obs.nickel` package are expressed declaratively via the `InstrumentProfile` fields and `@hook`s in `profile.py`.
 
 ### 4. obs_nickel_data (Curated Calibrations)
 
@@ -225,9 +226,9 @@ All LSST commands run through `stack.py`:
 def run_with_stack(cmd: list[str], config: Config, **kwargs) -> subprocess.CompletedProcess:
     """Execute command with LSST stack activated."""
     # Sources loadLSST.bash
-    # Sets up lsst_distrib and obs_stips; exports INSTRUMENT_DIR,
-    #   STIPS_DEFAULTS, and STIPS_PS1_BAND_MAP (profile ps1_band_map as JSON,
-    #   read by in-stack pex_config files that must not import the profile)
+    # Sets up lsst_distrib and obs_stips; exports INSTRUMENT_DIR and
+    #   STIPS_DEFAULTS; puts STIPS_INSTRUMENTS_ROOT (the dir containing
+    #   instruments/) on PYTHONPATH and exports STIPS_INSTRUMENT_CLASS
     # Exports config as environment variables
     # Runs the command
 ```
@@ -466,7 +467,7 @@ The instrument/translator/formatter are synthesized from the profile by `obs_sti
 
 ## Dependencies
 
-The framework is two packages plus declarative instrument directories. `stips` (CLI/tooling) defines the profile types and loads the active instrument's `profile.py` by path at runtime. `obs_stips` is the generic LSST glue, and it *synthesizes* the registerable instrument from that profile. A telescope is a declarative `instruments/<name>/` directory (the reference is `instruments/nickel/`), selected via `INSTRUMENT_DIR`; a fork is just another such directory.
+The framework is two packages plus declarative instrument directories. `stips` (CLI/tooling) defines the profile types and imports the active instrument's profile by name (`instruments.<name>.profile`) at runtime. `obs_stips` is the generic LSST glue, and it *synthesizes* the registerable instrument from that profile through each instrument's `instrument.py` nameplate. A telescope is a declarative `instruments/<name>/` directory (the reference is `instruments/nickel/`), selected via `INSTRUMENT_DIR`; a fork is just another such directory.
 
 ```
                       ┌──────────────────────────────────┐
@@ -475,8 +476,8 @@ The framework is two packages plus declarative instrument directories. `stips` (
                       │  (InstrumentProfile, @hook,      │
                       │   CollectionNames)               │
                       └──────────────────────────────────┘
-                       │ defines profile API      │ loads profile.py
-                       │ (imported by profiles)   │ by path at runtime
+                       │ defines profile API      │ imports profile.py
+                       │ (imported by profiles)   │ by name at runtime
                        ▼                          ▼ via INSTRUMENT_DIR
    ┌───────────────────────────┐      ┌──────────────────────────────────────┐
    │   instruments/nickel/     │      │   instruments/<name>/   (a fork)      │
@@ -490,7 +491,7 @@ The framework is two packages plus declarative instrument directories. `stips` (
                       │             obs_stips            │
                       │  generic LSST glue + synthesis   │
                       │  (instrument, translator,        │
-                      │  formatter, active.Instrument;   │
+                      │  formatter, binding.bind();      │
                       │  PipelineTasks: lsst.obs.stips.*)│
                       └──────────────────────────────────┘
                                        │

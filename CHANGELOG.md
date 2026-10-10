@@ -18,6 +18,9 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
   Python API pages by autodoc. Internal notes in `docs/` stay out of the
   build. `make docs` builds it as Read the Docs does, failing on warnings;
   `make docs-serve` previews it, and a CI job runs the same build.
+- `InstrumentProfile.ccd_binning` and `binning_header`; the translator claims
+  only raws whose binning matches. `instruments/ctio1m_bin2/` is the 2×2-binned
+  Y4KCam instrument.
 
 ### Changed
 - The paper material — the rebuild driver (`scripts/paper/`), the paper's
@@ -25,6 +28,22 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
   moved to a separate `stips-paper` repository, which also archives the
   rebuild's products. The rebuild driver now runs a STIPS checkout given by
   `--stips`. The diagnostic scripts in `scripts/analysis/` stay here.
+- Every instrument registers under its own Butler class path,
+  `instruments.<name>.instrument.Instrument`, from a three-line nameplate
+  `instrument.py` in the instrument dir; the stored `class_name` now identifies
+  the instrument on its own and several instruments can share a repo. Existing
+  repos migrate on their next step (`register-instrument --update`);
+  `lsst.obs.stips.active` stays as a shim. (#59)
+- Profiles are imported by name (`instruments.<name>.profile`) by one loader,
+  `stips.profile.import_profile`; `profile.py` imports `fetch` relatively.
+- `stips` refuses to run a step against a repo that holds other instruments
+  than the configured one, and `stips env` lists the registered instruments.
+
+### Removed
+- `InstrumentProfile.instrument_class` (derived from the directory name),
+  the `CCD_BINNING` config key (rejected with a message), the
+  `STIPS_PS1_BAND_MAP` env export, `lsst.obs.stips.profile_loader`, and the
+  `instrument:` line in `ForcedPhotRaDec.yaml`.
 
 ### Fixed
 - `stips download` works for Nickel in a fresh install again. The vendored

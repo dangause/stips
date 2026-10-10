@@ -3,6 +3,46 @@
 One-time migration notes for changes that affect the contents of *existing*
 Butler repositories or existing instrument forks. Newest first.
 
+## 2026-10: Instrument identity is the directory name (#59)
+
+Every instrument now registers under its **own** Butler class path,
+`instruments.<name>.instrument.Instrument`, instead of the shared
+`lsst.obs.stips.active.Instrument`. The stored `class_name` identifies the
+instrument on its own; `INSTRUMENT_DIR` no longer carries identity into the
+stack, and several instruments can share one repo.
+
+**Existing repositories migrate themselves.** The next `stips` step that touches
+a repo (or `stips bootstrap`) finds the legacy `class_name` and rewrites the
+instrument record with `butler register-instrument --update`; it logs one
+warning. To do it by hand:
+
+    butler register-instrument --update <REPO> instruments.<name>.instrument.Instrument
+
+`lsst.obs.stips.active` remains as a shim (it resolves `INSTRUMENT_DIR` and
+re-exports the same classes) so raws ingested before this change, whose
+datastore records name `lsst.obs.stips.active.RawFormatter`, stay readable.
+
+**Instrument forks must:**
+
+- add `instruments/<x>/instrument.py` (copy it from `instruments/nickel/`; it
+  is three lines and identical for every instrument);
+- import co-located modules relatively (`from .fetch import fetch_data`);
+- delete `instrument_class=` from `profile.py` (the field is gone; it is
+  derived from the directory name);
+- live at `<root>/instruments/<x>/` with `<root>` on `PYTHONPATH` in any
+  stack process (in-tree instruments get this from `stips` automatically; an
+  out-of-tree fork adds its own `<root>`).
+
+**`CCD_BINNING` is removed.** Binning is the profile field `ccd_binning`
+(plus `binning_header`, the FITS keyword the translator checks). A config that
+still sets `CCD_BINNING` fails with a message. Binned data of a camera that
+is also used unbinned is its own instrument dir: see
+`instruments/ctio1m_bin2/` (a `dataclasses.replace` of the base profile with a
+new `name` and `ccd_binning=2`).
+
+**`STIPS_PS1_BAND_MAP` is removed.** The in-stack refcat overlays import the
+profile by name instead.
+
 ## 2026-07: QA task-label rename — `...Nickel` → `...Visit` (F-013)
 
 Five analysis/QA task labels in the framework-default pipelines were renamed
