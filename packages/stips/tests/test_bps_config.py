@@ -365,9 +365,13 @@ class TestContainerSitesInstrumentDir:
             name=instrument, obs_data_package="", ps1_band_map={"r": "r"}
         )
         # The container path does not exist here, so find_bps_config() cannot
-        # derive the bps/ directory from it; point it at this checkout's.
+        # derive the bps/ directory from it, nor instruments_root() validate
+        # its layout; point them at this checkout's / the image's root.
         science_yaml = REPO_ROOT / "bps" / "pipelines" / "science.yaml"
-        with patch.object(bps_mod, "find_bps_config", return_value=science_yaml):
+        with (
+            patch.object(bps_mod, "find_bps_config", return_value=science_yaml),
+            patch.object(bps_mod, "instruments_root", return_value=Path("/opt/stips")),
+        ):
             bps_mod.render_bps_config(
                 bps_mod.BPSConfig(pipeline="science", night="20070321", site=site),
                 config,

@@ -18,7 +18,7 @@ set +a
 source "$(dirname "$0")/../utilities/logging.sh"
 
 ########## ENVIRONMENT VARS ##########
-INSTRUMENT="lsst.obs.stips.active.Instrument"
+INSTRUMENT="${STIPS_INSTRUMENT_CLASS:?STIPS_INSTRUMENT_CLASS not exported — run this through stips bootstrap, which derives it from INSTRUMENT_DIR}"
 TS="$(date -u +%Y%m%dT%H%M%SZ)"
 
 # Setup logging (creates LOG_DIR and LOG_FILE)
@@ -72,11 +72,11 @@ if [ -z "${STIPS_DATA_DIR:-}" ]; then
     done
   done
 fi
-# Re-sourcing loadLSST above can reset PYTHONPATH, dropping the src-layout
-# `stips` core package (NOT an EUPS product) that lsst.obs.stips.active imports
-# when register-instrument re-instantiates the instrument. Put it back, plus
-# obs_stips/python as belt-and-suspenders.
-export PYTHONPATH="$REPO_ROOT/packages/stips/src:$OBS_STIPS_DIR/python:${PYTHONPATH:-}"
+# Re-sourcing loadLSST above can reset PYTHONPATH, dropping the instruments/
+# namespace package and the src-layout stips package that the instrument class
+# imports when register-instrument re-instantiates the instrument. Put them
+# back, plus obs_stips/python as belt-and-suspenders.
+export PYTHONPATH="$REPO_ROOT:$REPO_ROOT/packages/stips/src:$OBS_STIPS_DIR/python:${PYTHONPATH:-}"
 
 ########## REPO ##########
 log_section "Butler Repository Setup"
@@ -87,7 +87,7 @@ else
   log_info "Butler repository exists: $REPO"
 fi
 log_info "Registering instrument: $INSTRUMENT"
-butler register-instrument "$REPO" "$INSTRUMENT" || true
+butler register-instrument --update "$REPO" "$INSTRUMENT" || true
 
 ########## REF CATS (MONSTER AFW only) ##########
 log_section "Reference Catalogs Ingestion (MONSTER only)"

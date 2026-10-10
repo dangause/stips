@@ -257,7 +257,7 @@ class TestBandMapping:
         """An explicit template_band_maps["ps1"] entry wins over the legacy map.
 
         ps1_band_map stays dual-purpose (it also builds the PS1 refcat
-        filterMap via STIPS_PS1_BAND_MAP), so a profile must be able to state a
+        filterMap), so a profile must be able to state a
         different TEMPLATE policy without disturbing refcats.
         """
         self._use_profile(

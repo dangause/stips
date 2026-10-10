@@ -68,15 +68,16 @@ COPY packages/obs_stips/ packages/obs_stips/
 COPY instruments/ instruments/
 
 # The import check loads each instrument as pipetask does on a compute node
-# (obs_stips set up, the stips source on PYTHONPATH, INSTRUMENT_DIR set), so a
+# (obs_stips set up, the repo root and stips source on PYTHONPATH), so a
 # missing package fails the build rather than the cluster run.
 RUN source /opt/lsst/software/stack/loadLSST.bash && \
     setup lsst_distrib && \
     pip install --no-deps -e packages/obs_stips && \
     setup -r /opt/stips/packages/obs_stips obs_stips && \
     for d in /opt/stips/instruments/*/; do \
-        INSTRUMENT_DIR="${d%/}" PYTHONPATH="/opt/stips/packages/stips/src:${PYTHONPATH:-}" \
-            python -c "import lsst.obs.stips.active" || exit 1; \
+        n="$(basename "$d")"; \
+        PYTHONPATH="/opt/stips:/opt/stips/packages/stips/src:${PYTHONPATH:-}" \
+            python -c "import instruments.${n}.instrument as m; print(m.Instrument.getName())" || exit 1; \
     done && \
     { chmod +x /opt/stips/packages/obs_stips/instrument_defaults/pipelines/*.yaml 2>/dev/null || true; }
 

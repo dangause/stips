@@ -49,10 +49,10 @@ if [[ -d "${INSTRUMENT_DIR}" ]]; then
     done
 fi
 
-# Add stips to PYTHONPATH
+# Add stips (src layout) and the repo root (instruments/ namespace package) to PYTHONPATH
 STIPS_SRC="${STIPS_ROOT}/packages/stips/src"
 if [[ -d "${STIPS_SRC}" ]]; then
-    export PYTHONPATH="${STIPS_SRC}:${PYTHONPATH:-}"
+    export PYTHONPATH="${STIPS_ROOT}:${STIPS_SRC}:${PYTHONPATH:-}"
 fi
 
 # Ensure conda bin is in PATH (for pip-installed scripts like 'stips')

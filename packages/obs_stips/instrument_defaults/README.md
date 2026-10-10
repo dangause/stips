@@ -58,14 +58,13 @@ Structural pipeline scaffolding and geometry-agnostic glue:
   measures a single 12px aperture, so a bare stock run fails downstream on the
   missing `base_CircularApertureFlux_*` columns).
 
-> **pex_config import-replay trap.** The `refcats_gaia_ps1*.py` overlays derive
-> the PS1 band map from the `STIPS_PS1_BAND_MAP` env var (exported by
-> `run_with_stack`) rather than importing the profile. A pex_config file must not
-> import the path-loaded profile during config exec: pex_config replays every
-> module first-imported that way when a saved quantum graph is reloaded, and the
-> profile machinery is unimportable at replay time — killing `pipetask run` at
-> graph deserialization. Profile loading survives only as a documented
-> direct-use fallback.
+> **pex_config import-replay trap.** The `refcats_gaia_ps1*.py` overlays import
+> the profile **by name** (`instruments.<name>.profile`, via
+> `stips.profile.import_profile`). pex_config replays every module first-imported
+> during config exec when a saved quantum graph is reloaded, so a config may only
+> import modules that are importable at replay time — a by-name import is,
+> wherever the stack can import the instrument class itself (the directory
+> containing `instruments/` is on `PYTHONPATH`).
 
 ### Instrument-fitted (MUST be reviewed by a fork — do NOT inherit blindly)
 
@@ -113,7 +112,7 @@ parameters to produce `calibrateImage/tuned_configs/*` (recipes under
 | `colorterms.py` | empty library | `instruments/nickel/configs/colorterms.py` |
 | `calibrateImage/tuned_configs/*` | absent (falls back to `calibrateImage/neutral_default.py`) | `instruments/nickel/configs/calibrateImage/tuned_configs/*` |
 | `calibrateImage/neutral_default.py` | schema-compat default (no tuning) | inherits neutral |
-| `refcats_gaia_ps1.py` | derives PS1 map from profile (via `STIPS_PS1_BAND_MAP`) | `instruments/nickel/configs/refcats_gaia_ps1.py` |
+| `refcats_gaia_ps1.py` | derives PS1 map from profile (imported by name) | `instruments/nickel/configs/refcats_gaia_ps1.py` |
 | `refcats_gaia_ps1_qa_{astrom,photom}.py` | Gaia/PS1 QA overlays (gaia_ps1 mode) | inherits neutral |
 | `filter_map.py` | reference map (+U for CTIO) | inherits neutral |
 | `apply_colorterms.py` | instrument-aware, off if empty | inherits neutral |

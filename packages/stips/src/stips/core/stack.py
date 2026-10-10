@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from stips.core.config import resolve_data_package_dir
+from stips.profile import instruments_root
 
 if TYPE_CHECKING:
     from stips.core.config import Config
@@ -44,9 +45,10 @@ def _build_setup_script(config: Config) -> tuple[str, dict[str, str]]:
 
     Returns everything EXCEPT the trailing command: the loader source, the
     config env exports, the data-package setup, and the STIPS framework sibling
-    setup. The instrument is declarative (loaded by path from INSTRUMENT_DIR);
-    only its data package is derived from the active profile so a fork's data
-    package (not just obs_nickel_data) is set up correctly.
+    setup. The instrument is imported by name (instruments.<name>), with the
+    directory containing instruments/ on PYTHONPATH; only its data package is
+    derived from the active profile so a fork's data package (not just
+    obs_nickel_data) is set up correctly.
 
     Security (F-018): config paths and env-derived values are NEVER interpolated
     into the script text. Every such value is placed in the returned ``env``
@@ -89,18 +91,24 @@ def _build_setup_script(config: Config) -> tuple[str, dict[str, str]]:
         "OBS_STIPS": str(obs_stips_dir),
         "STIPS_DEFAULTS": str(stips_defaults),
         "STIPS_SRC": str(stips_src),
+        # The dir containing instruments/: on PYTHONPATH so the stack imports
+        # instruments.<name>.{profile,instrument} by name (Butler re-imports
+        # STIPS_INSTRUMENT_CLASS from the registry with no env var in play).
+        "STIPS_INSTRUMENTS_ROOT": str(instruments_root(instrument_dir)),
+        "STIPS_INSTRUMENT_CLASS": config.instrument_class,
     }
 
     # Re-export the config-derived values (their values come from env=, so the
     # export lines are constant text). INSTRUMENT_DIR is the fixed export name
-    # pipeline YAMLs reference ($INSTRUMENT_DIR/...); the instrument is
-    # declarative (profile.py loaded by path), so there is no per-instrument
-    # EUPS product to set up.
+    # pipeline YAMLs reference ($INSTRUMENT_DIR/...); the instrument is imported
+    # by name (instruments.<name>), so there is no per-instrument EUPS product
+    # to set up.
     env_exports = (
         'export REPO="$REPO"\n'
         'export STACK_DIR="$STACK_DIR"\n'
         'export INSTRUMENT_DIR="$INSTRUMENT_DIR"\n'
         'export RAW_PARENT_DIR="$RAW_PARENT_DIR"\n'
+        'export STIPS_INSTRUMENT_CLASS="$STIPS_INSTRUMENT_CLASS"\n'
     )
     if config.cp_pipe_dir:
         script_env["CP_PIPE_DIR"] = str(config.cp_pipe_dir)
@@ -126,19 +134,6 @@ def _build_setup_script(config: Config) -> tuple[str, dict[str, str]]:
     # framework default when no override exists).
     script_env["SKYMAP_CFG"] = str(config.resolve_config("makeSkyMap.py"))
     env_exports += 'export SKYMAP_CFG="$SKYMAP_CFG"\n'
-
-    # Profile ps1_band_map as JSON, for in-stack pex_config files
-    # (refcats_gaia_ps1*.py). They must NOT import the profile during config
-    # exec: pex_config records every module first imported while executing a
-    # config and replays those imports when a saved quantum graph is loaded --
-    # the path-loaded profile machinery (module name "fetch") is then
-    # unimportable and pipetask run dies at graph deserialization.
-    ps1_map = getattr(prof, "ps1_band_map", None)
-    if isinstance(ps1_map, dict):
-        import json as _json
-
-        script_env["STIPS_PS1_BAND_MAP"] = _json.dumps(ps1_map)
-        env_exports += 'export STIPS_PS1_BAND_MAP="$STIPS_PS1_BAND_MAP"\n'
 
     # Pass through RUN_ID so shell scripts log to the same directory. It is
     # already in os.environ (which run_with_stack merges), so only the export
@@ -185,6 +180,8 @@ export STIPS_DEFAULTS="$STIPS_DEFAULTS"
 if [ -d "$STIPS_SRC" ]; then
     export PYTHONPATH="${{STIPS_SRC}}:${{PYTHONPATH:-}}"
 fi
+# instruments/ is a namespace package imported by name; its root goes on PYTHONPATH.
+export PYTHONPATH="${{STIPS_INSTRUMENTS_ROOT}}:${{PYTHONPATH:-}}"
 
 # Ensure we use the conda python by putting CONDA_PREFIX/bin first in PATH
 # This overrides any local .venv or shell aliases

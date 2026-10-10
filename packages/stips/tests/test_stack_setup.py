@@ -11,13 +11,22 @@ from stips.core.config import Config
 from stips.core.stack import _build_setup_script
 
 
+def _instrument_dir(tmp_path, name="x"):
+    """A minimal instruments/<name>/ dir: the setup script derives the
+    PYTHONPATH root and Butler class path from this layout."""
+    d = tmp_path / "instruments" / name
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "profile.py").write_text("")
+    return d
+
+
 def test_setup_script_exports_stips_defaults(tmp_path):
     # _build_setup_script needs a stack loader on disk AND a loaded profile.
     (tmp_path / "loadLSST.bash").write_text("")
     cfg = Config(
         repo=tmp_path,
         stack_dir=tmp_path,
-        instrument_dir=tmp_path,
+        instrument_dir=_instrument_dir(tmp_path),
         raw_parent_dir=tmp_path,
     )
     # require_profile() raises if profile is None; _build_setup_script reads
@@ -38,7 +47,7 @@ def test_setup_script_exports_profile_skymap_identity(tmp_path):
     cfg = Config(
         repo=tmp_path,
         stack_dir=tmp_path,
-        instrument_dir=tmp_path,
+        instrument_dir=_instrument_dir(tmp_path),
         raw_parent_dir=tmp_path,
     )
     cfg.profile = types.SimpleNamespace(
@@ -61,7 +70,7 @@ def test_setup_script_sets_up_colocated_data_package(tmp_path):
     # F-020: a data package co-located under the instrument dir must be
     # eups-setup'd from that location (not the framework packages/ dir).
     (tmp_path / "loadLSST.bash").write_text("")
-    instrument_dir = tmp_path / "instruments" / "x"
+    instrument_dir = _instrument_dir(tmp_path)
     data_dir = instrument_dir / "obs_x_data"
     data_dir.mkdir(parents=True)
     cfg = Config(
@@ -81,8 +90,7 @@ def test_setup_script_sets_up_colocated_data_package(tmp_path):
 def test_setup_script_skips_data_package_when_unresolved(tmp_path):
     # Named but present nowhere -> no data-package setup block emitted.
     (tmp_path / "loadLSST.bash").write_text("")
-    instrument_dir = tmp_path / "instruments" / "x"
-    instrument_dir.mkdir(parents=True)
+    instrument_dir = _instrument_dir(tmp_path)
     cfg = Config(
         repo=tmp_path,
         stack_dir=tmp_path,
@@ -102,7 +110,7 @@ def test_setup_script_omits_skymap_when_profile_has_none(tmp_path):
     cfg = Config(
         repo=tmp_path,
         stack_dir=tmp_path,
-        instrument_dir=tmp_path,
+        instrument_dir=_instrument_dir(tmp_path),
         raw_parent_dir=tmp_path,
     )
     cfg.profile = types.SimpleNamespace(obs_data_package=None)
@@ -124,7 +132,7 @@ def test_setup_script_does_not_interpolate_shell_metacharacters(tmp_path):
     cfg = Config(
         repo=hostile,
         stack_dir=tmp_path,
-        instrument_dir=tmp_path,
+        instrument_dir=_instrument_dir(tmp_path),
         raw_parent_dir=tmp_path,
     )
     cfg.profile = types.SimpleNamespace(obs_data_package=None)
