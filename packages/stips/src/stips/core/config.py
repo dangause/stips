@@ -79,20 +79,15 @@ def resolve_data_package_dir(
 
 
 def load_active_profile(instrument_dir: str | Path | None = None):
-    """Load the active instrument profile by path from INSTRUMENT_DIR.
+    """Import the active instrument profile (``instruments.<name>.profile``).
 
-    The collapsed framework defines a telescope as instruments/<name>/profile.py
-    loaded by path (no importable obs package). Reads INSTRUMENT_DIR from the env
-    if not given. APPENDS the instrument dir to sys.path (so co-located hook
-    modules like fetch.py resolve) WITHOUT shadowing stdlib/installed modules.
-
-    NOTE: this mirrors lsst.obs.stips.profile_loader.load_profile_from_dir — the
-    intentional dual-loader (stips-side here for the CLI/tools; obs_stips-side
-    for the stack-import path). Keep the two in sync.
+    ``instrument_dir`` defaults to the INSTRUMENT_DIR env var. The dir must be
+    ``<root>/instruments/<name>/``; ``<root>`` is appended to ``sys.path`` and
+    the profile is imported BY NAME — the same mechanism Butler uses to
+    re-import ``instruments.<name>.instrument.Instrument``, so the CLI and the
+    stack can never bind different profiles to one name.
     """
-    import importlib.util
-    import os
-    import sys
+    from stips.profile import import_profile
 
     d = instrument_dir or os.environ.get("INSTRUMENT_DIR")
     if not d:
@@ -100,15 +95,7 @@ def load_active_profile(instrument_dir: str | Path | None = None):
             "INSTRUMENT_DIR is not set; it must point at instruments/<name>/ "
             "(containing profile.py)."
         )
-    profile_py = Path(d) / "profile.py"
-    if not profile_py.is_file():
-        raise FileNotFoundError(f"No profile.py in INSTRUMENT_DIR: {d}")
-    if str(profile_py.parent) not in sys.path:
-        sys.path.append(str(profile_py.parent))
-    spec = importlib.util.spec_from_file_location("_stips_profile", profile_py)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod.profile
+    return import_profile(d)
 
 
 def _discover_cp_pipe_dir(stack_dir: Path) -> Path | None:
@@ -203,7 +190,7 @@ class Config:
     cp_pipe_dir: Path | None = None
     env: dict[str, str] = field(default_factory=dict)
 
-    # Active instrument's InstrumentProfile (loaded by path from INSTRUMENT_DIR).
+    # Active instrument's InstrumentProfile (instruments.<name>.profile, imported by name).
     # May be None if instruments/<name>/profile.py is absent; commands that need
     # it should call require_profile() to surface an actionable error.
     profile: "InstrumentProfile | None" = None
@@ -259,6 +246,15 @@ class Config:
                 "instruments/<name>/ containing profile.py."
             )
         return self.profile
+
+    @property
+    def instrument_class(self) -> str:
+        """Butler class path of the active instrument
+        (``instruments.<name>.instrument.Instrument``), derived from
+        ``instrument_dir``."""
+        from stips.profile import instrument_class_for
+
+        return instrument_class_for(self.instrument_dir)
 
     def validate(self) -> list[str]:
         """Check that required paths exist.
@@ -375,8 +371,8 @@ def load(
     # ${VAR} expansion using ONLY the env block (no os.environ)
     merged = {k: _expand_within(v, env, key=k) for k, v in env.items()}
 
-    # INSTRUMENT_PACKAGE is removed: the profile is loaded BY PATH from
-    # INSTRUMENT_DIR. A lingering INSTRUMENT_PACKAGE in the env block is a stale
+    # INSTRUMENT_PACKAGE is removed: the profile is imported by name from
+    # INSTRUMENT_DIR (instruments.<name>.profile). A lingering INSTRUMENT_PACKAGE in the env block is a stale
     # config; fail loud so it gets migrated.
     if merged.get("INSTRUMENT_PACKAGE"):
         raise ValueError(
@@ -411,18 +407,9 @@ def load(
     if cp_pipe_dir is None:
         cp_pipe_dir = _discover_cp_pipe_dir(stack_dir)
 
-    # Load the active instrument profile BY PATH from INSTRUMENT_DIR
-    # (post-collapse: a telescope is instruments/<name>/profile.py, loaded by
-    # path — there is no importable obs package). NOTE: the `instrument_dir`
-    # Path object isn't built until later in load() — only the string
-    # `instrument_dir_val` exists here, so use Path(instrument_dir_val). This
-    # mirrors lsst.obs.stips.profile_loader.load_profile_from_dir (load by path +
-    # insert the dir on sys.path so co-located hook modules — e.g. `from fetch
-    # import fetch_data` — resolve); keep the two in sync.
-    #
-    # Robustness: if profile.py is absent, do NOT crash config loading — leave
-    # profile=None. Commands that need it call Config.require_profile() for a
-    # clear, actionable error.
+    # Import the active instrument profile by name (instruments.<name>.profile).
+    # If profile.py is absent, do NOT crash config loading — leave profile=None;
+    # commands that need it call Config.require_profile() for a clear error.
     profile = None
     candidate = Path(instrument_dir_val).expanduser() / "profile.py"
     if candidate.is_file():

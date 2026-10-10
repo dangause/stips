@@ -42,9 +42,9 @@ if not _ps1_band_map:
     # Fallback for direct pipetask use outside STIPS (no env var): load the
     # profile. Safe at graph-BUILD time; a graph saved this way cannot be
     # re-loaded outside a matching sys.path (see above).
-    from lsst.obs.stips.profile_loader import load_profile_from_dir
+    from stips.profile import import_profile
 
-    _ps1_band_map = dict(load_profile_from_dir(_instrument_dir).ps1_band_map)
+    _ps1_band_map = dict(import_profile(_instrument_dir).ps1_band_map)
 config.photometry_ref_loader.filterMap = {
     band: f"{ps1_band}MeanPSFMag" for band, ps1_band in _ps1_band_map.items()
 }

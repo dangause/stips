@@ -18,10 +18,10 @@ Design notes
   LSST stack; callers that may run stack-free must ``pytest.importorskip`` a real
   ``lsst`` module (e.g. ``lsst.obs.base``) first -- never the ``lsst.obs.stips``
   namespace, which is importable from the editable install even without a stack.
-* **Unique module names.** Every ``profile.py`` / ``fetch.py`` /
-  ``contract_data.py`` loaded by path gets a unique synthetic module name keyed
-  by the instrument, so loading several instruments in one process cannot shadow
-  one another.
+* **Imported by name.** ``profile.py`` and ``fetch.py`` are imported as
+  ``instruments.<name>.profile`` / ``.fetch`` (the same way Butler imports the
+  instrument class), so several instruments coexist in one process without
+  any sys.path juggling; only ``tests/contract_data.py`` is loaded by path.
 """
 
 from __future__ import annotations
@@ -29,7 +29,6 @@ from __future__ import annotations
 import importlib
 import importlib.util
 import os
-import sys
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -137,38 +136,19 @@ def _load_module_by_path(path: Path, mod_name: str) -> Any:
 
 
 def load_profile(info: InstrumentDirInfo) -> Any:
-    """Load the instrument's ``profile.py`` object by path, stack-free.
+    """Import the instrument's profile by name (``instruments.<name>.profile``)."""
+    from stips.profile import import_profile
 
-    ``profile.py`` does ``from fetch import fetch_data`` and ``from stips import
-    ...``. We temporarily insert the instrument dir on ``sys.path`` and preload
-    THIS instrument's ``fetch`` module under the bare name ``fetch`` so that
-    import resolves to the right one even when several instruments are loaded in
-    a single process; the environment is fully restored on exit.
-    """
-    inst_dir = str(info.path)
-    saved_path = list(sys.path)
-    saved_fetch = sys.modules.get("fetch")
-    try:
-        sys.path.insert(0, inst_dir)
-        if info.has_fetch:
-            sys.modules["fetch"] = _load_module_by_path(info.fetch_path, "fetch")
-        prof_mod = _load_module_by_path(
-            info.profile_path, f"_stips_contract_profile_{info.name}"
-        )
-        return prof_mod.profile
-    finally:
-        sys.path[:] = saved_path
-        if saved_fetch is not None:
-            sys.modules["fetch"] = saved_fetch
-        else:
-            sys.modules.pop("fetch", None)
+    return import_profile(info.path)
 
 
 def load_fetch(info: InstrumentDirInfo) -> Any:
-    """Load the instrument's ``fetch.py`` module by path (stdlib-only at import)."""
+    """Import the instrument's ``fetch`` module by name (stdlib-only at import)."""
+    from stips.profile import import_instrument_submodule
+
     if not info.has_fetch:
         raise FileNotFoundError(f"{info.name} has no fetch.py")
-    return _load_module_by_path(info.fetch_path, f"_stips_contract_fetch_{info.name}")
+    return import_instrument_submodule(info.path, "fetch")
 
 
 def load_contract_data(info: InstrumentDirInfo) -> Any:
@@ -215,7 +195,6 @@ def assert_profile_valid(profile: Any) -> None:
     ), "profile.name must be a non-empty string"
     assert profile.collection_prefix, f"{profile.name}: collection_prefix must be set"
     assert profile.policy_name, f"{profile.name}: policy_name must be set"
-    assert profile.instrument_class, f"{profile.name}: instrument_class must be set"
     assert profile.filter_key, f"{profile.name}: filter_key must be set"
     assert (
         profile.filters
