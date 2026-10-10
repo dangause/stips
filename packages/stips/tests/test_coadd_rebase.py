@@ -41,10 +41,11 @@ def _config(tmp_path: Path) -> SimpleNamespace:
         collection_prefix="Nickel",
         skymap_name="nickelRings-v1",
         skymap_collection="skymaps/nickelRings",
-        instrument_class="lsst.obs.stips.active.Instrument",
     )
     return SimpleNamespace(
         repo=tmp_path,
+        instrument_dir=tmp_path / "instruments" / "nickel",
+        instrument_class="instruments.nickel.instrument.Instrument",
         require_profile=lambda: profile,
         resolve_pipeline=lambda name: "DRP.yaml",
     )
@@ -104,6 +105,9 @@ def _install(
 
     monkeypatch.setattr(coadd, "run_butler", fake_run_butler)
     monkeypatch.setattr(pipeline_mod, "run_butler", fake_run_butler)
+    monkeypatch.setattr(
+        pipeline_mod.butler_query, "list_instruments", lambda config: {}
+    )
     monkeypatch.setattr(coadd, "generate_run_timestamp", lambda: "20260710T000000Z")
     monkeypatch.setattr(
         coadd,

@@ -16,6 +16,8 @@ from __future__ import annotations
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 sys_path_guard = str(Path(__file__).resolve().parents[1] / "src")
 import sys  # noqa: E402
 
@@ -277,12 +279,21 @@ def test_output_parent_none_omits_dash_o():
 # --------------------------------------------------------------------------- #
 
 
-def _config(tmp_path, instrument_class="lsst.obs.stips.active.Instrument"):
-    prof = SimpleNamespace(instrument_class=instrument_class)
-    return SimpleNamespace(repo=tmp_path, require_profile=lambda: prof)
+NEW_CLS = "instruments.nickel.instrument.Instrument"
+OLD_CLS = "lsst.obs.stips.active.Instrument"
 
 
-def test_ensure_instrument_registered_argv(monkeypatch, tmp_path):
+def _config(tmp_path):
+    prof = SimpleNamespace(name="Nickel")
+    return SimpleNamespace(
+        repo=tmp_path,
+        instrument_dir=tmp_path / "instruments" / "nickel",
+        instrument_class=NEW_CLS,
+        require_profile=lambda: prof,
+    )
+
+
+def _guard(monkeypatch, registered):
     from stips.core import pipeline as pipeline_mod
 
     calls = []
@@ -291,15 +302,56 @@ def test_ensure_instrument_registered_argv(monkeypatch, tmp_path):
         "run_butler",
         lambda args, config, **kw: calls.append((list(args), kw)),
     )
-    ensure_instrument_registered(_config(tmp_path), log_file=None)
+    monkeypatch.setattr(
+        pipeline_mod.butler_query, "list_instruments", lambda config: registered
+    )
+    return calls
 
+
+def test_guard_noop_when_registered_with_new_class(monkeypatch, tmp_path):
+    calls = _guard(monkeypatch, {"Nickel": NEW_CLS})
+    ensure_instrument_registered(_config(tmp_path))
+    assert calls == []
+
+
+def test_guard_migrates_legacy_class_with_update(monkeypatch, tmp_path):
+    calls = _guard(monkeypatch, {"Nickel": OLD_CLS})
+    ensure_instrument_registered(_config(tmp_path))
     (args, kw) = calls[0]
-    assert args == [
-        "register-instrument",
-        str(tmp_path),
-        "lsst.obs.stips.active.Instrument",
-    ]
-    assert kw.get("check") is False  # idempotent: tolerate already-registered
+    assert args == ["register-instrument", str(tmp_path), NEW_CLS, "--update"]
+    assert kw.get("check") is True
+
+
+def test_guard_registers_into_an_empty_repo(monkeypatch, tmp_path):
+    calls = _guard(monkeypatch, {})
+    ensure_instrument_registered(_config(tmp_path))
+    assert calls[0][0] == ["register-instrument", str(tmp_path), NEW_CLS]
+
+
+def test_guard_refuses_a_repo_holding_other_instruments(monkeypatch, tmp_path):
+    calls = _guard(monkeypatch, {"CTIO1m": "instruments.ctio1m.instrument.Instrument"})
+    with pytest.raises(RuntimeError) as exc:
+        ensure_instrument_registered(_config(tmp_path))
+    msg = str(exc.value)
+    assert (
+        "CTIO1m" in msg
+        and "Nickel" in msg
+        and "INSTRUMENT_DIR" in msg
+        and "stips bootstrap" in msg
+    )
+    assert calls == []
+
+
+def test_guard_refuses_a_foreign_class_for_our_name(monkeypatch, tmp_path):
+    _guard(monkeypatch, {"Nickel": "some.other.Instrument"})
+    with pytest.raises(RuntimeError, match="some.other.Instrument"):
+        ensure_instrument_registered(_config(tmp_path))
+
+
+def test_guard_fails_when_the_registry_cannot_be_read(monkeypatch, tmp_path):
+    _guard(monkeypatch, None)
+    with pytest.raises(RuntimeError, match="could not list"):
+        ensure_instrument_registered(_config(tmp_path))
 
 
 # --------------------------------------------------------------------------- #

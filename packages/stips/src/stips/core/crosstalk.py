@@ -28,6 +28,7 @@ from typing import TYPE_CHECKING
 from stips.collections import CollectionNames
 from stips.core import butler_query
 from stips.core.pipeline import (
+    ensure_instrument_registered,
     find_aliasing_exposure_ids,
     get_raw_dir,
     isr_config_args,
@@ -424,12 +425,7 @@ def _resolve_raw_runs(nights, config, prof, *, log_file=None) -> list[str]:
             )
             continue
         cols = CollectionNames(night, prefix=prof.collection_prefix)
-        run_butler(
-            ["register-instrument", repo, prof.instrument_class],
-            config,
-            check=False,
-            log_file=log_file,
-        )
+        ensure_instrument_registered(config, log_file)
         run_butler(
             [
                 "ingest-raws",
