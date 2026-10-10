@@ -239,8 +239,8 @@ butler = Butler.from_config({repo!r}, writeable=False)
 try:
     # explain=False: an empty repo yields [] instead of EmptyQueryResultError.
     records = list(butler.query_dimension_records("instrument", explain=False))
-except AttributeError:
-    # v27 fallback
+except (AttributeError, TypeError):
+    # v27 fallback (no query_dimension_records, or no explain= kwarg)
     records = list(butler.registry.queryDimensionRecords("instrument"))
 print(json.dumps({{"instruments": {{r.name: r.class_name for r in records}}}}))
 """

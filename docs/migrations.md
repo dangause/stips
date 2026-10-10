@@ -28,6 +28,9 @@ Run that in a stack shell with `setup -r packages/obs_stips obs_stips` and
 `lsst.obs.stips.active` remains as a shim (it resolves `INSTRUMENT_DIR` and
 re-exports the same classes) so raws ingested before this change, whose
 datastore records name `lsst.obs.stips.active.RawFormatter`, stay readable.
+Those legacy raws bind to whatever `INSTRUMENT_DIR` the reading process has, so
+a hand-typed `butler` with no `INSTRUMENT_DIR` set cannot read them; only repos
+that still hold raws (Docker/HPC) are affected.
 
 **Instrument forks must:**
 

@@ -9,11 +9,19 @@ from astropy.coordinates import Angle, EarthLocation
 
 
 def _header_binning(value) -> int | None:
-    """First integer in a binning header value: ``"2 2"`` -> 2, ``2`` -> 2."""
+    """Binning from a header value when every integer in it agrees.
+
+    ``"2 2"`` -> 2, ``2`` -> 2; a blank value reads as unbinned (1), like a
+    missing keyword. Asymmetric (``"2 1"``) or digit-less (``"N/A"``) values
+    return ``None`` so no profile claims the file. ``None`` stays ``None``.
+    """
     if value is None:
         return None
-    m = re.search(r"\d+", str(value))
-    return int(m.group()) if m else None
+    text = str(value)
+    if not text.strip():
+        return 1
+    nums = {int(n) for n in re.findall(r"\d+", text)}
+    return nums.pop() if len(nums) == 1 else None
 
 
 class StipsTranslator(FitsTranslator):
@@ -43,13 +51,14 @@ class StipsTranslator(FitsTranslator):
         # On-chip binning: when the profile names the binning keyword, claim the
         # file only if its binning equals the profile's, so an unbinned profile
         # and its binned variant (a separate instrument) never both match. A
-        # missing keyword reads as unbinned.
+        # missing or blank keyword reads as unbinned; an asymmetric or
+        # unparseable value is claimed by no profile.
         key = cls.profile.binning_header
         if key is None:
             return True
         value = header.get(key)
         binning = 1 if value is None else _header_binning(value)
-        return binning == int(cls.profile.ccd_binning)
+        return binning is not None and binning == int(cls.profile.ccd_binning)
 
     def _hook(self, name):
         return self.profile.hooks.get(name)

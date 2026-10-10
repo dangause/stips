@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import re
+import subprocess
 from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -853,12 +854,15 @@ def ensure_instrument_registered(
     """Make sure the active instrument is registered in the repo under its
     own class path, and fail loudly when the repo belongs to another one.
 
-    Four cases, decided from the registry (never by blind registration):
+    Five cases, decided from the registry (never by blind registration):
 
     * registered with ``config.instrument_class``: nothing to do;
     * registered under the legacy ``lsst.obs.stips.active.Instrument``: a
       repo from before the by-name layout — rewrite the record with
-      ``register-instrument --update`` (one-time, logged);
+      ``register-instrument --update`` (one-time, logged; a failed update is
+      re-raised as ``RuntimeError`` pointing at the butler log);
+    * our name registered under some other (foreign) class: raise, pointing at
+      ``stips bootstrap`` to re-register it;
     * no instrument registered at all: a fresh repo — register;
     * other instruments only: almost certainly a wrong ``INSTRUMENT_DIR`` for
       this repo — raise. Adding a second instrument to a repo on purpose is
@@ -884,12 +888,20 @@ def ensure_instrument_registered(
             current,
             class_name,
         )
-        run_butler(
-            ["register-instrument", str(config.repo), class_name, "--update"],
-            config,
-            check=True,
-            log_file=log_file,
-        )
+        try:
+            run_butler(
+                ["register-instrument", str(config.repo), class_name, "--update"],
+                config,
+                check=True,
+                log_file=log_file,
+            )
+        except subprocess.CalledProcessError as exc:
+            where = f" at {log_file}" if log_file else ""
+            raise RuntimeError(
+                f"migrating instrument {prof.name!r} in {config.repo} to {class_name} "
+                f"failed (exit {exc.returncode}); see the butler log{where} "
+                "and docs/migrations.md"
+            ) from exc
         return
     if current is not None:
         raise RuntimeError(

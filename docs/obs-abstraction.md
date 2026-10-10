@@ -139,8 +139,12 @@ A profile is imported as `instruments.<name>.profile` by
 tree shadows installed packages — the reason the old loader used `sys.path.append`). This is
 the in-process path (the `stips` CLI itself); the stack subprocess instead gets `<root>`
 **prepended** via the `PYTHONPATH` environment variable (`stack.py`'s `_build_setup_script`) —
-which is harmless either way, since `PYTHONPATH` entries always precede site-packages
-regardless of order among themselves.
+which is harmless with respect to site-packages, since `PYTHONPATH` entries always precede
+site-packages regardless of order among themselves. It is *not* harmless between roots: a
+second root carrying the same instrument name (`<other_root>/instruments/<name>/`) earlier on
+the path would win the import. That is why the loader checks the imported module's origin
+against `instrument_dir` and fails loudly (`RuntimeError` naming both paths and the offending
+`sys.path` entry) instead of silently running the wrong profile.
 `instruments` is an implicit namespace package, so an out-of-tree fork merges with the in-tree
 dirs. The same function serves the CLI (`Config.profile`), the in-stack refcat overlays, and
 the test harness, and the stack's `binding.bind` imports the very same module name

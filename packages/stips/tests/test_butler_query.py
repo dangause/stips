@@ -301,6 +301,7 @@ def test_list_instruments_script_queries_dimension_records():
     s = _build_list_instruments_script("/repo")
     assert 'query_dimension_records("instrument", explain=False)' in s
     assert 'queryDimensionRecords("instrument")' in s  # v27 fallback
+    assert "except (AttributeError, TypeError):" in s  # unexpected explain= kwarg
     assert "class_name" in s
 
 

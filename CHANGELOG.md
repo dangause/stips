@@ -32,9 +32,10 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
   `instruments.<name>.instrument.Instrument`, from a three-line nameplate
   `instrument.py` in the instrument dir; the stored `class_name` now identifies
   the instrument on its own and several instruments can share a repo. Existing
-  repos migrate on their next calibs/science/dia/coadd/crosstalk step or
-  `stips bootstrap` (`register-instrument --update`); `lsst.obs.stips.active`
-  stays as a shim. (#59)
+  repos migrate on their next `calibs`/`science`/`dia`/`coadd`/`measure-crosstalk`
+  step or `stips bootstrap` (`register-instrument --update`); `fphot`,
+  `lightcurve`, `ps1-template` and `clean` do not migrate a repo but keep
+  working through the `lsst.obs.stips.active` shim, which stays. (#59)
 - Profiles are imported by name (`instruments.<name>.profile`) by one loader,
   `stips.profile.import_profile`; `profile.py` imports `fetch` relatively.
 - `stips` refuses to run a step against a repo that holds other instruments

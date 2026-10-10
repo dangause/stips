@@ -363,6 +363,23 @@ def test_guard_fails_when_the_registry_cannot_be_read(monkeypatch, tmp_path):
         ensure_instrument_registered(_config(tmp_path))
 
 
+def test_guard_reports_a_failed_legacy_migration(monkeypatch, tmp_path):
+    import subprocess
+
+    from stips.core import pipeline as pipeline_mod
+
+    _guard(monkeypatch, {"Nickel": OLD_CLS})
+
+    def boom(args, config, **kw):
+        raise subprocess.CalledProcessError(1, "butler")
+
+    monkeypatch.setattr(pipeline_mod, "run_butler", boom)
+    with pytest.raises(RuntimeError, match="migrating instrument") as exc:
+        ensure_instrument_registered(_config(tmp_path))
+    assert NEW_CLS in str(exc.value) and "docs/migrations.md" in str(exc.value)
+    assert isinstance(exc.value.__cause__, subprocess.CalledProcessError)
+
+
 # --------------------------------------------------------------------------- #
 # redefine_chain
 # --------------------------------------------------------------------------- #

@@ -26,6 +26,10 @@ class _Binned(StipsTranslator):
     profile = _profile("BinTestBinned", 2)
 
 
+class _BinnedStr(StipsTranslator):
+    profile = _profile("BinTestBinnedStr", "2")
+
+
 class _NoCheck(StipsTranslator):
     profile = _profile("BinTestNoCheck", 1, header=None)
 
@@ -56,3 +60,38 @@ def test_no_binning_header_skips_the_check():
 
 def test_instrume_mismatch_still_rejects():
     assert not _Unbinned.can_translate({"INSTRUME": "Other", "CCDSUM": "1 1"})
+
+
+def test_header_binning_requires_all_integers_to_agree():
+    assert _header_binning("2 1") is None
+    assert _header_binning("1 2") is None
+    assert _header_binning("2,2") == 2
+
+
+def test_asymmetric_binning_is_claimed_by_neither_profile():
+    h = {"INSTRUME": "Y4KTest", "CCDSUM": "2 1"}
+    assert not _Unbinned.can_translate(h)
+    assert not _Binned.can_translate(h)
+
+
+def test_blank_binning_value_reads_as_unbinned():
+    assert _header_binning("") == 1
+    assert _header_binning("   ") == 1
+    for blank in ("", "  "):
+        h = {"INSTRUME": "Y4KTest", "CCDSUM": blank}
+        assert _Unbinned.can_translate(h)
+        assert not _Binned.can_translate(h)
+
+
+def test_string_ccd_binning_profile_still_matches():
+    h2 = {"INSTRUME": "Y4KTest", "CCDSUM": "2 2"}
+    h1 = {"INSTRUME": "Y4KTest", "CCDSUM": "1 1"}
+    assert _BinnedStr.can_translate(h2)
+    assert not _BinnedStr.can_translate(h1)
+
+
+def test_digitless_binning_value_is_claimed_by_neither_profile():
+    h = {"INSTRUME": "Y4KTest", "CCDSUM": "N/A"}
+    assert _header_binning("N/A") is None
+    assert not _Unbinned.can_translate(h)
+    assert not _Binned.can_translate(h)

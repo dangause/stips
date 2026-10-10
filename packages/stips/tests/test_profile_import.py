@@ -124,3 +124,32 @@ def test_profile_binning_fields_default_and_validate():
     assert p2.ccd_binning == 2
     with pytest.raises(ValueError, match="ccd_binning"):
         InstrumentProfile(name="X3", ccd_binning=0, **kw)
+
+
+@pytest.fixture
+def two_roots(tmp_path):
+    """Two <root>/instruments/ layouts; cleaned from sys.path/sys.modules on exit."""
+    roots = [tmp_path / "root_a", tmp_path / "root_b"]
+    for r in roots:
+        (r / "instruments").mkdir(parents=True)
+    yield roots
+    for mod_name in list(sys.modules):
+        if mod_name == "instruments.demo_s" or mod_name.startswith(
+            "instruments.demo_s."
+        ):
+            del sys.modules[mod_name]
+    for r in roots:
+        while str(r) in sys.path:
+            sys.path.remove(str(r))
+
+
+def test_shadowed_instrument_dir_raises(two_roots):
+    root_a, root_b = two_roots
+    _make(root_a, "demo_s", "A")
+    b = _make(root_b, "demo_s", "B")
+    sys.path.insert(0, str(root_a))
+    with pytest.raises(RuntimeError) as excinfo:
+        import_profile(b)
+    msg = str(excinfo.value)
+    assert str((root_a / "instruments" / "demo_s").resolve()) in msg
+    assert str((root_b / "instruments" / "demo_s").resolve()) in msg

@@ -7,8 +7,11 @@ Curated calibration data for the Nickel 1-meter telescope at Lick Observatory.
 This package provides versioned calibration data for the Nickel telescope, following the LSST `obs_lsst_data` pattern. The data can be ingested into a Butler repository using:
 
 ```bash
-butler write-curated-calibrations <REPO> lsst.obs.stips.active.Instrument
+butler write-curated-calibrations <REPO> instruments.nickel.instrument.Instrument
 ```
+
+A hand-run `butler` command needs a stack shell with `setup -r packages/obs_stips obs_stips`
+and `PYTHONPATH=<root>:<root>/packages/stips/src` set (see `docs/migrations.md`).
 
 ## Directory Structure
 

@@ -93,7 +93,12 @@ else
   log_info "Butler repository exists: $REPO"
 fi
 log_info "Registering instrument: $INSTRUMENT"
-butler register-instrument --update "$REPO" "$INSTRUMENT" || true
+if ! butler register-instrument --update "$REPO" "$INSTRUMENT"; then
+  log_error "Failed to register instrument $INSTRUMENT in $REPO"
+  log_error "The class must be importable from PYTHONPATH=$PYTHONPATH"
+  print_log_summary
+  exit 2
+fi
 
 ########## REF CATS (MONSTER AFW only) ##########
 log_section "Reference Catalogs Ingestion (MONSTER only)"

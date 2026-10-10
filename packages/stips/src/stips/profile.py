@@ -372,7 +372,20 @@ def import_instrument_submodule(instrument_dir: "str | Path", submodule: str):
     root = str(instruments_root(instrument_dir))
     if root not in sys.path:
         sys.path.append(root)
-    return importlib.import_module(f"{INSTRUMENTS_PACKAGE}.{name}.{submodule}")
+    qualname = f"{INSTRUMENTS_PACKAGE}.{name}.{submodule}"
+    module = importlib.import_module(qualname)
+    # Importing by name means an earlier ``<other_root>/instruments/<name>`` on
+    # sys.path silently wins. Verify the module really came from instrument_dir.
+    got = Path(module.__file__).resolve().parent
+    want = Path(instrument_dir).expanduser().resolve()
+    if got != want:
+        raise RuntimeError(
+            f"{qualname} resolved to {got} instead of {want}: another "
+            f"instruments/{name} is earlier on sys.path (entry {got.parent.parent}). "
+            "Remove that entry from sys.path/PYTHONPATH or rename one of the "
+            "instrument directories."
+        )
+    return module
 
 
 def import_profile(instrument_dir: "str | Path") -> "InstrumentProfile":
