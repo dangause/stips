@@ -11,13 +11,11 @@
 """Under-stack tests that the Y4KCam camera yaml builds a 4-amplifier Camera.
 
 Y4KCam is the first MULTI-AMPLIFIER camera in STIPS: a single CCD read out
-through four amplifiers (2x2 quadrants). These tests exercise the GENERIC STIPS
-machinery (``lsst.obs.stips.active.Instrument`` synthesized from
-``INSTRUMENT_DIR=instruments/ctio1m``) and assert the assembled afw ``Camera``
-has exactly one detector with FOUR amplifiers.
+through four amplifiers (2x2 quadrants). These tests exercise the nameplate
+``instruments.ctio1m.instrument.Instrument`` (the nameplate) and assert the
+assembled afw ``Camera`` has exactly one detector with FOUR amplifiers.
 """
 
-import functools
 import unittest
 from pathlib import Path
 
@@ -26,38 +24,34 @@ import pytest
 pytest.importorskip("lsst.utils.tests")
 
 import lsst.utils.tests  # noqa: E402
-from stips.testing.instrument_contract import (  # noqa: E402
-    active_instrument_dir as _active_instrument_dir,
-)
+from stips.testing.instrument_contract import bound_instrument  # noqa: E402
 
 # instruments/ctio1m/tests/test_camera.py -> parents[1] == instruments/ctio1m
-active_instrument_dir = functools.partial(
-    _active_instrument_dir, Path(__file__).resolve().parents[1]
-)
+_CTIO_DIR = Path(__file__).resolve().parents[1]
 
 
 class TestY4KCamCamera(unittest.TestCase):
     def test_camera_builds_with_four_amps(self):
-        with active_instrument_dir() as active:
-            cam = active.Instrument().getCamera()
+        active = bound_instrument(_CTIO_DIR)
+        cam = active.Instrument().getCamera()
 
-            dets = list(cam)
-            self.assertEqual(len(dets), 1)
+        dets = list(cam)
+        self.assertEqual(len(dets), 1)
 
-            det = dets[0]
-            self.assertEqual(det.getId(), 0)
-            self.assertEqual(det.getName(), "CCD0")
+        det = dets[0]
+        self.assertEqual(det.getId(), 0)
+        self.assertEqual(det.getName(), "CCD0")
 
-            # The key new assertion: FOUR amplifiers (codebase idiom: list(det)).
-            amps = list(det)
-            self.assertEqual(len(amps), 4)
-            self.assertEqual([a.getName() for a in amps], ["A00", "A01", "A02", "A03"])
+        # The key new assertion: FOUR amplifiers (codebase idiom: list(det)).
+        amps = list(det)
+        self.assertEqual(len(amps), 4)
+        self.assertEqual([a.getName() for a in amps], ["A00", "A01", "A02", "A03"])
 
-            # LSST bbox max-corner is inclusive, so a [[0,0],[4064,4064]] yaml may
-            # yield width/height 4064 or 4065 depending on stack version.
-            bbox = det.getBBox()
-            self.assertIn(bbox.getWidth(), (4064, 4065))
-            self.assertIn(bbox.getHeight(), (4064, 4065))
+        # LSST bbox max-corner is inclusive, so a [[0,0],[4064,4064]] yaml may
+        # yield width/height 4064 or 4065 depending on stack version.
+        bbox = det.getBBox()
+        self.assertIn(bbox.getWidth(), (4064, 4065))
+        self.assertIn(bbox.getHeight(), (4064, 4065))
 
 
 class MemoryTester(lsst.utils.tests.MemoryTestCase):

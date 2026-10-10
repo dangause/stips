@@ -1,4 +1,3 @@
-import importlib
 import os
 import unittest
 from pathlib import Path
@@ -22,15 +21,13 @@ from lsst.daf.butler import (  # noqa: E402
     StorageClassFactory,
 )
 
-# Obtain the synthesized RawFormatter from the generic machinery
-# (lsst.obs.stips.active, bound to INSTRUMENT_DIR=instruments/nickel).
-# instruments/nickel/tests/test_formatter.py -> parents[1] == instruments/nickel
-_INSTRUMENT_DIR = str(Path(__file__).resolve().parents[1])
-os.environ["INSTRUMENT_DIR"] = _INSTRUMENT_DIR
-import lsst.obs.stips.active as _active  # noqa: E402
+# The synthesized RawFormatter for the reference Nickel instrument, imported by
+# name like Butler does. instruments/nickel/tests/... -> parents[1] == instruments/nickel
+from stips.profile import import_instrument_module  # noqa: E402
 
-_active = importlib.reload(_active)
-NickelRawFormatter = _active.RawFormatter
+NickelRawFormatter = import_instrument_module(
+    Path(__file__).resolve().parents[1]
+).RawFormatter
 
 testDataPackage = "testdata_nickel"
 try:

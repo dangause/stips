@@ -16,7 +16,6 @@ the amp count, the amp ordering is preserved, and the calib round-trips through
 ECSV (the format ``butler write/certify`` uses).
 """
 
-import functools
 import os
 import tempfile
 import unittest
@@ -31,14 +30,10 @@ import lsst.utils.tests  # noqa: E402
 from stips.pipeline_tools.build_crosstalk_calib import (
     make_crosstalk_calib,
 )  # noqa: E402
-from stips.testing.instrument_contract import (  # noqa: E402
-    active_instrument_dir as _active_instrument_dir,
-)
+from stips.testing.instrument_contract import bound_instrument  # noqa: E402
 
 # instruments/ctio1m/tests/... -> parents[1] == instruments/ctio1m
-active_instrument_dir = functools.partial(
-    _active_instrument_dir, Path(__file__).resolve().parents[1]
-)
+_CTIO_DIR = Path(__file__).resolve().parents[1]
 
 
 def _y4kcam_detector(active):
@@ -53,8 +48,8 @@ class TestY4KCamCrosstalkCalib(unittest.TestCase):
             [4e-4, 5e-4, 0.0, 6e-4],
             [7e-4, 8e-4, 9e-4, 0.0],
         ]
-        with active_instrument_dir() as active:
-            calib = make_crosstalk_calib(_y4kcam_detector(active), coeffs, "adu")
+        active = bound_instrument(_CTIO_DIR)
+        calib = make_crosstalk_calib(_y4kcam_detector(active), coeffs, "adu")
 
         self.assertTrue(calib.hasCrosstalk)
         self.assertEqual(calib.nAmp, 4)
@@ -64,16 +59,16 @@ class TestY4KCamCrosstalkCalib(unittest.TestCase):
 
     def test_zero_placeholder_is_a_valid_noop(self):
         zeros = [[0.0] * 4 for _ in range(4)]
-        with active_instrument_dir() as active:
-            calib = make_crosstalk_calib(_y4kcam_detector(active), zeros)
+        active = bound_instrument(_CTIO_DIR)
+        calib = make_crosstalk_calib(_y4kcam_detector(active), zeros)
         np.testing.assert_array_equal(calib.coeffs, np.zeros((4, 4)))
 
     def test_wrong_amp_count_is_rejected(self):
         # A 2x2 matrix against the 4-amp detector must fail loudly.
-        with active_instrument_dir() as active:
-            det = _y4kcam_detector(active)
-            with self.assertRaises(ValueError):
-                make_crosstalk_calib(det, [[0.0, 1e-4], [1e-4, 0.0]])
+        active = bound_instrument(_CTIO_DIR)
+        det = _y4kcam_detector(active)
+        with self.assertRaises(ValueError):
+            make_crosstalk_calib(det, [[0.0, 1e-4], [1e-4, 0.0]])
 
     def test_ecsv_round_trip_preserves_matrix(self):
         coeffs = [
@@ -84,8 +79,8 @@ class TestY4KCamCrosstalkCalib(unittest.TestCase):
         ]
         from lsst.ip.isr import CrosstalkCalib
 
-        with active_instrument_dir() as active:
-            calib = make_crosstalk_calib(_y4kcam_detector(active), coeffs)
+        active = bound_instrument(_CTIO_DIR)
+        calib = make_crosstalk_calib(_y4kcam_detector(active), coeffs)
 
         with tempfile.TemporaryDirectory() as tmp:
             path = os.path.join(tmp, "crosstalk.ecsv")
