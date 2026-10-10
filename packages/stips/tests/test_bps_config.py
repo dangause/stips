@@ -185,6 +185,14 @@ class TestFullBPSLifecycle:
         assert (output_dir / "sites" / "local.yaml").exists()
         assert (output_dir / "base.yaml").exists()
 
+        # base.yaml carries the preScript's {instruments_root} substitution
+        # (local.yaml includes it rather than defining its own preScript).
+        base_content = (output_dir / "base.yaml").read_text()
+        assert "{instruments_root}" not in base_content
+        # config.instrument_dir is REPO_ROOT/instruments/nickel, so the real
+        # instruments_root() is REPO_ROOT itself.
+        assert str(REPO_ROOT) in base_content
+
     def test_bps_executor_full_roundtrip(self, tmp_path):
         """BPSExecutor routes 'run' through custom pipeline with qgraph injection."""
         from stips.core import quanta_report
