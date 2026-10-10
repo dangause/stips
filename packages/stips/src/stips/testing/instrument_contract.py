@@ -14,26 +14,23 @@ Design notes
   which previously collided across the two instrument test dirs.
 * **Stack-free core.** The profile / exposure-id / fetch / translation contracts
   call the profile's declarative hooks directly and need only ``stips`` +
-  ``astropy`` (imported lazily). Only :func:`active_instrument_dir` touches the
-  LSST stack; callers that may run stack-free must ``pytest.importorskip`` a real
+  ``astropy`` (imported lazily). Only :func:`bound_instrument` touches the LSST
+  stack; callers that may run stack-free must ``pytest.importorskip`` a real
   ``lsst`` module (e.g. ``lsst.obs.base``) first -- never the ``lsst.obs.stips``
   namespace, which is importable from the editable install even without a stack.
-* **Unique module names.** Every ``profile.py`` / ``fetch.py`` /
-  ``contract_data.py`` loaded by path gets a unique synthetic module name keyed
-  by the instrument, so loading several instruments in one process cannot shadow
-  one another.
+* **Imported by name.** ``profile.py``, ``fetch.py``, and the nameplate
+  ``instrument.py`` are imported as ``instruments.<name>.profile`` / ``.fetch`` /
+  ``.instrument`` (the same way Butler imports the instrument class), so several
+  instruments coexist in one process without any sys.path juggling; only
+  ``tests/contract_data.py`` is loaded by path.
 """
 
 from __future__ import annotations
 
-import importlib
 import importlib.util
-import os
-import sys
-from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterator, Optional
+from typing import Any, Optional
 from unittest import mock
 
 # --------------------------------------------------------------------------- #
@@ -88,6 +85,14 @@ class InstrumentDirInfo:
     def has_contract_data(self) -> bool:
         return self.contract_data_path.is_file()
 
+    @property
+    def nameplate_path(self) -> Path:
+        return self.path / "instrument.py"
+
+    @property
+    def has_nameplate(self) -> bool:
+        return self.nameplate_path.is_file()
+
 
 def find_repo_root(start: Optional[Path | str] = None) -> Path:
     """Walk upward from ``start`` (default: this file) to the repo root.
@@ -137,38 +142,19 @@ def _load_module_by_path(path: Path, mod_name: str) -> Any:
 
 
 def load_profile(info: InstrumentDirInfo) -> Any:
-    """Load the instrument's ``profile.py`` object by path, stack-free.
+    """Import the instrument's profile by name (``instruments.<name>.profile``)."""
+    from stips.profile import import_profile
 
-    ``profile.py`` does ``from fetch import fetch_data`` and ``from stips import
-    ...``. We temporarily insert the instrument dir on ``sys.path`` and preload
-    THIS instrument's ``fetch`` module under the bare name ``fetch`` so that
-    import resolves to the right one even when several instruments are loaded in
-    a single process; the environment is fully restored on exit.
-    """
-    inst_dir = str(info.path)
-    saved_path = list(sys.path)
-    saved_fetch = sys.modules.get("fetch")
-    try:
-        sys.path.insert(0, inst_dir)
-        if info.has_fetch:
-            sys.modules["fetch"] = _load_module_by_path(info.fetch_path, "fetch")
-        prof_mod = _load_module_by_path(
-            info.profile_path, f"_stips_contract_profile_{info.name}"
-        )
-        return prof_mod.profile
-    finally:
-        sys.path[:] = saved_path
-        if saved_fetch is not None:
-            sys.modules["fetch"] = saved_fetch
-        else:
-            sys.modules.pop("fetch", None)
+    return import_profile(info.path)
 
 
 def load_fetch(info: InstrumentDirInfo) -> Any:
-    """Load the instrument's ``fetch.py`` module by path (stdlib-only at import)."""
+    """Import the instrument's ``fetch`` module by name (stdlib-only at import)."""
+    from stips.profile import import_instrument_submodule
+
     if not info.has_fetch:
         raise FileNotFoundError(f"{info.name} has no fetch.py")
-    return _load_module_by_path(info.fetch_path, f"_stips_contract_fetch_{info.name}")
+    return import_instrument_submodule(info.path, "fetch")
 
 
 def load_contract_data(info: InstrumentDirInfo) -> Any:
@@ -180,32 +166,43 @@ def load_contract_data(info: InstrumentDirInfo) -> Any:
     )
 
 
-@contextmanager
-def active_instrument_dir(instrument_dir: Path | str) -> Iterator[Any]:
-    """Bind ``INSTRUMENT_DIR`` to ``instrument_dir``, (re)load
-    ``lsst.obs.stips.active``, and yield the freshly synthesized module.
+def bound_instrument(instrument_dir: Path | str) -> Any:
+    """Import and return the instrument's nameplate module
+    (``instruments.<name>.instrument``: ``Instrument`` / ``Translator`` /
+    ``RawFormatter`` bound to its profile).
 
-    STACK-DEPENDENT: ``lsst.obs.stips.active`` imports the LSST stack. Callers
-    that may run in a plain venv must ``pytest.importorskip`` a real ``lsst``
-    module (e.g. ``lsst.obs.base``) BEFORE calling this. Restores the prior
-    ``INSTRUMENT_DIR`` on exit.
+    STACK-DEPENDENT: the nameplate imports the LSST stack. Callers that may run
+    in a plain venv must ``pytest.importorskip("lsst.obs.base")`` first.
     """
-    prev = os.environ.get("INSTRUMENT_DIR")
-    os.environ["INSTRUMENT_DIR"] = str(instrument_dir)
-    try:
-        import lsst.obs.stips.active as active
+    from stips.profile import import_instrument_module
 
-        yield importlib.reload(active)
-    finally:
-        if prev is None:
-            os.environ.pop("INSTRUMENT_DIR", None)
-        else:
-            os.environ["INSTRUMENT_DIR"] = prev
+    return import_instrument_module(instrument_dir)
 
 
 # --------------------------------------------------------------------------- #
 # Contract assertions (stack-free; each raises AssertionError on violation)
 # --------------------------------------------------------------------------- #
+
+
+def assert_nameplate_contract(info: InstrumentDirInfo) -> None:
+    """Every instrument dir ships the three-line Butler nameplate."""
+    assert (
+        info.has_nameplate
+    ), f"{info.name}: missing instrument.py — copy it from instruments/nickel/"
+    src = info.nameplate_path.read_text()
+    assert (
+        "bind(__name__)" in src
+    ), f"{info.name}: instrument.py must call bind(__name__)"
+
+
+def assert_profile_imports_relatively(info: InstrumentDirInfo) -> None:
+    """profile.py imports its co-located modules relatively (``from .fetch``)."""
+    import re
+
+    src = info.profile_path.read_text()
+    assert not re.search(
+        r"^\s*from fetch import", src, re.M
+    ), f"{info.name}: use `from .fetch import ...` (profile.py is instruments.{info.name}.profile)"
 
 
 def assert_profile_valid(profile: Any) -> None:
@@ -215,7 +212,6 @@ def assert_profile_valid(profile: Any) -> None:
     ), "profile.name must be a non-empty string"
     assert profile.collection_prefix, f"{profile.name}: collection_prefix must be set"
     assert profile.policy_name, f"{profile.name}: policy_name must be set"
-    assert profile.instrument_class, f"{profile.name}: instrument_class must be set"
     assert profile.filter_key, f"{profile.name}: filter_key must be set"
     assert (
         profile.filters

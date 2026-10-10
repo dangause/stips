@@ -26,7 +26,6 @@ def _profile() -> SimpleNamespace:
         collection_prefix="Nickel",
         skymap_name="nickelRings-v1",
         skymap_collection="skymaps/nickelRings",
-        instrument_class="lsst.obs.stips.active.Instrument",
         night_to_dayobs_offset_days=1,
         isr_overrides=None,
         crosstalk=None,
@@ -40,6 +39,8 @@ def _ctx(tmp_path, executor):
     cols = CollectionNames("20230519", "20230519T000000Z", prefix="Nickel")
     config = SimpleNamespace(
         repo=tmp_path,
+        instrument_dir=tmp_path / "instruments" / "nickel",
+        instrument_class="instruments.nickel.instrument.Instrument",
         resolve_config=lambda name: tmp_path / name,
     )
     return science._AttemptContext(
@@ -606,6 +607,8 @@ def test_run_chains_fallback_runs_first(tmp_path, monkeypatch):
     resolve.write_text("# config\n")
     config = SimpleNamespace(
         repo=tmp_path,
+        instrument_dir=tmp_path / "instruments" / "nickel",
+        instrument_class="instruments.nickel.instrument.Instrument",
         require_profile=lambda: profile,
         resolve_config=lambda name: resolve,
         resolve_pipeline=lambda name: tmp_path / "DRP.yaml",
@@ -644,6 +647,9 @@ def test_run_chains_fallback_runs_first(tmp_path, monkeypatch):
         pipeline_mod,
         "run_butler",
         lambda args, cfg, **k: butler_calls.append(list(args)),
+    )
+    monkeypatch.setattr(
+        pipeline_mod.butler_query, "list_instruments", lambda config: {}
     )
     monkeypatch.setattr(
         science.butler_query,

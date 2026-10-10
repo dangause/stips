@@ -47,8 +47,11 @@ This writes `19700101T000000.ecsv` (all-time validity). Commit the file, then
 ingest the curated calibrations:
 
 ```bash
-butler write-curated-calibrations "$REPO" lsst.obs.stips.active.Instrument
+butler write-curated-calibrations "$REPO" instruments.nickel.instrument.Instrument
 ```
+
+A hand-run `butler` command needs a stack shell with `setup -r packages/obs_stips obs_stips`
+and `PYTHONPATH=<root>:<root>/packages/stips/src` set (see `docs/migrations.md`).
 
 To also register/certify a Butler `defects` calib directly (instead of the
 curated-data-package route) add `--ingest --register --certify --begin <date>

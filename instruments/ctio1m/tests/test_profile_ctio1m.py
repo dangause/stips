@@ -22,8 +22,9 @@ def test_identity():
     prof = load_ctio1m_profile()
     assert prof.name == "CTIO1m"
     assert prof.collection_prefix == "CTIO1m"
-    assert prof.instrument_class == "lsst.obs.stips.active.Instrument"
     assert prof.filter_key == "FILTERID"
+    assert prof.ccd_binning == 1
+    assert prof.binning_header == "CCDSUM"
 
 
 def test_filters_broadband():

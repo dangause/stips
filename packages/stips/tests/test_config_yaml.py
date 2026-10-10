@@ -97,17 +97,12 @@ class TestYamlConfig(unittest.TestCase):
             cfg.load(p)
         self.assertIn("INSTRUMENT_DIR", str(ctx.exception))
 
-    def test_profile_loaded_by_path_from_instrument_dir(self):
+    def test_profile_imported_by_name_from_instrument_dir(self):
         import sys
         from pathlib import Path
 
-        FIX = str(
-            Path(__file__).resolve().parents[2]
-            / "obs_stips"
-            / "tests"
-            / "data"
-            / "demo_instrument"
-        )
+        DATA = Path(__file__).resolve().parents[2] / "obs_stips" / "tests" / "data"
+        FIX = str(DATA / "instruments" / "demo_instrument")
         # verify the hop reaches the fixture (adjust parents[N] if needed)
         assert (Path(FIX) / "profile.py").is_file(), FIX
         c = cfg.load(
@@ -120,7 +115,8 @@ class TestYamlConfig(unittest.TestCase):
         )
         self.assertIsNotNone(c.profile)
         self.assertEqual(c.profile.name, "DemoFix")
-        self.assertIn(FIX, sys.path)  # by-path load also inserts on sys.path
+        # The by-name import appends the dir's root (<root>/instruments/<name>).
+        self.assertIn(str(DATA), sys.path)
 
     def test_self_referential_var_raises_labeled_error(self):
         # A self-referential ${A} used to infinite-loop with unbounded string
@@ -237,34 +233,36 @@ class TestYamlConfig(unittest.TestCase):
             errors = c.validate()
             self.assertEqual(errors, [])
 
-    def test_config_and_obs_stips_loaders_agree(self):
-        import sys
+    def test_config_loads_profile_by_name_and_derives_class(self):
         from pathlib import Path
 
-        import pytest
-
-        pytest.importorskip("lsst.obs.stips")
-
-        from lsst.obs.stips.profile_loader import load_profile_from_dir
-
-        FIX = str(
-            Path(__file__).resolve().parents[2]
-            / "obs_stips"
-            / "tests"
-            / "data"
-            / "demo_instrument"
-        )
-        p1 = load_profile_from_dir(FIX)
+        root = Path(__file__).resolve().parents[3]
         c = cfg.load(
             env={
                 "REPO": "/r",
                 "STACK_DIR": "/s",
-                "INSTRUMENT_DIR": FIX,
+                "INSTRUMENT_DIR": str(root / "instruments" / "ctio1m"),
                 "RAW_PARENT_DIR": "/raw",
             }
         )
-        self.assertEqual(p1.name, c.profile.name)
-        self.assertIn(FIX, sys.path)  # both loaders insert
+        self.assertEqual(c.profile.name, "CTIO1m")
+        self.assertEqual(c.instrument_class, "instruments.ctio1m.instrument.Instrument")
+
+    def test_ccd_binning_env_key_is_rejected(self):
+        from pathlib import Path
+
+        root = Path(__file__).resolve().parents[3]
+        with self.assertRaises(ValueError) as ctx:
+            cfg.load(
+                env={
+                    "REPO": "/r",
+                    "STACK_DIR": "/s",
+                    "INSTRUMENT_DIR": str(root / "instruments" / "ctio1m"),
+                    "RAW_PARENT_DIR": "/raw",
+                    "CCD_BINNING": "2",
+                }
+            )
+        self.assertIn("ccd_binning", str(ctx.exception))
 
 
 if __name__ == "__main__":

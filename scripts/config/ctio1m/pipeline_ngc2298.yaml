@@ -3,7 +3,7 @@
 #
 # Reverse-engineered from the (now-reproducible) ngc2298_repo Butler repo:
 #   - raw source: CTIO archive nights 20060927, 20060929, 20061001, 20061216
-#   - unbinned Y4KCam (raw 4104x4104 -> CCD_BINNING unset = 1)
+#   - unbinned Y4KCam (raw 4104x4104; ccd_binning=1 in instruments/ctio1m)
 #   - bands B/V/R/I, no NOIRLAB proposal filter (old headers carry no PROPID)
 #   - target NGC2298 (RA 06:48:59.17, DEC -36:00:19.2)
 #

@@ -55,11 +55,11 @@ site:
       source /opt/lsst/software/stack/loadLSST.bash
       setup lsst_distrib
       # STIPS framework: obs_stips (LSST glue) + stips (core, src-layout).
-      # The instrument is declarative (loaded by path from INSTRUMENT_DIR):
-      # the config's INSTRUMENT_DIR, a path inside the container such as
-      # /opt/stips/instruments/ctio1m.
+      # The instrument is imported by name (instruments.<name>); the repo root
+      # (/opt/stips) is on PYTHONPATH. INSTRUMENT_DIR is the config's, a path
+      # inside the container such as /opt/stips/instruments/ctio1m.
       setup -r /opt/stips/packages/obs_stips obs_stips 2>/dev/null || true
-      export PYTHONPATH=/opt/stips/packages/stips/src:${PYTHONPATH:-}
+      export PYTHONPATH=/opt/stips:/opt/stips/packages/stips/src:${PYTHONPATH:-}
       export INSTRUMENT_DIR="{instrument_dir}"
       # Set up the active instrument's EUPS packages (curated calibration data,
       # etc.): any subdir of INSTRUMENT_DIR with a ups/<name>.table is an

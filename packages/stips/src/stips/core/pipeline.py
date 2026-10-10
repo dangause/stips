@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import re
+import subprocess
 from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -23,6 +24,7 @@ from stips.collections import template_ps1_glob as template_ps1_glob
 from stips.core import butler_query
 from stips.core.query import butler_str_literal
 from stips.core.stack import run_butler
+from stips.profile import LEGACY_INSTRUMENT_CLASS
 
 if TYPE_CHECKING:
     from stips.core.config import Config
@@ -849,19 +851,74 @@ def ensure_instrument_registered(
     config: "Config",
     log_file: Path | None = None,
 ) -> None:
-    """Register the active instrument in the Butler repo (idempotent).
+    """Make sure the active instrument is registered in the repo under its
+    own class path, and fail loudly when the repo belongs to another one.
 
-    Hoisted from the five identical copies that lived in science/dia/calibs
-    (×2)/coadd. ``check=False`` tolerates the common "already registered"
-    non-zero exit. No try/except here on purpose: the only remaining raise path
-    is a stack-activation/spawn failure, which must surface rather than be
-    silently swallowed.
+    Five cases, decided from the registry (never by blind registration):
+
+    * registered with ``config.instrument_class``: nothing to do;
+    * registered under the legacy ``lsst.obs.stips.active.Instrument``: a
+      repo from before the by-name layout — rewrite the record with
+      ``register-instrument --update`` (one-time, logged; a failed update is
+      re-raised as ``RuntimeError`` pointing at the butler log);
+    * our name registered under some other (foreign) class: raise, pointing at
+      ``stips bootstrap`` to re-register it;
+    * no instrument registered at all: a fresh repo — register;
+    * other instruments only: almost certainly a wrong ``INSTRUMENT_DIR`` for
+      this repo — raise. Adding a second instrument to a repo on purpose is
+      ``stips bootstrap``, which registers unconditionally.
     """
     prof = config.require_profile()
+    class_name = config.instrument_class
+    registered = butler_query.list_instruments(config)
+    if registered is None:
+        raise RuntimeError(
+            f"could not list the instruments registered in {config.repo}; "
+            "does the repo exist (stips bootstrap) and is the LSST stack reachable?"
+        )
+    current = registered.get(prof.name)
+    if current == class_name:
+        return
+    if current == LEGACY_INSTRUMENT_CLASS:
+        log.warning(
+            "Migrating instrument %r in %s: class_name %s -> %s "
+            "(one-time; see docs/migrations.md)",
+            prof.name,
+            config.repo,
+            current,
+            class_name,
+        )
+        try:
+            run_butler(
+                ["register-instrument", str(config.repo), class_name, "--update"],
+                config,
+                check=True,
+                log_file=log_file,
+            )
+        except subprocess.CalledProcessError as exc:
+            where = f" at {log_file}" if log_file else ""
+            raise RuntimeError(
+                f"migrating instrument {prof.name!r} in {config.repo} to {class_name} "
+                f"failed (exit {exc.returncode}); see the butler log{where} "
+                "and docs/migrations.md"
+            ) from exc
+        return
+    if current is not None:
+        raise RuntimeError(
+            f"instrument {prof.name!r} is registered in {config.repo} as {current}, "
+            f"but this STIPS expects {class_name}; run `stips bootstrap` to re-register it"
+        )
+    if registered:
+        others = ", ".join(sorted(registered))
+        raise RuntimeError(
+            f"{config.repo} holds instrument(s) {others}, not {prof.name!r} "
+            f"(INSTRUMENT_DIR={config.instrument_dir}). Fix INSTRUMENT_DIR, or run "
+            f"`stips bootstrap` to add {prof.name!r} to this repo."
+        )
     run_butler(
-        ["register-instrument", str(config.repo), prof.instrument_class],
+        ["register-instrument", str(config.repo), class_name],
         config,
-        check=False,
+        check=True,
         log_file=log_file,
     )
 

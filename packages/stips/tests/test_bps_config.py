@@ -185,6 +185,49 @@ class TestFullBPSLifecycle:
         assert (output_dir / "sites" / "local.yaml").exists()
         assert (output_dir / "base.yaml").exists()
 
+        # base.yaml carries the preScript's {instruments_root} substitution
+        # (local.yaml includes it rather than defining its own preScript).
+        base_content = (output_dir / "base.yaml").read_text()
+        assert "{instruments_root}" not in base_content
+        # config.instrument_dir is REPO_ROOT/instruments/nickel, so the real
+        # instruments_root() is REPO_ROOT itself. Check the exact exported
+        # PYTHONPATH line rather than a bare substring: str(REPO_ROOT) also
+        # appears in the INSTRUMENT_DIR export on the same file.
+        expected_pythonpath_line = f'export PYTHONPATH="{REPO_ROOT}:${{PYTHONPATH:-}}"'
+        assert expected_pythonpath_line in base_content
+
+    @pytest.mark.parametrize("site", ["htcondor", "slurm"])
+    def test_site_prescript_substitutes_instruments_root(self, tmp_path, site):
+        """htcondor.yaml / slurm.yaml carry their OWN preScript/worker_init
+        {instruments_root} substitution, independent of base.yaml's.
+
+        Each of these site configs has its own
+        ``export PYTHONPATH="{instruments_root}:${PYTHONPATH:-}"`` line, so
+        this must be verified directly on the copied site file, not inferred
+        from base.yaml being correct.
+        """
+        from stips.core.bps import BPSConfig, render_bps_config
+
+        config = self._make_mock_config(tmp_path)
+        bps_cfg = BPSConfig(
+            pipeline="custom",
+            night="20230519",
+            site=site,
+            qgraph_file="/path/to/my_graph.qg",
+        )
+
+        output_dir = tmp_path / "submit"
+        render_bps_config(bps_cfg, config, output_dir)
+
+        site_content = (output_dir / "sites" / f"{site}.yaml").read_text()
+        assert "{instruments_root}" not in site_content
+        # config.instrument_dir is REPO_ROOT/instruments/nickel, so the real
+        # instruments_root() is REPO_ROOT itself. Check the exact exported
+        # PYTHONPATH line rather than a bare substring: str(REPO_ROOT) also
+        # appears in the INSTRUMENT_DIR export in the same file.
+        expected_pythonpath_line = f'export PYTHONPATH="{REPO_ROOT}:${{PYTHONPATH:-}}"'
+        assert expected_pythonpath_line in site_content
+
     def test_bps_executor_full_roundtrip(self, tmp_path):
         """BPSExecutor routes 'run' through custom pipeline with qgraph injection."""
         from stips.core import quanta_report
@@ -365,9 +408,13 @@ class TestContainerSitesInstrumentDir:
             name=instrument, obs_data_package="", ps1_band_map={"r": "r"}
         )
         # The container path does not exist here, so find_bps_config() cannot
-        # derive the bps/ directory from it; point it at this checkout's.
+        # derive the bps/ directory from it, nor instruments_root() validate
+        # its layout; point them at this checkout's / the image's root.
         science_yaml = REPO_ROOT / "bps" / "pipelines" / "science.yaml"
-        with patch.object(bps_mod, "find_bps_config", return_value=science_yaml):
+        with (
+            patch.object(bps_mod, "find_bps_config", return_value=science_yaml),
+            patch.object(bps_mod, "instruments_root", return_value=Path("/opt/stips")),
+        ):
             bps_mod.render_bps_config(
                 bps_mod.BPSConfig(pipeline="science", night="20070321", site=site),
                 config,

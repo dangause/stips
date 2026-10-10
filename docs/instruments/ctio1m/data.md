@@ -29,9 +29,10 @@ every raw frame of that date into `RAW_PARENT_DIR/<night>/raw/`. Optional
 
 ## Binned data
 
-Y4KCam was used both unbinned and binned 2 × 2. Set `CCD_BINNING: 2` in the
-`env:` block for binned raws. The camera geometry is fixed when a repository
-is set up, so binned and unbinned data need separate repositories.
+Y4KCam was used both unbinned and binned 2 × 2. Binned raws are the separate
+instrument `instruments/ctio1m_bin2/` (point `INSTRUMENT_DIR` at it). Both
+profiles check `CCDSUM`, so the two can share a repository;
+`scripts/config/ctio1m/pipeline_bin2_e2.yaml` is the example.
 
 ## Files and headers
 

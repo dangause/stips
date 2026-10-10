@@ -28,9 +28,8 @@ __all__ = ["StipsInstrument"]
 
 
 # Camera construction is expensive (YAML parsing + cameraGeom assembly) and the
-# result is used read-only, so cache it. Every environment knob that affects
-# the geometry (INSTRUMENT_DIR via camera_file, CCD_BINNING via binning) is
-# part of the cache key, so changing the env mid-process yields a fresh build.
+# result is used read-only, so cache it. The cache key carries everything that
+# affects the geometry (the camera file and the profile's ccd_binning).
 @lru_cache(maxsize=None)
 def _cached_spec_camera(instrument_class):
     """Build (once per binding class) the camera for a CameraSpec profile."""
@@ -50,24 +49,6 @@ def _cached_yaml_camera(camera_file: str, binning: int):
     return yamlCamera.makeCamera(camera_file)
 
 
-def _get_ccd_binning() -> int:
-    """Parse and validate the CCD_BINNING environment variable."""
-    raw = os.environ.get("CCD_BINNING", "1")
-    try:
-        binning = int(raw)
-    except ValueError:
-        raise RuntimeError(
-            f"Invalid CCD_BINNING={raw!r}: must be a positive integer "
-            "(1 = unbinned, 2 = 2x2 on-chip binning, ...)."
-        ) from None
-    if binning < 1:
-        raise RuntimeError(
-            f"Invalid CCD_BINNING={binning}: must be >= 1 "
-            "(1 = unbinned, 2 = 2x2 on-chip binning, ...)."
-        )
-    return binning
-
-
 class StipsInstrument(Instrument):
     """Generic LSST instrument driven by a bound ``InstrumentProfile``."""
 
@@ -76,6 +57,9 @@ class StipsInstrument(Instrument):
     #: Set by a binding subclass; defaults to the generic formatter.
     translatorClass = None
     rawFormatterClass = StipsRawFormatter
+    #: Directory of the bound profile (instruments/<name>/); set by binding.bind.
+    #: Camera YAML paths in the profile resolve against it.
+    instrumentDir = None
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
@@ -109,18 +93,15 @@ class StipsInstrument(Instrument):
         cam = self.profile.camera
         if isinstance(cam, CameraSpec):
             return _cached_spec_camera(type(self))
-        instrument_dir = os.environ.get("INSTRUMENT_DIR")
-        if not instrument_dir:
+        if self.instrumentDir is None:
             raise RuntimeError(
-                "INSTRUMENT_DIR must be set to load the camera "
-                "(it points at instruments/<name>/, containing the camera yaml)."
+                f"{type(self).__name__} has no instrumentDir: bind it through "
+                "instruments/<name>/instrument.py (lsst.obs.stips.binding.bind)."
             )
-        camera_file = os.path.join(instrument_dir, cam)
-        # On-chip binning: CCD_BINNING (from the config env: block) scales the
-        # camera geometry to match binned raws. Default 1 == unbinned, which
-        # reproduces yamlCamera.makeCamera exactly.
-        binning = _get_ccd_binning()
-        return _cached_yaml_camera(camera_file, binning)
+        camera_file = os.path.join(str(self.instrumentDir), cam)
+        # On-chip binning: profile.ccd_binning scales the camera geometry to
+        # match binned raws. 1 == unbinned reproduces yamlCamera.makeCamera.
+        return _cached_yaml_camera(camera_file, int(self.profile.ccd_binning))
 
     def register(self, registry, update: bool = False):
         camera = self.getCamera()

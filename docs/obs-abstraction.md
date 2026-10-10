@@ -34,7 +34,7 @@ flowchart TB
     end
     data["<b>obs_nickel_data/</b><br/>curated calibs (defects, crosstalk)"]
 
-    stips -->|reads INSTRUMENT_DIR| nickel
+    stips -->|imports by name<br/>(INSTRUMENT_DIR)| nickel
     obs_stips -->|binds profile onto<br/>generic classes| nickel
     nickel -.declares.-> data
 
@@ -47,8 +47,9 @@ flowchart TB
 > **Doc drift note:** older docs/CLAUDE.md text refers to an importable `lsst.obs.nickel`
 > package under `packages/obs_nickel/` selected by an `INSTRUMENT_PACKAGE` env var. That model
 > was replaced by the "collapse" refactor described here: instruments are plain directories
-> loaded **by path** via `INSTRUMENT_DIR`. There is no per-instrument importable package or
-> EUPS product anymore.
+> under `instruments/`, imported **by name** (`instruments.<name>`), with `INSTRUMENT_DIR`
+> selecting the active one. There is no per-instrument installable package or EUPS product
+> anymore; each dir carries only a three-line `instrument.py` nameplate.
 
 ---
 
@@ -70,7 +71,8 @@ classDiagram
         +str filter_key = "FILTNAM"
         +str instrument_header_value  : matched vs INSTRUME
         +dict const_map
-        +str instrument_class  : FQN Butler persists
+        +int ccd_binning = 1
+        +str binning_header  : FITS binning keyword
         +str collection_prefix
         +str skymap_name / skymap_collection
         +dict isr_overrides
@@ -129,60 +131,29 @@ the `RA`/`DEC` keywords.
 
 ---
 
-## 3. Loading a profile: the dual by-path loader
+## 3. Loading a profile: import by name
 
-A profile is loaded by **file path** (not by `import`), and it is loaded in **two different
-runtime contexts** that don't share an interpreter — so there are two near-identical loaders
-that must stay in lockstep.
+A profile is imported as `instruments.<name>.profile` by
+`stips.profile.import_profile(instrument_dir)` (stdlib only). The dir must be
+`<root>/instruments/<name>/`; `<root>` is appended to `sys.path` (append, so nothing in the
+tree shadows installed packages — the reason the old loader used `sys.path.append`). This is
+the in-process path (the `stips` CLI itself); the stack subprocess instead gets `<root>`
+**prepended** via the `PYTHONPATH` environment variable (`stack.py`'s `_build_setup_script`) —
+which is harmless with respect to site-packages, since `PYTHONPATH` entries always precede
+site-packages regardless of order among themselves. It is *not* harmless between roots: a
+second root carrying the same instrument name (`<other_root>/instruments/<name>/`) earlier on
+the path would win the import. That is why the loader checks the imported module's origin
+against `instrument_dir` and fails loudly (`RuntimeError` naming both paths and the offending
+`sys.path` entry) instead of silently running the wrong profile.
+`instruments` is an implicit namespace package, so an out-of-tree fork merges with the in-tree
+dirs. The same function serves the CLI (`Config.profile`), the in-stack refcat overlays, and
+the test harness, and the stack's `binding.bind` imports the very same module name
+(`instruments.<name>.profile`); there is no second loader to keep in sync.
 
-```mermaid
-flowchart LR
-    subgraph A["CLI / Python context"]
-        cfg["stips.core.config<br/>load_active_profile()<br/>config.py:19"]
-    end
-    subgraph B["LSST-stack subprocess context"]
-        ldr["lsst.obs.stips.profile_loader<br/>load_profile_from_dir()<br/>profile_loader.py:18"]
-    end
-    dir["INSTRUMENT_DIR<br/>= instruments/nickel/"]
-    py["profile.py"]
-    obj["profile object<br/>(InstrumentProfile)"]
-
-    cfg -->|importlib by path| py
-    ldr -->|importlib by path| py
-    dir --> py
-    py --> obj
-
-    note["Two loaders kept in sync<br/>by convention (code comments)"]
-    cfg -.-> note
-    ldr -.-> note
-```
-
-**Why two loaders?**
-
-- `stips.core.config.load_active_profile()` runs in the CLI's own Python (full `stips`
-  available). It populates `Config.profile`.
-- `lsst.obs.stips.profile_loader.load_profile_from_dir()` is **stdlib-only**, because it runs
-  inside the bare LSST-stack environment where the `stips` package may not be importable.
-
-Both do the same three things:
-
-1. Resolve `<INSTRUMENT_DIR>/profile.py`.
-2. **Append** the instrument dir to `sys.path` (see below).
-3. `importlib`-exec the file and return its module-level `profile` object.
-
-The two implementations are kept in sync **by convention** — each carries a code comment
-pointing at the other (`config.py:27`, `profile_loader.py:5`). The stack-side loader has unit
-coverage in `test_profile_loader.py` (load-by-path, `sys.path` insertion, missing-file error);
-there is no automated assertion that the two bodies are byte-identical, so edit them together.
-
-### Why `sys.path.append`, not `insert(0)`
-
-The instrument dir holds generically-named modules (`profile.py`, `fetch.py`, `camera/`).
-Prepending them to `sys.path` would let `instruments/nickel/profile.py` **shadow** any
-third-party `import profile` (galsim has one). Appending makes stdlib/installed packages win,
-while a uniquely-named co-located hook module like `fetch` still resolves because nothing else
-provides it. This is exactly why `instruments/nickel/profile.py:9` can do
-`from fetch import fetch_data`. (See the comment at `profile_loader.py:28`.)
+Because the profile is a real submodule of the `instruments.<name>` package, it imports its
+co-located modules relatively (`from .fetch import fetch_data`), and `<name>` must be a Python
+identifier that does not start with an underscore — it becomes part of the Butler class path
+(§5).
 
 ---
 
@@ -190,29 +161,30 @@ provides it. This is exactly why `instruments/nickel/profile.py:9` can do
 
 The LSST stack needs concrete `Instrument`, `MetadataTranslator`, and `RawFormatter`
 *classes*. `obs_stips` ships these as **generic base classes** with an unbound `profile = None`.
-The module `lsst.obs.stips.active` (`packages/obs_stips/python/lsst/obs/stips/active.py`) does
-the binding at **import time**:
+Each instrument dir binds them in a three-line **nameplate**, `instruments/<name>/instrument.py`,
+identical for every instrument:
 
 ```python
-# active.py (abbreviated)
-_profile = load_profile_from_dir(os.environ["INSTRUMENT_DIR"])   # fail-loud if unset
+from lsst.obs.stips.binding import bind
 
-class Translator(StipsTranslator):   profile = _profile
-class Instrument(StipsInstrument):   profile = _profile; translatorClass = Translator
-class RawFormatter(StipsRawFormatter):
-    instrumentClass = Instrument
-    translatorClass = Translator
-    filterDefinitions = Instrument.filterDefinitions
+Instrument, Translator, RawFormatter = bind(__name__)
 ```
+
+`lsst.obs.stips.binding.bind` (`packages/obs_stips/python/lsst/obs/stips/binding.py`) imports
+the sibling `instruments.<name>.profile` and builds the three subclasses with `type()`, each
+with `__module__` set to `instruments.<name>.instrument`, so the classes really live at that
+importable path. It also records `instrumentDir` (the directory of the profile module's file)
+on the `Instrument`; `getCamera()` resolves a camera YAML against it, not against
+`INSTRUMENT_DIR`.
 
 ```mermaid
 flowchart TB
-    env["env: INSTRUMENT_DIR"] --> active
-    subgraph active["import lsst.obs.stips.active"]
-        load["_profile = load_profile_from_dir(INSTRUMENT_DIR)"]
-        T["class Translator(StipsTranslator)<br/>profile = _profile"]
-        I["class Instrument(StipsInstrument)<br/>profile = _profile<br/>translatorClass = Translator"]
-        R["class RawFormatter(StipsRawFormatter)<br/>instrumentClass = Instrument"]
+    np["instruments/&lt;name&gt;/instrument.py<br/>bind(__name__)"] --> nameplate
+    subgraph nameplate["import instruments.&lt;name&gt;.instrument"]
+        load["import instruments.&lt;name&gt;.profile<br/>instrumentDir = dir of profile.py"]
+        T["Translator(StipsTranslator)<br/>profile = profile"]
+        I["Instrument(StipsInstrument)<br/>profile = profile<br/>translatorClass = Translator"]
+        R["RawFormatter(StipsRawFormatter)<br/>instrumentClass = Instrument"]
         load --> T --> I --> R
     end
 
@@ -228,55 +200,78 @@ flowchart TB
 
 Key design points:
 
-- **`active` is not imported by `obs_stips/__init__`.** Importing the package stays
-  side-effect-free, so plotting-only code paths work even with `INSTRUMENT_DIR` unset.
-  Importing `active` *itself* requires the env var and fails loud otherwise (`active.py:22`).
+- **`binding` is not imported by `obs_stips/__init__`.** Importing the package stays
+  side-effect-free (and stack-light), so plotting-only code paths work without an instrument.
+  Only nameplates and the legacy `active` shim (§5) import it.
 - **The binding is by class attribute.** `StipsInstrument.__init_subclass__`
-  (`instrument.py:37`) reads the bound `profile` at subclass-creation time and resolves
+  (`instrument.py`) reads the bound `profile` at subclass-creation time and resolves
   `name`, `policyName`, `obsDataPackage`, and `filterDefinitions` — *without* instantiation, so
   Butler can read class-level metadata cheaply.
+- **The nameplate carries no logic.** It is copied verbatim into every instrument dir; the
+  identity is the directory name, everything else lives in the generic bases.
 
 ---
 
-## 5. The Butler round trip: why `INSTRUMENT_DIR` must follow the subprocess
+## 5. The Butler round trip
 
-Here's the subtlety that ties it all together. When Butler registers an instrument it persists
-the **fully-qualified class name**, which for *every* STIPS telescope is the same string:
-`lsst.obs.stips.active.Instrument` (set via `profile.instrument_class`,
-`instruments/nickel/profile.py:71`).
+When Butler registers an instrument it persists the **fully-qualified class name**, which is
+now unique per telescope: `instruments.<name>.instrument.Instrument` (derived from the
+directory name by `stips.profile.instrument_class_for`; there is no profile field for it).
 
-Later, Butler re-imports that FQN to re-instantiate the instrument. Re-importing `active`
-re-runs `load_profile_from_dir(os.environ["INSTRUMENT_DIR"])` — so **the identity of the
-instrument is carried by the env var + profile file, not by the persisted class name.**
+Later, Butler re-imports that class path to re-instantiate the instrument. The import needs
+only `PYTHONPATH`: the directory containing `instruments/` (`STIPS_INSTRUMENTS_ROOT`, which
+`stack.py` puts on `PYTHONPATH` in every stack subprocess). It never reads `INSTRUMENT_DIR`, so
+**the stored class name identifies the instrument on its own**, and several instruments can
+share one repo.
 
 ```mermaid
 sequenceDiagram
     participant CLI as stips CLI
     participant Stack as stack.py (subprocess builder)
     participant Sub as LSST subprocess (pipetask/butler)
-    participant Active as lsst.obs.stips.active
+    participant NP as instruments.nickel.instrument
     participant Butler
 
     CLI->>Stack: run_with_stack(config)
-    Note over Stack: export INSTRUMENT_DIR=instruments/nickel
+    Note over Stack: PYTHONPATH += STIPS_INSTRUMENTS_ROOT
     Stack->>Sub: bash: source loader#59; setup#59; run command
-    Sub->>Active: import (register-instrument)
-    Active->>Active: load_profile_from_dir($INSTRUMENT_DIR)
-    Active-->>Sub: concrete Instrument bound to Nickel profile
-    Sub->>Butler: register class FQN "lsst.obs.stips.active.Instrument"
-    Note over Butler: stores only the FQN string
+    Sub->>NP: import (register-instrument)
+    NP->>NP: bind(__name__) imports instruments.nickel.profile
+    NP-->>Sub: concrete Instrument bound to Nickel profile
+    Sub->>Butler: register class "instruments.nickel.instrument.Instrument"
+    Note over Butler: stores only the class path string
 
     rect rgb(245,245,245)
     Note over Sub,Butler: later run — same or different process
-    Butler->>Active: re-import FQN to re-instantiate
-    Active->>Active: load_profile_from_dir($INSTRUMENT_DIR) AGAIN
-    Active-->>Butler: identity re-resolved from env + profile.py
+    Butler->>NP: re-import class path to re-instantiate
+    NP-->>Butler: same instrument, found through PYTHONPATH alone
     end
 ```
 
-Practical consequence: **every** LSST subprocess must have `INSTRUMENT_DIR` exported.
-`stack.py:_build_setup_script()` (`packages/stips/src/stips/core/stack.py:37`) does this — see
-§7.
+**Registration guard.** `stips.core.pipeline.ensure_instrument_registered` decides from the
+registry what to do before a step runs, in `calibs`, `science`, `dia`, `coadd` and
+`measure-crosstalk` (`stips bootstrap` always registers with `--update`; `fphot`,
+`lightcurve`, `ps1-template` and `clean` skip the guard and keep working through the
+`lsst.obs.stips.active` shim). Five branches:
+
+- registered with its own class path → nothing to do;
+- registered under the legacy `lsst.obs.stips.active.Instrument` (a repo from before this
+  layout) → rewrites the record with `butler register-instrument --update` and logs one
+  warning;
+- empty repo → registers it;
+- repo holds only *other* instruments → raises a `RuntimeError` naming them and pointing at
+  `INSTRUMENT_DIR` (or at `stips bootstrap`, which adds an instrument to a repo on purpose);
+- our instrument *name* is already registered, but under some other non-legacy class path
+  (what happens after renaming an instrument dir — the old class path is still what the repo
+  has stored) → raises a `RuntimeError` saying to run `stips bootstrap` to re-register it
+  under the new class path.
+
+`stips env` lists the registered instruments, marking legacy records.
+
+**The `active` shim.** Raws ingested before this layout have datastore records naming
+`lsst.obs.stips.active.RawFormatter`. `lsst.obs.stips.active` is kept as a shim for them: it
+resolves `INSTRUMENT_DIR` to its nameplate and re-exports the *same* class objects, so nothing
+is bound twice. New registrations never use it. See `docs/migrations.md`.
 
 ---
 
@@ -286,21 +281,22 @@ Practical consequence: **every** LSST subprocess must have `INSTRUMENT_DIR` expo
 
 `instrument.py:28`. Generic LSST `Instrument` subclass. Highlights:
 
-- `__init_subclass__` (`:37`) pulls `name`, `policyName`, `obsDataPackage`, and builds
+- `__init_subclass__` pulls `name`, `policyName`, `obsDataPackage`, and builds
   `filterDefinitions` — one `FilterDefinition(physical_filter, band=band)` per `profile.filters`
-  entry (`:49`).
-- `getCamera()` (`:63`) branches on the `camera` field:
+  entry.
+- `getCamera()` branches on the `camera` field (a YAML path is resolved against the bound
+  `instrumentDir`):
 
 ```mermaid
 flowchart TB
     gc["getCamera()"] --> q{"profile.camera<br/>is a CameraSpec?"}
     q -->|yes| bc["build_camera(spec)<br/>synthesize afw Camera in-memory<br/>camera_builder.py:202"]
-    q -->|no, it's a yaml path| bn{"CCD_BINNING &gt; 1?"}
+    q -->|no, it's a yaml path| bn{"profile.ccd_binning &gt; 1?"}
     bn -->|no| yc["yamlCamera.makeCamera(file)<br/>(stock LSST loader)"]
     bn -->|yes| byc["build_yaml_camera(file, binning)<br/>on-chip binning transform<br/>camera_builder.py:136"]
 ```
 
-- `register()` (`:88`) writes the single-CCD geometry with stable raft/slot labels `R00`/`S00`.
+- `register()` writes the single-CCD geometry with stable raft/slot labels `R00`/`S00`.
 
 ### 6.2 `StipsTranslator` — header translation by profile
 
@@ -310,7 +306,10 @@ flowchart TB
   `profile.const_map` into `_const_map`.
 - `can_translate()` (`:23`) decides whether this translator owns a file by substring-matching
   `profile.instrument_header_value or profile.name` against the FITS `INSTRUME`. (This is how
-  the profile named `"CTIO1m"` claims files whose `INSTRUME` is `"Y4KCam"`.)
+  the profile named `"CTIO1m"` claims files whose `INSTRUME` is `"Y4KCam"`.) When the profile
+  sets `binning_header` (e.g. `"CCDSUM"`), it also claims a file only if the header's binning
+  matches `profile.ccd_binning`; a missing keyword reads as unbinned. That is how
+  `instruments/ctio1m/` and `instruments/ctio1m_bin2/` split one camera's raws.
 - Every `to_*` method follows the same **hook-first, default-fallback** pattern:
 
 ```mermaid
@@ -326,7 +325,7 @@ So the translator carries *no* instrument knowledge: declarative headers come fr
 
 ### 6.3 `StipsRawFormatter`
 
-Generic raw formatter, bound to the synthesized `Instrument`/`Translator` in `active.py:45`.
+Generic raw formatter, bound to the synthesized `Instrument`/`Translator` by `binding.bind`.
 
 ---
 
@@ -351,8 +350,8 @@ geometry config (`SKYMAP_CFG`).
 
 ## 8. End-to-end: from CLI command to a running pipeline
 
-`stack.py:_build_setup_script()` (`:37`) assembles the bash prefix that activates the stack and
-exports everything the subprocess (and Butler-inside-it) needs to re-resolve the profile:
+`stack.py:_build_setup_script()` assembles the bash prefix that activates the stack and
+exports everything the subprocess (and Butler-inside-it) needs to import the instrument:
 
 ```mermaid
 sequenceDiagram
@@ -368,9 +367,9 @@ sequenceDiagram
     Cfg->>Cfg: load_active_profile(INSTRUMENT_DIR)  ← profile object
     Cfg-->>CLI: Config(profile=...)
     CLI->>Stack: build setup script
-    Note over Stack: export REPO / STACK_DIR / RAW_PARENT_DIR<br/>export INSTRUMENT_DIR  ← keystone<br/>export SKYMAP_* / CCD_BINNING (from profile)<br/>setup obs_stips, stips, obs_data_package
+    Note over Stack: export REPO / STACK_DIR / RAW_PARENT_DIR / INSTRUMENT_DIR<br/>PYTHONPATH += STIPS_INSTRUMENTS_ROOT<br/>export STIPS_INSTRUMENT_CLASS / SKYMAP_* (from profile)<br/>setup obs_stips, stips, obs_data_package
     Stack-->>Sh: source loadLSST#59; setup#59; #lt;pipetask ...#gt;
-    Sh->>Sh: import lsst.obs.stips.active → re-resolve profile
+    Sh->>Sh: import instruments.nickel.instrument (by name)
     Sh-->>U: pipeline runs as the active instrument
 ```
 
@@ -378,14 +377,18 @@ What `stack.py` exports and why it matters (all in `_build_setup_script`):
 
 | Export | Source | Purpose |
 |--------|--------|---------|
-| `INSTRUMENT_DIR` | `config.instrument_dir` (`:67`) | **Keystone** — lets `active` re-resolve the profile in-subprocess |
-| `SKYMAP_NAME` / `SKYMAP_COLLECTION` | `profile.skymap_*` (`:84`) | Instrument-specific skymap identity |
-| `SKYMAP_CFG` | `resolve_config("makeSkyMap.py")` (`:95`) | Instrument-dir-first skymap geometry |
-| `CCD_BINNING` | config `env:` block (`:77`) | On-chip binning camera transform |
-| `obs_data_package` setup | `profile.obs_data_package` (`:106`) | `setup -r` only the active instrument's calib data |
+| `INSTRUMENT_DIR` | `config.instrument_dir` | Config overrides (`$INSTRUMENT_DIR/configs/...`) and the in-stack refcat overlays' profile import |
+| `STIPS_INSTRUMENTS_ROOT` | `instruments_root(INSTRUMENT_DIR)` | Put on `PYTHONPATH`, so `instruments.<name>` imports by name |
+| `STIPS_INSTRUMENT_CLASS` | `config.instrument_class` | Class path the bootstrap script registers (`register-instrument --update`) |
+| `SKYMAP_NAME` / `SKYMAP_COLLECTION` | `profile.skymap_*` | Instrument-specific skymap identity |
+| `SKYMAP_CFG` | `resolve_config("makeSkyMap.py")` | Instrument-dir-first skymap geometry |
+| `obs_data_package` setup | `profile.obs_data_package` | `setup -r` only the active instrument's calib data |
 
-Note there is **no** per-instrument EUPS `setup` — the instrument is purely declarative. Only
-`obs_stips`, `stips`, and the profile's data package are set up as products.
+Note there is **no** per-instrument EUPS `setup` — the instrument is purely declarative and
+imported by name. Only `obs_stips`, `stips`, and the profile's data package are set up as
+products. `stips` puts the configured instrument's root on `PYTHONPATH` automatically,
+in-tree or not; add `<root>` yourself only for stack commands run outside `stips`, or when
+a shared repo also holds an instrument from another root.
 
 ---
 
@@ -394,14 +397,14 @@ Note there is **no** per-instrument EUPS `setup` — the instrument is purely de
 ```mermaid
 flowchart TB
     yaml["pipeline.yaml<br/>env: INSTRUMENT_DIR=instruments/nickel"] --> load
-    load["config.load()<br/>load_active_profile()"] --> prof["profile object"]
+    load["config.load()<br/>import_profile(INSTRUMENT_DIR)"] --> prof["profile object"]
     prof --> cfg["Config(profile=...)"]
-    cfg --> stack["stack._build_setup_script()<br/>exports INSTRUMENT_DIR + profile-derived env"]
+    cfg --> stack["stack._build_setup_script()<br/>instruments root on PYTHONPATH + profile-derived env"]
     stack --> sub["LSST subprocess"]
 
-    sub --> active["import lsst.obs.stips.active<br/>load_profile_from_dir(INSTRUMENT_DIR)"]
-    active --> bind["bind profile onto<br/>StipsInstrument / StipsTranslator / StipsRawFormatter"]
-    bind --> butler["Butler: register / re-instantiate<br/>FQN lsst.obs.stips.active.Instrument"]
+    sub --> active["import instruments.nickel.instrument<br/>(STIPS_INSTRUMENTS_ROOT on PYTHONPATH)"]
+    active --> bind["bind(__name__): profile onto<br/>StipsInstrument / StipsTranslator / StipsRawFormatter"]
+    bind --> butler["Butler: register / re-instantiate<br/>instruments.nickel.instrument.Instrument"]
 
     prof -. drives .-> filters["FilterDefinitions<br/>(profile.filters)"]
     prof -. drives .-> cam["Camera<br/>(profile.camera / CameraSpec)"]
@@ -419,13 +422,13 @@ flowchart TB
 To add a telescope you touch only `instruments/<name>/`:
 
 1. **`profile.py`** — declare `name`, `site`, `filters`, `filter_aliases`, `header_map`,
-   `camera`, `instrument_class="lsst.obs.stips.active.Instrument"`, skymap identity, and any
-   `@hook(profile)` quirk functions.
-2. **`camera/`** — a single-CCD LSST `camera/<name>.yaml`, *or* set `camera=CameraSpec(...)` in
+   `camera`, skymap identity, and any `@hook(profile)` quirk functions.
+2. **`instrument.py`** — the nameplate, copied verbatim.
+3. **`camera/`** — a single-CCD LSST `camera/<name>.yaml`, *or* set `camera=CameraSpec(...)` in
    the profile to skip the yaml entirely.
-3. **`fetch.py`** (optional) — a `fetch_data(night, config, *, overwrite)` hook for archive
-   downloads; wired via `profile.fetch_data`.
-4. **`configs/` / `pipelines/`** (optional) — only the files you need to override; everything
+4. **`fetch.py`** (optional) — a `fetch_data(night, config, *, overwrite)` hook for archive
+   downloads; wired via `profile.fetch_data` (`from .fetch import fetch_data`).
+5. **`configs/` / `pipelines/`** (optional) — only the files you need to override; everything
    else falls back to `obs_stips/instrument_defaults/`.
 
 Then point `INSTRUMENT_DIR` at the new directory. No framework code changes, no new package,
@@ -438,13 +441,14 @@ no EUPS product. See `docs/forking-stips.md` for the step-by-step walkthrough.
 | Concern | File |
 |---------|------|
 | Profile dataclass + `hook` decorator | `packages/stips/src/stips/profile.py` |
-| CLI-side by-path loader | `packages/stips/src/stips/core/config.py:19` |
-| Stack-side by-path loader | `packages/obs_stips/python/lsst/obs/stips/profile_loader.py` |
-| Import-time synthesis | `packages/obs_stips/python/lsst/obs/stips/active.py` |
+| By-name loader | `packages/stips/src/stips/profile.py` |
+| Binding | `packages/obs_stips/python/lsst/obs/stips/binding.py` |
+| Legacy shim | `packages/obs_stips/python/lsst/obs/stips/active.py` |
+| Registration guard | `packages/stips/src/stips/core/pipeline.py` (`ensure_instrument_registered`) |
 | Generic instrument | `packages/obs_stips/python/lsst/obs/stips/instrument.py` |
 | Generic translator | `packages/obs_stips/python/lsst/obs/stips/translator.py` |
 | Camera synthesis + binning | `packages/obs_stips/python/lsst/obs/stips/camera_builder.py` |
-| Subprocess env wiring | `packages/stips/src/stips/core/stack.py:37` |
+| Subprocess env wiring | `packages/stips/src/stips/core/stack.py` |
 | Config/pipeline resolution | `packages/stips/src/stips/core/config.py:141` |
-| Stack-side loader tests | `packages/obs_stips/tests/test_profile_loader.py` |
+| Loader / binding tests | `packages/obs_stips/tests/test_binding.py`, `packages/stips/tests/test_profile_import.py` |
 | Reference profile | `instruments/nickel/profile.py` |

@@ -293,3 +293,28 @@ class TestQuantumGraph:
             butler_query, "run_butler_python_json", return_value={"count": 12}
         ):
             assert butler_query.quantum_graph_quanta_count(_cfg(), "/x.qg") == 12
+
+
+def test_list_instruments_script_queries_dimension_records():
+    from stips.core.butler_query import _build_list_instruments_script
+
+    s = _build_list_instruments_script("/repo")
+    assert 'query_dimension_records("instrument", explain=False)' in s
+    assert 'queryDimensionRecords("instrument")' in s  # v27 fallback
+    assert "except (AttributeError, TypeError):" in s  # unexpected explain= kwarg
+    assert "class_name" in s
+
+
+def test_list_instruments_returns_name_to_class(monkeypatch):
+    from stips.core import butler_query as bq
+
+    monkeypatch.setattr(
+        bq,
+        "run_butler_python_json",
+        lambda script, config: {
+            "instruments": {"CTIO1m": "lsst.obs.stips.active.Instrument"}
+        },
+    )
+    assert bq.list_instruments(_cfg()) == {"CTIO1m": "lsst.obs.stips.active.Instrument"}
+    monkeypatch.setattr(bq, "run_butler_python_json", lambda script, config: None)
+    assert bq.list_instruments(_cfg()) is None

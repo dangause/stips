@@ -157,6 +157,7 @@ def test_calibs_ingests_only_accepted_frames(tmp_path):
         patch.object(calibs, "run_butler", run_butler),
         patch.object(pipeline, "run_butler", run_butler),
         patch.object(calibs, "butler_query", MagicMock()),
+        patch.object(pipeline.butler_query, "list_instruments", lambda config: {}),
         patch.object(calibs, "get_raw_dir", return_value=raw_dir),
         patch.object(calibs, "find_aliasing_exposure_ids", return_value={}),
     ):

@@ -47,6 +47,7 @@ docs = [
 line-length = 110
 target-version = "py312"
 src = [
+    ".",
     "instruments/nickel",
     "packages/refcats",
     "instruments/nickel/testdata",
@@ -99,9 +100,13 @@ convention = "numpy"
 # stips tests live in packages/stips/tests; per-instrument tests in
 # instruments/<name>/tests. Add additional packages here as they add
 # tests/ directories.
+# `instruments/` is an implicit namespace package imported by name
+# (instruments.<name>.profile); the repo root must be importable.
+pythonpath = ["."]
 testpaths = [
     "instruments/nickel/tests",
     "instruments/ctio1m/tests",
+    "instruments/ctio1m_bin2/tests",
     "packages/stips/tests",
     "packages/obs_stips/tests",
     "packages/refcats/tests",
