@@ -458,12 +458,13 @@ The `processCcd/timestamp/` CHAINED collection is what downstream steps (DIA, co
 ### Adding New Instruments
 
 Copy the reference `instruments/nickel/` directory to `instruments/<instrument>/` and edit it — no new code package is required:
-1. Edit `profile.py` (an `InstrumentProfile` plus any `@hook` quirks)
-2. Replace `camera/<instrument>.yaml` with your camera geometry
-3. Add any instrument-specific pipeline configs under `pipelines/` and `configs/`
-4. Point `INSTRUMENT_DIR` at the new directory (via the config `env:` block) so the tooling — and `obs_stips`'s synthesis — load the new profile
+1. Edit `profile.py` (an `InstrumentProfile` plus any `@hook` quirks); it imports co-located modules relatively (`from .fetch import fetch_data`)
+2. Copy `instrument.py` verbatim — the three-line Butler nameplate is identical for every instrument and must not be edited
+3. Replace `camera/<instrument>.yaml` with your camera geometry
+4. Add any instrument-specific pipeline configs under `pipelines/` and `configs/`
+5. Point `INSTRUMENT_DIR` at the new directory (via the config `env:` block) so the tooling — and `obs_stips`'s synthesis — load the new profile
 
-The instrument/translator/formatter are synthesized from the profile by `obs_stips`, so there is nothing to subclass or register. The shared PipelineTasks in `obs_stips` and the `stips` tooling work unchanged. See the [forking guide](forking-stips.md) for the full walkthrough.
+The instrument/translator/formatter are synthesized from the profile by `obs_stips`, so there is nothing to subclass; the nameplate gives Butler the class path (`instruments.<instrument>.instrument.Instrument`). The shared PipelineTasks in `obs_stips` and the `stips` tooling work unchanged. See the [forking guide](forking-stips.md) for the full walkthrough.
 
 ## Dependencies
 

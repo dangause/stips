@@ -11,12 +11,19 @@ Every instrument now registers under its **own** Butler class path,
 instrument on its own; `INSTRUMENT_DIR` no longer carries identity into the
 stack, and several instruments can share one repo.
 
-**Existing repositories migrate themselves.** The next `stips` step that touches
-a repo (or `stips bootstrap`) finds the legacy `class_name` and rewrites the
-instrument record with `butler register-instrument --update`; it logs one
-warning. To do it by hand:
+**Existing repositories migrate themselves.** The next `calibs`, `science`,
+`dia`, `coadd` or `measure-crosstalk` step (or `stips bootstrap`) finds the
+legacy `class_name` and rewrites the instrument record with `butler
+register-instrument --update`; it logs one warning. `fphot`, `lightcurve`,
+`ps1-template` and `clean` do not migrate a repo, but keep working unchanged
+through the `lsst.obs.stips.active` shim. To do it by hand:
 
     butler register-instrument --update <REPO> instruments.<name>.instrument.Instrument
+
+Run that in a stack shell with `setup -r packages/obs_stips obs_stips` and
+`PYTHONPATH=<root>:<root>/packages/stips/src` set (the nameplate needs
+`<root>`; `lsst.obs.stips.binding` imports `stips.profile`) — or just run
+`stips bootstrap`, which does this for you.
 
 `lsst.obs.stips.active` remains as a shim (it resolves `INSTRUMENT_DIR` and
 re-exports the same classes) so raws ingested before this change, whose
@@ -29,9 +36,10 @@ datastore records name `lsst.obs.stips.active.RawFormatter`, stay readable.
 - import co-located modules relatively (`from .fetch import fetch_data`);
 - delete `instrument_class=` from `profile.py` (the field is gone; it is
   derived from the directory name);
-- live at `<root>/instruments/<x>/` with `<root>` on `PYTHONPATH` in any
-  stack process (in-tree instruments get this from `stips` automatically; an
-  out-of-tree fork adds its own `<root>`).
+- live at `<root>/instruments/<x>/`. `stips` puts the configured instrument's
+  root on `PYTHONPATH` automatically, in-tree or not; add `<root>` yourself
+  only for stack commands run outside `stips`, or when a shared repo also
+  holds an instrument from another root.
 
 **`CCD_BINNING` is removed.** Binning is the profile field `ccd_binning`
 (plus `binning_header`, the FITS keyword the translator checks). A config that

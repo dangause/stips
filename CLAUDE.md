@@ -589,8 +589,10 @@ See `docs/forking-stips.md`. Common ones: `night_to_dayobs_offset_days` must be
 verified by ingesting a frame (not assumed); disable ISR steps whose curated
 calibs you don't ship via `isr_overrides` (e.g. `{"doDefect": False}`); add
 `instrument.py` verbatim; `from .fetch import`; `ccd_binning`/`binning_header`
-for binned readouts (separate dir). Out-of-tree forks keep the
-`<root>/instruments/<x>/` layout and put `<root>` on `PYTHONPATH`.
+for binned readouts (separate dir). `stips` puts the configured instrument's
+root on `PYTHONPATH` automatically, in-tree or not; add `<root>` yourself
+only for stack commands run outside `stips`, or when a shared repo also
+holds an instrument from another root.
 
 ## File Locations
 

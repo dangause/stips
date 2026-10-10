@@ -136,7 +136,11 @@ the `RA`/`DEC` keywords.
 A profile is imported as `instruments.<name>.profile` by
 `stips.profile.import_profile(instrument_dir)` (stdlib only). The dir must be
 `<root>/instruments/<name>/`; `<root>` is appended to `sys.path` (append, so nothing in the
-tree shadows installed packages — the reason the old loader used `sys.path.append`).
+tree shadows installed packages — the reason the old loader used `sys.path.append`). This is
+the in-process path (the `stips` CLI itself); the stack subprocess instead gets `<root>`
+**prepended** via the `PYTHONPATH` environment variable (`stack.py`'s `_build_setup_script`) —
+which is harmless either way, since `PYTHONPATH` entries always precede site-packages
+regardless of order among themselves.
 `instruments` is an implicit namespace package, so an out-of-tree fork merges with the in-tree
 dirs. The same function serves the CLI (`Config.profile`), the in-stack refcat overlays, and
 the test harness, and the stack's `binding.bind` imports the very same module name
@@ -241,13 +245,24 @@ sequenceDiagram
 ```
 
 **Registration guard.** `stips.core.pipeline.ensure_instrument_registered` decides from the
-registry what to do before a step runs: if the instrument is registered with its own class
-path, nothing; if it is registered under the legacy `lsst.obs.stips.active.Instrument` (a repo
-from before this layout), it rewrites the record with `butler register-instrument --update`
-and logs one warning; if the repo is empty, it registers; if the repo holds only *other*
-instruments, it raises a `RuntimeError` naming them and pointing at `INSTRUMENT_DIR` (or at
-`stips bootstrap`, which adds an instrument to a repo on purpose). `stips env` lists the
-registered instruments, marking legacy records.
+registry what to do before a step runs, in `calibs`, `science`, `dia`, `coadd` and
+`measure-crosstalk` (`stips bootstrap` always registers with `--update`; `fphot`,
+`lightcurve`, `ps1-template` and `clean` skip the guard and keep working through the
+`lsst.obs.stips.active` shim). Five branches:
+
+- registered with its own class path → nothing to do;
+- registered under the legacy `lsst.obs.stips.active.Instrument` (a repo from before this
+  layout) → rewrites the record with `butler register-instrument --update` and logs one
+  warning;
+- empty repo → registers it;
+- repo holds only *other* instruments → raises a `RuntimeError` naming them and pointing at
+  `INSTRUMENT_DIR` (or at `stips bootstrap`, which adds an instrument to a repo on purpose);
+- our instrument *name* is already registered, but under some other non-legacy class path
+  (what happens after renaming an instrument dir — the old class path is still what the repo
+  has stored) → raises a `RuntimeError` saying to run `stips bootstrap` to re-register it
+  under the new class path.
+
+`stips env` lists the registered instruments, marking legacy records.
 
 **The `active` shim.** Raws ingested before this layout have datastore records naming
 `lsst.obs.stips.active.RawFormatter`. `lsst.obs.stips.active` is kept as a shim for them: it
@@ -367,8 +382,9 @@ What `stack.py` exports and why it matters (all in `_build_setup_script`):
 
 Note there is **no** per-instrument EUPS `setup` — the instrument is purely declarative and
 imported by name. Only `obs_stips`, `stips`, and the profile's data package are set up as
-products. An out-of-tree fork keeps the `<root>/instruments/<name>/` layout and adds its own
-`<root>` to `PYTHONPATH`.
+products. `stips` puts the configured instrument's root on `PYTHONPATH` automatically,
+in-tree or not; add `<root>` yourself only for stack commands run outside `stips`, or when
+a shared repo also holds an instrument from another root.
 
 ---
 

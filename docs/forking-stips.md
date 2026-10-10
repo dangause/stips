@@ -377,14 +377,17 @@ unbinned and 2×2-binned is two instruments. Make the binned one a tiny
 variant dir:
 
     instruments/<x>_bin2/
-    ├── profile.py      # replace(base, name="<X>_bin2", collection_prefix=..., ccd_binning=2, hooks=dict(base.hooks))
+    ├── profile.py      # replace(base, name="<X>_bin2", policy_name=..., collection_prefix=...,
+                         #         ccd_binning=2, obs_data_package=None, hooks=dict(base.hooks))
     ├── instrument.py   # the same nameplate
     ├── camera -> ../<x>/camera
     └── configs -> ../<x>/configs
 
-`instruments/ctio1m_bin2/profile.py` is the worked example (it also turns
-`doDefect` off, because curated defects are in unbinned pixels). Both profiles
-set `binning_header`, so ingest routes each raw to the right instrument.
+`instruments/ctio1m_bin2/profile.py` is the worked example: it also sets
+`obs_data_package=None` and turns `doDefect` off via `isr_overrides`, because
+its curated defects are shipped in **unbinned** pixels and so do not apply to
+the binned variant's geometry. Both profiles set `binning_header`, so ingest
+routes each raw to the right instrument.
 
 ---
 
@@ -527,10 +530,11 @@ env:
 
 `stips` imports `instruments/<x>/profile.py` by name (`instruments.<x>.profile`);
 the stack imports `instruments.<x>.instrument.Instrument` the same way, which is
-the class name Butler stores (it reports your `profile.name`). For an
-**out-of-tree** fork, keep the `<root>/instruments/<x>/` layout and add `<root>`
-to `PYTHONPATH` in your stack environment (in-tree instruments need nothing).
-Every collection name, Butler query, and
+the class name Butler stores (it reports your `profile.name`). `stips` puts
+the configured instrument's root on `PYTHONPATH` automatically, in-tree or
+not; add `<root>` yourself only for stack commands run outside `stips`, or
+when a shared repo also holds an instrument from another root. Every
+collection name, Butler query, and
 skymap reference is driven by your profile — collections become
 `<your collection_prefix>/...`.
 
@@ -600,7 +604,9 @@ values. Most fork bugs are header-mapping bugs, and they surface here cheaply.
 - **The directory name is the identity.** `<x>` becomes the Butler class path
   `instruments.<x>.instrument.Instrument`, so it must be a Python identifier that
   does not start with an underscore. Renaming the dir changes the class path a
-  repo has stored; treat it like renaming the instrument.
+  repo has stored; treat it like renaming the instrument. The fix is `stips
+  bootstrap`, which re-registers the instrument under its new class path with
+  `--update`.
 - **`day_obs` is UT, derived from the datetime — not from a hook.** The Butler
   `day_obs` dimension comes from `astro_metadata_translator.to_observing_day`
   (the UT calendar day of the exposure). A profile `day_obs` hook *can* override
