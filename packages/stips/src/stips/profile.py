@@ -376,7 +376,7 @@ def import_instrument_submodule(instrument_dir: "str | Path", submodule: str):
     module = importlib.import_module(qualname)
     # Importing by name means an earlier ``<other_root>/instruments/<name>`` on
     # sys.path silently wins. Verify the module really came from instrument_dir.
-    got = Path(module.__file__).resolve().parent
+    got = Path(module.__file__).parent.resolve()
     want = Path(instrument_dir).expanduser().resolve()
     if got != want:
         raise RuntimeError(
