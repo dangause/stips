@@ -106,6 +106,7 @@ pythonpath = ["."]
 testpaths = [
     "instruments/nickel/tests",
     "instruments/ctio1m/tests",
+    "instruments/ctio1m_bin2/tests",
     "packages/stips/tests",
     "packages/obs_stips/tests",
     "packages/refcats/tests",
