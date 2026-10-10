@@ -281,7 +281,9 @@ def env(ctx: click.Context, config: cfg_module.Config) -> None:
 
             registered = butler_query.list_instruments(config)
             click.echo("\nRegistered instruments:")
-            if not registered:
+            if registered is None:
+                click.echo("  (could not query the registry; see the stack log above)")
+            elif not registered:
                 click.echo("  (none; run `stips bootstrap`)")
             for name, cls in sorted((registered or {}).items()):
                 note = (

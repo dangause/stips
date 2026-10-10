@@ -13,6 +13,7 @@ Also covers the ``ensure_instrument_registered`` / ``redefine_chain`` helpers an
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -314,12 +315,19 @@ def test_guard_noop_when_registered_with_new_class(monkeypatch, tmp_path):
     assert calls == []
 
 
-def test_guard_migrates_legacy_class_with_update(monkeypatch, tmp_path):
+def test_guard_migrates_legacy_class_with_update(monkeypatch, tmp_path, caplog):
+    caplog.set_level(logging.WARNING, logger="stips.core.pipeline")
     calls = _guard(monkeypatch, {"Nickel": OLD_CLS})
     ensure_instrument_registered(_config(tmp_path))
     (args, kw) = calls[0]
     assert args == ["register-instrument", str(tmp_path), NEW_CLS, "--update"]
     assert kw.get("check") is True
+    warnings = [
+        r
+        for r in caplog.records
+        if r.levelname == "WARNING" and "Migrating instrument" in r.getMessage()
+    ]
+    assert len(warnings) == 1
 
 
 def test_guard_registers_into_an_empty_repo(monkeypatch, tmp_path):
@@ -343,9 +351,10 @@ def test_guard_refuses_a_repo_holding_other_instruments(monkeypatch, tmp_path):
 
 
 def test_guard_refuses_a_foreign_class_for_our_name(monkeypatch, tmp_path):
-    _guard(monkeypatch, {"Nickel": "some.other.Instrument"})
+    calls = _guard(monkeypatch, {"Nickel": "some.other.Instrument"})
     with pytest.raises(RuntimeError, match="some.other.Instrument"):
         ensure_instrument_registered(_config(tmp_path))
+    assert calls == []
 
 
 def test_guard_fails_when_the_registry_cannot_be_read(monkeypatch, tmp_path):
