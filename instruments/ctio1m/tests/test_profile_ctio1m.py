@@ -23,6 +23,8 @@ def test_identity():
     assert prof.name == "CTIO1m"
     assert prof.collection_prefix == "CTIO1m"
     assert prof.filter_key == "FILTERID"
+    assert prof.ccd_binning == 1
+    assert prof.binning_header == "CCDSUM"
 
 
 def test_filters_broadband():

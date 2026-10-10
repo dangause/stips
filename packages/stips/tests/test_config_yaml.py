@@ -248,6 +248,22 @@ class TestYamlConfig(unittest.TestCase):
         self.assertEqual(c.profile.name, "CTIO1m")
         self.assertEqual(c.instrument_class, "instruments.ctio1m.instrument.Instrument")
 
+    def test_ccd_binning_env_key_is_rejected(self):
+        from pathlib import Path
+
+        root = Path(__file__).resolve().parents[3]
+        with self.assertRaises(ValueError) as ctx:
+            cfg.load(
+                env={
+                    "REPO": "/r",
+                    "STACK_DIR": "/s",
+                    "INSTRUMENT_DIR": str(root / "instruments" / "ctio1m"),
+                    "RAW_PARENT_DIR": "/raw",
+                    "CCD_BINNING": "2",
+                }
+            )
+        self.assertIn("ccd_binning", str(ctx.exception))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -108,14 +108,6 @@ def _build_setup_script(config: Config) -> tuple[str, dict[str, str]]:
     if config.refcat_repo:
         script_env["REFCAT_REPO"] = str(config.refcat_repo)
         env_exports += 'export REFCAT_REPO="$REFCAT_REPO"\n'
-    # On-chip binning: the camera build (getCamera, run inside the LSST
-    # subprocess) reads CCD_BINNING from the environment, so the config's
-    # env: value must be exported through to the subprocess shell.
-    ccd_binning = (getattr(config, "env", None) or {}).get("CCD_BINNING")
-    if ccd_binning:
-        script_env["CCD_BINNING"] = str(ccd_binning)
-        env_exports += 'export CCD_BINNING="$CCD_BINNING"\n'
-
     # Profile-derived skymap identity so the (instrument-neutral) bootstrap
     # script registers/chains the skymap under the active instrument's names
     # (e.g. ctio1mRings-v1 / skymaps/ctio1mRings) instead of a hardcoded one.

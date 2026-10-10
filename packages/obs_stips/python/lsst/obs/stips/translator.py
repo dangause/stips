@@ -1,9 +1,19 @@
 from __future__ import annotations
 
+import re
+
 import astropy.units as u
 from astro_metadata_translator.translator import cache_translation
 from astro_metadata_translator.translators.fits import FitsTranslator
 from astropy.coordinates import Angle, EarthLocation
+
+
+def _header_binning(value) -> int | None:
+    """First integer in a binning header value: ``"2 2"`` -> 2, ``2`` -> 2."""
+    if value is None:
+        return None
+    m = re.search(r"\d+", str(value))
+    return int(m.group()) if m else None
 
 
 class StipsTranslator(FitsTranslator):
@@ -28,7 +38,18 @@ class StipsTranslator(FitsTranslator):
         # FITS INSTRUME — supports instruments whose name differs from INSTRUME
         # (e.g. name "CTIO1m" but INSTRUME "Y4KCam").
         match = cls.profile.instrument_header_value or cls.profile.name
-        return match.lower() in str(header.get("INSTRUME", "")).lower()
+        if match.lower() not in str(header.get("INSTRUME", "")).lower():
+            return False
+        # On-chip binning: when the profile names the binning keyword, claim the
+        # file only if its binning equals the profile's, so an unbinned profile
+        # and its binned variant (a separate instrument) never both match. A
+        # missing keyword reads as unbinned.
+        key = cls.profile.binning_header
+        if key is None:
+            return True
+        value = header.get(key)
+        binning = 1 if value is None else _header_binning(value)
+        return binning == int(cls.profile.ccd_binning)
 
     def _hook(self, name):
         return self.profile.hooks.get(name)

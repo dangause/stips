@@ -48,7 +48,7 @@ def _make_camera(cameraParams: dict):
 
 
 # ---------------------------------------------------------------------------
-# On-chip binning support (CCD_BINNING env knob).
+# On-chip binning support (profile.ccd_binning).
 #
 # LSST cameraGeom has no input-binning parameter — the camera is defined in
 # physical (unbinned) pixels and ISR reads the fixed amp bboxes, so a binned
@@ -73,7 +73,7 @@ def _axis_map(imaging: int, overscan: int, binning: int):
     """
     if imaging % binning:
         raise ValueError(
-            f"imaging extent {imaging} not divisible by CCD_BINNING={binning}"
+            f"imaging extent {imaging} not divisible by ccd_binning={binning}"
         )
     seg_img1 = imaging
     seg_os1 = imaging + overscan

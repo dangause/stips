@@ -380,6 +380,16 @@ def load(
             "instruments/<name>/ (containing profile.py) instead."
         )
 
+    # CCD_BINNING is removed: binning is a profile field, because the camera
+    # geometry it changes is part of the instrument's identity in the Butler.
+    if merged.get("CCD_BINNING"):
+        raise ValueError(
+            "CCD_BINNING is removed; set ccd_binning=<N> in the instrument profile "
+            "(instruments/<name>/profile.py). Binned data of a camera that is also "
+            "used unbinned needs its own instrument dir, e.g. instruments/ctio1m_bin2 "
+            "(see docs/migrations.md)."
+        )
+
     # Validate required fields
     required = ["REPO", "STACK_DIR", "RAW_PARENT_DIR"]
     missing = [k for k in required if not merged.get(k)]

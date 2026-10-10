@@ -89,6 +89,10 @@ profile = InstrumentProfile(
     fov_arcmin=20.0,
     # FITS INSTRUME is "Y4KCam" (the camera), not the instrument name "CTIO1m".
     instrument_header_value="Y4KCam",
+    # Y4KCam was used unbinned and 2x2-binned; CCDSUM ("1 1" / "2 2") tells the
+    # translator which. This profile is the unbinned camera (ccd_binning=1);
+    # binned data is the separate instrument instruments/ctio1m_bin2/.
+    binning_header="CCDSUM",
     header_map={
         "exposure_time": Field("EXPTIME", unit="s", default=0.0),
         "dark_time": Field("DARKTIME", unit="s", default=0.0),
