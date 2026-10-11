@@ -1,7 +1,7 @@
 # Rings SkyMap for CTIO 1.0m / Y4KCam.
 #
-# Resolved instrument-dir-first by core/stack.py -> SKYMAP_CFG (shadows the
-# framework reference $STIPS_DEFAULTS/configs/makeSkyMap.py). The geometry uses
+# Resolved instrument-dir-first by stips.core.bootstrap.register_skymap (shadows
+# the framework reference $STIPS_DEFAULTS/configs/makeSkyMap.py). The geometry uses
 # Y4KCam's native plate scale, which also gives a distinct SkyMap hash from the
 # Nickel reference so each registers cleanly under its own name.
 

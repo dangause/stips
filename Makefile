@@ -72,9 +72,7 @@ setup-dev-full: ## Install all packages + notebooks + analysis tools
 # LSST stack targets
 # =============================================================================
 
-.PHONY: bootstrap
-bootstrap: ## Bootstrap Butler repo + refcats + skymap
-	$(SHELL) -lc '$(setup_stack) ./scripts/pipeline/00_bootstrap_repo.sh'
+# Bootstrap is a CLI command: stips -c <config.yaml> bootstrap
 
 # Pipeline operations (calibs, science, DIA, fphot, lightcurve) are handled
 # by the `stips` CLI. Run `stips --help` for usage, or use YAML-driven

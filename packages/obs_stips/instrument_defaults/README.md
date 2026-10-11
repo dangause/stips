@@ -24,7 +24,7 @@ Structural pipeline scaffolding and geometry-agnostic glue:
   labeled and a fork should review and override them per-instrument via
   `instruments/<x>/pipelines/` when its optics/cadence differ.
 - `configs/makeSkyMap.py` — a rings SkyMap whose **name** bootstrap overrides
-  (`-c name=$SKYMAP_NAME`) but whose **geometry** (pixelScale 0.40"/px) is
+  (`-c name=<profile.skymap_name>`) but whose **geometry** (pixelScale 0.40"/px) is
   inherited silently. A fork with a materially different plate scale should ship
   its own (see `instruments/ctio1m/configs/makeSkyMap.py`, 0.289"/px).
 - `configs/dia/*.py`, `configs/coadds/makeDirectWarp_relaxed.py` — DIA/coadd

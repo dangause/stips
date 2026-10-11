@@ -763,6 +763,8 @@ def bootstrap(ctx: click.Context, config: cfg_module.Config) -> None:
 
     Creates the Butler repo, registers the instrument, ingests reference
     catalogs, and sets up the skymap. Run this once before processing data.
+    On an already-initialized repo it only re-registers the active instrument
+    (register-instrument --update). Logs go to logs/<RUN_ID>/bootstrap/.
 
     Configuration comes from the group -c config YAML's env: block.
 
@@ -772,11 +774,24 @@ def bootstrap(ctx: click.Context, config: cfg_module.Config) -> None:
         stips -c scripts/config/2020wnt/pipeline_nickel_template.yaml bootstrap
     """
     from stips.core import bootstrap as bootstrap_module
+    from stips.core.run_logging import (
+        generate_run_id,
+        get_step_log_file,
+        setup_run_logging,
+    )
 
+    run_log_dir = setup_run_logging(generate_run_id(), config)
     _print_info("Bootstrapping Butler repository...")
     _print_info(f"  Repo: {config.repo}")
+    _print_info(f"  Logs: {run_log_dir}")
 
-    result = bootstrap_module.run(config)
+    result = bootstrap_module.run(config, log_file=get_step_log_file("bootstrap"))
+    # pipeline.log alone reads as an active run on the dashboard; record the outcome.
+    (run_log_dir / "summary.txt").write_text(
+        "Step: bootstrap\n"
+        f"Status: {'SUCCESS' if result.success else 'FAILED'}\n"
+        + (f"Error: {result.error}\n" if result.error else "")
+    )
 
     _report_result(
         result,

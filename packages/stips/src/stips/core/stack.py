@@ -93,9 +93,8 @@ def _build_setup_script(config: Config) -> tuple[str, dict[str, str]]:
         "STIPS_SRC": str(stips_src),
         # The dir containing instruments/: on PYTHONPATH so the stack imports
         # instruments.<name>.{profile,instrument} by name (Butler re-imports
-        # STIPS_INSTRUMENT_CLASS from the registry with no env var in play).
+        # the registered instrument class from the registry by that name).
         "STIPS_INSTRUMENTS_ROOT": str(instruments_root(instrument_dir)),
-        "STIPS_INSTRUMENT_CLASS": config.instrument_class,
     }
 
     # Re-export the config-derived values (their values come from env=, so the
@@ -108,7 +107,6 @@ def _build_setup_script(config: Config) -> tuple[str, dict[str, str]]:
         'export STACK_DIR="$STACK_DIR"\n'
         'export INSTRUMENT_DIR="$INSTRUMENT_DIR"\n'
         'export RAW_PARENT_DIR="$RAW_PARENT_DIR"\n'
-        'export STIPS_INSTRUMENT_CLASS="$STIPS_INSTRUMENT_CLASS"\n'
     )
     if config.cp_pipe_dir:
         script_env["CP_PIPE_DIR"] = str(config.cp_pipe_dir)
@@ -116,30 +114,6 @@ def _build_setup_script(config: Config) -> tuple[str, dict[str, str]]:
     if config.refcat_repo:
         script_env["REFCAT_REPO"] = str(config.refcat_repo)
         env_exports += 'export REFCAT_REPO="$REFCAT_REPO"\n'
-    # Profile-derived skymap identity so the (instrument-neutral) bootstrap
-    # script registers/chains the skymap under the active instrument's names
-    # (e.g. ctio1mRings-v1 / skymaps/ctio1mRings) instead of a hardcoded one.
-    skymap_name = getattr(prof, "skymap_name", None)
-    skymap_collection = getattr(prof, "skymap_collection", None)
-    if skymap_name:
-        script_env["SKYMAP_NAME"] = str(skymap_name)
-        env_exports += 'export SKYMAP_NAME="$SKYMAP_NAME"\n'
-    if skymap_collection:
-        script_env["SKYMAP_COLLECTION"] = str(skymap_collection)
-        env_exports += 'export SKYMAP_COLLECTION="$SKYMAP_COLLECTION"\n'
-    # SkyMap geometry config, resolved instrument-dir-first: a fork that wants its
-    # own tract/patch geometry (e.g. its native pixel scale) drops a
-    # configs/makeSkyMap.py into its instrument dir; otherwise the framework
-    # reference geometry is used. resolve_config always returns a path (the
-    # framework default when no override exists).
-    script_env["SKYMAP_CFG"] = str(config.resolve_config("makeSkyMap.py"))
-    env_exports += 'export SKYMAP_CFG="$SKYMAP_CFG"\n'
-
-    # Pass through RUN_ID so shell scripts log to the same directory. It is
-    # already in os.environ (which run_with_stack merges), so only the export
-    # line is needed here.
-    if os.environ.get("RUN_ID"):
-        env_exports += 'export RUN_ID="$RUN_ID"\n'
 
     # Instrument data package (e.g. obs_nickel_data) — only when the profile
     # declares one AND its directory resolves (explicit package_dir, co-located
