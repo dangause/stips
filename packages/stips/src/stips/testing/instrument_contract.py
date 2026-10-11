@@ -202,23 +202,44 @@ def assert_profile_imports_relatively(info: InstrumentDirInfo) -> None:
     import of a sibling module (``from helpers import x`` / ``import helpers``)
     only works by accident of ``sys.path``. Every ``*.py`` beside ``profile.py``
     (other than ``profile.py`` and the ``instrument.py`` nameplate) is a
-    sibling; the pattern anchors on the bare stem at the start of a line, so a
-    package-qualified ``from stips.fetch import ...`` is not rejected.
+    sibling. The check parses ``profile.py`` with :mod:`ast` and walks
+    ``ast.Import``/``ast.ImportFrom`` nodes directly, so it catches every
+    syntactic form (``import os, helpers``, ``import helpers;``,
+    ``import helpers.sub``) without false-positiving on a sibling's name
+    merely appearing in a string or docstring, and without rejecting a
+    package-qualified ``from stips.fetch import ...`` or a genuine relative
+    import (``from .helpers import x`` / ``from . import helpers``).
     """
-    import re
+    import ast
 
     src = info.profile_path.read_text()
-    siblings = sorted(
+    siblings = {
         p.stem
         for p in info.path.glob("*.py")
         if p.name not in ("profile.py", "instrument.py")
-    )
-    for stem in siblings:
-        s = re.escape(stem)
-        pattern = rf"^\s*(from\s+{s}(\.|\s)|import\s+{s}(\s|$|,))"
-        assert not re.search(pattern, src, re.M), (
+    }
+    tree = ast.parse(src, filename=str(info.profile_path))
+
+    offenses: list[tuple[int, str]] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                stem = alias.name.split(".")[0]
+                if stem in siblings:
+                    offenses.append((node.lineno, stem))
+        elif isinstance(node, ast.ImportFrom):
+            # level == 0 is an absolute import; level > 0 (``from .foo
+            # import ...`` / ``from . import foo``) is already relative.
+            if node.level == 0 and node.module:
+                stem = node.module.split(".")[0]
+                if stem in siblings:
+                    offenses.append((node.lineno, stem))
+
+    if offenses:
+        lineno, stem = min(offenses)
+        raise AssertionError(
             f"{info.name}: use `from .{stem} import ...` "
-            f"(profile.py is instruments.{info.name}.profile)"
+            f"(profile.py is instruments.{info.name}.profile) [line {lineno}]"
         )
 
 
