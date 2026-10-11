@@ -59,8 +59,7 @@ RUN source /opt/lsst/software/stack/loadLSST.bash && \
     pip install --no-deps -e packages/stips && \
     pip install --no-deps -e packages/obs_stips && \
     pip install "tenacity==9.1.2" && \
-    python -c "import stips.cli, stips_refcats, astroquery, tenacity" && \
-    { chmod +x /opt/stips/scripts/pipeline/*.sh 2>/dev/null || true; }
+    python -c "import stips.cli, stips_refcats, astroquery, tenacity"
 
 # =============================================================================
 # Entrypoint

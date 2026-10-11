@@ -67,8 +67,8 @@ fi
 # Resolve repo root + package path for monorepo layout.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_SCRIPTS_DIR="${SCRIPT_DIR%/utilities}"
-# shellcheck source=/dev/null
-source "$REPO_SCRIPTS_DIR/utilities/repo_paths.sh"
+REPO_ROOT="${REPO_ROOT:-$(cd "$REPO_SCRIPTS_DIR/.." && pwd)}"
+export REPO_ROOT
 TESTDATA_NICKEL_DIR="${TESTDATA_NICKEL_DIR:-$REPO_ROOT/instruments/nickel/testdata}"
 
 # --------- Activate LSST stack (prefer bash variant) ----------

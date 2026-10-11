@@ -96,7 +96,6 @@ stips/
 │   └── ctio1m_bin2/         # 2x2-binned Y4KCam: replace() of the ctio1m profile; camera/, configs/ symlinked
 ├── scripts/
 │   ├── config/             # Per-target YAML configs (2023ixf, 2020wnt, ctio1m, ...)
-│   ├── pipeline/           # Bootstrap shell script (delegated to via run_with_stack)
 │   └── utilities/          # Helper scripts
 ├── bps/                    # BPS configs (base.yaml, sites/, pipelines/)
 ├── docker/                 # Dockerfile(s), docker-compose, Singularity def
@@ -129,6 +128,10 @@ console scripts (`stips-dia-lightcurve`, `stips-eda-butler`, `stips-skymap-make`
 - `lightcurve` — Lightcurve extraction; `LightcurveConfig` dataclass for display
   options (y-axis/x-axis mode, distance modulus, explosion date, error filter).
 - `refcat` — On-demand Gaia DR3 + PS1 refcat fetch/convert/ingest for a target cone.
+- `bootstrap` — Repository bootstrap in Python (`butler create`,
+  `register-instrument --update`, MONSTER refcat ingest, skymap); extends the
+  `refcats` chain (never redefines it), so fetched Gaia/PS1 runs survive a
+  re-bootstrap.
 - `run` — YAML-driven full-pipeline orchestration.
 - `bps` — HPC batch submission (Slurm / HTCondor / local Parsl).
 - `pipeline` — Shared utilities: re-exports `CollectionNames`; coordinate/data
@@ -264,8 +267,7 @@ butler) are wrapped by `run_with_stack()` in `core/stack.py`, which:
    dir containing `instruments/`) on `PYTHONPATH` so the stack imports
    `instruments.<name>` by name; exports `INSTRUMENT_DIR` (for `configs/`
    overrides and the in-stack refcat overlays' profile import),
-   `STIPS_INSTRUMENT_CLASS` (used by the bootstrap script), `STIPS_DEFAULTS`
-   (framework defaults dir), and config values as env vars.
+   `STIPS_DEFAULTS` (framework defaults dir), and config values as env vars.
 3. Runs the command in the activated environment.
 
 Where STIPS needs data *out* of the stack (Butler queries), it runs a small
@@ -613,7 +615,7 @@ holds an instrument from another root.
 - Framework default pipelines: `packages/obs_stips/instrument_defaults/pipelines/` (DRP.yaml, DIA.yaml, ForcedPhotRaDec.yaml, ...)
 - Framework default configs: `packages/obs_stips/instrument_defaults/configs/` (dia/, coadds/, neutral colorterms/filter_map; tiering contract in `instrument_defaults/README.md`)
 - Nickel-fitted science configs: `instruments/nickel/configs/` (colorterms.py, calibrateImage/tuned_configs/, refcats_gaia_ps1.py)
-- Bootstrap shell script: `scripts/pipeline/`
+- Repository bootstrap: `stips bootstrap` (`packages/stips/src/stips/core/bootstrap.py`)
 - Target configs: `scripts/config/{target}/`
 - Adding a new instrument: `docs/forking-stips.md`
 - Stack-upgrade runbook: `docs/stack-bump-runbook.md`

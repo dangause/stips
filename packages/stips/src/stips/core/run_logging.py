@@ -2,8 +2,7 @@
 
 Extracted from ``stips.core.run`` to keep the orchestrator focused on step
 dispatch. These set up the per-run log directory, hand out per-step log file
-paths (via the ``RUN_LOG_DIR`` env var, which is also how child shell scripts
-find the directory), and split interleaved LSST ``--long-log`` output into
+paths (via the ``RUN_LOG_DIR`` env var), and split interleaved LSST ``--long-log`` output into
 per-exposure files for easier reading. They share no Python module state — only
 the ``RUN_LOG_DIR``/``RUN_ID`` environment variables.
 """
@@ -25,7 +24,7 @@ log = logging.getLogger(__name__)
 
 
 def generate_run_id() -> str:
-    """Generate a unique run ID for unified logging across Python and shell."""
+    """Generate a unique run ID (``YYYYMMDD_HHMMSS_PID``) for the run log directory."""
     ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     return f"{ts}_{os.getpid()}"
 
@@ -204,10 +203,10 @@ def setup_run_logging(run_id: str, config: "Config") -> Path:
     """Set up unified logging directory for a pipeline run.
 
     Creates the run log directory and adds a FileHandler so all Python
-    log output is captured alongside the shell script logs.
+    log output is captured alongside the per-step stack command logs.
 
-    Also sets RUN_ID in os.environ so child shell scripts (via
-    run_with_stack) inherit it and write to the same directory.
+    Also sets RUN_ID / RUN_LOG_DIR in os.environ so child processes (via
+    run_with_stack) and step helpers can find the same run.
 
     Args:
         run_id: Unique run identifier
@@ -216,16 +215,16 @@ def setup_run_logging(run_id: str, config: "Config") -> Path:
     Returns:
         Path to the run log directory
     """
-    # Use the same LOG_ROOT as logging.sh: {REPO_ROOT}/logs
-    # REPO_ROOT is the monorepo root (instrument_dir.parent.parent)
+    # LOG_ROOT is {REPO_ROOT}/logs, where REPO_ROOT is the instruments
+    # root (instrument_dir.parent.parent) — the monorepo root in-tree.
     repo_root = config.instrument_dir.parent.parent
     log_root = repo_root / "logs"
     run_log_dir = log_root / run_id
 
     run_log_dir.mkdir(parents=True, exist_ok=True)
 
-    # Set RUN_ID in environment so shell scripts (via run_with_stack)
-    # inherit it and their logging.sh uses the same directory
+    # Set RUN_ID in environment so child processes (via run_with_stack)
+    # inherit the run identifier
     os.environ["RUN_ID"] = run_id
 
     # Set RUN_LOG_DIR in environment so child modules can access it

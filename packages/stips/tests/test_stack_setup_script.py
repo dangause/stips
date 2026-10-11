@@ -23,12 +23,12 @@ def _config(tmp_path):
     )
 
 
-def test_setup_script_exports_instruments_root_and_class(tmp_path):
+def test_setup_script_exports_instruments_root(tmp_path):
     script, env = _build_setup_script(_config(tmp_path))
     assert env["STIPS_INSTRUMENTS_ROOT"] == str(REPO_ROOT)
-    assert env["STIPS_INSTRUMENT_CLASS"] == "instruments.nickel.instrument.Instrument"
     assert 'export PYTHONPATH="${STIPS_INSTRUMENTS_ROOT}:${PYTHONPATH:-}"' in script
-    assert 'export STIPS_INSTRUMENT_CLASS="$STIPS_INSTRUMENT_CLASS"' in script
+    assert "STIPS_INSTRUMENT_CLASS" not in env
+    assert "STIPS_INSTRUMENT_CLASS" not in script
 
 
 def test_setup_script_no_longer_smuggles_profile_values(tmp_path):

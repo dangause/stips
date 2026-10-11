@@ -228,7 +228,7 @@ def run_with_stack(cmd: list[str], config: Config, **kwargs) -> subprocess.Compl
     # Sources loadLSST.bash
     # Sets up lsst_distrib and obs_stips; exports INSTRUMENT_DIR and
     #   STIPS_DEFAULTS; puts STIPS_INSTRUMENTS_ROOT (the dir containing
-    #   instruments/) on PYTHONPATH and exports STIPS_INSTRUMENT_CLASS
+    #   instruments/) on PYTHONPATH
     # Exports config as environment variables
     # Runs the command
 ```
