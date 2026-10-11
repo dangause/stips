@@ -5,29 +5,11 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
 ## [Unreleased]
 
 ### Added
-- A documentation site for Read the Docs: Sphinx with MyST markdown and the
-  furo theme (`docs/conf.py`, `.readthedocs.yaml`, a uv `docs` dependency
-  group). The docs are reorganized around a reading path: what STIPS is and
-  why it uses the Rubin stack, installing the Rubin stack and STIPS (natively
-  or with the published container), a quickstart on public SN 2023ixf data,
-  user guides for configuration, templates, reference catalogs, variable
-  stars and transits, outputs, logs, and clusters, and a section for each
-  instrument (Nickel; CTIO / Y4KCam): data access, calibration, photometry or
-  southern fields, example campaigns, and status. The CLI reference is
-  generated from `stips <command> --help` (`docs/_ext/stips_cli.py`) and the
-  Python API pages by autodoc. Internal notes in `docs/` stay out of the
-  build. `make docs` builds it as Read the Docs does, failing on warnings;
-  `make docs-serve` previews it, and a CI job runs the same build.
 - `InstrumentProfile.ccd_binning` and `binning_header`; the translator claims
   only raws whose binning matches. `instruments/ctio1m_bin2/` is the 2×2-binned
   Y4KCam instrument.
 
 ### Changed
-- The paper material — the rebuild driver (`scripts/paper/`), the paper's
-  figure scripts, `docs/paper-readiness.md` and the nightly-median test —
-  moved to a separate `stips-paper` repository, which also archives the
-  rebuild's products. The rebuild driver now runs a STIPS checkout given by
-  `--stips`. The diagnostic scripts in `scripts/analysis/` stay here.
 - Every instrument registers under its own Butler class path,
   `instruments.<name>.instrument.Instrument`, from a three-line nameplate
   `instrument.py` in the instrument dir; the stored `class_name` now identifies
@@ -46,6 +28,34 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
   the `CCD_BINNING` config key (rejected with a message), the
   `STIPS_PS1_BAND_MAP` env export, `lsst.obs.stips.profile_loader`, and the
   `instrument:` line in `ForcedPhotRaDec.yaml`.
+
+## [2.3.0] — 2026-10-09
+
+A documentation site (<https://stips-lsst.readthedocs.io>), and fixes for
+problems a new user hits installing and first running STIPS. No pipeline,
+task or calibration-config changes.
+
+### Added
+- A documentation site for Read the Docs: Sphinx with MyST markdown and the
+  furo theme (`docs/conf.py`, `.readthedocs.yaml`, a uv `docs` dependency
+  group). The docs are reorganized around a reading path: what STIPS is and
+  why it uses the Rubin stack, installing the Rubin stack and STIPS (natively
+  or with the published container), a quickstart on public SN 2023ixf data,
+  user guides for configuration, templates, reference catalogs, variable
+  stars and transits, outputs, logs, and clusters, and a section for each
+  instrument (Nickel; CTIO / Y4KCam): data access, calibration, photometry or
+  southern fields, example campaigns, and status. The CLI reference is
+  generated from `stips <command> --help` (`docs/_ext/stips_cli.py`) and the
+  Python API pages by autodoc. Internal notes in `docs/` stay out of the
+  build. `make docs` builds it as Read the Docs does, failing on warnings;
+  `make docs-serve` previews it, and a CI job runs the same build.
+
+### Changed
+- The paper material — the rebuild driver (`scripts/paper/`), the paper's
+  figure scripts, `docs/paper-readiness.md` and the nightly-median test —
+  moved to a separate `stips-paper` repository, which also archives the
+  rebuild's products. The rebuild driver now runs a STIPS checkout given by
+  `--stips`. The diagnostic scripts in `scripts/analysis/` stay here.
 
 ### Fixed
 - `stips download` works for Nickel in a fresh install again. The vendored
