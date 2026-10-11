@@ -77,3 +77,36 @@ def test_nameplate_and_profile_stems_are_not_siblings(tmp_path):
     # importing e.g. ``instrument`` from elsewhere is not this contract's job.
     info = _demo_instrument(tmp_path, "import instrument\nimport profile\n", ())
     ic.assert_profile_imports_relatively(info)
+
+
+# --------------------------------------------------------------------------- #
+# assert_fetch_hook_is_framework_wrapper
+# --------------------------------------------------------------------------- #
+
+
+class _ProfileStub:
+    def __init__(self, fetch_data):
+        self.fetch_data = fetch_data
+
+
+def _backend(night, raw_root, *, overwrite=False, **kwargs):  # pragma: no cover
+    return 0
+
+
+def test_no_fetch_hook_passes():
+    ic.assert_fetch_hook_is_framework_wrapper(_ProfileStub(None))
+
+
+def test_framework_wrapper_fetch_hook_passes():
+    from stips.fetch import make_fetch_data
+
+    hook = make_fetch_data(_backend, lambda env: {})
+    ic.assert_fetch_hook_is_framework_wrapper(_ProfileStub(hook))
+
+
+def test_hand_rolled_fetch_hook_fails():
+    def fetch_data(night, config, *, overwrite=False):  # pragma: no cover
+        return "ok"
+
+    with pytest.raises(AssertionError, match="make_fetch_data"):
+        ic.assert_fetch_hook_is_framework_wrapper(_ProfileStub(fetch_data))

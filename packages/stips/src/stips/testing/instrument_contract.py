@@ -358,6 +358,31 @@ class FetchConfigStub:
         self.env = dict(env)
 
 
+def _assert_is_framework_fetch_wrapper(hook: Any, label: str) -> None:
+    """``hook`` is the closure built by :func:`stips.fetch.make_fetch_data`."""
+    from stips import fetch as framework_fetch
+
+    assert getattr(hook, "__module__", None) == framework_fetch.__name__, (
+        f"{label} must be built via "
+        "stips.fetch.make_fetch_data (shared wrapper), not a per-instrument copy"
+    )
+
+
+def assert_fetch_hook_is_framework_wrapper(profile: Any) -> None:
+    """A wired ``profile.fetch_data`` is the shared framework wrapper.
+
+    Runs for every instrument, including variants with no ``fetch.py`` whose
+    hook is inherited from another instrument's profile (e.g. ``ctio1m_bin2``
+    reusing ``ctio1m``'s), which the ``fetch.py``-driven contracts never see.
+    A profile with no fetch hook (``fetch_data is None``) passes.
+    """
+    if profile.fetch_data is None:
+        return
+    _assert_is_framework_fetch_wrapper(
+        profile.fetch_data, f"{getattr(profile, 'name', 'profile')}.fetch_data"
+    )
+
+
 def assert_fetch_status_contract(fetch_module: Any, contract_data: Any) -> None:
     """``fetch_data`` maps the backend return code to ok / not_found / failed.
 
@@ -370,11 +395,8 @@ def assert_fetch_status_contract(fetch_module: Any, contract_data: Any) -> None:
     the shared wrapper (its ``fetch_data`` closure is defined in ``stips.fetch``)
     rather than copy-pasting one -- that is what keeps the mapping single-source.
     """
-    from stips import fetch as framework_fetch
-
-    assert fetch_module.fetch_data.__module__ == framework_fetch.__name__, (
-        f"{fetch_module.__name__}.fetch_data must be built via "
-        "stips.fetch.make_fetch_data (shared wrapper), not a per-instrument copy"
+    _assert_is_framework_fetch_wrapper(
+        fetch_module.fetch_data, f"{fetch_module.__name__}.fetch_data"
     )
 
     night = contract_data.FETCH_NIGHT

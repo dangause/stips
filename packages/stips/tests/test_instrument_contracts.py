@@ -8,7 +8,8 @@ test code to copy.
 
 Optional assets skip-with-reason rather than fail:
   - no ``tests/contract_data.py`` -> the data-driven contracts skip
-  - no ``fetch.py``               -> the fetch contract skips
+  - no ``fetch.py``               -> the fetch-status contract skips (the
+                                     inherited hook is still checked)
   - no ``camera/``                -> the camera-assembly contract skips
   - no ``testdata/``              -> the testdata-layout contract skips
   - no LSST stack in the venv     -> stack-dependent contracts skip
@@ -100,6 +101,12 @@ def test_fetch_hook_registered(instrument, profile):
     assert (
         profile.fetch_data is not None
     ), f"{instrument.name}: ships fetch.py but profile.fetch_data is not wired"
+
+
+def test_fetch_hook_is_framework_wrapper(profile):
+    """Runs for every instrument -- including variants with no fetch.py whose
+    fetch_data is inherited -- so no hook escapes the shared-wrapper check."""
+    ic.assert_fetch_hook_is_framework_wrapper(profile)
 
 
 # --------------------------------------------------------------------------- #
