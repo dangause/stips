@@ -116,9 +116,11 @@ possibly `RAW_PARENT_DIR`. It checks the stack only once every path exists.
 ## What else you need
 
 **Reference catalogs**
-: Astrometric and photometric calibration need reference stars. Setting up a
-  repository currently requires MONSTER catalog shards for your fields under
-  `REFCAT_REPO`. See {doc}`reference-catalogs`.
+: Astrometric and photometric calibration need reference stars. In the default
+  `refcat.mode: monster`, bootstrap needs MONSTER catalog shards for your
+  fields under `REFCAT_REPO`. In `gaia_ps1` or `gaia` mode, `stips run`
+  fetches Gaia DR3 (and Pan-STARRS) shards for the target on demand and no
+  MONSTER shards are needed. See {doc}`reference-catalogs`.
 
 **Raw data**
 : STIPS reads `RAW_PARENT_DIR/<night>/raw/*.fits`. `stips download` fetches
