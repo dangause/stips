@@ -35,7 +35,10 @@ Community Forum](https://community.lsst.org/) is the place to ask.
 : Bootstrap needs MONSTER shards in
   `REFCAT_REPO/data/refcats/the_monster_20250219_afw/` (only in
   `refcat.mode: monster`; other modes skip MONSTER when the shards are
-  absent). See {doc}`reference-catalogs`.
+  absent). To move a repository bootstrapped without shards to `monster`
+  mode, add the shards under `REFCAT_REPO` and run `stips bootstrap` (or
+  `stips run`) with `refcat.mode: monster`; it ingests them and extends the
+  existing `refcats` chain. See {doc}`reference-catalogs`.
 
 **`Unknown refcat.mode ...`**
 : The config's `refcat.mode` is misspelled or unsupported. Valid values are

@@ -40,6 +40,13 @@ def test_mode_from_yaml_absent_present_invalid(tmp_path):
         refcat.refcat_mode_from_yaml(_yaml(tmp_path, {"refcat": {"mode": "nope"}}))
 
 
+@pytest.mark.parametrize("section", ["gaia_ps1", ["gaia"], 3])
+def test_mode_from_yaml_non_dict_section_is_rejected(tmp_path, section):
+    with pytest.raises(ValueError, match="refcat: must be a mapping") as exc:
+        refcat.refcat_mode_from_yaml(_yaml(tmp_path, {"refcat": section}))
+    assert repr(section) in str(exc.value)
+
+
 def test_run_default_is_reexported():
     from stips.core.run import DEFAULT_REFCAT_MODE
 

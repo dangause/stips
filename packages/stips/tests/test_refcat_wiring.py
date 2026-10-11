@@ -233,9 +233,11 @@ def test_refcat_null_section_defaults_to_monster(tmp_path):
     assert cfg.refcat_radius_deg == 0.3
 
 
-def test_refcat_non_dict_section_defaults_to_monster(tmp_path):
-    cfg = RunConfig.from_yaml(_write(tmp_path, {"refcat": "gaia_ps1"}))
-    assert cfg.refcat_mode == "monster"
+@pytest.mark.parametrize("section", ["gaia_ps1", ["gaia"], 3])
+def test_refcat_non_dict_section_is_rejected(tmp_path, section):
+    with pytest.raises(ValueError, match="refcat: must be a mapping") as exc:
+        RunConfig.from_yaml(_write(tmp_path, {"refcat": section}))
+    assert repr(section) in str(exc.value)
 
 
 # ---------------------------------------------------------------------------
@@ -243,10 +245,15 @@ def test_refcat_non_dict_section_defaults_to_monster(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def _patch_bootstrap(monkeypatch, *, needs=True, result=None):
-    from stips.core import bootstrap
+def _patch_bootstrap(monkeypatch, *, needs=True, result=None, monster_run=True):
+    from stips.core import bootstrap, butler_query
 
     calls = []
+    monkeypatch.setattr(
+        butler_query,
+        "collection_exists",
+        lambda config, name: monster_run if name == bootstrap.MONSTER_RUN else True,
+    )
 
     def fake_run(config, **kw):
         calls.append(kw)
@@ -319,6 +326,38 @@ def test_run_bootstrap_step_skips(monkeypatch, tmp_path, needs, dry_run):
     )
     assert out is None
     assert calls == []
+
+
+@pytest.mark.parametrize(
+    "mode, monster_run, called",
+    [
+        # initialized repo without the MONSTER run, now in monster mode:
+        # bootstrap again so shards are ingested or the clear error surfaces
+        ("monster", False, True),
+        ("gaia_ps1", False, False),
+        ("monster", True, False),
+    ],
+)
+def test_run_bootstrap_step_monster_mode_needs_monster_run(
+    monkeypatch, tmp_path, mode, monster_run, called
+):
+    from types import SimpleNamespace
+
+    import stips.core.run as run
+
+    calls = _patch_bootstrap(monkeypatch, needs=False, monster_run=monster_run)
+    out = run._run_bootstrap_step(
+        SimpleNamespace(repo=tmp_path / "repo"),
+        SimpleNamespace(refcat_mode=mode),
+        dry_run=False,
+        run_log_dir=tmp_path,
+    )
+    assert out is None
+    if called:
+        assert len(calls) == 1
+        assert calls[0]["require_monster"] is True
+    else:
+        assert calls == []
 
 
 def test_run_invalid_refcat_mode_returns_failure(monkeypatch, tmp_path):

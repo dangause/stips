@@ -71,7 +71,12 @@ from typing import TYPE_CHECKING
 
 import yaml
 
-from stips.core.refcat import DEFAULT_REFCAT_MODE, ensure_refcats, parse_refcat_mode
+from stips.core.refcat import (
+    DEFAULT_REFCAT_MODE,
+    ensure_refcats,
+    parse_refcat_mode,
+    refcat_section,
+)
 from stips.core.run_logging import (
     generate_run_id as _generate_run_id,
 )
@@ -95,10 +100,7 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
-# Staging default: "monster" preserves legacy behavior until Gaia/PS1 is
-# validated (see docs/refcat-validation-runbook.md). Single source of truth
-# lives in stips.core.refcat (DEFAULT_REFCAT_MODE above is re-exported from
-# there for existing callers, e.g. `from stips.core.run import DEFAULT_REFCAT_MODE`).
+# DEFAULT_REFCAT_MODE (imported above) is defined once, in stips.core.refcat.
 
 
 @dataclass
@@ -255,9 +257,7 @@ class RunConfig:
 
         # Extract refcat config (on-demand Gaia/PS1; absent section => defaults).
         # Staging default "monster" keeps behavior unchanged until validated.
-        refcat = data.get("refcat") or {}
-        if not isinstance(refcat, dict):
-            refcat = {}
+        refcat = refcat_section(data)
         refcat_mode = parse_refcat_mode(refcat.get("mode"))
         refcat_radius_deg = float(refcat.get("radius_deg", 0.3))
         refcat_gaia_quality = refcat.get("gaia_quality")
@@ -1733,11 +1733,18 @@ def _run_bootstrap_step(
     when shards are present and otherwise register an empty ``refcats`` chain.
     Returns a failed ``RunResult`` to stop the run, else None.
     """
-    from stips.core import bootstrap
+    from stips.core import bootstrap, butler_query
 
-    if not bootstrap.needs_bootstrap(config):
+    # needs_bootstrap is satisfied by an empty refcats chain, so a repo
+    # bootstrapped without shards would never ingest MONSTER in monster mode.
+    if bootstrap.needs_bootstrap(config):
+        log.info(f"Repository not initialized, running bootstrap: {config.repo}")
+    elif run_cfg.refcat_mode == "monster" and not butler_query.collection_exists(
+        config, bootstrap.MONSTER_RUN
+    ):
+        log.info("MONSTER run missing; bootstrapping in monster mode")
+    else:
         return None
-    log.info(f"Repository not initialized, running bootstrap: {config.repo}")
     if dry_run:
         log.info("[DRY RUN] Would run bootstrap")
         return None

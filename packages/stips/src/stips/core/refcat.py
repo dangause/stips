@@ -124,14 +124,31 @@ def parse_refcat_mode(value: object | None) -> str:
     )
 
 
+def refcat_section(raw: dict) -> dict:
+    """The ``refcat:`` mapping of a loaded config YAML.
+
+    Absent or null means defaults (``{}``); any other non-mapping (e.g. the
+    typo ``refcat: gaia_ps1``) raises ``ValueError`` rather than silently
+    falling back to the default mode.
+    """
+    section = raw.get("refcat")
+    if section is None:
+        return {}
+    if not isinstance(section, dict):
+        raise ValueError(
+            "refcat: must be a mapping (e.g. refcat: {mode: gaia_ps1}), "
+            f"got {section!r}"
+        )
+    return section
+
+
 def refcat_mode_from_yaml(path) -> str:
     """The validated ``refcat.mode`` of a ``-c`` config YAML (default when absent)."""
     import yaml
 
     with open(path) as fh:
         raw = yaml.safe_load(fh) or {}
-    section = raw.get("refcat") or {}
-    return parse_refcat_mode(section.get("mode") if isinstance(section, dict) else None)
+    return parse_refcat_mode(refcat_section(raw).get("mode"))
 
 
 def refcat_overlay_config(mode: str) -> str | None:

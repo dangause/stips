@@ -40,7 +40,10 @@ In `monster` mode, setting up a repository (`stips bootstrap`, or the first
 step of `stips run`) requires the shards and ingests them. In `gaia_ps1` and
 `gaia` mode the shards are optional: bootstrap ingests them if present and
 otherwise skips MONSTER with a warning and creates an empty `refcats` chain for
-the on-demand catalogs. The shards are FITS files, one per HTM level-7 sky cell, stored in
+the on-demand catalogs. To move a repository bootstrapped without shards to
+`monster` mode, add the shards under `REFCAT_REPO` and run `stips bootstrap`
+(or `stips run`) with `refcat.mode: monster`; it ingests them and extends the
+existing `refcats` chain. The shards are FITS files, one per HTM level-7 sky cell, stored in
 
 ```text
 $REFCAT_REPO/data/refcats/the_monster_20250219_afw/refcat_htm7_<id>.fits

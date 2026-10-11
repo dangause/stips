@@ -487,7 +487,8 @@ error. Fix the reported cause, or use `refcat.mode: monster` if the repo already
 holds refcats. Science treats `MissingDatasetTypeError` as fatal: each night fails
 immediately instead of exhausting every `calibrateImage` fallback. A repo
 bootstrapped in `gaia_ps1`/`gaia` mode without shards has no MONSTER run, so
-switching it to `monster` mode hits this error.
+switching it to `monster` mode makes `stips run` bootstrap again, which ingests
+the shards if present or fails with the `No MONSTER refcat shards found` error.
 
 ### DIA reports success but no difference images
 `core/dia.py` checks `diff_image_count` after execution. If the pipeline exits 0

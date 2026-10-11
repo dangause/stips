@@ -69,8 +69,10 @@ data is its own instrument dir (see `instruments/ctio1m_bin2/`). A leftover
 | `gaia_quality` | | Gaia cuts, such as `{ruwe_max: 1.4, require_5param: true}` |
 
 `mode` must be `monster`, `gaia_ps1` or `gaia`; any other value is rejected
-when the config is loaded, before bootstrap. An empty `refcat:` section means
-the defaults. Bootstrap follows the mode: `monster` requires MONSTER shards
+by `stips run` and `stips bootstrap` (and by any command that reads the run
+config); `stips calibs`/`science`/`download` do not read it. An empty `refcat:`
+section means the defaults; a `refcat:` that is not a mapping (such as
+`refcat: gaia_ps1`) is rejected. Bootstrap follows the mode: `monster` requires MONSTER shards
 under `REFCAT_REPO` and ingests them; `gaia_ps1` and `gaia` ingest the shards
 if present and otherwise skip MONSTER with a warning and create an empty
 `refcats` chain, which the on-demand Gaia/PS1 fetch then extends.
