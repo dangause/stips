@@ -30,6 +30,7 @@ from stips.core.pipeline import (  # noqa: E402
     PipetaskStage,
     ensure_instrument_registered,
     redefine_chain,
+    reset_registration_memo,
 )
 
 REPO = "/repo"
@@ -294,7 +295,15 @@ def _config(tmp_path):
     )
 
 
-def _guard(monkeypatch, registered):
+@pytest.fixture(autouse=True)
+def _fresh_registration_memo():
+    """Each guard test starts (and leaves) the per-process memo empty."""
+    reset_registration_memo()
+    yield
+    reset_registration_memo()
+
+
+def _guard(monkeypatch, registered, queries=None):
     from stips.core import pipeline as pipeline_mod
 
     calls = []
@@ -303,9 +312,13 @@ def _guard(monkeypatch, registered):
         "run_butler",
         lambda args, config, **kw: calls.append((list(args), kw)),
     )
-    monkeypatch.setattr(
-        pipeline_mod.butler_query, "list_instruments", lambda config: registered
-    )
+
+    def list_instruments(config):
+        if queries is not None:
+            queries.append(str(config.repo))
+        return registered
+
+    monkeypatch.setattr(pipeline_mod.butler_query, "list_instruments", list_instruments)
     return calls
 
 
@@ -378,6 +391,59 @@ def test_guard_reports_a_failed_legacy_migration(monkeypatch, tmp_path):
         ensure_instrument_registered(_config(tmp_path))
     assert NEW_CLS in str(exc.value) and "docs/migrations.md" in str(exc.value)
     assert isinstance(exc.value.__cause__, subprocess.CalledProcessError)
+
+
+@pytest.mark.parametrize(
+    "registered", [{"Nickel": NEW_CLS}, {"Nickel": OLD_CLS}, {}], ids=str
+)
+def test_guard_verifies_a_repo_once_per_process(monkeypatch, tmp_path, registered):
+    queries = []
+    calls = _guard(monkeypatch, registered, queries)
+    ensure_instrument_registered(_config(tmp_path))
+    n_calls = len(calls)
+    ensure_instrument_registered(_config(tmp_path))
+    ensure_instrument_registered(_config(tmp_path))
+    assert queries == [str(tmp_path)]
+    assert len(calls) == n_calls
+
+
+def test_guard_memo_is_per_repo(monkeypatch, tmp_path):
+    queries = []
+    _guard(monkeypatch, {"Nickel": NEW_CLS}, queries)
+    ensure_instrument_registered(_config(tmp_path / "a"))
+    ensure_instrument_registered(_config(tmp_path / "b"))
+    ensure_instrument_registered(_config(tmp_path / "a"))
+    assert queries == [str(tmp_path / "a"), str(tmp_path / "b")]
+
+
+def test_guard_memo_is_per_class(monkeypatch, tmp_path):
+    queries = []
+    _guard(monkeypatch, {"Nickel": NEW_CLS}, queries)
+    ensure_instrument_registered(_config(tmp_path))
+    other = _config(tmp_path)
+    other.instrument_class = OLD_CLS
+    with pytest.raises(RuntimeError):
+        ensure_instrument_registered(other)
+    assert len(queries) == 2
+
+
+@pytest.mark.parametrize("registered", [{"Nickel": "some.other.Instrument"}, None])
+def test_guard_does_not_memoise_a_failure(monkeypatch, tmp_path, registered):
+    queries = []
+    _guard(monkeypatch, registered, queries)
+    for _ in range(2):
+        with pytest.raises(RuntimeError):
+            ensure_instrument_registered(_config(tmp_path))
+    assert len(queries) == 2
+
+
+def test_guard_rechecks_after_reset(monkeypatch, tmp_path):
+    queries = []
+    _guard(monkeypatch, {"Nickel": NEW_CLS}, queries)
+    ensure_instrument_registered(_config(tmp_path))
+    reset_registration_memo()
+    ensure_instrument_registered(_config(tmp_path))
+    assert len(queries) == 2
 
 
 # --------------------------------------------------------------------------- #

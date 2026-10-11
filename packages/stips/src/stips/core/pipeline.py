@@ -847,6 +847,23 @@ def is_empty_qgraph(output: str) -> bool:
     return "QuantumGraph contains no quanta" in output
 
 
+#: ``(repo, instrument class)`` pairs :func:`ensure_instrument_registered` has
+#: already verified in this process. ``calibs`` calls the guard twice per night
+#: and ``stips run`` processes many nights in one process; each check is an
+#: in-stack ``butler`` process, so a repo is verified once and then trusted.
+_REGISTRATION_VERIFIED: set[tuple[str, str]] = set()
+
+
+def reset_registration_memo() -> None:
+    """Forget which repos :func:`ensure_instrument_registered` has verified.
+
+    Test/tooling support: lets a test (or a long-lived process that rewrites a
+    repo's instrument registry out-of-band) force the next guard call to
+    re-query the registry.
+    """
+    _REGISTRATION_VERIFIED.clear()
+
+
 def ensure_instrument_registered(
     config: "Config",
     log_file: Path | None = None,
@@ -867,9 +884,16 @@ def ensure_instrument_registered(
     * other instruments only: almost certainly a wrong ``INSTRUMENT_DIR`` for
       this repo — raise. Adding a second instrument to a repo on purpose is
       ``stips bootstrap``, which registers unconditionally.
+
+    The three success paths are memoised per process on ``(repo, class)``
+    (see :func:`reset_registration_memo`): a repeat call returns without
+    touching the registry. A raise is never memoised.
     """
     prof = config.require_profile()
     class_name = config.instrument_class
+    key = (str(config.repo), class_name)
+    if key in _REGISTRATION_VERIFIED:
+        return
     registered = butler_query.list_instruments(config)
     if registered is None:
         raise RuntimeError(
@@ -878,6 +902,7 @@ def ensure_instrument_registered(
         )
     current = registered.get(prof.name)
     if current == class_name:
+        _REGISTRATION_VERIFIED.add(key)
         return
     if current == LEGACY_INSTRUMENT_CLASS:
         log.warning(
@@ -902,6 +927,7 @@ def ensure_instrument_registered(
                 f"failed (exit {exc.returncode}); see the butler log{where} "
                 "and docs/migrations.md"
             ) from exc
+        _REGISTRATION_VERIFIED.add(key)
         return
     if current is not None:
         raise RuntimeError(
@@ -921,6 +947,7 @@ def ensure_instrument_registered(
         check=True,
         log_file=log_file,
     )
+    _REGISTRATION_VERIFIED.add(key)
 
 
 def redefine_chain(
