@@ -1,6 +1,5 @@
 import pytest
 import yaml
-
 from stips.core import refcat
 
 
@@ -19,7 +18,9 @@ def test_parse_rejects_unknown(value):
     with pytest.raises(ValueError) as exc:
         refcat.parse_refcat_mode(value)
     msg = str(exc.value)
-    assert repr(value) in msg and "monster" in msg and "gaia_ps1" in msg and "gaia" in msg
+    assert (
+        repr(value) in msg and "monster" in msg and "gaia_ps1" in msg and "gaia" in msg
+    )
 
 
 def _yaml(tmp_path, data):
@@ -30,7 +31,10 @@ def _yaml(tmp_path, data):
 
 def test_mode_from_yaml_absent_present_invalid(tmp_path):
     assert refcat.refcat_mode_from_yaml(_yaml(tmp_path, {"env": {}})) == "monster"
-    assert refcat.refcat_mode_from_yaml(_yaml(tmp_path, {"refcat": {"mode": "gaia"}})) == "gaia"
+    assert (
+        refcat.refcat_mode_from_yaml(_yaml(tmp_path, {"refcat": {"mode": "gaia"}}))
+        == "gaia"
+    )
     assert refcat.refcat_mode_from_yaml(_yaml(tmp_path, {"refcat": None})) == "monster"
     with pytest.raises(ValueError, match="refcat.mode"):
         refcat.refcat_mode_from_yaml(_yaml(tmp_path, {"refcat": {"mode": "nope"}}))
