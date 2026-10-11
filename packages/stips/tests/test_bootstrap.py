@@ -107,7 +107,10 @@ class _Butler:
 
     def __init__(self, state):
         self.calls = []
-        self.state = state  # {"collections": set(), "chains": {name: [members]}}
+        # {"collections": set(), "chains": {name: [members]},
+        #  "datasets": set of collections holding a skyMap (default empty)}
+        self.state = state
+        state.setdefault("datasets", set())
 
     def run_butler(self, args, config, *, check=True, log_file=None, **kw):
         self.calls.append(list(args))
@@ -128,8 +131,12 @@ class _Butler:
                     a for a in args[3:] if not a.startswith("--") and a != "redefine"
                 ]
             self.state["collections"].add(chain)
-        elif cmd == "register-skymap" and self.state.get("skymap_fails"):
-            return subprocess.CompletedProcess(args, 1)
+        elif cmd == "register-skymap":
+            if self.state.get("skymap_fails"):
+                return subprocess.CompletedProcess(args, 1)
+            self.state["collections"].add("skymaps")
+            if self.state.get("skymap_lands", True):
+                self.state["datasets"].add("skymaps")
         return subprocess.CompletedProcess(args, 0)
 
     def collection_exists(self, config, name):
@@ -141,7 +148,15 @@ class _Butler:
         )
 
     def has_datasets(self, config, dataset_type, collections, **kw):
-        return self.state.get("has_datasets", True)
+        """A skyMap is visible in a RUN holding it, or through a chain member."""
+        names = [collections] if isinstance(collections, str) else list(collections)
+
+        def visible(name):
+            if name in self.state["datasets"]:
+                return True
+            return any(visible(m) for m in self.state["chains"].get(name, []))
+
+        return dataset_type == "skyMap" and any(visible(n) for n in names)
 
 
 @contextmanager
@@ -256,6 +271,7 @@ def test_run_is_idempotent_and_never_redefines_refcats(tmp_path):
             ],
             "skymaps/nickelRings": ["skymaps"],
         },
+        "datasets": {"skymaps"},
     }
     fake = _Butler(state)
     with mock.patch.object(bootstrap, "needs_bootstrap", return_value=True), _patched(
@@ -269,7 +285,7 @@ def test_run_is_idempotent_and_never_redefines_refcats(tmp_path):
     assert (
         state["chains"]["refcats"][0] == "refcats/gaia_dr3/20261001"
     )  # Gaia run preserved
-    assert cmds.count("register-skymap") == 1  # re-attempted (warn on failure)
+    assert cmds.count("register-skymap") == 0  # already registered in skymaps
 
 
 def test_run_adds_monster_to_existing_refcats_chain_with_extend(tmp_path):
@@ -353,7 +369,8 @@ def test_register_skymap_warns_when_no_skymap_visible(tmp_path, caplog):
 
     refcat_repo, _ = _shards(tmp_path)
     cfg = _full_cfg(tmp_path, refcat_repo=refcat_repo)
-    fake = _Butler({"collections": set(), "chains": {}, "has_datasets": False})
+    # register-skymap "succeeds" but no skyMap lands: absent before and after.
+    fake = _Butler({"collections": set(), "chains": {}, "skymap_lands": False})
     with mock.patch.object(bootstrap, "needs_bootstrap", return_value=True), _patched(
         bootstrap, fake
     ):
@@ -365,11 +382,39 @@ def test_register_skymap_warns_when_no_skymap_visible(tmp_path, caplog):
     )
 
 
+def _initialized_state(**over):
+    """A fully-bootstrapped repo: MONSTER RUN, both chains, skyMap in skymaps."""
+    state = {
+        "collections": {
+            "refcats/the_monster_20250219_local",
+            "refcats",
+            "refcats/gaia_dr3/x",
+            "skymaps",
+            "skymaps/nickelRings",
+        },
+        "chains": {
+            "refcats": ["refcats/gaia_dr3/x", "refcats/the_monster_20250219_local"],
+            "skymaps/nickelRings": ["skymaps"],
+        },
+        "datasets": {"skymaps"},
+    }
+    state.update(over)
+    return state
+
+
+def _initialized_cfg(tmp_path):
+    refcat_repo, _ = _shards(tmp_path)
+    cfg = _full_cfg(tmp_path, refcat_repo=refcat_repo)
+    cfg.repo.mkdir(parents=True)
+    (cfg.repo / "butler.yaml").write_text("")
+    return cfg
+
+
 def test_initialized_repo_still_re_registers_instrument(tmp_path):
     from stips.core import bootstrap
 
-    cfg = _full_cfg(tmp_path, refcat_repo=None)
-    fake = _Butler({"collections": set(), "chains": {}})
+    cfg = _initialized_cfg(tmp_path)
+    fake = _Butler(_initialized_state())
     with mock.patch.object(bootstrap, "needs_bootstrap", return_value=False), _patched(
         bootstrap, fake
     ):
@@ -386,11 +431,65 @@ def test_initialized_repo_still_re_registers_instrument(tmp_path):
     )
 
 
+def test_rebootstrap_after_dropping_monster_run_reingests(tmp_path):
+    from stips.core import bootstrap
+
+    cfg = _initialized_cfg(tmp_path)
+    state = _initialized_state()
+    state["collections"].discard("refcats/the_monster_20250219_local")
+    state["chains"]["refcats"] = ["refcats/gaia_dr3/x"]
+    fake = _Butler(state)
+    with mock.patch.object(bootstrap, "needs_bootstrap", return_value=False), _patched(
+        bootstrap, fake
+    ):
+        res = bootstrap.run(cfg)
+    assert res.success and res.error is None
+    assert [c[0] for c in fake.calls] == [
+        "register-instrument",
+        "register-dataset-type",
+        "ingest-files",
+        "collection-chain",
+    ]
+    assert fake.calls[-1] == [
+        "collection-chain",
+        str(cfg.repo),
+        "refcats",
+        "--mode",
+        "extend",
+        "refcats/the_monster_20250219_local",
+    ]
+    assert state["chains"]["refcats"] == [
+        "refcats/gaia_dr3/x",
+        "refcats/the_monster_20250219_local",
+    ]
+
+
+def test_rebootstrap_with_missing_skymap_chain_recreates_it(tmp_path):
+    from stips.core import bootstrap
+
+    cfg = _initialized_cfg(tmp_path)
+    state = _initialized_state()
+    state["collections"].discard("skymaps/nickelRings")
+    del state["chains"]["skymaps/nickelRings"]
+    fake = _Butler(state)
+    with mock.patch.object(bootstrap, "needs_bootstrap", return_value=False), _patched(
+        bootstrap, fake
+    ):
+        res = bootstrap.run(cfg)
+    assert res.success
+    cmds = [c[0] for c in fake.calls]
+    assert "register-skymap" not in cmds
+    assert [c for c in fake.calls if c[0] == "collection-chain"] == [
+        ["collection-chain", str(cfg.repo), "skymaps/nickelRings", "skymaps"]
+    ]
+    assert state["chains"]["skymaps/nickelRings"] == ["skymaps"]
+
+
 def test_initialized_repo_re_register_failure_becomes_result_error(tmp_path):
     from stips.core import bootstrap
 
-    cfg = _full_cfg(tmp_path, refcat_repo=None)
-    fake = _Butler({"collections": set(), "chains": {}})
+    cfg = _initialized_cfg(tmp_path)
+    fake = _Butler(_initialized_state())
 
     def boom(args, config, **kw):
         raise subprocess.CalledProcessError(3, ["butler", *args])

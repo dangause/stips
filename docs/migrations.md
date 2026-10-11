@@ -7,10 +7,20 @@ Butler repositories or existing instrument forks. Newest first.
 
 `stips bootstrap` (and the bootstrap step of `stips run`) no longer shells out
 to `scripts/pipeline/00_bootstrap_repo.sh`; `stips.core.bootstrap` does the same
-work through `butler` with one change in behaviour: the `refcats` chain is
-**extended**, never redefined, so re-running bootstrap on a repo keeps the
-Gaia DR3 / PS1 runs fetched by `stips refcat fetch`. Failures now surface as
-the command's exit status and `logs/<RUN_ID>/bootstrap/bootstrap.log`.
+work through `butler`, with three changes in behaviour:
+
+- The `refcats` chain is **extended**, never redefined, so re-running
+  bootstrap on a repo keeps the Gaia DR3 / PS1 runs fetched by
+  `stips refcat fetch`.
+- The skymap chain (the profile's `skymap_collection`) is created or
+  extended with the `skymaps` run, never redefined.
+- `stips bootstrap` on an initialized repo re-runs every idempotent step: it
+  re-registers the instrument with `register-instrument --update` and
+  re-ingests MONSTER if its `refcats/the_monster_20250219_local` run was
+  removed. Steps whose result already exists are skipped.
+
+Failures now surface as the command's exit status and
+`logs/<RUN_ID>/bootstrap/bootstrap.log`.
 
 The Makefile and the container entrypoint stopped reading `.env` files. Export
 `STACK_DIR` (and optionally `INSTRUMENT_DIR`) for `make test` / `make notebook`;

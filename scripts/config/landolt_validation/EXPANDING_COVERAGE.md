@@ -85,9 +85,10 @@ butler remove-runs $REPO refcats/the_monster_20250219_local --no-confirm --force
 Leave the `refcats` chain in place: bootstrap extends it with the re-ingested
 run and never redefines it, so any Gaia/PS1 runs already in the chain survive.
 
-Then re-bootstrap. Bootstrap is idempotent: it rebuilds the stale
-`filename_to_htm.ecsv` map, re-ingests the shards, and leaves calibs and
-science collections untouched:
+Then run `stips bootstrap` again. Bootstrap is idempotent and runs every step
+on an initialized repo: it re-ingests the shards (building a fresh
+`filename_to_htm.ecsv` map), re-links the RUN into the `refcats` chain, and
+leaves calibs and science collections untouched:
 
 ```bash
 stips -c scripts/config/landolt_validation/pipeline_landolt.yaml bootstrap

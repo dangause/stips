@@ -214,15 +214,22 @@ def ingest_monster(config: Config, log_file: Path | None = None) -> None:
             f"{MONSTER_SHARD_GLOB}); see docs/reference-catalogs.md"
         )
     repo = str(config.repo)
-    _butler(
-        ["register-dataset-type", repo, MONSTER_DATASET_TYPE, "SimpleCatalog", "htm7"],
-        config,
-        log_file,
-        check=False,
-    )
     if butler_query.collection_exists(config, MONSTER_RUN):
+        # The RUN holds datasets of this type, so the type is registered too.
         log.info("MONSTER RUN already present: %s", MONSTER_RUN)
     else:
+        _butler(
+            [
+                "register-dataset-type",
+                repo,
+                MONSTER_DATASET_TYPE,
+                "SimpleCatalog",
+                "htm7",
+            ],
+            config,
+            log_file,
+            check=False,
+        )
         ecsv = ensure_monster_map(shard_dir)
         log.info("Ingesting MONSTER -> %s", MONSTER_RUN)
         _butler(
@@ -263,10 +270,16 @@ def _ensure_chain_member(
 def register_skymap(config: Config, log_file: Path | None = None) -> None:
     """Register the profile's skymap and chain its RUN under the skymap collection.
 
-    A non-zero ``register-skymap`` is a warning (already registered, or a
-    config error the sanity query below surfaces).
+    Quiet on re-run: when the ``skymaps`` RUN already holds a ``skyMap`` the
+    registration is skipped and only the chain membership is ensured. A
+    non-zero ``register-skymap`` is a warning (a config error the sanity query
+    below surfaces).
     """
     prof = config.require_profile()
+    if butler_query.has_datasets(config, "skyMap", SKYMAP_RUN):
+        log.info("SkyMap already registered in %s", SKYMAP_RUN)
+        _ensure_chain_member(config, prof.skymap_collection, SKYMAP_RUN, log_file)
+        return
     cfg_path = config.resolve_config("makeSkyMap.py")
     log.info("Registering SkyMap %r (config: %s)", prof.skymap_name, cfg_path)
     proc = _butler(
@@ -284,7 +297,7 @@ def register_skymap(config: Config, log_file: Path | None = None) -> None:
     )
     if proc.returncode != 0:
         log.warning(
-            "register-skymap exited %s (already registered, or a config error); see %s",
+            "register-skymap exited %s; see %s",
             proc.returncode,
             log_file or "the butler output",
         )
@@ -307,40 +320,29 @@ def run(
     log_file: Path | None = None,
     require_monster: bool = True,
 ) -> BootstrapResult:
-    """Bootstrap a Butler repository (idempotent).
+    """Bootstrap a Butler repository.
 
     Order: create repo -> register instrument -> ingest MONSTER -> register
     skymap. A failing step stops the run and is reported in
     ``BootstrapResult.error``; the per-step flags record how far it got.
 
-    On an already-initialized repo (``needs_bootstrap`` is False) only the
-    instrument is re-registered (``register-instrument --update``): that is
-    how ``stips bootstrap`` adds the active instrument to a shared repo or
-    migrates a legacy class name, as ``ensure_instrument_registered``'s error
-    messages advise. A failure there is reported in ``BootstrapResult.error``.
+    Idempotent: safe to re-run on an initialized repo; each step skips what
+    already exists (ingest when the MONSTER RUN is present, chain members
+    already linked, a registered skymap) and always re-registers the
+    instrument with ``--update``. That is how ``stips bootstrap`` adds the
+    active instrument to a shared repo, migrates a legacy class name (as
+    ``ensure_instrument_registered``'s error messages advise), or re-ingests
+    MONSTER after its RUN was removed.
 
     ``require_monster`` is the policy knob for the MONSTER step; today it is
     always required (the Gaia/PS1 path still needs the ``refcats`` chain that
     this step creates).
     """
     result = BootstrapResult(success=False)
-    if not needs_bootstrap(config):
-        log.info("Repository already initialized: %s", config.repo)
-        if dry_run:
-            log.info("[DRY RUN] Would re-register the instrument")
-            return BootstrapResult(True, None, True, True, True, True)
-        try:
-            register_instrument(config, log_file)
-        except BootstrapError as exc:
-            log.error("Bootstrap failed: %s", exc)
-            return BootstrapResult(False, str(exc), True, False, True, True)
-        except Exception as exc:  # e.g. stack activation
-            log.exception("Bootstrap failed unexpectedly")
-            return BootstrapResult(
-                False, f"Bootstrap failed: {exc}", True, False, True, True
-            )
-        return BootstrapResult(True, None, True, True, True, True)
-    log.info("Bootstrapping repository: %s", config.repo)
+    if needs_bootstrap(config):
+        log.info("Bootstrapping repository: %s", config.repo)
+    else:
+        log.info("Repository already initialized; verifying: %s", config.repo)
     if dry_run:
         log.info(
             "[DRY RUN] Would create the repo, register the instrument, "
