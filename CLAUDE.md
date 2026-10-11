@@ -29,26 +29,33 @@ tracks `w_latest`. Before bumping the stack, follow
 ## Architecture: framework + declarative instrument
 
 The framework is **two packages** plus **declarative instrument directories**.
-A telescope is *not* a code package — it is a directory loaded by path.
+A telescope is *not* a code package — it is a directory `instruments/<name>/`
+imported by name (`instruments` is an implicit namespace package).
 
 - **`packages/stips`** — the `stips` CLI, pipeline tooling, framework-core, and
   the profile *types* (`InstrumentProfile`, `Site`, `Field`, `hook`,
-  `CollectionNames`). It loads the active instrument's `profile.py` **by path**
-  from the `INSTRUMENT_DIR` env var and drives all collection names, Butler
+  `CollectionNames`). It imports the active instrument's profile **by name**
+  (`instruments.<name>.profile`, via `stips.profile.import_profile`) for the
+  dir `INSTRUMENT_DIR` names, and drives all collection names, Butler
   queries, and skymap behavior from that profile.
 - **`packages/obs_stips`** — generic, instrument-neutral LSST glue
   (`lsst.obs.stips`). It *synthesizes* a concrete, registerable LSST
   instrument/translator/raw-formatter from the profile at import time. Butler
-  registers the fixed class `lsst.obs.stips.active.Instrument` for **every**
-  instrument (the instrument is re-resolved from `INSTRUMENT_DIR` on each
-  import). Also ships the shared PipelineTasks (`lsst.obs.stips.tasks.*`) and
-  the reference pipelines/configs (`instrument_defaults/`).
+  registers `instruments.<name>.instrument.Instrument` for each instrument: a
+  three-line nameplate `instrument.py` in the instrument dir calls
+  `lsst.obs.stips.binding.bind`, so the stored class name identifies the
+  instrument on its own (several can share a repo). `lsst.obs.stips.active`
+  survives only as a shim for raws ingested before this layout. Also ships
+  the shared PipelineTasks (`lsst.obs.stips.tasks.*`) and the reference
+  pipelines/configs (`instrument_defaults/`).
 - **`instruments/<name>/`** — a declarative profile directory: a `profile.py`
-  (one `InstrumentProfile(...)` plus a handful of `@hook` quirk functions), a
-  camera geometry (a `camera/<name>.yaml` or an in-memory `CameraSpec`), an
-  optional `fetch.py` data-fetch hook, and *optional* `pipelines/`/`configs/`
+  (one `InstrumentProfile(...)` plus a handful of `@hook` quirk functions), the
+  `instrument.py` nameplate (copied verbatim), a camera geometry (a
+  `camera/<name>.yaml` or an in-memory `CameraSpec`), an optional `fetch.py`
+  data-fetch hook, and *optional* `pipelines/`/`configs/`
   override dirs. `instruments/nickel/` is the reference profile;
-  `instruments/ctio1m/` is the second instrument.
+  `instruments/ctio1m/` is the second instrument, and `instruments/ctio1m_bin2/`
+  its 2×2-binned variant.
 
 **No `INSTRUMENT_PACKAGE`, no `obs_nickel` package, no `.env`/`-p` profiles.**
 The old package-based instrument selection is gone. `INSTRUMENT_PACKAGE` in a
@@ -85,7 +92,8 @@ stips/
 │   │   ├── colorterms/      # Color-term fitting (stips-colorterms-fit)
 │   │   ├── tuning/          # Pipeline-tuning utilities (stips-tune-calibrate-image)
 │   │   └── vendor/lick_searchable_archive/  # Vendored Lick archive (client used by fetch.py)
-│   └── ctio1m/              # CTIO 1.0m / Y4KCam (4-amp camera, configs/, tests/)
+│   ├── ctio1m/              # CTIO 1.0m / Y4KCam (4-amp camera, configs/, tests/)
+│   └── ctio1m_bin2/         # 2x2-binned Y4KCam: replace() of the ctio1m profile; camera/, configs/ symlinked
 ├── scripts/
 │   ├── config/             # Per-target YAML configs (2023ixf, 2020wnt, ctio1m, ...)
 │   ├── pipeline/           # Bootstrap shell script (delegated to via run_with_stack)
@@ -106,8 +114,9 @@ console scripts (`stips-dia-lightcurve`, `stips-eda-butler`, `stips-skymap-make`
 
 **Core modules (`stips.core.*`):**
 - `config` — Loads config from a YAML `env:` block (the SOLE config source);
-  `load_active_profile()` imports the active instrument profile by path from
-  `INSTRUMENT_DIR`. Rejects the removed `INSTRUMENT_PACKAGE` key.
+  `load_active_profile()` imports the active instrument profile by name for the
+  `INSTRUMENT_DIR` dir (delegates to `stips.profile.import_profile`). Rejects
+  the removed `INSTRUMENT_PACKAGE` and `CCD_BINNING` keys.
 - `stack` — LSST stack activation and command execution (`run_with_stack()`).
 - `calibs` — Nightly calibration processing (bias, flat, defects).
 - `crosstalk` — Measure/certify intra-detector crosstalk (multi-amp cameras).
@@ -123,21 +132,24 @@ console scripts (`stips-dia-lightcurve`, `stips-eda-butler`, `stips-skymap-make`
 - `run` — YAML-driven full-pipeline orchestration.
 - `bps` — HPC batch submission (Slurm / HTCondor / local Parsl).
 - `pipeline` — Shared utilities: re-exports `CollectionNames`; coordinate/data
-  validation (`find_bad_coord_exposures()`).
+  validation (`find_bad_coord_exposures()`); the registration guard
+  `ensure_instrument_registered()` (registers a fresh repo, migrates a legacy
+  `lsst.obs.stips.active.Instrument` record with `register-instrument --update`,
+  refuses a repo that holds only other instruments).
 - `dataset_types` — Central Butler dataset-type name constants (e.g.
   `difference_image`, `forced_phot_diffim_radec`), so a stack rename is one edit.
 
 - `stips.collections` — `CollectionNames(night, run_ts, *, prefix)` builds
   standard collection names parameterized by the profile's `collection_prefix`.
 - `stips.profile` — `InstrumentProfile` dataclass and `Site`/`Field`/`CameraSpec`/
-  `CrosstalkSpec`/`hook` framework types.
+  `CrosstalkSpec`/`hook` framework types; the by-name loader `import_profile()`.
 
 ### packages/obs_stips
 
 Generic, instrument-neutral LSST glue shared by all instruments (translator/
-formatter/instrument base classes, the `active` synthesizer that binds a profile
-onto them, the shared PipelineTasks, and the reference `instrument_defaults/`
-pipelines & configs). Instrument profiles build on top of this.
+formatter/instrument base classes, the `binding.bind()` that binds a profile
+onto them (called by each instrument's nameplate), the shared PipelineTasks,
+and the reference `instrument_defaults/` pipelines & configs). Instrument profiles build on top of this.
 
 **Key framework-default pipeline files** (`packages/obs_stips/instrument_defaults/pipelines/`):
 - `DRP.yaml` — Data-release pipeline (ISR, calibration, coaddition); includes the
@@ -176,7 +188,6 @@ env:
   RAW_PARENT_DIR: /path/to/raw/data                    # contains YYYYMMDD/raw/
   REFCAT_REPO: /path/to/refcats                        # optional
   CP_PIPE_DIR: "${STACK_DIR}/cp_pipe"                  # optional; ${VAR} expands within env:
-  # CCD_BINNING: 2                                     # optional; scale camera for 2x2 raws (default 1)
 ```
 
 ### Required config keys
@@ -194,9 +205,11 @@ env:
 |-----|-------------|
 | `REFCAT_REPO` | Path to reference catalog repository |
 | `CP_PIPE_DIR` | Path to cp_pipe (auto-discovered from the stack if unset) |
-| `CCD_BINNING` | On-chip binning factor; scales camera geometry (default 1 = unbinned) |
 | `LICK_ARCHIVE_DIR` | Path to the Lick archive client (Nickel `download`) |
 | `NOIRLAB_PROPOSAL` | Optional proposal-id filter for the CTIO NOIRLab `download` |
+
+Binning: `ccd_binning` in the profile (see `instruments/ctio1m_bin2/`); a
+`CCD_BINNING` config key is rejected.
 
 > `INSTRUMENT_PACKAGE`, `OBS_NICKEL`, and `.env`/`-p` profiles are **removed**.
 > A lingering `INSTRUMENT_PACKAGE` in `env:` raises an error telling you to set
@@ -247,10 +260,12 @@ All commands take the config via the group-level `stips -c <config.yaml>
 `stips` runs in its own venv and does not `import lsst`. LSST commands (pipetask,
 butler) are wrapped by `run_with_stack()` in `core/stack.py`, which:
 1. Sources the LSST stack loader (`loadLSST.bash`).
-2. Sets up `lsst_distrib` and `obs_stips`; exports `INSTRUMENT_DIR`,
-   `STIPS_DEFAULTS` (framework defaults dir), `STIPS_PS1_BAND_MAP` (the profile's
-   `ps1_band_map` as JSON, read by in-stack pex_config files that must not import
-   the profile — see Common Issues), and config values as env vars.
+2. Sets up `lsst_distrib` and `obs_stips`; puts `STIPS_INSTRUMENTS_ROOT` (the
+   dir containing `instruments/`) on `PYTHONPATH` so the stack imports
+   `instruments.<name>` by name; exports `INSTRUMENT_DIR` (for `configs/`
+   overrides and the in-stack refcat overlays' profile import),
+   `STIPS_INSTRUMENT_CLASS` (used by the bootstrap script), `STIPS_DEFAULTS`
+   (framework defaults dir), and config values as env vars.
 3. Runs the command in the activated environment.
 
 Where STIPS needs data *out* of the stack (Butler queries), it runs a small
@@ -331,8 +346,8 @@ stips --help                   # verify the CLI
 stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml env
 ```
 
-Instrument profiles under `instruments/` are loaded by path at runtime — there is
-no per-instrument package to install.
+Instrument profiles under `instruments/` are imported by name at runtime — there
+is no per-instrument package to install.
 
 ## YAML-Driven Pipeline Orchestration
 
@@ -419,8 +434,9 @@ stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml run
 1. **Python CLI over Makefile** — All pipeline operations go through the `stips`
    CLI; the Makefile is dev-tasks only (lint, test).
 2. **Declarative instrument profiles** — A telescope is a `instruments/<name>/`
-   directory loaded by path (`INSTRUMENT_DIR`), not a code package. `obs_stips`
-   synthesizes the LSST instrument from the profile at runtime.
+   directory imported by name (selected by `INSTRUMENT_DIR`), not a code package.
+   `obs_stips` synthesizes the LSST instrument from the profile at runtime; the
+   Butler class path `instruments.<name>.instrument.Instrument` is the identity.
 3. **Single-YAML config** — The `-c` YAML's `env:` block is the sole config
    source; the same file drives `stips run`.
 4. **Instrument-dir-first resolution** — Pipelines/configs resolve from the
@@ -571,9 +587,12 @@ The installed stack uses specific field names that may differ from docs:
 ### Instrument fork gotchas
 See `docs/forking-stips.md`. Common ones: `night_to_dayobs_offset_days` must be
 verified by ingesting a frame (not assumed); disable ISR steps whose curated
-calibs you don't ship via `isr_overrides` (e.g. `{"doDefect": False}`); keep
-`instrument_class="lsst.obs.stips.active.Instrument"` (the generic synthesized
-class, same for every fork).
+calibs you don't ship via `isr_overrides` (e.g. `{"doDefect": False}`); add
+`instrument.py` verbatim; `from .fetch import`; `ccd_binning`/`binning_header`
+for binned readouts (separate dir). `stips` puts the configured instrument's
+root on `PYTHONPATH` automatically, in-tree or not; add `<root>` yourself
+only for stack commands run outside `stips`, or when a shared repo also
+holds an instrument from another root.
 
 ## File Locations
 
@@ -585,9 +604,12 @@ class, same for every fork).
 - Instrument profile dataclass: `packages/stips/src/stips/profile.py`
 - Reference profile object: `instruments/nickel/profile.py`
 - Second instrument profile: `instruments/ctio1m/profile.py`
+- Binned variant instrument: `instruments/ctio1m_bin2/` (example config `scripts/config/ctio1m/pipeline_bin2_e2.yaml`)
 - Pipeline tools (`stips-*`): `packages/stips/src/stips/pipeline_tools/`
 - PS1 ingestion: `packages/stips/src/stips/pipeline_tools/ingest_ps1_template.py`
 - Generic LSST glue: `packages/obs_stips/python/lsst/obs/stips/`
+- Profile binding (nameplate target): `packages/obs_stips/python/lsst/obs/stips/binding.py`
+- Migration notes: `docs/migrations.md`
 - Framework default pipelines: `packages/obs_stips/instrument_defaults/pipelines/` (DRP.yaml, DIA.yaml, ForcedPhotRaDec.yaml, ...)
 - Framework default configs: `packages/obs_stips/instrument_defaults/configs/` (dia/, coadds/, neutral colorterms/filter_map; tiering contract in `instrument_defaults/README.md`)
 - Nickel-fitted science configs: `instruments/nickel/configs/` (colorterms.py, calibrateImage/tuned_configs/, refcats_gaia_ps1.py)

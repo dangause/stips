@@ -10,14 +10,18 @@ this coverage by dropping in the directory — no test code to copy.
 
 1. **`instruments/<name>/profile.py`** exposing a module-level
    `InstrumentProfile` object named `profile`. The profile contract asserts:
-   - `name`, `policy_name`, `collection_prefix`, `instrument_class`,
-     `filter_key` are set; `filters` and `header_map` are non-empty;
+   - `name`, `policy_name`, `collection_prefix`, `filter_key` are set; `filters` and `header_map` are non-empty;
    - the `Site` lat/lon/elevation are physically plausible;
    - `profile.camera` resolves (a `CameraSpec`, or a yaml path that exists
      under the instrument dir);
    - if the instrument ships `fetch.py`, `profile.fetch_data` is wired.
 
-2. **`instruments/<name>/tests/contract_data.py`** — a small fixtures module
+2. **`instruments/<name>/instrument.py`**, the three-line nameplate
+   (`bind(__name__)`), and `profile.py` importing co-located modules
+   relatively (`from .fetch import fetch_data`). The profile is imported by
+   name as `instruments.<name>.profile`, so a bare `from fetch import` fails.
+
+3. **`instruments/<name>/tests/contract_data.py`** — a small fixtures module
    (loaded by path with a unique per-instrument module name, so the identical
    basename across instruments cannot collide) exporting:
 
@@ -37,7 +41,7 @@ this coverage by dropping in the directory — no test code to copy.
    `tracking_radec` (an `(ra_deg, dec_deg)` tuple, 0.01 deg tolerance),
    `datetime_begin_mjd`, `datetime_end_mjd` (1e-6 day tolerance).
 
-3. **Optional assets** — each enables further contracts; missing ones skip
+4. **Optional assets** — each enables further contracts; missing ones skip
    with a reason instead of failing:
    - `fetch.py` → fetch status contract (`fetch_data` returns
      `ok`/`not_found`/`failed`; mocked backend, network-free);
@@ -50,6 +54,9 @@ this coverage by dropping in the directory — no test code to copy.
 Stack-free (run in the plain `uv sync` venv):
 
 - **profile** — required fields populated, filters non-empty, site sane.
+- **nameplate** — `instrument.py` exists (`InstrumentDirInfo.has_nameplate`)
+  and calls `bind(__name__)`.
+- **relative imports** — `profile.py` has no bare `from fetch import`.
 - **exposure-id scheme** — positive, fits in 31 bits, `visit_id ==
   exposure_id`, low digits encode the sequence number, monotonic in seq. The
   reference scheme (`days_since_2000 * 10000 + seq`) is provided by
@@ -67,7 +74,10 @@ Stack-free (run in the plain `uv sync` venv):
 Stack-dependent (skip in a plain venv; run under `scripts/with-stack.sh`, e.g.
 via `tox`):
 
-- **camera assembly** — `lsst.obs.stips.active.Instrument().getCamera()`
+- **nameplate binds** — `bound_instrument(dir)` imports the nameplate module
+  `instruments.<name>.instrument`; its `Instrument` reports `profile.name` and
+  its Butler class path is `instruments.<name>.instrument.Instrument`.
+- **camera assembly** — `instruments.<name>.instrument.Instrument().getCamera()`
   yields the pinned detector/amplifier counts.
 - **translator synthesis** — the generic `StipsTranslator` bound to the
   profile reproduces the pinned ids/types through the real `to_*` surface.
@@ -79,7 +89,7 @@ coordinate reconciliation and golden translation-parity gate
 (`test_translation_golden.py`), ctio1m's NOIRLab `_funpack`/find-night backend
 tests and measured-crosstalk pins, each side's env-key→kwarg forwarding.
 Import shared helpers explicitly from `stips.testing.instrument_contract`
-(`active_instrument_dir`, `load_fetch`, `FetchConfigStub`, ...) — never from a
+(`bound_instrument`, `load_fetch`, `FetchConfigStub`, ...) — never from a
 `conftest.py` (bare `conftest` imports collide across test dirs).
 
 ## Future work (deferred)

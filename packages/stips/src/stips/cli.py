@@ -250,6 +250,9 @@ def env(ctx: click.Context, config: cfg_module.Config) -> None:
     click.echo(f"{'STACK_DIR:':<20} {config.stack_dir}")
     click.echo(f"{'INSTRUMENT_DIR:':<20} {config.instrument_dir}")
     click.echo(f"{'RAW_PARENT_DIR:':<20} {config.raw_parent_dir}")
+    if config.profile is not None:
+        click.echo(f"\n{'Instrument:':<20} {config.profile.name}")
+        click.echo(f"{'Class:':<20} {config.instrument_class}")
 
     if config.cp_pipe_dir:
         click.echo(f"{'CP_PIPE_DIR:':<20} {config.cp_pipe_dir}")
@@ -272,6 +275,23 @@ def env(ctx: click.Context, config: cfg_module.Config) -> None:
 
     if check_stack(config):
         click.echo(click.style(" ✓ available", fg="green"))
+        if (config.repo / "butler.yaml").is_file():
+            from stips.core import butler_query
+            from stips.profile import LEGACY_INSTRUMENT_CLASS
+
+            registered = butler_query.list_instruments(config)
+            click.echo("\nRegistered instruments:")
+            if registered is None:
+                click.echo("  (could not query the registry; see the stack log above)")
+            elif not registered:
+                click.echo("  (none; run `stips bootstrap`)")
+            for name, cls in sorted((registered or {}).items()):
+                note = (
+                    "  <- legacy; migrates on the next step"
+                    if cls == LEGACY_INSTRUMENT_CLASS
+                    else ""
+                )
+                click.echo(f"  {name:<12} {cls}{note}")
     else:
         click.echo(click.style(" ✗ not accessible", fg="red"))
         click.echo("  Make sure LSST stack is installed at STACK_DIR")

@@ -21,9 +21,6 @@ is imported lazily inside the hooks.
 import logging
 import re
 
-# Safe to import at module load: fetch.py is stdlib-only at import time
-# (urllib/json); the NOIRLab archive is hit only when fetch_data() runs.
-from fetch import fetch_data as _fetch_data
 from stips import (
     CrosstalkSpec,
     Field,
@@ -33,6 +30,10 @@ from stips import (
     hook,
     pack_exposure_id,
 )
+
+# Safe to import at module load: fetch.py is stdlib-only at import time
+# (urllib/json); the NOIRLab archive is hit only when fetch_data() runs.
+from .fetch import fetch_data as _fetch_data
 
 log = logging.getLogger("lsst.obs.stips.ctio1m.profile")
 
@@ -88,6 +89,10 @@ profile = InstrumentProfile(
     fov_arcmin=20.0,
     # FITS INSTRUME is "Y4KCam" (the camera), not the instrument name "CTIO1m".
     instrument_header_value="Y4KCam",
+    # Y4KCam was used unbinned and 2x2-binned; CCDSUM ("1 1" / "2 2") tells the
+    # translator which. This profile is the unbinned camera (ccd_binning=1);
+    # binned data is the separate instrument instruments/ctio1m_bin2/.
+    binning_header="CCDSUM",
     header_map={
         "exposure_time": Field("EXPTIME", unit="s", default=0.0),
         "dark_time": Field("DARKTIME", unit="s", default=0.0),
@@ -108,7 +113,6 @@ profile = InstrumentProfile(
     # NOIRLab Astro Data Archive fetch (stips download); see fetch.py.
     fetch_data=_fetch_data,
     camera="camera/y4kcam.yaml",
-    instrument_class="lsst.obs.stips.active.Instrument",
     # The Butler ``day_obs`` dimension is derived by astro_metadata_translator's
     # ``to_observing_day`` from the UT exposure datetime (NOT the profile's
     # ``day_obs`` hook / DTCALDAT, which only feeds ``observation_id``). CTIO is

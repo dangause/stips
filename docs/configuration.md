@@ -20,17 +20,20 @@ has many more.
 |---|---|---|
 | `REPO` | yes | Butler repository; created by the first run |
 | `STACK_DIR` | yes | Rubin stack installation: the directory containing `loadLSST.sh` |
-| `INSTRUMENT_DIR` | yes | Instrument profile directory, containing `profile.py` |
+| `INSTRUMENT_DIR` | yes | Instrument directory `instruments/<name>/`, containing `profile.py` and `instrument.py` |
 | `RAW_PARENT_DIR` | yes | Raw data, as `<night>/raw/*.fits` |
 | `REFCAT_REPO` | for bootstrap | MONSTER shard directory; see {doc}`reference-catalogs` |
 | `CP_PIPE_DIR` | no | `cp_pipe` location; found from the stack if unset |
-| `CCD_BINNING` | no | On-chip binning factor of the raws, such as `2`; default `1` |
 | `LICK_ARCHIVE_DIR` | Nickel `download` | The Lick archive client, normally `instruments/nickel/vendor/lick_searchable_archive` |
 | `NOIRLAB_PROPOSAL` | no | Restrict CTIO `download` to one proposal ID |
 
 Values can refer to other keys in the block, as in
 `CP_PIPE_DIR: "${STACK_DIR}/cp_pipe"`. The old `INSTRUMENT_PACKAGE` key is
 rejected with a message to use `INSTRUMENT_DIR`.
+
+On-chip binning is a profile field (`ccd_binning`), not a config key; binned
+data is its own instrument dir (see `instruments/ctio1m_bin2/`). A leftover
+`CCD_BINNING` key is rejected with a message.
 
 ## Target
 

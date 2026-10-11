@@ -4,6 +4,31 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
 
 ## [Unreleased]
 
+### Added
+- `InstrumentProfile.ccd_binning` and `binning_header`; the translator claims
+  only raws whose binning matches. `instruments/ctio1m_bin2/` is the 2×2-binned
+  Y4KCam instrument.
+
+### Changed
+- Every instrument registers under its own Butler class path,
+  `instruments.<name>.instrument.Instrument`, from a three-line nameplate
+  `instrument.py` in the instrument dir; the stored `class_name` now identifies
+  the instrument on its own and several instruments can share a repo. Existing
+  repos migrate on their next `calibs`/`science`/`dia`/`coadd`/`measure-crosstalk`
+  step or `stips bootstrap` (`register-instrument --update`); `fphot`,
+  `lightcurve`, `ps1-template` and `clean` do not migrate a repo but keep
+  working through the `lsst.obs.stips.active` shim, which stays. (#59)
+- Profiles are imported by name (`instruments.<name>.profile`) by one loader,
+  `stips.profile.import_profile`; `profile.py` imports `fetch` relatively.
+- `stips` refuses to run a step against a repo that holds other instruments
+  than the configured one, and `stips env` lists the registered instruments.
+
+### Removed
+- `InstrumentProfile.instrument_class` (derived from the directory name),
+  the `CCD_BINNING` config key (rejected with a message), the
+  `STIPS_PS1_BAND_MAP` env export, `lsst.obs.stips.profile_loader`, and the
+  `instrument:` line in `ForcedPhotRaDec.yaml`.
+
 ## [2.3.0] — 2026-10-09
 
 A documentation site (<https://stips-lsst.readthedocs.io>), and fixes for

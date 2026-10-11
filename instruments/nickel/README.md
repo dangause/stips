@@ -23,12 +23,16 @@ A telescope is defined entirely by the files in this directory:
 
 Point `INSTRUMENT_DIR` at this directory (typically via the `env:` block of a
 `stips -c <config.yaml>`); the framework loads `profile.py` by path and Butler
-registers `lsst.obs.stips.active.Instrument` (which resolves to "Nickel"):
+registers `instruments.nickel.instrument.Instrument` (the `instrument.py` nameplate,
+which binds this profile — "Nickel"):
 
 ```bash
 export INSTRUMENT_DIR=/path/to/stips/instruments/nickel
-butler register-instrument <repo> lsst.obs.stips.active.Instrument
+butler register-instrument <repo> instruments.nickel.instrument.Instrument
 ```
+
+A hand-run `butler` command needs a stack shell with `setup -r packages/obs_stips obs_stips`
+and `PYTHONPATH=<root>:<root>/packages/stips/src` set (see `docs/migrations.md`).
 
 Curated calibrations (defects/crosstalk) come from the co-located
 `obs_nickel_data` EUPS data package (`instruments/nickel/obs_nickel_data`),

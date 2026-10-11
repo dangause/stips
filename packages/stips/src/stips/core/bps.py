@@ -27,6 +27,7 @@ from typing import TYPE_CHECKING
 from stips.collections import template_ps1
 from stips.core.config import resolve_data_package_dir
 from stips.core.query import butler_str_literal
+from stips.profile import instruments_root
 
 if TYPE_CHECKING:
     from stips.core.config import Config
@@ -244,12 +245,14 @@ def render_bps_config(
         "repo": str(config.repo),
         "night": bps_cfg.night,
         "timestamp": timestamp,
-        # STIPS framework: the instrument is declarative (loaded by path from
-        # INSTRUMENT_DIR); LSST machinery lives in obs_stips + stips (src-layout).
+        # STIPS framework: the instrument is imported by name
+        # (instruments.<name>); the repo root is on PYTHONPATH. LSST machinery
+        # lives in obs_stips + stips (src-layout).
         "instrument_dir": str(config.instrument_dir),
         "obs_stips_dir": str(_PACKAGES_DIR / "obs_stips"),
         "stips_defaults": str(_PACKAGES_DIR / "obs_stips" / "instrument_defaults"),
         "stips_src": str(_PACKAGES_DIR / "stips" / "src"),
+        "instruments_root": str(instruments_root(config.instrument_dir)),
         "obs_data_package": prof.obs_data_package or "",
         # Resolve the data-package dir with the shared precedence (explicit
         # package_dir, co-located under the instrument dir, or the reference

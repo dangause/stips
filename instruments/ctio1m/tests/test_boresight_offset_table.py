@@ -5,42 +5,18 @@ now rows in _BORESIGHT_OFFSET_TABLE, bounded to each campaign's measured nights.
 """
 
 import datetime as dt
-import importlib.util
-import sys as _sys
 from pathlib import Path
 
 import astropy.units as u
 import pytest
+from stips.profile import import_instrument_submodule
 from stips.testing.instrument_contract import InstrumentDirInfo, load_profile
 
-_INFO = InstrumentDirInfo(name="ctio1m", path=Path(__file__).resolve().parents[1])
-PROFILE = load_profile(_INFO)
-
-# Import the module under test directly for the pure table helpers.
-# profile.py does `from fetch import fetch_data`, which only resolves if the
-# instrument dir is on sys.path -- and that import caches ctio1m's fetch.py
-# under the bare sys.modules["fetch"] key. Mirror load_profile()'s full
-# handling (packages/stips/src/stips/testing/instrument_contract.py): save +
-# restore BOTH sys.path and sys.modules["fetch"], so this load leaves no
-# global state behind (nickel/profile.py has the same bare `from fetch
-# import`, so a leaked sys.modules["fetch"] could silently resolve to the
-# wrong instrument's fetch module later in the same pytest process).
 _CTIO_DIR = Path(__file__).resolve().parents[1]
-_saved_path = list(_sys.path)
-_saved_fetch = _sys.modules.get("fetch")
-try:
-    _sys.path.insert(0, str(_CTIO_DIR))
-    _SPEC = importlib.util.spec_from_file_location(
-        "ctio_profile", _CTIO_DIR / "profile.py"
-    )
-    prof_mod = importlib.util.module_from_spec(_SPEC)
-    _SPEC.loader.exec_module(prof_mod)
-finally:
-    _sys.path[:] = _saved_path
-    if _saved_fetch is not None:
-        _sys.modules["fetch"] = _saved_fetch
-    else:
-        _sys.modules.pop("fetch", None)
+_INFO = InstrumentDirInfo(name="ctio1m", path=_CTIO_DIR)
+PROFILE = load_profile(_INFO)
+# The module under test, imported by name like everything else in the dir.
+prof_mod = import_instrument_submodule(_CTIO_DIR, "profile")
 
 _BASE = {"RA": "00:30:08.9", "DEC": "-46:31:22.8", "EQUINOX": 2000}
 

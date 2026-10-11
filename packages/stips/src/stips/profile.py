@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import importlib
+import keyword
+import sys
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Callable, Optional
 
 
@@ -100,6 +104,19 @@ class InstrumentProfile:
     # Either a path to a raw LSST camera/<name>.yaml, or a friendly CameraSpec
     # (obs_stips builds the afw Camera from a CameraSpec at runtime).
     camera: str | CameraSpec
+    # On-chip binning factor of the raws this profile describes (1 = unbinned,
+    # 2 = 2x2, ...). The camera geometry is scaled to match at build time
+    # (camera_builder.build_yaml_camera). Butler stores ONE geometry per
+    # instrument name, so binned data of a camera that is also used unbinned
+    # needs its own instrument dir with its own ``name`` (see
+    # docs/forking-stips.md, "Binned variants").
+    ccd_binning: int = 1
+    # FITS keyword carrying the on-chip binning, e.g. "CCDSUM" (value "1 1" or
+    # "2 2"). When set, the translator claims a file only if the header's
+    # binning equals ``ccd_binning``, so an unbinned profile and its binned
+    # variant never both match the same raw. A missing keyword reads as 1.
+    # None (default) skips the check.
+    binning_header: Optional[str] = None
     filter_key: str = "FILTNAM"
     # Substring matched (case-insensitive) against the FITS INSTRUME header to
     # decide whether this profile's translator handles a file. Defaults to
@@ -110,9 +127,6 @@ class InstrumentProfile:
     filter_aliases: dict[str, str] = field(default_factory=dict)
     const_map: dict[str, Any] = field(default_factory=dict)
     night_to_dayobs_offset_days: int = 1
-    # FQ instrument class path for butler register-instrument,
-    # e.g. "lsst.obs.stips.active.Instrument"
-    instrument_class: Optional[str] = None
     policy_name: Optional[str] = None
     collection_prefix: Optional[str] = None
     skymap_name: Optional[str] = None
@@ -160,11 +174,11 @@ class InstrumentProfile:
     # Landolt validator (no AB->Vega shift for bands already Vega).
     vega_bands: dict[str, tuple[str, ...]] = field(default_factory=dict)
     # Per-source external-template band policy: SOURCE NAME -> (LOCAL band ->
-    # that survey's band). Distinct from ``ps1_band_map`` above, which is
-    # ALSO consumed by the in-stack refcat configs via STIPS_PS1_BAND_MAP and
-    # therefore cannot be generalized away. For source "ps1" this field takes
-    # precedence when present and falls back to ``ps1_band_map`` when absent,
-    # so existing profiles keep working untouched.
+    # that survey's band). Distinct from ``ps1_band_map`` above, which the
+    # in-stack refcat configs also read (they import the profile by name).
+    # For source "ps1" this field takes precedence when present and falls
+    # back to ``ps1_band_map`` when absent, so existing profiles keep working
+    # untouched.
     #
     # Band names are NOT interchangeable across surveys: SkyMapper's "v" is a
     # ~384nm violet filter, not Johnson V (~551nm). Map deliberately.
@@ -191,6 +205,10 @@ class InstrumentProfile:
             self.policy_name = self.name
         if self.collection_prefix is None:
             self.collection_prefix = self.name
+        if int(self.ccd_binning) < 1:
+            raise ValueError(
+                f"ccd_binning must be >= 1 (1 = unbinned, 2 = 2x2 ...), got {self.ccd_binning!r}"
+            )
 
 
 def hook(profile: InstrumentProfile, name: Optional[str] = None) -> Callable:
@@ -286,3 +304,95 @@ def make_exposure_id(end_time: Any, seqnum: int) -> int:
     epoch0 = astropy.time.Time(EXPOSURE_ID_EPOCH, scale="utc")
     days = int((end_time - epoch0).to_value("day"))
     return pack_exposure_id(days, seqnum)
+
+
+# ---------------------------------------------------------------------------
+# Locating and importing an instrument directory
+#
+# An instrument lives at <root>/instruments/<name>/ and is imported BY NAME:
+# ``instruments.<name>.profile`` (the profile) and
+# ``instruments.<name>.instrument`` (the Butler-facing nameplate, see
+# lsst.obs.stips.binding). ``instruments`` is an implicit namespace package
+# (no __init__.py), so an out-of-tree fork with the same layout merges with the
+# in-tree instruments once its <root> is on sys.path / PYTHONPATH. The directory
+# name IS the identity: Butler stores ``instruments.<name>.instrument.Instrument``
+# and re-imports it with no environment variable in play.
+# ---------------------------------------------------------------------------
+
+INSTRUMENTS_PACKAGE = "instruments"
+#: Class path every repo registered before the by-name layout carries.
+LEGACY_INSTRUMENT_CLASS = "lsst.obs.stips.active.Instrument"
+
+
+def instrument_dir_name(instrument_dir: "str | Path") -> str:
+    """Validate an instrument dir's layout and return its name (the identity).
+
+    Raises ``FileNotFoundError`` if ``profile.py`` is absent and ``ValueError``
+    if the dir is not ``<root>/instruments/<name>/`` or ``<name>`` is not a
+    plain identifier (``lsst.utils.doImport`` / ``get_full_type_name`` need a
+    real dotted path, and leading-underscore components are stripped by the
+    latter).
+    """
+    d = Path(instrument_dir).expanduser()
+    if not (d / "profile.py").is_file():
+        raise FileNotFoundError(f"No profile.py in instrument dir: {d}")
+    d = d.resolve()
+    if d.parent.name != INSTRUMENTS_PACKAGE:
+        raise ValueError(
+            f"{d} is not an instruments/<name>/ directory: an instrument must "
+            f"live at <root>/{INSTRUMENTS_PACKAGE}/<name>/ so it can be imported by name"
+        )
+    name = d.name
+    if not name.isidentifier() or keyword.iskeyword(name) or name.startswith("_"):
+        raise ValueError(
+            f"instrument dir name {name!r} must be a Python identifier that does "
+            "not start with an underscore (it becomes the Butler class path)"
+        )
+    return name
+
+
+def instruments_root(instrument_dir: "str | Path") -> Path:
+    """The directory containing ``instruments/`` (what goes on PYTHONPATH)."""
+    instrument_dir_name(instrument_dir)
+    return Path(instrument_dir).expanduser().resolve().parent.parent
+
+
+def instrument_class_for(instrument_dir: "str | Path") -> str:
+    """Butler class path of the instrument in ``instrument_dir``."""
+    return f"{INSTRUMENTS_PACKAGE}.{instrument_dir_name(instrument_dir)}.instrument.Instrument"
+
+
+def import_instrument_submodule(instrument_dir: "str | Path", submodule: str):
+    """Import ``instruments.<name>.<submodule>`` for the given instrument dir.
+
+    Appends ``<root>`` to ``sys.path`` if absent (append, not insert, so nothing
+    in the instrument tree can shadow stdlib or installed packages).
+    """
+    name = instrument_dir_name(instrument_dir)
+    root = str(instruments_root(instrument_dir))
+    if root not in sys.path:
+        sys.path.append(root)
+    qualname = f"{INSTRUMENTS_PACKAGE}.{name}.{submodule}"
+    module = importlib.import_module(qualname)
+    # Importing by name means an earlier ``<other_root>/instruments/<name>`` on
+    # sys.path silently wins. Verify the module really came from instrument_dir.
+    got = Path(module.__file__).parent.resolve()
+    want = Path(instrument_dir).expanduser().resolve()
+    if got != want:
+        raise RuntimeError(
+            f"{qualname} resolved to {got} instead of {want}: another "
+            f"instruments/{name} is earlier on sys.path (entry {got.parent.parent}). "
+            "Remove that entry from sys.path/PYTHONPATH or rename one of the "
+            "instrument directories."
+        )
+    return module
+
+
+def import_profile(instrument_dir: "str | Path") -> "InstrumentProfile":
+    """Import and return the ``profile`` object of an instrument dir."""
+    return import_instrument_submodule(instrument_dir, "profile").profile
+
+
+def import_instrument_module(instrument_dir: "str | Path"):
+    """Import the nameplate ``instruments.<name>.instrument`` (needs the LSST stack)."""
+    return import_instrument_submodule(instrument_dir, "instrument")

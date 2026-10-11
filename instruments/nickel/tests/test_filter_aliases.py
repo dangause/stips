@@ -1,19 +1,17 @@
 """Lock the Nickel filter alias table (raw FITS FILTNAM -> physical_filter).
 
-Exercises the generic ``StipsTranslator`` synthesized from
-``INSTRUMENT_DIR=instruments/nickel`` (``lsst.obs.stips.active.Translator``).
-The alias golden values are unchanged from the legacy suite.
+Exercises the generic ``StipsTranslator`` bound to the Nickel profile through
+the nameplate ``instruments.nickel.instrument.Translator``. The alias golden
+values are unchanged from the legacy suite.
 """
 
-import importlib
-import os
 import unittest
 from pathlib import Path
 
 import pytest
 
-# The translator is synthesized from lsst.obs.stips.active, which requires the
-# LSST stack; skip cleanly in a plain venv.
+# The translator is bound through the nameplate, which requires the LSST
+# stack; skip cleanly in a plain venv.
 pytest.importorskip("lsst.daf.butler")
 
 # instruments/nickel/tests/test_filter_aliases.py -> parents[1] == instruments/nickel
@@ -21,10 +19,9 @@ _INSTRUMENT_DIR = str(Path(__file__).resolve().parents[1])
 
 
 def _load_translator():
-    os.environ["INSTRUMENT_DIR"] = _INSTRUMENT_DIR
-    import lsst.obs.stips.active as active
+    from stips.profile import import_instrument_module
 
-    return importlib.reload(active).Translator
+    return import_instrument_module(_INSTRUMENT_DIR).Translator
 
 
 NickelTranslator = _load_translator()

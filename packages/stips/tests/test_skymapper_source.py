@@ -74,13 +74,13 @@ def test_template_band_map_unknown_source_is_empty():
 
 def test_ctio1m_profile_excludes_skymapper_v_band():
     """SkyMapper v is a 384nm violet filter, NOT Johnson V (551nm)."""
-    # NOTE: this loader lives in lsst.obs.stips, NOT stips.core.config.
-    # lsst.obs.stips is an editable install and IS importable in the plain venv
-    # (only lsst.afw / lsst.daf.butler are absent). See test_config_yaml.py:248
-    # for the same import in an existing passing test.
-    from lsst.obs.stips.profile_loader import load_profile_from_dir
+    from pathlib import Path
 
-    prof = load_profile_from_dir("instruments/ctio1m")
+    from stips.core.config import load_active_profile
+
+    prof = load_active_profile(
+        Path(__file__).resolve().parents[3] / "instruments" / "ctio1m"
+    )
     sm = prof.template_band_maps.get("skymapper", {})
     assert sm == {"r": "r", "i": "i"}
     assert "v" not in sm

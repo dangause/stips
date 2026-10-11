@@ -4,10 +4,11 @@ Copy this directory and edit profile.py + camera/ for your telescope."""
 
 import logging
 
+from stips import Field, InstrumentProfile, Site, hook, make_exposure_id
+
 # Safe to import at module load: fetch.py is stdlib-only at import time
 # (the lick_archive client is lazy-imported inside the fetch implementation).
-from fetch import fetch_data as _fetch_data
-from stips import Field, InstrumentProfile, Site, hook, make_exposure_id
+from .fetch import fetch_data as _fetch_data
 
 log = logging.getLogger("lsst.obs.stips.nickel.profile")
 
@@ -96,7 +97,6 @@ profile = InstrumentProfile(
     },
     const_map={"boresight_rotation_angle": 0.0, "boresight_rotation_coord": "sky"},
     camera="camera/nickel.yaml",
-    instrument_class="lsst.obs.stips.active.Instrument",
     night_to_dayobs_offset_days=1,
     skymap_name="nickelRings-v1",
     skymap_collection="skymaps/nickelRings",

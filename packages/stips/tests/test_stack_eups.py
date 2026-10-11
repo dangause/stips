@@ -1,3 +1,4 @@
+import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -10,8 +11,19 @@ from stips.core.config import Config
 # test_stack_eups.py -> parents[3] == repo root.
 _NICKEL_DIR = Path(__file__).resolve().parents[3] / "instruments" / "nickel"
 
+# A minimal instruments/obs_demo/ dir: the setup script derives the PYTHONPATH
+# root and Butler class path from this layout, so it must hold a profile.py.
+_TMP = tempfile.TemporaryDirectory()
+_DEMO_DIR = Path(_TMP.name).resolve() / "instruments" / "obs_demo"
+_DEMO_DIR.mkdir(parents=True)
+(_DEMO_DIR / "profile.py").write_text("")
 
-def _config(data="obs_demo_data", instr="/tmp/pkgs/obs_demo"):
+
+def tearDownModule():
+    _TMP.cleanup()
+
+
+def _config(data="obs_demo_data", instr=str(_DEMO_DIR)):
     c = Config(
         repo=Path("/tmp/repo"),
         stack_dir=Path("/tmp/stack"),
@@ -31,7 +43,7 @@ def _config(data="obs_demo_data", instr="/tmp/pkgs/obs_demo"):
 
 class TestStackSetup(unittest.TestCase):
     def test_no_per_instrument_eups_setup(self):
-        # The instrument is declarative (profile.py loaded by path): there is no
+        # The instrument is imported by name (instruments.<name>): there is no
         # per-instrument EUPS product, so no `setup -r ... <eups>` instrument
         # line and no dynamic OBS_* export.
         with mock.patch.object(
@@ -40,7 +52,7 @@ class TestStackSetup(unittest.TestCase):
             return_value=Path("/tmp/stack/loadLSST.sh"),
         ):
             script, _env = stack_module._build_setup_script(_config())
-        self.assertNotIn('/tmp/pkgs/obs_demo" obs_demo', script)
+        self.assertNotIn(f'{_DEMO_DIR}" obs_demo', script)
         self.assertNotIn("export OBS_DEMO=", script)
 
     def test_data_package_from_profile(self):
@@ -62,7 +74,7 @@ class TestStackSetup(unittest.TestCase):
         ):
             script, env = stack_module._build_setup_script(_config())
         self.assertIn('export INSTRUMENT_DIR="$INSTRUMENT_DIR"', script)
-        self.assertEqual(env["INSTRUMENT_DIR"], "/tmp/pkgs/obs_demo")
+        self.assertEqual(env["INSTRUMENT_DIR"], str(_DEMO_DIR))
 
     def test_obs_stips_sibling_set_up(self):
         with mock.patch.object(

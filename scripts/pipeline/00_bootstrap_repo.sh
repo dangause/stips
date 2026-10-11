@@ -18,7 +18,6 @@ set +a
 source "$(dirname "$0")/../utilities/logging.sh"
 
 ########## ENVIRONMENT VARS ##########
-INSTRUMENT="lsst.obs.stips.active.Instrument"
 TS="$(date -u +%Y%m%dT%H%M%SZ)"
 
 # Setup logging (creates LOG_DIR and LOG_FILE)
@@ -44,9 +43,9 @@ else
   exit 1
 fi
 setup lsst_distrib
-# STIPS framework: the instrument is declarative (loaded by path from
-# INSTRUMENT_DIR); LSST machinery lives in obs_stips. Set it up from the repo
-# packages/ dir (this script lives at scripts/pipeline/, so ../../packages).
+# STIPS framework: the instrument is imported by name (instruments.<name>);
+# its root is on PYTHONPATH. LSST machinery lives in obs_stips. Set it up from
+# the repo packages/ dir (this script lives at scripts/pipeline/, so ../../packages).
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 OBS_STIPS_DIR="${OBS_STIPS_DIR:-$REPO_ROOT/packages/obs_stips}"
 if [ -d "$OBS_STIPS_DIR" ]; then
@@ -72,11 +71,18 @@ if [ -z "${STIPS_DATA_DIR:-}" ]; then
     done
   done
 fi
-# Re-sourcing loadLSST above can reset PYTHONPATH, dropping the src-layout
-# `stips` core package (NOT an EUPS product) that lsst.obs.stips.active imports
-# when register-instrument re-instantiates the instrument. Put it back, plus
-# obs_stips/python as belt-and-suspenders.
-export PYTHONPATH="$REPO_ROOT/packages/stips/src:$OBS_STIPS_DIR/python:${PYTHONPATH:-}"
+# STIPS_INSTRUMENT_CLASS is exported by `stips`/run_with_stack (derived from
+# INSTRUMENT_DIR). Standalone use (e.g. `make bootstrap`) derives the same
+# default here, now that REPO_ROOT/INSTRUMENT_DIR are both set.
+INSTRUMENT="${STIPS_INSTRUMENT_CLASS:-instruments.$(basename "${INSTRUMENT_DIR:-$REPO_ROOT/instruments/nickel}").instrument.Instrument}"
+# Re-sourcing loadLSST above can reset PYTHONPATH, dropping the instruments/
+# namespace package and the src-layout stips package that the instrument class
+# imports when register-instrument re-instantiates the instrument. Put them
+# back, plus obs_stips/python as belt-and-suspenders. The instruments root
+# comes from STIPS_INSTRUMENTS_ROOT (exported by `stips`), falling back to
+# this checkout, so an instrument living outside the STIPS checkout still
+# resolves.
+export PYTHONPATH="${STIPS_INSTRUMENTS_ROOT:-$REPO_ROOT}:$REPO_ROOT/packages/stips/src:$OBS_STIPS_DIR/python:${PYTHONPATH:-}"
 
 ########## REPO ##########
 log_section "Butler Repository Setup"
@@ -87,7 +93,12 @@ else
   log_info "Butler repository exists: $REPO"
 fi
 log_info "Registering instrument: $INSTRUMENT"
-butler register-instrument "$REPO" "$INSTRUMENT" || true
+if ! butler register-instrument --update "$REPO" "$INSTRUMENT"; then
+  log_error "Failed to register instrument $INSTRUMENT in $REPO"
+  log_error "The class must be importable from PYTHONPATH=$PYTHONPATH"
+  print_log_summary
+  exit 2
+fi
 
 ########## REF CATS (MONSTER AFW only) ##########
 log_section "Reference Catalogs Ingestion (MONSTER only)"

@@ -12,7 +12,7 @@
 
 - ✅ **Nickel 1-m** at Lick Observatory — reference implementation, used in active SN, exoplanet, and variable-star follow-up
 - ✅ **CTIO 1.0m / Y4KCam** — second instrument; validated end-to-end on archival standard-star data. Exercises the framework's **multi-amplifier camera** support (4-amp, central-cross overscan), **on-chip binning** (unbinned 4064² and 2×2-binned 2072²), **multi-band** B/V/R/I reductions, and a **NOIRLab Astro Data Archive** fetch hook.
-- ➕ **Other 1-m telescopes** — add one by dropping a declarative profile under `instruments/<name>/` (a `profile.py` + camera + hooks, loaded by path — no per-instrument LSST `obs_` package). The framework core and science pipelines work unchanged. See the [forking guide](docs/forking-stips.md).
+- ➕ **Other 1-m telescopes** — add one by dropping a declarative profile under `instruments/<name>/` (a `profile.py` + camera + hooks, imported by name — no per-instrument LSST `obs_` package). The framework core and science pipelines work unchanged. See the [forking guide](docs/forking-stips.md).
 
 **Documentation:** <https://stips-lsst.readthedocs.io>
 
@@ -50,7 +50,7 @@
 ## Quick Start
 
 ```bash
-# 1. Install the framework (stips + obs_stips); instruments load by path
+# 1. Install the framework (stips + obs_stips); instruments are imported by name
 uv sync --group dev
 
 # 2. Run a full pipeline from a YAML config (self-contained)
@@ -83,10 +83,10 @@ docker run -v /path/to/repo:/data/repo \
 ## Features
 
 ### Declarative instrument profiles (`instruments/<name>/`)
-- An instrument is a directory — a `profile.py` (camera, site, filters, header translation, ISR overrides, data-fetch hook), an optional camera YAML, and tuned configs — **loaded by path** via `INSTRUMENT_DIR`. No per-instrument LSST `obs_` package or EUPS product.
+- An instrument is a directory — a `profile.py` (camera, site, filters, header translation, ISR overrides, data-fetch hook), a three-line `instrument.py` nameplate, an optional camera YAML, and tuned configs — loaded by name (`instruments.<name>`) via `INSTRUMENT_DIR`. No per-instrument LSST `obs_` package or EUPS product.
 - `obs_stips` synthesizes the LSST `Instrument`, translator, and raw formatter from the profile at runtime.
-- **Cameras**: in-memory `CameraSpec` (single-amp) or a full multi-amp camera YAML; **on-chip binning** scales the geometry from a `CCD_BINNING` knob.
-- Ships two instruments: **Nickel** (reference, single-CCD, B/V/R/I) and **CTIO 1.0m / Y4KCam** (4-amp, binned/unbinned, B/V/R/I).
+- **Cameras**: in-memory `CameraSpec` (single-amp) or a full multi-amp camera YAML; **on-chip binning** is a profile field (`ccd_binning`).
+- Ships two instruments: **Nickel** (reference, single-CCD, B/V/R/I) and **CTIO 1.0m / Y4KCam** (4-amp, B/V/R/I; unbinned `ctio1m` and 2×2-binned `ctio1m_bin2`).
 
 ### Complete Processing Pipelines
 - **Calibration pipeline**: bias, flats, curated defect masks
@@ -233,7 +233,7 @@ stips lightcurve --ra 210.910750 --dec 54.311694 \
 ```bash
 uv sync --group dev
 ```
-Installs the framework workspace packages (`stips`, `obs_stips`, and support packages) plus code quality tools (ruff, pyright, pre-commit). Instrument profiles under `instruments/` are loaded by path at runtime (via `INSTRUMENT_DIR`), so there is no per-instrument package to install.
+Installs the framework workspace packages (`stips`, `obs_stips`, and support packages) plus code quality tools (ruff, pyright, pre-commit). Instrument profiles under `instruments/` are imported by name at runtime (selected by `INSTRUMENT_DIR`), so there is no per-instrument package to install.
 
 A fork adds its own profile directory under `instruments/<name>/` and points `INSTRUMENT_DIR` at it — no new `obs_` package required. See the [forking guide](docs/forking-stips.md).
 
@@ -328,7 +328,6 @@ env:
   RAW_PARENT_DIR: /path/to/raw/data
   REFCAT_REPO: /path/to/refcats
   CP_PIPE_DIR: "${STACK_DIR}/cp_pipe"   # ${VAR} expands within the env: block
-  # CCD_BINNING: 2   # optional; scale the camera for 2x2-binned raws (default 1)
 ```
 
 ### Required Variables
@@ -346,7 +345,6 @@ env:
 |----------|-------------|
 | `REFCAT_REPO` | Path to reference catalog repository |
 | `CP_PIPE_DIR` | Path to cp_pipe (auto-discovered if not set) |
-| `CCD_BINNING` | On-chip binning factor; scales the camera geometry (default 1 = unbinned) |
 | `LICK_ARCHIVE_DIR` | Path to the Lick archive client (Nickel `download`) |
 | `NOIRLAB_PROPOSAL` | Optional proposal-id filter for the CTIO NOIRLab `download` |
 
@@ -631,9 +629,9 @@ pipetask:
 
 Each instrument declares its camera in its profile — either an in-memory
 `CameraSpec` (single-amplifier) or a full multi-amp camera YAML. On-chip
-binning is applied at build time from `CCD_BINNING` (imaging pixels scale by the
-factor; overscan strips stay fixed), so the same profile reduces binned and
-unbinned raws.
+binning is declared per profile (`ccd_binning`; imaging pixels scale by the
+factor, overscan strips stay fixed). A camera used binned and unbinned is two
+instrument dirs.
 
 | | **Nickel 1-m** | **CTIO 1.0m / Y4KCam** |
 |---|---|---|

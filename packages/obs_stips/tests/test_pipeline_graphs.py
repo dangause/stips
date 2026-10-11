@@ -61,10 +61,9 @@ STIPS_DEFAULTS_ROOT = _OBS_STIPS_DIR / "instrument_defaults"
 # ``--config-file calibrateImage:<this file>`` (science.py); the DRP.yaml itself
 # only sets ``photometry.applyColorTerms: true`` and leaves the library empty.
 APPLY_COLORTERMS_PATH = STIPS_DEFAULTS_ROOT / "configs" / "apply_colorterms.py"
-# Instrument-bearing pipelines (ForcedPhotRaDec.yaml declares
-# ``instrument: lsst.obs.stips.active.Instrument``) synthesize the instrument from
-# INSTRUMENT_DIR when the graph is built. with-stack.sh exports it, but pin it to
-# the reference Nickel instrument so this test is self-contained.
+# No pipeline names an instrument class; INSTRUMENT_DIR is still needed because
+# the refcat overlays resolve configs/ and the profile from it. Pin the
+# reference Nickel dir so this test is self-contained.
 INSTRUMENT_DIR_PATH = _REPO_ROOT / "instruments" / "nickel"
 
 # Discovered dynamically so new pipelines are validated with no test edit.

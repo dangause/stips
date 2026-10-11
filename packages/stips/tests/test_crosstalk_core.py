@@ -112,7 +112,6 @@ class _FakeProc:
 class _FakeProfile:
     name = "CTIO1m"
     collection_prefix = "CTIO1m"
-    instrument_class = "lsst.obs.stips.active.Instrument"
 
 
 class _FakeConfig:
@@ -134,12 +133,14 @@ class TestResolveRawRuns(unittest.TestCase):
         calls = []
         orig_lc = mod.butler_query.list_collections
         orig_butler = mod.run_butler
+        orig_ensure = mod.ensure_instrument_registered
         orig_get_raw = mod.get_raw_dir
         try:
             mod.butler_query.list_collections = (
                 lambda config, pattern, *, prefix=None: ["CTIO1m/raw/20070321/ts1"]
             )
             mod.run_butler = lambda args, config, **k: calls.append(args[0])
+            mod.ensure_instrument_registered = lambda *a, **k: None
             mod.get_raw_dir = lambda config, night: (_ for _ in ()).throw(
                 AssertionError("should not touch raw dir when collection exists")
             )
@@ -149,6 +150,7 @@ class TestResolveRawRuns(unittest.TestCase):
         finally:
             mod.butler_query.list_collections = orig_lc
             mod.run_butler = orig_butler
+            mod.ensure_instrument_registered = orig_ensure
             mod.get_raw_dir = orig_get_raw
 
         self.assertEqual(runs, ["CTIO1m/raw/20070321/ts1"])
@@ -160,6 +162,7 @@ class TestResolveRawRuns(unittest.TestCase):
         calls = []
         orig_lc = mod.butler_query.list_collections
         orig_butler = mod.run_butler
+        orig_ensure = mod.ensure_instrument_registered
         orig_get_raw = mod.get_raw_dir
 
         class _ExistingDir:
@@ -174,6 +177,7 @@ class TestResolveRawRuns(unittest.TestCase):
                 lambda config, pattern, *, prefix=None: []  # none found
             )
             mod.run_butler = lambda args, config, **k: calls.append(args[0])
+            mod.ensure_instrument_registered = lambda *a, **k: None
             mod.get_raw_dir = lambda config, night: _ExistingDir()
             runs = mod._resolve_raw_runs(
                 ["20070321"], _FakeConfig("/repo"), _FakeProfile()
@@ -181,6 +185,7 @@ class TestResolveRawRuns(unittest.TestCase):
         finally:
             mod.butler_query.list_collections = orig_lc
             mod.run_butler = orig_butler
+            mod.ensure_instrument_registered = orig_ensure
             mod.get_raw_dir = orig_get_raw
 
         self.assertEqual(len(runs), 1)

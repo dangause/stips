@@ -3,7 +3,7 @@
 #
 # Reverse-engineered from the (now-reproducible) sa98_v2_repo Butler repo:
 #   - raw source: CTIO archive nights 20100117, 20100119, 20100120, 20100121
-#   - unbinned Y4KCam (raw 4104x4104 -> CCD_BINNING unset = 1)
+#   - unbinned Y4KCam (raw 4104x4104; ccd_binning=1 in instruments/ctio1m)
 #   - bands B/V/R/I plus U (raw FILTERID "U+CuSO4"); no NOIRLAB proposal filter
 #   - target SA98 Landolt standard field (RA 06:51:56.64, DEC -00:22:21.0)
 #

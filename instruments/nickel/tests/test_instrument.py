@@ -8,16 +8,13 @@
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 
-"""Tests of the synthesized STIPS instrument bound to the Nickel profile.
+"""Tests of the nameplate STIPS instrument bound to the Nickel profile.
 
-These run against the GENERIC machinery: ``lsst.obs.stips.active.Instrument``
-synthesized from ``INSTRUMENT_DIR=instruments/nickel`` (not the deleted
-``lsst.obs.nickel.Nickel`` class). The assertions on name/camera/filters/
-detectors are unchanged from the legacy suite.
+These run against the nameplate ``instruments.nickel.instrument.Instrument``
+(not the deleted ``lsst.obs.nickel.Nickel`` class). The assertions on
+name/camera/filters/detectors are unchanged from the legacy suite.
 """
 
-import importlib
-import os
 import unittest
 from pathlib import Path
 
@@ -33,25 +30,17 @@ _INSTRUMENT_DIR = str(Path(__file__).resolve().parents[1])
 
 
 def _load_active():
-    """Set INSTRUMENT_DIR to the reference Nickel dir and (re)load active."""
-    os.environ["INSTRUMENT_DIR"] = _INSTRUMENT_DIR
-    import lsst.obs.stips.active as active
+    """The Nickel nameplate module (Instrument / Translator / RawFormatter)."""
+    from stips.profile import import_instrument_module
 
-    return importlib.reload(active)
+    return import_instrument_module(_INSTRUMENT_DIR)
 
 
 class TestNickelInstrument(unittest.TestCase):
     def setUp(self):
-        self._prev_instrument_dir = os.environ.get("INSTRUMENT_DIR")
         self.active = _load_active()
         self.Instrument = self.active.Instrument
         self.inst = self.Instrument()
-
-    def tearDown(self):
-        if self._prev_instrument_dir is None:
-            os.environ.pop("INSTRUMENT_DIR", None)
-        else:
-            os.environ["INSTRUMENT_DIR"] = self._prev_instrument_dir
 
     def test_name_consistency(self):
         # Class attribute and method should agree

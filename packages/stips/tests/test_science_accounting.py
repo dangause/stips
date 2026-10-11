@@ -18,7 +18,6 @@ def _nickel_profile() -> SimpleNamespace:
         collection_prefix="Nickel",
         skymap_name="nickelRings-v1",
         skymap_collection="skymaps/nickelRings",
-        instrument_class="lsst.obs.stips.active.Instrument",
         night_to_dayobs_offset_days=1,
     )
 
@@ -33,6 +32,8 @@ def test_science_rc0_unparseable_records_honest_zero(tmp_path, monkeypatch, capl
 
     config = SimpleNamespace(
         repo=tmp_path,
+        instrument_dir=tmp_path / "instruments" / "nickel",
+        instrument_class="instruments.nickel.instrument.Instrument",
         require_profile=lambda: profile,
         resolve_config=lambda name: resolve,
         resolve_pipeline=lambda name: tmp_path / "DRP.yaml",
@@ -60,6 +61,7 @@ def test_science_rc0_unparseable_records_honest_zero(tmp_path, monkeypatch, capl
     from stips.core import pipeline
 
     monkeypatch.setattr(pipeline, "run_butler", lambda *a, **k: SimpleNamespace())
+    monkeypatch.setattr(pipeline.butler_query, "list_instruments", lambda config: {})
     monkeypatch.setattr(
         science.butler_query,
         "list_collections",

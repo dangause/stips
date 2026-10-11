@@ -229,6 +229,23 @@ print(json.dumps({{"has_datasets": has}}))
 """
 
 
+def _build_list_instruments_script(repo: str) -> str:
+    """Build a snippet printing ``{"instruments": {name: class_name}}``."""
+    return f"""
+import json
+from lsst.daf.butler import Butler
+
+butler = Butler.from_config({repo!r}, writeable=False)
+try:
+    # explain=False: an empty repo yields [] instead of EmptyQueryResultError.
+    records = list(butler.query_dimension_records("instrument", explain=False))
+except (AttributeError, TypeError):
+    # v27 fallback (no query_dimension_records, or no explain= kwarg)
+    records = list(butler.registry.queryDimensionRecords("instrument"))
+print(json.dumps({{"instruments": {{r.name: r.class_name for r in records}}}}))
+"""
+
+
 def _build_qg_count_script(qg_path: str) -> str:
     """Build an in-stack snippet that prints ``{"count": N}`` for a saved qgraph.
 
@@ -360,6 +377,20 @@ def collection_has_datasets(config: "Config", name: str) -> bool:
     """
     script = _build_collection_has_datasets_script(str(config.repo), name)
     return bool(_field(run_butler_python_json(script, config), "has_datasets"))
+
+
+def list_instruments(config: "Config") -> dict[str, str] | None:
+    """Map every registered instrument name to its stored ``class_name``.
+
+    Returns ``None`` if the in-stack query failed (e.g. the repo does not exist
+    yet or the stack is unreachable) so callers can distinguish that from an
+    empty repo.
+    """
+    script = _build_list_instruments_script(str(config.repo))
+    raw = _field(run_butler_python_json(script, config), "instruments")
+    if raw is None:
+        return None
+    return {str(k): str(v) for k, v in raw.items()}
 
 
 def quantum_graph_quanta_count(config: "Config", qg_path: "Path | str") -> int | None:

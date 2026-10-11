@@ -15,7 +15,6 @@
 # into ``instruments/<name>/configs/`` (resolved instrument-dir-first). The
 # reference Nickel overlay (full b/v/r/i/halpha/oiii/gp/rp map + Landolt color
 # terms) lives at ``instruments/nickel/configs/refcats_gaia_ps1.py``.
-import json
 import os
 
 # ---- Astrometry: Gaia DR3 (single-flux astrometric reference) ----
@@ -31,20 +30,15 @@ config.astrometry.referenceSelector.magLimit.fluxField = "phot_g_mean_flux"
 
 # ---- Photometry: PS1 DR2 (per-band flux + color terms) ----
 config.connections.photometry_ref_cat = "panstarrs1_dr2"
-# Derive the LOCAL band -> PS1 mean-PSF magnitude column map from the profile,
-# via the STIPS_PS1_BAND_MAP env var exported by run_with_stack. Do NOT import
-# the profile here: pex_config replays modules imported during config exec when
-# a saved quantum graph is reloaded, and the path-loaded profile machinery
-# ("fetch") cannot be imported at replay time.
-_instrument_dir = os.environ["INSTRUMENT_DIR"]
-_ps1_band_map = json.loads(os.environ.get("STIPS_PS1_BAND_MAP", "{}"))
-if not _ps1_band_map:
-    # Fallback for direct pipetask use outside STIPS (no env var): load the
-    # profile. Safe at graph-BUILD time; a graph saved this way cannot be
-    # re-loaded outside a matching sys.path (see above).
-    from lsst.obs.stips.profile_loader import load_profile_from_dir
+# Derive the LOCAL band -> PS1 mean-PSF magnitude column map from the active
+# instrument profile, imported by name (instruments.<name>.profile): pex_config
+# replays modules imported during config exec when a saved quantum graph is
+# reloaded, and a by-name import replays wherever the stack can import the
+# instrument class itself.
+from stips.profile import import_profile  # noqa: E402
 
-    _ps1_band_map = dict(load_profile_from_dir(_instrument_dir).ps1_band_map)
+_instrument_dir = os.environ["INSTRUMENT_DIR"]
+_ps1_band_map = dict(import_profile(_instrument_dir).ps1_band_map)
 config.photometry_ref_loader.filterMap = {
     band: f"{ps1_band}MeanPSFMag" for band, ps1_band in _ps1_band_map.items()
 }
