@@ -33,8 +33,13 @@ Community Forum](https://community.lsst.org/) is the place to ask.
 
 **`No MONSTER refcat shards found under ...`**
 : Bootstrap needs MONSTER shards in
-  `REFCAT_REPO/data/refcats/the_monster_20250219_afw/`. See
-  {doc}`reference-catalogs`.
+  `REFCAT_REPO/data/refcats/the_monster_20250219_afw/` (only in
+  `refcat.mode: monster`; other modes skip MONSTER when the shards are
+  absent). See {doc}`reference-catalogs`.
+
+**`Unknown refcat.mode ...`**
+: The config's `refcat.mode` is misspelled or unsupported. Valid values are
+  `monster`, `gaia_ps1` and `gaia`.
 
 **`No skyMap dataset visible in <collection>` after bootstrap**
 : The `skymap` dimension record survives `butler remove-runs skymaps`, so

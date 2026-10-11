@@ -128,6 +128,8 @@ console scripts (`stips-dia-lightcurve`, `stips-eda-butler`, `stips-skymap-make`
 - `lightcurve` — Lightcurve extraction; `LightcurveConfig` dataclass for display
   options (y-axis/x-axis mode, distance modulus, explosion date, error filter).
 - `refcat` — On-demand Gaia DR3 + PS1 refcat fetch/convert/ingest for a target cone.
+  `refcat.mode` is validated (`monster`, `gaia_ps1`, `gaia`); an unknown mode is
+  rejected by `RunConfig.from_yaml`, `stips run` and `stips bootstrap`.
 - `bootstrap` — Repository bootstrap in Python (`butler create`,
   `register-instrument --update`, MONSTER refcat ingest, skymap); extends the
   `refcats` chain (never redefines it), so fetched Gaia/PS1 runs survive a
@@ -305,7 +307,9 @@ templates/deep/tract{N}/{band}                        # RUN: Nickel coadd templa
 ### Pipeline Workflow
 
 1. **Bootstrap** — Create repo, register instrument, ingest the MONSTER refcat
-   shards, register skymap (Gaia/PS1 are fetched on demand by `stips run`).
+   shards (required only in `refcat.mode: monster`; `gaia_ps1`/`gaia` skip
+   MONSTER when the shards are absent and create an empty `refcats` chain),
+   register skymap (Gaia/PS1 are fetched on demand by `stips run`).
 2. **Templates** — PS1 template ingestion (r/i) or Nickel coadd template building
    (b/v/r/i).
 3. **Calibs** — Ingest raws, build bias/flat, certify calibrations.
@@ -480,7 +484,10 @@ A different root cause for a downstream `astrometry_ref_cat`/`panstarrs1_dr2`
 network, missing `astroquery`), reporting the root cause — rather than warning
 and limping into science where every night dies with an opaque missing-dataset
 error. Fix the reported cause, or use `refcat.mode: monster` if the repo already
-holds refcats.
+holds refcats. Science treats `MissingDatasetTypeError` as fatal: it stops at the
+first night instead of trying every `calibrateImage` fallback. A repo
+bootstrapped in `gaia_ps1`/`gaia` mode without shards has no MONSTER run, so
+switching it to `monster` mode hits this error.
 
 ### DIA reports success but no difference images
 `core/dia.py` checks `diff_image_count` after execution. If the pipeline exits 0

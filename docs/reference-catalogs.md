@@ -16,6 +16,9 @@ refcat:
   radius_deg: 0.3      # cone fetched around ra/dec; cover your dithers
 ```
 
+Any other `mode` is rejected with an error naming the valid ones; an empty
+`refcat:` section means `monster`.
+
 Not every band can be calibrated in every mode. A band needs a reference
 filter, and with colour terms it needs a term for that catalog too. Bands
 that have neither fail calibration. As configured today:
@@ -33,9 +36,11 @@ first with `stips refcat fetch`.
 
 ## MONSTER shards
 
-Setting up a repository (`stips bootstrap`, or the first step of `stips run`)
-currently ingests MONSTER shards whatever the mode, so every repository needs
-them. They are FITS files, one per HTM level-7 sky cell, stored in
+In `monster` mode, setting up a repository (`stips bootstrap`, or the first
+step of `stips run`) requires the shards and ingests them. In `gaia_ps1` and
+`gaia` mode the shards are optional: bootstrap ingests them if present and
+otherwise skips MONSTER with a warning and creates an empty `refcats` chain for
+the on-demand catalogs. The shards are FITS files, one per HTM level-7 sky cell, stored in
 
 ```text
 $REFCAT_REPO/data/refcats/the_monster_20250219_afw/refcat_htm7_<id>.fits
@@ -76,7 +81,7 @@ Platform](https://data.lsst.cloud/), which needs an RSP account:
    stips-refcats status --shard-dir $SHARDS
    ```
 
-Do this before creating the repository: bootstrap ingests the shard directory
+In `monster` mode do this before creating the repository: bootstrap ingests the shard directory
 into the `refcats/the_monster_20250219_local` run once, and skips the ingest
 when that run already exists, so it does not pick up shards added later. To
 re-ingest after merging new shards, remove the run
