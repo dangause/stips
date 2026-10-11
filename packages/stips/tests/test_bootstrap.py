@@ -10,6 +10,7 @@ replaced by a recording fake.
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import sys
 from contextlib import ExitStack, contextmanager
@@ -23,6 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 def _cfg(repo: Path) -> mock.Mock:
     cfg = mock.Mock()
     cfg.repo = repo
+    cfg.profile = None  # no active profile: only skymaps + refcats are checked
     return cfg
 
 
@@ -75,6 +77,27 @@ def test_needs_bootstrap_when_adapter_raises(tmp_path):
         assert bootstrap.needs_bootstrap(_cfg(tmp_path)) is True
 
 
+def test_needs_bootstrap_when_profile_skymap_chain_missing(tmp_path):
+    from stips.core import bootstrap, butler_query
+
+    (tmp_path / "butler.yaml").write_text("")
+    cfg = _cfg(tmp_path)
+    cfg.profile = SimpleNamespace(skymap_collection="skymaps/nickelRings")
+    seen = []
+
+    # skymaps + refcats present, the profile's skymap chain absent -> bootstrap.
+    def exists(config, name):
+        seen.append(name)
+        return name in ("skymaps", "refcats")
+
+    with mock.patch.object(butler_query, "collection_exists", side_effect=exists):
+        assert bootstrap.needs_bootstrap(cfg) is True
+    assert "skymaps/nickelRings" in seen
+
+    with mock.patch.object(butler_query, "collection_exists", return_value=True):
+        assert bootstrap.needs_bootstrap(cfg) is False
+
+
 # --- run() ------------------------------------------------------------------
 
 
@@ -108,8 +131,9 @@ class _Butler:
     def __init__(self, state):
         self.calls = []
         # {"collections": set(), "chains": {name: [members]},
-        #  "datasets": set of collections holding a skyMap (default empty)}
+        #  "datasets": set of (RUN, skymap name) holding a skyMap (default empty)}
         self.state = state
+        self.dataset_queries = []
         state.setdefault("datasets", set())
 
     def run_butler(self, args, config, *, check=True, log_file=None, **kw):
@@ -121,6 +145,8 @@ class _Butler:
         elif cmd == "ingest-files":
             self.state["collections"].add(args[4])
         elif cmd == "collection-chain":
+            if self.state.get("chain_noop"):
+                return subprocess.CompletedProcess(args, 0)
             chain = args[2]
             if "--mode" in args and args[args.index("--mode") + 1] == "extend":
                 self.state["chains"].setdefault(chain, []).extend(
@@ -136,7 +162,8 @@ class _Butler:
                 return subprocess.CompletedProcess(args, 1)
             self.state["collections"].add("skymaps")
             if self.state.get("skymap_lands", True):
-                self.state["datasets"].add("skymaps")
+                name = args[args.index("-c") + 1].split("=", 1)[1]
+                self.state["datasets"].add(("skymaps", name))
         return subprocess.CompletedProcess(args, 0)
 
     def collection_exists(self, config, name):
@@ -147,12 +174,21 @@ class _Butler:
             list(self.state["chains"][name]) if name in self.state["chains"] else None
         )
 
-    def has_datasets(self, config, dataset_type, collections, **kw):
-        """A skyMap is visible in a RUN holding it, or through a chain member."""
+    def has_datasets(self, config, dataset_type, collections, *, where=""):
+        """A skyMap is visible in a RUN holding it, or through a chain member.
+
+        Honours a ``skymap = '<name>'`` where clause; no clause matches any skymap.
+        """
+        self.dataset_queries.append((dataset_type, collections, where))
         names = [collections] if isinstance(collections, str) else list(collections)
+        m = re.search(r"skymap\s*=\s*'([^']*)'", where or "")
+        want = m.group(1) if m else None
 
         def visible(name):
-            if name in self.state["datasets"]:
+            if any(
+                run == name and (want is None or sky == want)
+                for run, sky in self.state["datasets"]
+            ):
                 return True
             return any(visible(m) for m in self.state["chains"].get(name, []))
 
@@ -271,7 +307,7 @@ def test_run_is_idempotent_and_never_redefines_refcats(tmp_path):
             ],
             "skymaps/nickelRings": ["skymaps"],
         },
-        "datasets": {"skymaps"},
+        "datasets": {("skymaps", "nickelRings-v1")},
     }
     fake = _Butler(state)
     with mock.patch.object(bootstrap, "needs_bootstrap", return_value=True), _patched(
@@ -286,6 +322,72 @@ def test_run_is_idempotent_and_never_redefines_refcats(tmp_path):
         state["chains"]["refcats"][0] == "refcats/gaia_dr3/20261001"
     )  # Gaia run preserved
     assert cmds.count("register-skymap") == 0  # already registered in skymaps
+    # The chain-visibility check runs on the skip path too.
+    assert (
+        "skyMap",
+        "skymaps/nickelRings",
+        "skymap = 'nickelRings-v1'",
+    ) in fake.dataset_queries
+
+
+def test_second_instrument_in_shared_repo_registers_its_own_skymap(tmp_path):
+    from stips.core import bootstrap
+
+    cfg = _initialized_cfg(tmp_path)
+    # A shared repo: skymaps holds another instrument's skymap only.
+    state = _initialized_state(datasets={("skymaps", "otherRings-v1")})
+    state["collections"].discard("skymaps/nickelRings")
+    del state["chains"]["skymaps/nickelRings"]
+    fake = _Butler(state)
+    with _patched(bootstrap, fake):
+        res = bootstrap.run(cfg)
+    assert res.success
+    reg = [c for c in fake.calls if c[0] == "register-skymap"]
+    assert len(reg) == 1 and reg[0][-2:] == ["-c", "name=nickelRings-v1"]
+    assert [c for c in fake.calls if c[0] == "collection-chain"] == [
+        ["collection-chain", str(cfg.repo), "skymaps/nickelRings", "skymaps"]
+    ]
+    assert state["chains"]["skymaps/nickelRings"] == ["skymaps"]
+
+
+def test_skip_path_warns_when_skymap_not_visible_through_chain(tmp_path, caplog):
+    from stips.core import bootstrap
+
+    cfg = _initialized_cfg(tmp_path)
+    state = _initialized_state(chain_noop=True)
+    state["collections"].discard("skymaps/nickelRings")
+    del state["chains"]["skymaps/nickelRings"]
+    fake = _Butler(state)
+    with _patched(bootstrap, fake):
+        res = bootstrap.run(cfg)
+    assert res.success
+    assert not [c for c in fake.calls if c[0] == "register-skymap"]
+    assert any(
+        "No skyMap dataset visible" in r.getMessage() and r.levelname == "WARNING"
+        for r in caplog.records
+    )
+
+
+def test_run_logs_by_butler_yaml_without_querying_the_registry(tmp_path, caplog):
+    import logging
+
+    from stips.core import bootstrap
+
+    caplog.set_level(logging.INFO, logger="stips.core.bootstrap")
+    cfg = _full_cfg(tmp_path, refcat_repo=None)
+    fake = _Butler({"collections": set(), "chains": {}})
+    boom = mock.Mock(side_effect=AssertionError("needs_bootstrap must not run"))
+    with mock.patch.object(bootstrap, "needs_bootstrap", boom), _patched(
+        bootstrap, fake
+    ):
+        assert bootstrap.run(cfg, dry_run=True).success
+        assert f"Bootstrapping repository: {cfg.repo}" in caplog.text
+        cfg.repo.mkdir(parents=True)
+        (cfg.repo / "butler.yaml").write_text("")
+        caplog.clear()
+        assert bootstrap.run(cfg, dry_run=True).success
+        assert f"Repository exists; verifying/repairing: {cfg.repo}" in caplog.text
+    boom.assert_not_called()
 
 
 def test_run_adds_monster_to_existing_refcats_chain_with_extend(tmp_path):
@@ -396,7 +498,7 @@ def _initialized_state(**over):
             "refcats": ["refcats/gaia_dr3/x", "refcats/the_monster_20250219_local"],
             "skymaps/nickelRings": ["skymaps"],
         },
-        "datasets": {"skymaps"},
+        "datasets": {("skymaps", "nickelRings-v1")},
     }
     state.update(over)
     return state

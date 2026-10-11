@@ -30,8 +30,9 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
   `stips bootstrap` (standalone) re-runs every idempotent step on an existing
   repo: it re-registers the instrument with `register-instrument --update` and
   re-ingests MONSTER if its run was removed; `stips run` still bootstraps
-  only when the repo lacks `skymaps`/`refcats`. Failures are the command's exit status, and a standalone `stips
-  bootstrap` writes the unified logs (`logs/<RUN_ID>/pipeline.log`,
+  only when the repo lacks `skymaps`, `refcats` or the active profile's
+  skymap chain. Failures are the command's exit status, and a standalone
+  `stips bootstrap` writes the unified logs (`logs/<RUN_ID>/pipeline.log`,
   `bootstrap/bootstrap.log`, `summary.txt`), so the dashboard sees it finish.
 - The paper material — the rebuild driver (`scripts/paper/`), the paper's
   figure scripts, `docs/paper-readiness.md` and the nightly-median test —

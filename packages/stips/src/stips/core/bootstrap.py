@@ -61,7 +61,8 @@ def needs_bootstrap(config: Config) -> bool:
     """Check if the repository needs bootstrapping.
 
     Returns True if the repo doesn't exist, or if critical infrastructure
-    (skymaps, refcats) is missing — e.g. after a botched clean operation.
+    (``skymaps``, ``refcats`` and, with an active profile, its skymap chain) is
+    missing — e.g. after a botched clean operation.
 
     Args:
         config: Pipeline configuration
@@ -75,7 +76,12 @@ def needs_bootstrap(config: Config) -> bool:
 
     # Repo exists — verify critical collections are present.
     # A clean bug could remove skymaps/refcats while leaving butler.yaml.
-    for collection in ("skymaps", "refcats"):
+    required = [SKYMAP_RUN, REFCATS_CHAIN]
+    prof = getattr(config, "profile", None)
+    skymap_chain = getattr(prof, "skymap_collection", None) if prof else None
+    if skymap_chain:
+        required.append(skymap_chain)
+    for collection in required:
         try:
             # collection_exists() is False both when the collection is absent and
             # when the in-stack query fails to run — either way, bootstrap.
@@ -215,7 +221,9 @@ def ingest_monster(config: Config, log_file: Path | None = None) -> None:
         )
     repo = str(config.repo)
     if butler_query.collection_exists(config, MONSTER_RUN):
-        # The RUN holds datasets of this type, so the type is registered too.
+        # The RUN is only ever created by `ingest-files`, which requires the
+        # dataset type to be registered; and with the RUN present the ingest is
+        # skipped anyway.
         log.info("MONSTER RUN already present: %s", MONSTER_RUN)
     else:
         _butler(
@@ -270,15 +278,18 @@ def _ensure_chain_member(
 def register_skymap(config: Config, log_file: Path | None = None) -> None:
     """Register the profile's skymap and chain its RUN under the skymap collection.
 
-    Quiet on re-run: when the ``skymaps`` RUN already holds a ``skyMap`` the
-    registration is skipped and only the chain membership is ensured. A
-    non-zero ``register-skymap`` is a warning (a config error the sanity query
-    below surfaces).
+    Quiet on re-run: when the ``skymaps`` RUN already holds the profile's
+    ``skyMap`` (keyed on ``skymap_name``, so another instrument's skymap in a
+    shared repo does not count) the registration is skipped and only the chain
+    membership is ensured. A non-zero ``register-skymap`` is a warning (a
+    config error the sanity query below surfaces).
     """
     prof = config.require_profile()
-    if butler_query.has_datasets(config, "skyMap", SKYMAP_RUN):
-        log.info("SkyMap already registered in %s", SKYMAP_RUN)
+    where = f"skymap = '{prof.skymap_name}'"
+    if butler_query.has_datasets(config, "skyMap", SKYMAP_RUN, where=where):
+        log.info("SkyMap %r already registered in %s", prof.skymap_name, SKYMAP_RUN)
         _ensure_chain_member(config, prof.skymap_collection, SKYMAP_RUN, log_file)
+        _check_skymap_visible(config, prof, where)
         return
     cfg_path = config.resolve_config("makeSkyMap.py")
     log.info("Registering SkyMap %r (config: %s)", prof.skymap_name, cfg_path)
@@ -302,7 +313,14 @@ def register_skymap(config: Config, log_file: Path | None = None) -> None:
             log_file or "the butler output",
         )
     _ensure_chain_member(config, prof.skymap_collection, SKYMAP_RUN, log_file)
-    if not butler_query.has_datasets(config, "skyMap", prof.skymap_collection):
+    _check_skymap_visible(config, prof, where)
+
+
+def _check_skymap_visible(config: Config, prof, where: str) -> None:
+    """Warn when the profile's skyMap is not visible through its chain."""
+    if not butler_query.has_datasets(
+        config, "skyMap", prof.skymap_collection, where=where
+    ):
         log.warning(
             "No skyMap dataset visible in %s after registration", prof.skymap_collection
         )
@@ -339,10 +357,10 @@ def run(
     this step creates).
     """
     result = BootstrapResult(success=False)
-    if needs_bootstrap(config):
-        log.info("Bootstrapping repository: %s", config.repo)
+    if (config.repo / "butler.yaml").is_file():
+        log.info("Repository exists; verifying/repairing: %s", config.repo)
     else:
-        log.info("Repository already initialized; verifying: %s", config.repo)
+        log.info("Bootstrapping repository: %s", config.repo)
     if dry_run:
         log.info(
             "[DRY RUN] Would create the repo, register the instrument, "

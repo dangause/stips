@@ -72,8 +72,8 @@ def _build_count_script(
 
     Prefers ``butler.query_datasets(..., explain=False)`` (v28+, returns ``[]``
     instead of raising on an empty result) and falls back to the legacy
-    ``registry.queryDatasets`` on older stacks. An unregistered dataset type maps
-    to a count of 0 rather than an error.
+    ``registry.queryDatasets`` on older stacks. An unregistered dataset type or a
+    missing collection maps to a count of 0 rather than an error.
     """
     return f"""
 import json
@@ -83,6 +83,14 @@ try:
 except Exception:  # pragma: no cover - older stacks lack the symbol
     class MissingDatasetTypeError(Exception):
         pass
+try:
+    from lsst.daf.butler import MissingCollectionError
+except Exception:  # pragma: no cover - relocated/absent on some stacks
+    try:
+        from lsst.daf.butler.registry import MissingCollectionError
+    except Exception:
+        class MissingCollectionError(Exception):
+            pass
 
 butler = Butler.from_config({repo!r}, writeable=False)
 dataset_type = {dataset_type!r}
@@ -107,7 +115,7 @@ try:
         _lim = {limit!r}
         refs = list(_q if _lim is None else itertools.islice(_q, _lim))
     print(json.dumps({{"count": len(list(refs))}}))
-except MissingDatasetTypeError:
+except (MissingDatasetTypeError, MissingCollectionError):
     print(json.dumps({{"count": 0}}))
 """
 
@@ -168,18 +176,33 @@ except (MissingDatasetTypeError, MissingCollectionError):
 
 
 def _build_list_collections_script(repo: str, pattern: str) -> str:
-    """Build an in-stack snippet that prints ``{"collections": [...]}`` for a glob."""
+    """Build an in-stack snippet that prints ``{"collections": [...]}`` for a glob.
+
+    An exact (non-glob) name that does not exist raises
+    ``MissingCollectionError``; it maps to ``{"collections": []}``.
+    """
     return f"""
 import json
 from lsst.daf.butler import Butler
+try:
+    from lsst.daf.butler import MissingCollectionError
+except Exception:  # pragma: no cover - relocated/absent on some stacks
+    try:
+        from lsst.daf.butler.registry import MissingCollectionError
+    except Exception:
+        class MissingCollectionError(Exception):
+            pass
 
 butler = Butler.from_config({repo!r}, writeable=False)
 pattern = {pattern!r}
 try:
-    names = list(butler.collections.query(pattern))
-except AttributeError:
-    # v27 fallback
-    names = list(butler.registry.queryCollections(pattern))
+    try:
+        names = list(butler.collections.query(pattern))
+    except AttributeError:
+        # v27 fallback
+        names = list(butler.registry.queryCollections(pattern))
+except MissingCollectionError:
+    names = []
 print(json.dumps({{"collections": sorted(names)}}))
 """
 
@@ -189,21 +212,33 @@ def _build_collection_types_script(repo: str, pattern: str) -> str:
 
     Uses ``butler.collections.query_info`` (v28+) so the collection *type*
     (RUN/CHAINED/CALIBRATION/...) comes from a typed ``CollectionInfo`` rather
-    than the last whitespace column of the CLI table.
+    than the last whitespace column of the CLI table. A missing exact name
+    maps to ``{}``.
     """
     return f"""
 import json
 from lsst.daf.butler import Butler
+try:
+    from lsst.daf.butler import MissingCollectionError
+except Exception:  # pragma: no cover - relocated/absent on some stacks
+    try:
+        from lsst.daf.butler.registry import MissingCollectionError
+    except Exception:
+        class MissingCollectionError(Exception):
+            pass
 
 butler = Butler.from_config({repo!r}, writeable=False)
 pattern = {pattern!r}
 try:
-    infos = butler.collections.query_info(pattern)
-    out = {{ci.name: ci.type.name for ci in infos}}
-except AttributeError:
-    # v27 fallback
-    names = list(butler.registry.queryCollections(pattern))
-    out = {{n: butler.registry.getCollectionType(n).name for n in names}}
+    try:
+        infos = butler.collections.query_info(pattern)
+        out = {{ci.name: ci.type.name for ci in infos}}
+    except AttributeError:
+        # v27 fallback
+        names = list(butler.registry.queryCollections(pattern))
+        out = {{n: butler.registry.getCollectionType(n).name for n in names}}
+except MissingCollectionError:
+    out = {{}}
 print(json.dumps({{"collections": out}}))
 """
 
@@ -249,7 +284,9 @@ except Exception:  # pragma: no cover - relocated/absent on some stacks
 butler = Butler.from_config({repo!r}, writeable=False)
 try:
     try:
-        info = butler.collections.get_info({name_literal}, include_chains=True)
+        # get_info() always fills ``children`` for a CHAINED collection; v30
+        # has no include_chains kwarg (it would raise TypeError).
+        info = butler.collections.get_info({name_literal})
         members = list(info.children)
     except (AttributeError, TypeError):
         # v27 fallback

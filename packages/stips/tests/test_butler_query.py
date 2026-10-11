@@ -48,6 +48,14 @@ class TestScriptBuilders:
         ast.parse(s)
         assert "limit=1" in s
 
+    def test_count_script_maps_missing_collection_to_zero(self):
+        from stips.core.butler_query import _build_count_script
+
+        s = _build_count_script("/repo", "skyMap", ["skymaps"], "", 1)
+        ast.parse(s)
+        assert "except (MissingDatasetTypeError, MissingCollectionError):" in s
+        assert "from lsst.daf.butler import MissingCollectionError" in s
+
     def test_list_collections_script_valid(self):
         from stips.core.butler_query import _build_list_collections_script
 
@@ -56,6 +64,15 @@ class TestScriptBuilders:
         assert "collections.query" in s
         assert "queryCollections" in s  # fallback
         assert "templates/*" in s
+
+    def test_list_collections_script_maps_missing_collection_to_empty(self):
+        from stips.core.butler_query import _build_list_collections_script
+
+        s = _build_list_collections_script("/repo", "skymaps/nickelRings")
+        ast.parse(s)
+        assert "except MissingCollectionError:" in s
+        assert "from lsst.daf.butler import MissingCollectionError" in s
+        assert "    names = []" in s  # -> {"collections": []}
 
     def test_data_id_values_script_valid(self):
         from stips.core.butler_query import _build_data_id_values_script
@@ -270,6 +287,13 @@ class TestCollections:
         )
         assert "include_summary=True" in s
 
+    def test_collection_types_script_maps_missing_collection_to_empty(self):
+        from stips.core.butler_query import _build_collection_types_script
+
+        s = _build_collection_types_script("/repo", "Nickel/runs/x")
+        ast.parse(s)
+        assert "except MissingCollectionError:" in s
+
 
 class TestQuantumGraph:
     def test_is_empty_true_false_none(self):
@@ -324,7 +348,11 @@ def test_chain_members_script_uses_collection_info_with_registry_fallback():
     from stips.core.butler_query import _build_chain_members_script
 
     s = _build_chain_members_script("/repo", "refcats")
-    assert 'butler.collections.get_info("refcats", include_chains=True)' in s
+    ast.parse(s)
+    # v30 get_info() has no include_chains kwarg (TypeError); children are
+    # always populated for a CHAINED collection.
+    assert 'butler.collections.get_info("refcats")' in s
+    assert "include_chains=True" not in s
     assert 'getCollectionChain("refcats")' in s  # v27 fallback
     assert "MissingCollectionError" in s
 
