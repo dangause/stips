@@ -1,15 +1,19 @@
-"""Tests for stips.core.bootstrap.needs_bootstrap.
+"""Tests for stips.core.bootstrap — the Python port of the bootstrap script.
 
-``needs_bootstrap`` decides whether ``stips bootstrap`` must (re-)run. It now
-uses the structured ``butler_query.collection_exists`` adapter instead of
-grepping ``butler query-collections`` CLI stdout; these tests pin its exact
-decision semantics with that adapter mocked.
+Covers ``needs_bootstrap`` (with the ``butler_query.collection_exists`` adapter
+mocked), the MONSTER shard ECSV map build/repair, and ``run()``'s step order,
+idempotency, ``refcats`` chain extension (never redefinition) and error
+surfacing. All stack-free: ``run_butler`` and the ``butler_query`` helpers are
+replaced by a recording fake.
 """
 
 from __future__ import annotations
 
+import subprocess
 import sys
+from contextlib import ExitStack, contextmanager
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
@@ -68,3 +72,358 @@ def test_needs_bootstrap_when_adapter_raises(tmp_path):
         butler_query, "collection_exists", side_effect=RuntimeError("boom")
     ):
         assert bootstrap.needs_bootstrap(_cfg(tmp_path)) is True
+
+
+# --- run() ------------------------------------------------------------------
+
+
+def _full_cfg(tmp_path, *, refcat_repo=None):
+    prof = SimpleNamespace(
+        name="Nickel",
+        skymap_name="nickelRings-v1",
+        skymap_collection="skymaps/nickelRings",
+    )
+    return SimpleNamespace(
+        repo=tmp_path / "repo",
+        refcat_repo=refcat_repo,
+        instrument_dir=tmp_path / "instruments" / "nickel",
+        instrument_class="instruments.nickel.instrument.Instrument",
+        require_profile=lambda: prof,
+        resolve_config=lambda name: tmp_path / "configs" / name,
+    )
+
+
+def _shards(tmp_path, n=3):
+    d = tmp_path / "refcats" / "data" / "refcats" / "the_monster_20250219_afw"
+    d.mkdir(parents=True)
+    for i in (131072, 131073, 131074)[:n]:
+        (d / f"refcat_htm7_{i}.fits").write_bytes(b"x")
+    return tmp_path / "refcats", d
+
+
+class _Butler:
+    """Records run_butler argv and answers queries from a mutable state dict."""
+
+    def __init__(self, state):
+        self.calls = []
+        self.state = state  # {"collections": set(), "chains": {name: [members]}}
+
+    def run_butler(self, args, config, *, check=True, log_file=None, **kw):
+        self.calls.append(list(args))
+        cmd = args[0]
+        if cmd == "create":
+            (config.repo / "butler.yaml").parent.mkdir(parents=True, exist_ok=True)
+            (config.repo / "butler.yaml").write_text("")
+        elif cmd == "ingest-files":
+            self.state["collections"].add(args[4])
+        elif cmd == "collection-chain":
+            chain = args[2]
+            if "--mode" in args and args[args.index("--mode") + 1] == "extend":
+                self.state["chains"].setdefault(chain, []).extend(
+                    a for a in args[3:] if not a.startswith("--") and a != "extend"
+                )
+            else:
+                self.state["chains"][chain] = [
+                    a for a in args[3:] if not a.startswith("--") and a != "redefine"
+                ]
+            self.state["collections"].add(chain)
+        elif cmd == "register-skymap" and self.state.get("skymap_fails"):
+            return subprocess.CompletedProcess(args, 1)
+        return subprocess.CompletedProcess(args, 0)
+
+    def collection_exists(self, config, name):
+        return name in self.state["collections"]
+
+    def chain_members(self, config, name):
+        return (
+            list(self.state["chains"][name]) if name in self.state["chains"] else None
+        )
+
+    def has_datasets(self, config, dataset_type, collections, **kw):
+        return True
+
+
+@contextmanager
+def _patched(bootstrap, fake):
+    """Enter all four stack-free patches (run_butler + the butler_query helpers)."""
+    from stips.core import butler_query
+
+    with ExitStack() as es:
+        es.enter_context(mock.patch.object(bootstrap, "run_butler", fake.run_butler))
+        es.enter_context(
+            mock.patch.object(butler_query, "collection_exists", fake.collection_exists)
+        )
+        es.enter_context(
+            mock.patch.object(butler_query, "chain_members", fake.chain_members)
+        )
+        es.enter_context(
+            mock.patch.object(butler_query, "has_datasets", fake.has_datasets)
+        )
+        yield
+
+
+def test_run_fresh_repo_does_every_step_in_order(tmp_path):
+    from stips.core import bootstrap
+
+    refcat_repo, shards = _shards(tmp_path)
+    cfg = _full_cfg(tmp_path, refcat_repo=refcat_repo)
+    fake = _Butler({"collections": set(), "chains": {}})
+    with mock.patch.object(bootstrap, "needs_bootstrap", return_value=True), _patched(
+        bootstrap, fake
+    ):
+        res = bootstrap.run(cfg, log_file=tmp_path / "b.log")
+    assert res.success and res.error is None
+    assert (
+        res.repo_created
+        and res.instrument_registered
+        and res.refcats_ingested
+        and res.skymap_registered
+    )
+    cmds = [c[0] for c in fake.calls]
+    assert cmds == [
+        "create",
+        "register-instrument",
+        "register-dataset-type",
+        "ingest-files",
+        "collection-chain",
+        "register-skymap",
+        "collection-chain",
+    ]
+    assert fake.calls[1] == [
+        "register-instrument",
+        str(cfg.repo),
+        cfg.instrument_class,
+        "--update",
+    ]
+    assert fake.calls[2] == [
+        "register-dataset-type",
+        str(cfg.repo),
+        "the_monster_20250219_local",
+        "SimpleCatalog",
+        "htm7",
+    ]
+    ingest = fake.calls[3]
+    assert ingest[:5] == [
+        "ingest-files",
+        "-t",
+        "direct",
+        str(cfg.repo),
+        "the_monster_20250219_local",
+    ]
+    assert ingest[5] == "refcats/the_monster_20250219_local"
+    assert ingest[6] == str(shards / "filename_to_htm.ecsv")
+    assert fake.calls[4] == [
+        "collection-chain",
+        str(cfg.repo),
+        "refcats",
+        "refcats/the_monster_20250219_local",
+    ]
+    assert fake.calls[5] == [
+        "register-skymap",
+        str(cfg.repo),
+        "-C",
+        str(cfg.resolve_config("makeSkyMap.py")),
+        "-c",
+        "name=nickelRings-v1",
+    ]
+    assert fake.calls[6] == [
+        "collection-chain",
+        str(cfg.repo),
+        "skymaps/nickelRings",
+        "skymaps",
+    ]
+
+
+def test_run_is_idempotent_and_never_redefines_refcats(tmp_path):
+    from stips.core import bootstrap
+
+    refcat_repo, shards = _shards(tmp_path)
+    cfg = _full_cfg(tmp_path, refcat_repo=refcat_repo)
+    cfg.repo.mkdir(parents=True)
+    (cfg.repo / "butler.yaml").write_text("")
+    state = {
+        "collections": {
+            "refcats/the_monster_20250219_local",
+            "refcats",
+            "skymaps/nickelRings",
+            "refcats/gaia_dr3/20261001",
+        },
+        "chains": {
+            "refcats": [
+                "refcats/gaia_dr3/20261001",
+                "refcats/the_monster_20250219_local",
+            ],
+            "skymaps/nickelRings": ["skymaps"],
+        },
+    }
+    fake = _Butler(state)
+    with mock.patch.object(bootstrap, "needs_bootstrap", return_value=True), _patched(
+        bootstrap, fake
+    ):
+        res = bootstrap.run(cfg)
+    assert res.success
+    cmds = [c[0] for c in fake.calls]
+    assert "create" not in cmds and "ingest-files" not in cmds
+    assert cmds.count("collection-chain") == 0  # both chains already complete
+    assert (
+        state["chains"]["refcats"][0] == "refcats/gaia_dr3/20261001"
+    )  # Gaia run preserved
+    assert cmds.count("register-skymap") == 1  # re-attempted (warn on failure)
+
+
+def test_run_adds_monster_to_existing_refcats_chain_with_extend(tmp_path):
+    from stips.core import bootstrap
+
+    refcat_repo, _ = _shards(tmp_path)
+    cfg = _full_cfg(tmp_path, refcat_repo=refcat_repo)
+    state = {
+        "collections": {"refcats", "refcats/gaia_dr3/x"},
+        "chains": {"refcats": ["refcats/gaia_dr3/x"]},
+    }
+    fake = _Butler(state)
+    with mock.patch.object(bootstrap, "needs_bootstrap", return_value=True), _patched(
+        bootstrap, fake
+    ):
+        assert bootstrap.run(cfg).success
+    chain_calls = [
+        c for c in fake.calls if c[0] == "collection-chain" and c[2] == "refcats"
+    ]
+    assert chain_calls == [
+        [
+            "collection-chain",
+            str(cfg.repo),
+            "refcats",
+            "--mode",
+            "extend",
+            "refcats/the_monster_20250219_local",
+        ]
+    ]
+    assert state["chains"]["refcats"] == [
+        "refcats/gaia_dr3/x",
+        "refcats/the_monster_20250219_local",
+    ]
+
+
+def test_missing_shards_fails_naming_the_directory(tmp_path):
+    from stips.core import bootstrap
+
+    cfg = _full_cfg(tmp_path, refcat_repo=tmp_path / "refcats")
+    fake = _Butler({"collections": set(), "chains": {}})
+    with mock.patch.object(bootstrap, "needs_bootstrap", return_value=True), _patched(
+        bootstrap, fake
+    ):
+        res = bootstrap.run(cfg)
+    assert not res.success
+    assert "the_monster_20250219_afw" in res.error and "refcat_htm7_" in res.error
+    assert res.repo_created and res.instrument_registered and not res.refcats_ingested
+
+
+def test_missing_refcat_repo_fails_before_touching_refcats(tmp_path):
+    from stips.core import bootstrap
+
+    cfg = _full_cfg(tmp_path, refcat_repo=None)
+    fake = _Butler({"collections": set(), "chains": {}})
+    with mock.patch.object(bootstrap, "needs_bootstrap", return_value=True), _patched(
+        bootstrap, fake
+    ):
+        res = bootstrap.run(cfg)
+    assert not res.success and "REFCAT_REPO" in res.error
+
+
+def test_register_skymap_failure_is_a_warning(tmp_path, caplog):
+    from stips.core import bootstrap
+
+    refcat_repo, _ = _shards(tmp_path)
+    cfg = _full_cfg(tmp_path, refcat_repo=refcat_repo)
+    fake = _Butler({"collections": set(), "chains": {}, "skymap_fails": True})
+    with mock.patch.object(bootstrap, "needs_bootstrap", return_value=True), _patched(
+        bootstrap, fake
+    ):
+        res = bootstrap.run(cfg)
+    assert res.success and res.skymap_registered
+    assert any(
+        "register-skymap" in r.getMessage() and r.levelname == "WARNING"
+        for r in caplog.records
+    )
+
+
+def test_butler_failure_becomes_result_error(tmp_path):
+    from stips.core import bootstrap
+
+    refcat_repo, _ = _shards(tmp_path)
+    cfg = _full_cfg(tmp_path, refcat_repo=refcat_repo)
+    fake = _Butler({"collections": set(), "chains": {}})
+
+    def boom(args, config, **kw):
+        if args[0] == "ingest-files":
+            raise subprocess.CalledProcessError(2, ["butler", *args])
+        return fake.run_butler(args, config, **kw)
+
+    with mock.patch.object(bootstrap, "needs_bootstrap", return_value=True), _patched(
+        bootstrap, fake
+    ):
+        with mock.patch.object(bootstrap, "run_butler", boom):
+            res = bootstrap.run(cfg)
+    assert not res.success and "ingest-files" in res.error and "exit 2" in res.error
+
+
+def test_dry_run_touches_nothing(tmp_path):
+    from stips.core import bootstrap
+
+    cfg = _full_cfg(tmp_path, refcat_repo=None)
+    fake = _Butler({"collections": set(), "chains": {}})
+    with mock.patch.object(bootstrap, "needs_bootstrap", return_value=True), _patched(
+        bootstrap, fake
+    ):
+        assert bootstrap.run(cfg, dry_run=True).success
+    assert fake.calls == []
+
+
+# --- ECSV map ---------------------------------------------------------------
+
+
+def test_build_monster_map_writes_sorted_absolute_ecsv(tmp_path):
+    from astropy.table import Table
+    from stips.core import bootstrap
+
+    _, shards = _shards(tmp_path)
+    (shards / "notes.txt").write_text("ignored")
+    out = bootstrap.build_monster_map(shards, shards / "filename_to_htm.ecsv")
+    t = Table.read(out, format="ascii.ecsv")
+    assert list(t.colnames) == ["path", "htm7"]
+    assert list(t["htm7"]) == [131072, 131073, 131074]
+    assert all(p.startswith(str(shards.resolve())) for p in t["path"])
+
+
+def test_ensure_monster_map_reuses_valid_rebuilds_stale_or_non_ecsv(tmp_path):
+    from stips.core import bootstrap
+
+    _, shards = _shards(tmp_path)
+    m = shards / "filename_to_htm.ecsv"
+    first = bootstrap.ensure_monster_map(shards)
+    assert first == m
+    mtime = m.stat().st_mtime_ns
+    assert (
+        bootstrap.ensure_monster_map(shards) == m and m.stat().st_mtime_ns == mtime
+    )  # reused
+    m.write_text("path htm7\n/nowhere/refcat_htm7_1.fits 1\n")  # not ECSV -> rebuilt
+    bootstrap.ensure_monster_map(shards)
+    assert m.read_text().startswith("# %ECSV")
+    m.write_text(
+        m.read_text().replace(str(shards.resolve()), "/stale/host")
+    )  # stale -> rebuilt
+    bootstrap.ensure_monster_map(shards)
+    assert "/stale/host" not in m.read_text()
+
+
+def test_ensure_monster_map_falls_back_to_tempdir_when_read_only(tmp_path, monkeypatch):
+    import tempfile
+
+    from stips.core import bootstrap
+
+    _, shards = _shards(tmp_path)
+    monkeypatch.setattr(bootstrap, "_dir_is_writable", lambda d: False)
+    monkeypatch.setattr(tempfile, "gettempdir", lambda: str(tmp_path / "tmp"))
+    out = bootstrap.ensure_monster_map(shards)
+    assert out == tmp_path / "tmp" / "stips_refcat_ecsv" / "filename_to_htm.ecsv"
+    assert out.exists()
