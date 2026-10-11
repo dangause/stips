@@ -5,8 +5,9 @@ supernova in M101, taken with the Nickel 1-m in May 2023 and public in the
 Lick archive. It ends with a lightcurve in Nickel's Sloan-like r′ and i′
 filters, which the Nickel profile calls `rp` and `ip`.
 
-You need a {doc}`native install <installation>` of STIPS and MONSTER
-reference-catalog shards covering M101 (see {doc}`reference-catalogs`).
+You need a {doc}`native install <installation>` of STIPS. The quickstart
+fetches Gaia and Pan-STARRS on demand, so no MONSTER shards are needed (see
+{doc}`reference-catalogs`).
 
 ## 1. Write the config
 
@@ -19,7 +20,7 @@ env:
   STACK_DIR: /home/you/lsst_stack
   INSTRUMENT_DIR: /home/you/stips/instruments/nickel
   RAW_PARENT_DIR: /data/raw
-  REFCAT_REPO: /data/refcats
+  REFCAT_REPO: /data/refcats                    # where fetched catalogs are stored
   LICK_ARCHIVE_DIR: /home/you/stips/instruments/nickel/vendor/lick_searchable_archive
 
 object: "2023ixf"           # matched against the FITS OBJECT header

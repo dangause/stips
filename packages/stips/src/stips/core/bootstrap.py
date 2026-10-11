@@ -6,9 +6,13 @@ same ``run_butler`` / ``butler_query`` helpers every other step uses. Each
 step is idempotent so ``run()`` can be re-run on a half-built repo.
 
 Reference catalogs: this module ingests the sharded MONSTER catalog from
-``REFCAT_REPO`` into the ``refcats`` CHAINED collection. Gaia DR3 / PS1 shards
-fetched on demand (``stips.core.refcat``) live in the same chain; bootstrap
-only ever EXTENDS that chain, never redefines it, so a re-bootstrap keeps them.
+``REFCAT_REPO`` into the ``refcats`` CHAINED collection whenever the shards
+are present. Gaia DR3 / PS1 shards fetched on demand (``stips.core.refcat``)
+live in the same chain; bootstrap only ever EXTENDS that chain, never
+redefines it, so a re-bootstrap keeps them. MONSTER is required only when the
+refcat mode uses it (``monster``); otherwise, with no shards, the ingest is
+skipped with a warning and an empty ``refcats`` chain is registered so the
+on-demand fetch has a chain to extend.
 """
 
 from __future__ import annotations
@@ -24,7 +28,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from stips.core import butler_query
-from stips.core.stack import run_butler
+from stips.core.stack import run_butler, run_butler_python_json
 
 if TYPE_CHECKING:
     from stips.core.config import Config
@@ -55,6 +59,7 @@ class BootstrapResult:
     instrument_registered: bool = False
     refcats_ingested: bool = False
     skymap_registered: bool = False
+    monster_skipped: bool = False
 
 
 def needs_bootstrap(config: Config) -> bool:
@@ -211,53 +216,120 @@ def register_instrument(config: Config, log_file: Path | None = None) -> None:
     )
 
 
-def ingest_monster(config: Config, log_file: Path | None = None) -> None:
+def ingest_monster(
+    config: Config, log_file: Path | None = None, *, required: bool = True
+) -> bool:
     """Ingest the MONSTER shards (once) and make them a member of ``refcats``.
 
     With the MONSTER RUN already present, ``REFCAT_REPO`` and the shard
     directory are not consulted at all: only the chain membership is ensured.
+    Shards present under ``REFCAT_REPO`` are ingested whatever ``required``
+    says. Without them (or without ``REFCAT_REPO``), ``required`` raises
+    :class:`BootstrapError`; otherwise the ingest is skipped with a warning and
+    an empty ``refcats`` chain is registered if none exists.
+
+    Returns:
+        True when MONSTER was ingested or was already present, False when the
+        ingest was skipped.
     """
     if butler_query.collection_exists(config, MONSTER_RUN):
         # The RUN is only ever created by `ingest-files`, which requires the
         # dataset type to be registered; and with the RUN present the ingest is
         # skipped anyway.
         log.info("MONSTER RUN already present: %s", MONSTER_RUN)
-    else:
-        shard_dir = monster_shard_dir(config)
-        if not any(shard_dir.glob(MONSTER_SHARD_GLOB)):
+        _ensure_chain_member(config, REFCATS_CHAIN, MONSTER_RUN, log_file)
+        return True
+
+    shard_dir = monster_shard_dir(config) if config.refcat_repo else None
+    have_shards = bool(shard_dir and any(shard_dir.glob(MONSTER_SHARD_GLOB)))
+    if not have_shards:
+        if required:
+            shard_dir = monster_shard_dir(config)  # raises when REFCAT_REPO is unset
             raise BootstrapError(
                 f"No MONSTER refcat shards found under {shard_dir} (expected files "
                 f"like {MONSTER_SHARD_GLOB}); see docs/reference-catalogs.md"
             )
-        ecsv = ensure_monster_map(shard_dir)
-        repo = str(config.repo)
-        _butler(
-            [
-                "register-dataset-type",
-                repo,
-                MONSTER_DATASET_TYPE,
-                "SimpleCatalog",
-                "htm7",
-            ],
-            config,
-            log_file,
-            check=False,
+        log.warning(
+            "MONSTER shards not found under %s; refcat mode does not use MONSTER, "
+            "skipping the ingest (set REFCAT_REPO and add shards to use mode "
+            "'monster')",
+            shard_dir or f"<REFCAT_REPO unset>/{MONSTER_SHARD_SUBDIR}",
         )
-        log.info("Ingesting MONSTER -> %s", MONSTER_RUN)
-        _butler(
-            [
-                "ingest-files",
-                "-t",
-                "direct",
-                repo,
-                MONSTER_DATASET_TYPE,
-                MONSTER_RUN,
-                str(ecsv),
-            ],
-            config,
-            log_file,
-        )
+        if not butler_query.collection_exists(config, REFCATS_CHAIN):
+            register_empty_chain(config, REFCATS_CHAIN, log_file)
+        return False
+
+    ecsv = ensure_monster_map(shard_dir)
+    repo = str(config.repo)
+    _butler(
+        [
+            "register-dataset-type",
+            repo,
+            MONSTER_DATASET_TYPE,
+            "SimpleCatalog",
+            "htm7",
+        ],
+        config,
+        log_file,
+        check=False,
+    )
+    log.info("Ingesting MONSTER -> %s", MONSTER_RUN)
+    _butler(
+        [
+            "ingest-files",
+            "-t",
+            "direct",
+            repo,
+            MONSTER_DATASET_TYPE,
+            MONSTER_RUN,
+            str(ecsv),
+        ],
+        config,
+        log_file,
+    )
     _ensure_chain_member(config, REFCATS_CHAIN, MONSTER_RUN, log_file)
+    return True
+
+
+def _build_register_chain_script(repo: str, name: str) -> str:
+    """Snippet registering an empty CHAINED collection ``name`` if absent."""
+    return f"""
+import json
+from lsst.daf.butler import Butler, CollectionType
+
+butler = Butler.from_config({repo!r}, writeable=True)
+name = {name!r}
+try:
+    created = butler.collections.register(name, CollectionType.CHAINED)
+except AttributeError:
+    # v27 fallback
+    created = butler.registry.registerCollection(name, CollectionType.CHAINED)
+print(json.dumps({{"registered": name, "created": bool(created)}}))
+"""
+
+
+def register_empty_chain(
+    config: Config, name: str, log_file: Path | None = None
+) -> None:
+    """Create CHAINED collection ``name`` with no members (idempotent).
+
+    The ``butler`` CLI cannot create an empty chain, so this is the one
+    in-stack mutation snippet in bootstrap. Needed when MONSTER is skipped:
+    ``stips refcat fetch`` extends ``refcats`` and must find it.
+    """
+    out = run_butler_python_json(
+        _build_register_chain_script(str(config.repo), name), config
+    )
+    if not isinstance(out, dict) or out.get("registered") != name:
+        raise BootstrapError(
+            f"could not register the empty chain {name!r} in {config.repo} "
+            "(see the preceding run_butler_python warning for the stack output)"
+        )
+    log.info(
+        "Chain %s %s",
+        name,
+        "created (empty)" if out.get("created") else "already present",
+    )
 
 
 def _ensure_chain_member(
@@ -359,9 +431,13 @@ def run(
     ``ensure_instrument_registered``'s error messages advise), or re-ingests
     MONSTER after its RUN was removed.
 
-    ``require_monster`` is the policy knob for the MONSTER step; today it is
-    always required (the Gaia/PS1 path still needs the ``refcats`` chain that
-    this step creates).
+    ``require_monster`` comes from the config's ``refcat.mode`` (True only for
+    ``monster``). MONSTER shards found under ``REFCAT_REPO`` are ingested in
+    any mode, and a present MONSTER RUN only has its chain membership ensured.
+    Without shards (or ``REFCAT_REPO``), a required MONSTER fails the run;
+    otherwise the ingest is skipped with a warning, an empty ``refcats`` chain
+    is registered if absent (the on-demand Gaia/PS1 fetch extends it), and
+    ``monster_skipped`` is set.
     """
     result = BootstrapResult(success=False)
     if (config.repo / "butler.yaml").is_file():
@@ -369,9 +445,16 @@ def run(
     else:
         log.info("Bootstrapping repository: %s", config.repo)
     if dry_run:
+        monster_step = (
+            "ingest MONSTER"
+            if require_monster
+            else "ingest MONSTER if shards are present, else register an "
+            "empty refcats chain"
+        )
         log.info(
             "[DRY RUN] Would create the repo, register the instrument, "
-            "ingest MONSTER, register the skymap"
+            "%s, register the skymap",
+            monster_step,
         )
         result.success = True
         return result
@@ -380,9 +463,9 @@ def run(
         result.repo_created = True
         register_instrument(config, log_file)
         result.instrument_registered = True
-        if require_monster:
-            ingest_monster(config, log_file)
-            result.refcats_ingested = True
+        ingested = ingest_monster(config, log_file, required=require_monster)
+        result.refcats_ingested = ingested
+        result.monster_skipped = not ingested
         register_skymap(config, log_file)
         result.skymap_registered = True
     except BootstrapError as exc:

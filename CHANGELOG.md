@@ -21,6 +21,13 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
   skymap chain. Failures are the command's exit status, and a standalone
   `stips bootstrap` writes the unified logs (`logs/<RUN_ID>/pipeline.log`,
   `bootstrap/bootstrap.log`, `summary.txt`), so the dashboard sees it finish.
+- Bootstrap honours `refcat.mode`: MONSTER shards are required only in
+  `monster` mode. In `gaia_ps1` and `gaia` mode bootstrap ingests them if
+  present, and otherwise skips MONSTER with a warning and creates an empty
+  `refcats` chain for the on-demand Gaia/PS1 catalogs. (#75)
+- Science treats `MissingDatasetTypeError` as fatal, so a repo without the
+  reference catalogs its mode needs fails each night immediately instead of
+  exhausting every `calibrateImage` fallback.
 - Every instrument registers under its own Butler class path,
   `instruments.<name>.instrument.Instrument`, from a three-line nameplate
   `instrument.py` in the instrument dir; the stored `class_name` now identifies
@@ -50,6 +57,13 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
 - The `SKYMAP_NAME`, `SKYMAP_COLLECTION`, `SKYMAP_CFG` and
   `STIPS_INSTRUMENT_CLASS` stack env exports and the `RUN_ID` passthrough;
   nothing in the stack read them any more.
+
+### Fixed
+- An unknown `refcat.mode` is rejected (by config loading, `stips run` and
+  `stips bootstrap`, naming the valid modes) instead of silently selecting
+  MONSTER.
+- `refcat: null` in the config no longer crashes config loading; it means the
+  defaults.
 
 ## [2.3.0] — 2026-10-09
 

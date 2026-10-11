@@ -150,17 +150,13 @@ def _vega_bands_from_ctx(ctx: click.Context, config: cfg_module.Config) -> tuple
     ``InstrumentProfile.vega_bands``. Without a -c YAML there is no mode, so
     every band is reported as AB.
     """
-    import yaml
-
-    from stips.core.run import DEFAULT_REFCAT_MODE
+    from stips.core.refcat import refcat_mode_from_yaml
 
     config_path = (ctx.obj or {}).get("config_path")
     profile = getattr(config, "profile", None)
     if not config_path or profile is None:
         return ()
-    with open(config_path) as fh:
-        raw = yaml.safe_load(fh) or {}
-    mode = (raw.get("refcat") or {}).get("mode", DEFAULT_REFCAT_MODE)
+    mode = refcat_mode_from_yaml(config_path)
     return tuple(getattr(profile, "vega_bands", {}).get(mode, ()))
 
 
@@ -768,6 +764,9 @@ def bootstrap(ctx: click.Context, config: cfg_module.Config) -> None:
     run, the refcats and skymap chains, the skymap); steps whose result already
     exists are skipped. Logs go to logs/<RUN_ID>/bootstrap/.
 
+    MONSTER shards are required only in `refcat.mode: monster`; in
+    `gaia_ps1`/`gaia` they are ingested if present and skipped otherwise.
+
     Configuration comes from the group -c config YAML's env: block.
 
     \b
@@ -776,18 +775,29 @@ def bootstrap(ctx: click.Context, config: cfg_module.Config) -> None:
         stips -c scripts/config/2020wnt/pipeline_nickel_template.yaml bootstrap
     """
     from stips.core import bootstrap as bootstrap_module
+    from stips.core.refcat import refcat_mode_from_yaml
     from stips.core.run_logging import (
         generate_run_id,
         get_step_log_file,
         setup_run_logging,
     )
 
+    try:
+        mode = refcat_mode_from_yaml(ctx.obj["config_path"])
+    except ValueError as exc:
+        _print_error(str(exc))
+        sys.exit(1)
+
     run_log_dir = setup_run_logging(generate_run_id(), config)
     _print_info("Bootstrapping Butler repository...")
     _print_info(f"  Repo: {config.repo}")
     _print_info(f"  Logs: {run_log_dir}")
 
-    result = bootstrap_module.run(config, log_file=get_step_log_file("bootstrap"))
+    result = bootstrap_module.run(
+        config,
+        log_file=get_step_log_file("bootstrap"),
+        require_monster=(mode == "monster"),
+    )
     # pipeline.log alone reads as an active run on the dashboard; record the outcome.
     (run_log_dir / "summary.txt").write_text(
         "Step: bootstrap\n"
@@ -801,6 +811,11 @@ def bootstrap(ctx: click.Context, config: cfg_module.Config) -> None:
         fail_msg="Bootstrap failed",
         details=[f"  Repository ready: {config.repo}"],
     )
+    if result.monster_skipped:
+        _print_info(
+            f"  MONSTER shards not found; skipped (refcat mode {mode} "
+            "fetches catalogs on demand)"
+        )
 
 
 # =============================================================================

@@ -455,6 +455,13 @@ _FATAL_ERROR_PATTERNS: tuple[str, ...] = (
     "ConflictingDefinitionError",
     "Permission denied",
     "No space left on device",
+    # an unregistered reference catalog (e.g. MONSTER never ingested in a
+    # gaia_ps1-bootstrapped repo run in monster mode): no calibrateImage config
+    # can fix that. Caveat: a primary config that names a ref cat another
+    # fallback does not (e.g. ctio_dense.py forcing gaia_dr3 astrometry) could
+    # in principle be stopped early here; no shipped config mixes such configs
+    # in one fallback chain.
+    "MissingDatasetTypeError",
 )
 
 
@@ -593,6 +600,16 @@ def _attempt_config(
     # Each attempt gets its own qgraph (different config = different plan)
     qg_science = ctx.qg_dir / f"processCcd_{ctx.night}_{ctx.cols.run_ts}_cfg{index}.qg"
     repo = str(ctx.config.repo)
+
+    # Log position at the start of the attempt: a raised pipetask error
+    # (CalledProcessError) names only the command, so the fatal classifier
+    # below reads the log text this attempt appended.
+    attempt_log_start = 0
+    if ctx.log_file and ctx.log_file.exists():
+        try:
+            attempt_log_start = ctx.log_file.stat().st_size
+        except OSError:
+            pass
 
     try:
         # calibrateImage config-file chain: tuned config, then (optionally)
@@ -786,9 +803,14 @@ def _attempt_config(
         # F-042: only a small set of known-fatal patterns stops the fallback
         # cascade; anything else is presumed worth retrying with the next
         # config. Best-effort heuristic, never a correctness signal.
-        fatal = _is_fatal_error(error_str)
+        # str(e) of a CalledProcessError carries no stderr, so classify on
+        # the exception text plus the log this attempt wrote.
+        log_tail = read_log_delta(
+            ctx.log_file, log_start_pos=attempt_log_start, max_chars=8000
+        )
+        fatal = _is_fatal_error(error_str + "\n" + log_tail)
         if fatal:
-            if "astrometry_ref_cat" in error_str:
+            if "astrometry_ref_cat" in error_str + log_tail:
                 log.info("Refcat missing - skipping fallback (won't help)")
             else:
                 log.info("Known-fatal error - skipping fallbacks (won't help)")
