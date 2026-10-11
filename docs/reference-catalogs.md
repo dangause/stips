@@ -77,7 +77,14 @@ Platform](https://data.lsst.cloud/), which needs an RSP account:
    ```
 
 Do this before creating the repository: bootstrap ingests the shard directory
-once, when it sets the repository up, and does not pick up shards added later.
+into the `refcats/the_monster_20250219_local` run once, and skips the ingest
+when that run already exists, so it does not pick up shards added later. To
+re-ingest after merging new shards, remove that run
+(`butler remove-runs $REPO refcats/the_monster_20250219_local --no-confirm --force`,
+which also unlinks it from the `refcats` chain) and run
+`stips bootstrap` again. Bootstrap adds the run to the `refcats` chain by
+extending it, never redefining it, so re-running it keeps the Gaia and
+Pan-STARRS runs fetched by `stips refcat fetch`.
 
 ## On-demand Gaia and Pan-STARRS
 

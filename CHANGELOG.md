@@ -23,6 +23,14 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
   Y4KCam instrument.
 
 ### Changed
+- `stips bootstrap` and the bootstrap step of `stips run` run in Python
+  (`stips.core.bootstrap`) instead of shelling out to a bash script. The
+  `refcats` chain is extended, never redefined, so a re-bootstrap keeps the
+  Gaia DR3 / PS1 runs fetched by `stips refcat fetch`; the instrument is
+  always registered with `register-instrument --update`, also on an existing
+  repo. Failures are the command's exit status, and a standalone `stips
+  bootstrap` writes the unified logs (`logs/<RUN_ID>/pipeline.log`,
+  `bootstrap/bootstrap.log`, `summary.txt`), so the dashboard sees it finish.
 - The paper material — the rebuild driver (`scripts/paper/`), the paper's
   figure scripts, `docs/paper-readiness.md` and the nightly-median test —
   moved to a separate `stips-paper` repository, which also archives the
@@ -46,6 +54,17 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
   the `CCD_BINNING` config key (rejected with a message), the
   `STIPS_PS1_BAND_MAP` env export, `lsst.obs.stips.profile_loader`, and the
   `instrument:` line in `ForcedPhotRaDec.yaml`.
+- `scripts/pipeline/00_bootstrap_repo.sh` and the shell helpers
+  `scripts/utilities/logging.sh`, `repo_paths.sh` and
+  `observing_night_to_ut.sh` (the night → UT `day_obs` mapping is the
+  profile's `night_to_dayobs_offset_days`).
+- `.env` loading everywhere: the Makefile's `ENV_FILE`/`EXTRA_ENV` and its
+  `env-info` and `bootstrap` targets (`STACK_DIR=/path make test`), and the
+  container's `/config/.env` and `STIPS_PROFILE` loaders (containers take the
+  mounted `-c` config YAML).
+- The `SKYMAP_NAME`, `SKYMAP_COLLECTION`, `SKYMAP_CFG` and
+  `STIPS_INSTRUMENT_CLASS` stack env exports and the `RUN_ID` passthrough;
+  nothing in the stack read them any more.
 
 ### Fixed
 - `stips download` works for Nickel in a fresh install again. The vendored

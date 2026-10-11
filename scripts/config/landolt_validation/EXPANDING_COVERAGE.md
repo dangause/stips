@@ -71,30 +71,26 @@ stips-refcats merge the_monster_20250219_new.tgz \
 This extracts the new shards alongside the existing ones and deletes the
 stale `filename_to_htm.ecsv` so bootstrap rebuilds it.
 
-### 4. Drop the existing refcat collection and re-bootstrap
+### 4. Drop the existing refcat run and re-bootstrap
 
-`scripts/pipeline/00_bootstrap_repo.sh` skips `butler ingest-files` if the
-`refcats/the_monster_20250219_local` collection already exists, so we must
-drop it first:
+`stips bootstrap` skips `butler ingest-files` if the
+`refcats/the_monster_20250219_local` RUN collection already exists, so we must
+drop it first (`--force` also unlinks it from the `refcats` chain):
 
 ```bash
 REPO=/Users/dangause/Developer/lick/lsst/data/nickel/landolt_validation_repo
-butler remove-collections $REPO refcats/the_monster_20250219_local --no-confirm
-butler remove-collections $REPO refcats --no-confirm   # the chain
+butler remove-runs $REPO refcats/the_monster_20250219_local --no-confirm --force
 ```
 
-Then re-bootstrap (only the refcat ingestion step matters; calibs and
-science collections are preserved):
+Leave the `refcats` chain in place: bootstrap extends it with the re-ingested
+run and never redefines it, so any Gaia/PS1 runs already in the chain survive.
+
+Then re-bootstrap. Bootstrap is idempotent: it rebuilds the stale
+`filename_to_htm.ecsv` map, re-ingests the shards, and leaves calibs and
+science collections untouched:
 
 ```bash
-stips -c scripts/config/landolt_validation/pipeline_landolt.yaml run \
-  --skip-calibs --skip-science    # bootstrap only; adjust flags if needed
-```
-
-If `--skip-*` flags don't bypass everything cleanly, just shell out:
-
-```bash
-bash scripts/pipeline/00_bootstrap_repo.sh
+stips -c scripts/config/landolt_validation/pipeline_landolt.yaml bootstrap
 ```
 
 ### 5. Verify coverage

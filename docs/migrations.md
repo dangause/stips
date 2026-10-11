@@ -3,6 +3,22 @@
 One-time migration notes for changes that affect the contents of *existing*
 Butler repositories or existing instrument forks. Newest first.
 
+## 2026-10: Bootstrap runs in Python; `.env` files are gone everywhere
+
+`stips bootstrap` (and the bootstrap step of `stips run`) no longer shells out
+to `scripts/pipeline/00_bootstrap_repo.sh`; `stips.core.bootstrap` does the same
+work through `butler` with one change in behaviour: the `refcats` chain is
+**extended**, never redefined, so re-running bootstrap on a repo keeps the
+Gaia DR3 / PS1 runs fetched by `stips refcat fetch`. Failures now surface as
+the command's exit status and `logs/<RUN_ID>/bootstrap/bootstrap.log`.
+
+The Makefile and the container entrypoint stopped reading `.env` files. Export
+`STACK_DIR` (and optionally `INSTRUMENT_DIR`) for `make test` / `make notebook`;
+containers take the `-c` config YAML like every other invocation.
+`scripts/utilities/{logging.sh,repo_paths.sh,observing_night_to_ut.sh}` are
+removed (the night → UT `day_obs` mapping is the profile's
+`night_to_dayobs_offset_days`, used by every `stips` command).
+
 ## 2026-10: Instrument identity is the directory name (#59)
 
 Every instrument now registers under its **own** Butler class path,

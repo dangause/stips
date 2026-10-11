@@ -36,10 +36,6 @@ Community Forum](https://community.lsst.org/) is the place to ask.
   `REFCAT_REPO/data/refcats/the_monster_20250219_afw/`. See
   {doc}`reference-catalogs`.
 
-**`Bootstrap script not found`**
-: Run `stips` from the STIPS checkout, or keep your instrument directory at
-  `instruments/<name>/` inside it.
-
 **Database or locking errors**
 : The repository's filesystem must support `flock`; some network filesystems
   are mounted without it. Put the repository on a local disk to check.
