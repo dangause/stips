@@ -196,13 +196,30 @@ def assert_nameplate_contract(info: InstrumentDirInfo) -> None:
 
 
 def assert_profile_imports_relatively(info: InstrumentDirInfo) -> None:
-    """profile.py imports its co-located modules relatively (``from .fetch``)."""
+    """profile.py imports its co-located modules relatively (``from .fetch``).
+
+    ``profile.py`` is imported as ``instruments.<name>.profile``, so an absolute
+    import of a sibling module (``from helpers import x`` / ``import helpers``)
+    only works by accident of ``sys.path``. Every ``*.py`` beside ``profile.py``
+    (other than ``profile.py`` and the ``instrument.py`` nameplate) is a
+    sibling; the pattern anchors on the bare stem at the start of a line, so a
+    package-qualified ``from stips.fetch import ...`` is not rejected.
+    """
     import re
 
     src = info.profile_path.read_text()
-    assert not re.search(
-        r"^\s*from fetch import", src, re.M
-    ), f"{info.name}: use `from .fetch import ...` (profile.py is instruments.{info.name}.profile)"
+    siblings = sorted(
+        p.stem
+        for p in info.path.glob("*.py")
+        if p.name not in ("profile.py", "instrument.py")
+    )
+    for stem in siblings:
+        s = re.escape(stem)
+        pattern = rf"^\s*(from\s+{s}(\.|\s)|import\s+{s}(\s|$|,))"
+        assert not re.search(pattern, src, re.M), (
+            f"{info.name}: use `from .{stem} import ...` "
+            f"(profile.py is instruments.{info.name}.profile)"
+        )
 
 
 def assert_profile_valid(profile: Any) -> None:
