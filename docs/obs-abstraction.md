@@ -55,7 +55,7 @@ flowchart TB
 
 ## 2. The profile: one object describes the whole instrument
 
-`InstrumentProfile` (`packages/stips/src/stips/profile.py:47`) is the single surface a forking
+`InstrumentProfile` (`packages/stips/src/stips/profile.py`) is the single surface a forking
 team edits. It is a dataclass holding everything instrument-specific as **data**, plus a small
 dictionary of **hooks** for behavior that can't be expressed declaratively.
 
@@ -110,7 +110,7 @@ A frequent point of confusion. The two dictionaries serve different stages:
 | `filters` | `physical_filter → band` | The canonical filter registry → `FilterDefinitionCollection` |
 | `filter_aliases` | raw FITS value → `physical_filter` | `to_physical_filter()` during ingest |
 
-For Nickel (`instruments/nickel/profile.py:28`): `filters` maps `"R" → "r"`, while
+For Nickel (`instruments/nickel/profile.py`, `profile`): `filters` maps `"R" → "r"`, while
 `filter_aliases` maps the messy header values `"R'"`, `"RP"`, `"rp"` onto a clean
 `physical_filter`. Ingest normalizes header → physical_filter → band.
 
@@ -124,8 +124,8 @@ def observation_type(header):
     ...  # classify object/flat/bias/dark/focus from messy OBJECT/OBSTYPE
 ```
 
-The `hook` decorator (`profile.py:104`) simply stores the function in `profile.hooks[name]`.
-Nickel's most important hook is `tracking_radec` (`instruments/nickel/profile.py:246`), which
+The `hook` decorator (`profile.py` `hook`) simply stores the function in `profile.hooks[name]`.
+Nickel's most important hook is `tracking_radec` (`instruments/nickel/profile.py`), which
 works around the telescope's known stale-`DEC`-header bug by cross-checking `CRVAL1/2` against
 the `RA`/`DEC` keywords.
 
@@ -279,7 +279,7 @@ is bound twice. New registrations never use it. See `docs/migrations.md`.
 
 ### 6.1 `StipsInstrument` — registration & camera
 
-`instrument.py:28`. Generic LSST `Instrument` subclass. Highlights:
+`instrument.py` `StipsInstrument`. Generic LSST `Instrument` subclass. Highlights:
 
 - `__init_subclass__` pulls `name`, `policyName`, `obsDataPackage`, and builds
   `filterDefinitions` — one `FilterDefinition(physical_filter, band=band)` per `profile.filters`
@@ -290,21 +290,21 @@ is bound twice. New registrations never use it. See `docs/migrations.md`.
 ```mermaid
 flowchart TB
     gc["getCamera()"] --> q{"profile.camera<br/>is a CameraSpec?"}
-    q -->|yes| bc["build_camera(spec)<br/>synthesize afw Camera in-memory<br/>camera_builder.py:202"]
+    q -->|yes| bc["build_camera(spec)<br/>synthesize afw Camera in-memory<br/>camera_builder.py"]
     q -->|no, it's a yaml path| bn{"profile.ccd_binning &gt; 1?"}
     bn -->|no| yc["yamlCamera.makeCamera(file)<br/>(stock LSST loader)"]
-    bn -->|yes| byc["build_yaml_camera(file, binning)<br/>on-chip binning transform<br/>camera_builder.py:136"]
+    bn -->|yes| byc["build_yaml_camera(file, binning)<br/>on-chip binning transform<br/>camera_builder.py"]
 ```
 
 - `register()` writes the single-CCD geometry with stable raft/slot labels `R00`/`S00`.
 
 ### 6.2 `StipsTranslator` — header translation by profile
 
-`translator.py:9`. Subclasses astro_metadata_translator's `FitsTranslator`.
+`translator.py` `StipsTranslator`. Subclasses astro_metadata_translator's `FitsTranslator`.
 
-- `__init_subclass__` (`:14`) compiles `profile.header_map` into amt's `_trivial_map` and
+- `__init_subclass__` compiles `profile.header_map` into amt's `_trivial_map` and
   `profile.const_map` into `_const_map`.
-- `can_translate()` (`:23`) decides whether this translator owns a file by substring-matching
+- `can_translate()` decides whether this translator owns a file by substring-matching
   `profile.instrument_header_value or profile.name` against the FITS `INSTRUME`. (This is how
   the profile named `"CTIO1m"` claims files whose `INSTRUME` is `"Y4KCam"`.) When the profile
   sets `binning_header` (e.g. `"CCDSUM"`), it also claims a file only if the header's binning
@@ -320,7 +320,7 @@ flowchart LR
 ```
 
 So the translator carries *no* instrument knowledge: declarative headers come from
-`header_map`, and anything irregular is a profile hook. `_hook(name)` (`:33`) is just
+`header_map`, and anything irregular is a profile hook. `_hook(name)` is just
 `self.profile.hooks.get(name)`.
 
 ### 6.3 `StipsRawFormatter`
@@ -334,7 +334,7 @@ Generic raw formatter, bound to the synthesized `Instrument`/`Translator` by `bi
 A fork can override any single pipeline YAML or config `.py` by dropping a same-named file into
 its own directory — without forking the shared files.
 
-`Config.resolve_pipeline()` / `resolve_config()` (`config.py:141`–`157`):
+`Config.resolve_pipeline()` / `resolve_config()` (`config.py` `Config.resolve_pipeline()` / `Config.resolve_config()`):
 
 ```mermaid
 flowchart LR
@@ -350,7 +350,7 @@ geometry config (`SKYMAP_CFG`).
 
 ## 8. End-to-end: from CLI command to a running pipeline
 
-`stack.py:_build_setup_script()` assembles the bash prefix that activates the stack and
+`stack.py` `_build_setup_script()` assembles the bash prefix that activates the stack and
 exports everything the subprocess (and Butler-inside-it) needs to import the instrument:
 
 ```mermaid
@@ -449,6 +449,6 @@ no EUPS product. See `docs/forking-stips.md` for the step-by-step walkthrough.
 | Generic translator | `packages/obs_stips/python/lsst/obs/stips/translator.py` |
 | Camera synthesis + binning | `packages/obs_stips/python/lsst/obs/stips/camera_builder.py` |
 | Subprocess env wiring | `packages/stips/src/stips/core/stack.py` |
-| Config/pipeline resolution | `packages/stips/src/stips/core/config.py:141` |
+| Config/pipeline resolution | `packages/stips/src/stips/core/config.py` (`Config.resolve_pipeline` / `resolve_config`) |
 | Loader / binding tests | `packages/obs_stips/tests/test_binding.py`, `packages/stips/tests/test_profile_import.py` |
 | Reference profile | `instruments/nickel/profile.py` |
