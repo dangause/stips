@@ -318,3 +318,34 @@ def test_list_instruments_returns_name_to_class(monkeypatch):
     assert bq.list_instruments(_cfg()) == {"CTIO1m": "lsst.obs.stips.active.Instrument"}
     monkeypatch.setattr(bq, "run_butler_python_json", lambda script, config: None)
     assert bq.list_instruments(_cfg()) is None
+
+
+def test_chain_members_script_uses_collection_info_with_registry_fallback():
+    from stips.core.butler_query import _build_chain_members_script
+
+    s = _build_chain_members_script("/repo", "refcats")
+    assert 'butler.collections.get_info("refcats", include_chains=True)' in s
+    assert 'getCollectionChain("refcats")' in s  # v27 fallback
+    assert "MissingCollectionError" in s
+
+
+def test_chain_members_returns_ordered_children(monkeypatch):
+    from stips.core import butler_query as bq
+
+    monkeypatch.setattr(
+        bq,
+        "run_butler_python_json",
+        lambda script, config: {
+            "members": ["refcats/the_monster_20250219_local", "refcats/gaia_dr3/x"]
+        },
+    )
+    assert bq.chain_members(_cfg(), "refcats") == [
+        "refcats/the_monster_20250219_local",
+        "refcats/gaia_dr3/x",
+    ]
+    monkeypatch.setattr(
+        bq, "run_butler_python_json", lambda script, config: {"members": None}
+    )
+    assert bq.chain_members(_cfg(), "refcats") is None
+    monkeypatch.setattr(bq, "run_butler_python_json", lambda script, config: None)
+    assert bq.chain_members(_cfg(), "refcats") is None

@@ -31,6 +31,7 @@ in-stack snippet fails to run, so callers can distinguish "query failed" from
 
 from __future__ import annotations
 
+import json
 from typing import TYPE_CHECKING, Any, Sequence
 
 from stips.core.stack import run_butler_python_json
@@ -229,6 +230,28 @@ print(json.dumps({{"has_datasets": has}}))
 """
 
 
+def _build_chain_members_script(repo: str, name: str) -> str:
+    """Build a snippet printing ``{"members": [...]}`` for a CHAINED collection,
+    ``{"members": null}`` when the collection does not exist."""
+    name_literal = json.dumps(name)
+    return f"""
+import json
+from lsst.daf.butler import Butler, MissingCollectionError
+
+butler = Butler.from_config({repo!r}, writeable=False)
+try:
+    try:
+        info = butler.collections.get_info({name_literal}, include_chains=True)
+        members = list(info.children)
+    except (AttributeError, TypeError):
+        # v27 fallback
+        members = list(butler.registry.getCollectionChain({name_literal}))
+except MissingCollectionError:
+    members = None
+print(json.dumps({{"members": members}}))
+"""
+
+
 def _build_list_instruments_script(repo: str) -> str:
     """Build a snippet printing ``{"instruments": {name: class_name}}``."""
     return f"""
@@ -377,6 +400,21 @@ def collection_has_datasets(config: "Config", name: str) -> bool:
     """
     script = _build_collection_has_datasets_script(str(config.repo), name)
     return bool(_field(run_butler_python_json(script, config), "has_datasets"))
+
+
+def chain_members(config: "Config", name: str) -> list[str] | None:
+    """Direct members of CHAINED collection ``name`` in search order.
+
+    ``[]`` when the collection exists but has no members (or is not a chain);
+    ``None`` when it does not exist or the in-stack query failed. Callers use
+    ``collection_exists`` first when they need to distinguish "absent" from
+    "failed".
+    """
+    script = _build_chain_members_script(str(config.repo), name)
+    raw = _field(run_butler_python_json(script, config), "members")
+    if raw is None:
+        return None
+    return [str(m) for m in raw]
 
 
 def list_instruments(config: "Config") -> dict[str, str] | None:
