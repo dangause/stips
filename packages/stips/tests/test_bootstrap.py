@@ -149,9 +149,15 @@ class _Butler:
                 return subprocess.CompletedProcess(args, 0)
             chain = args[2]
             if "--mode" in args and args[args.index("--mode") + 1] == "extend":
-                self.state["chains"].setdefault(chain, []).extend(
-                    a for a in args[3:] if not a.startswith("--") and a != "extend"
-                )
+                # Mirrors Butler: creates a missing chain, and moves an
+                # already-present child to the end instead of erroring.
+                members = self.state["chains"].setdefault(chain, [])
+                for a in args[3:]:
+                    if a.startswith("--") or a == "extend":
+                        continue
+                    if a in members:
+                        members.remove(a)
+                    members.append(a)
             else:
                 self.state["chains"][chain] = [
                     a for a in args[3:] if not a.startswith("--") and a != "redefine"
@@ -268,6 +274,8 @@ def test_run_fresh_repo_does_every_step_in_order(tmp_path):
         "collection-chain",
         str(cfg.repo),
         "refcats",
+        "--mode",
+        "extend",
         "refcats/the_monster_20250219_local",
     ]
     assert fake.calls[5] == [
@@ -282,6 +290,8 @@ def test_run_fresh_repo_does_every_step_in_order(tmp_path):
         "collection-chain",
         str(cfg.repo),
         "skymaps/nickelRings",
+        "--mode",
+        "extend",
         "skymaps",
     ]
 
@@ -345,7 +355,14 @@ def test_second_instrument_in_shared_repo_registers_its_own_skymap(tmp_path):
     reg = [c for c in fake.calls if c[0] == "register-skymap"]
     assert len(reg) == 1 and reg[0][-2:] == ["-c", "name=nickelRings-v1"]
     assert [c for c in fake.calls if c[0] == "collection-chain"] == [
-        ["collection-chain", str(cfg.repo), "skymaps/nickelRings", "skymaps"]
+        [
+            "collection-chain",
+            str(cfg.repo),
+            "skymaps/nickelRings",
+            "--mode",
+            "extend",
+            "skymaps",
+        ]
     ]
     assert state["chains"]["skymaps/nickelRings"] == ["skymaps"]
 
@@ -582,9 +599,64 @@ def test_rebootstrap_with_missing_skymap_chain_recreates_it(tmp_path):
     cmds = [c[0] for c in fake.calls]
     assert "register-skymap" not in cmds
     assert [c for c in fake.calls if c[0] == "collection-chain"] == [
-        ["collection-chain", str(cfg.repo), "skymaps/nickelRings", "skymaps"]
+        [
+            "collection-chain",
+            str(cfg.repo),
+            "skymaps/nickelRings",
+            "--mode",
+            "extend",
+            "skymaps",
+        ]
     ]
     assert state["chains"]["skymaps/nickelRings"] == ["skymaps"]
+
+
+def test_chain_query_failure_never_redefines(tmp_path):
+    """A failed chain_members probe must not fall back to a redefining call."""
+    from stips.core import bootstrap, butler_query
+
+    cfg = _initialized_cfg(tmp_path)
+    state = _initialized_state()
+    state["collections"].discard("refcats/the_monster_20250219_local")
+    state["chains"]["refcats"] = ["refcats/gaia_dr3/x"]
+    fake = _Butler(state)
+    # Both in-stack probes fail (collection_exists -> False, chain_members ->
+    # None) while the chain really exists with a Gaia member.
+    with _patched(bootstrap, fake), mock.patch.object(
+        butler_query, "chain_members", lambda config, name: None
+    ), mock.patch.object(butler_query, "collection_exists", lambda config, name: False):
+        bootstrap._ensure_chain_member(
+            cfg, "refcats", "refcats/the_monster_20250219_local", None
+        )
+    assert fake.calls == [
+        [
+            "collection-chain",
+            str(cfg.repo),
+            "refcats",
+            "--mode",
+            "extend",
+            "refcats/the_monster_20250219_local",
+        ]
+    ]
+    assert state["chains"]["refcats"] == [
+        "refcats/gaia_dr3/x",
+        "refcats/the_monster_20250219_local",
+    ]
+
+
+def test_present_monster_run_needs_no_refcat_repo(tmp_path):
+    from stips.core import bootstrap
+
+    cfg = _full_cfg(tmp_path, refcat_repo=None)
+    cfg.repo.mkdir(parents=True)
+    (cfg.repo / "butler.yaml").write_text("")
+    fake = _Butler(_initialized_state())
+    with _patched(bootstrap, fake):
+        res = bootstrap.run(cfg)
+    assert res.success and res.error is None
+    assert fake.calls == [
+        ["register-instrument", str(cfg.repo), cfg.instrument_class, "--update"]
+    ]
 
 
 def test_initialized_repo_re_register_failure_becomes_result_error(tmp_path):
@@ -693,6 +765,17 @@ def test_map_with_unparseable_row_is_invalid(tmp_path):
     m = tmp_path / "filename_to_htm.ecsv"
     m.write_text('# %ECSV 1.0\n"/x/refcat_htm7_1.fits 1\n')  # unbalanced quote
     assert bootstrap._map_is_valid(m) is False
+
+
+def test_map_with_header_but_no_rows_is_rebuilt(tmp_path):
+    from stips.core import bootstrap
+
+    _, shards = _shards(tmp_path)
+    m = shards / "filename_to_htm.ecsv"
+    m.write_text("# %ECSV 1.0\n# ---\n# datatype: []\npath htm7\n")
+    assert bootstrap._map_is_valid(m) is False
+    assert bootstrap.ensure_monster_map(shards) == m
+    assert "refcat_htm7_131072" in m.read_text()
 
 
 def test_ensure_monster_map_reuses_valid_rebuilds_stale_or_non_ecsv(tmp_path):

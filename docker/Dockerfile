@@ -74,8 +74,7 @@ RUN source /opt/lsst/software/stack/loadLSST.bash && \
     pip install --no-deps -e packages/obs_stips && \
     pip install "tenacity==9.1.2" && \
     pip install fastapi "uvicorn[standard]" jinja2 sse-starlette && \
-    python -c "import stips.cli, stips_refcats, astroquery, tenacity, fastapi, uvicorn, sse_starlette" && \
-    { chmod +x /opt/stips/scripts/pipeline/*.sh 2>/dev/null || true; }
+    python -c "import stips.cli, stips_refcats, astroquery, tenacity, fastapi, uvicorn, sse_starlette"
 
 # Copy entrypoint
 COPY docker/entrypoint.sh /opt/stips/docker/entrypoint.sh

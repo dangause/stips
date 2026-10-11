@@ -136,7 +136,7 @@ def _dir_is_writable(d: Path) -> bool:
 
 
 def _map_is_valid(map_path: Path) -> bool:
-    """A usable map is ECSV and its first shard path exists on this host."""
+    """A usable map is ECSV, has a shard row, and its first shard path exists."""
     if not map_path.is_file() or map_path.stat().st_size == 0:
         return False
     with map_path.open() as fh:
@@ -151,7 +151,7 @@ def _map_is_valid(map_path: Path) -> bool:
                 except (ValueError, IndexError):
                     return False
                 return Path(first).is_file()
-    return True
+    return False  # a header with no shard rows would ingest nothing
 
 
 def ensure_monster_map(shard_dir: Path) -> Path:
@@ -212,20 +212,25 @@ def register_instrument(config: Config, log_file: Path | None = None) -> None:
 
 
 def ingest_monster(config: Config, log_file: Path | None = None) -> None:
-    """Ingest the MONSTER shards (once) and make them a member of ``refcats``."""
-    shard_dir = monster_shard_dir(config)
-    if not any(shard_dir.glob(MONSTER_SHARD_GLOB)):
-        raise BootstrapError(
-            f"No MONSTER refcat shards found under {shard_dir} (expected files like "
-            f"{MONSTER_SHARD_GLOB}); see docs/reference-catalogs.md"
-        )
-    repo = str(config.repo)
+    """Ingest the MONSTER shards (once) and make them a member of ``refcats``.
+
+    With the MONSTER RUN already present, ``REFCAT_REPO`` and the shard
+    directory are not consulted at all: only the chain membership is ensured.
+    """
     if butler_query.collection_exists(config, MONSTER_RUN):
         # The RUN is only ever created by `ingest-files`, which requires the
         # dataset type to be registered; and with the RUN present the ingest is
         # skipped anyway.
         log.info("MONSTER RUN already present: %s", MONSTER_RUN)
     else:
+        shard_dir = monster_shard_dir(config)
+        if not any(shard_dir.glob(MONSTER_SHARD_GLOB)):
+            raise BootstrapError(
+                f"No MONSTER refcat shards found under {shard_dir} (expected files "
+                f"like {MONSTER_SHARD_GLOB}); see docs/reference-catalogs.md"
+            )
+        ecsv = ensure_monster_map(shard_dir)
+        repo = str(config.repo)
         _butler(
             [
                 "register-dataset-type",
@@ -238,7 +243,6 @@ def ingest_monster(config: Config, log_file: Path | None = None) -> None:
             log_file,
             check=False,
         )
-        ecsv = ensure_monster_map(shard_dir)
         log.info("Ingesting MONSTER -> %s", MONSTER_RUN)
         _butler(
             [
@@ -259,19 +263,22 @@ def ingest_monster(config: Config, log_file: Path | None = None) -> None:
 def _ensure_chain_member(
     config: Config, chain: str, member: str, log_file: Path | None
 ) -> None:
-    """Make ``member`` part of CHAINED ``chain`` without disturbing other members."""
-    repo = str(config.repo)
-    if not butler_query.collection_exists(config, chain):
-        log.info("Creating chain %s -> %s", chain, member)
-        _butler(["collection-chain", repo, chain, member], config, log_file)
-        return
+    """Make ``member`` part of CHAINED ``chain`` without disturbing other members.
+
+    Always ``--mode extend``, never the bare form (whose default mode is
+    ``redefine``): extend creates a missing chain and moves an already-present
+    child to the end, so a failed membership probe can at worst reorder the
+    chain, never drop its Gaia/PS1 runs.
+    """
     members = butler_query.chain_members(config, chain)
     if members is not None and member in members:
         log.info("Chain %s already contains %s", chain, member)
         return
-    log.info("Extending chain %s with %s", chain, member)
+    log.info("Linking %s into chain %s", member, chain)
     _butler(
-        ["collection-chain", repo, chain, "--mode", "extend", member], config, log_file
+        ["collection-chain", str(config.repo), chain, "--mode", "extend", member],
+        config,
+        log_file,
     )
 
 

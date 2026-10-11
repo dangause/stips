@@ -763,8 +763,10 @@ def bootstrap(ctx: click.Context, config: cfg_module.Config) -> None:
 
     Creates the Butler repo, registers the instrument, ingests reference
     catalogs, and sets up the skymap. Run this once before processing data.
-    On an already-initialized repo it only re-registers the active instrument
-    (register-instrument --update). Logs go to logs/<RUN_ID>/bootstrap/.
+    Safe to re-run on an existing repo: it re-registers the instrument
+    (`register-instrument --update`) and repairs anything missing (the MONSTER
+    run, the refcats and skymap chains, the skymap); steps whose result already
+    exists are skipped. Logs go to logs/<RUN_ID>/bootstrap/.
 
     Configuration comes from the group -c config YAML's env: block.
 

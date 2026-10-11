@@ -36,6 +36,12 @@ Community Forum](https://community.lsst.org/) is the place to ask.
   `REFCAT_REPO/data/refcats/the_monster_20250219_afw/`. See
   {doc}`reference-catalogs`.
 
+**`No skyMap dataset visible in <collection>` after bootstrap**
+: The `skymap` dimension record survives `butler remove-runs skymaps`, so
+  `register-skymap` cannot re-write the dataset; bootstrap warns and
+  continues. Do not remove the `skymaps` run; to change skymap geometry
+  create a repository instead.
+
 **Database or locking errors**
 : The repository's filesystem must support `flock`; some network filesystems
   are mounted without it. Put the repository on a local disk to check.
