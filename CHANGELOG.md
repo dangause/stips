@@ -64,6 +64,15 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
   MONSTER.
 - `refcat: null` in the config no longer crashes config loading; it means the
   defaults.
+- The on-demand PS1 DR2 fetch reads the whole cone. MAST serves at most one
+  page (50 000 rows) per request and, unsorted, an arbitrary slice of it, so
+  a cone larger than a page (`radius_deg: 0.3` at Dec +54 holds ~112 000
+  objects) silently got a different ~45 % sample on every fetch; a field could
+  lose its bright PS1 stars and `calibrateImage` would fit the zeropoint to
+  one star. `stips_refcats.ps1.query_ps1_mean_pages` now pages through the
+  cone sorted by `objID`, which makes the result complete and repeatable;
+  the bulk `ps1_fetch_mast.py` script uses it too. Cones of 0.1 deg and
+  smaller fit in one page and were unaffected.
 
 ## [2.3.0] — 2026-10-09
 
