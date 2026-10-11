@@ -483,6 +483,8 @@ class TestIsFatalError:
             "sqlite3.OperationalError: ConflictingDefinitionError follows",
             "OSError: [Errno 13] Permission denied: '/repo'",
             "OSError: [Errno 28] No space left on device",
+            "lsst.daf.butler.MissingDatasetTypeError: Dataset type "
+            "'the_monster_20250219_local' is not registered",
         ],
     )
     def test_fatal(self, text):

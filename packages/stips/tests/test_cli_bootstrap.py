@@ -123,3 +123,52 @@ def test_bootstrap_run_reads_as_finished_on_the_dashboard(
     )
     (run,) = discover_runs(tmp_path / "root" / "logs")
     assert run.status == getattr(RunStatus, status)
+
+
+# ---------------------------------------------------------------------------
+# refcat.mode -> require_monster (issue #75)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "refcat_block, required",
+    [
+        ("", True),
+        ("refcat:\n  mode: monster\n", True),
+        ("refcat:\n  mode: gaia_ps1\n", False),
+        ("refcat:\n  mode: gaia\n", False),
+    ],
+)
+def test_bootstrap_require_monster_follows_refcat_mode(
+    cfg_file, monkeypatch, refcat_block, required
+):
+    cfg_file.write_text(cfg_file.read_text() + refcat_block)
+    res, seen = _invoke(
+        cfg_file, monkeypatch, bootstrap_module.BootstrapResult(True, None)
+    )
+    assert res.exit_code == 0, res.output
+    assert seen["require_monster"] is required
+
+
+def test_bootstrap_rejects_unknown_refcat_mode(cfg_file, monkeypatch):
+    cfg_file.write_text(cfg_file.read_text() + "refcat:\n  mode: bogus\n")
+    res, seen = _invoke(
+        cfg_file, monkeypatch, bootstrap_module.BootstrapResult(True, None)
+    )
+    assert res.exit_code != 0
+    assert seen == {}  # bootstrap_module.run was not called
+    assert "bogus" in res.output
+    assert "gaia_ps1" in res.output
+
+
+def test_bootstrap_reports_skipped_monster(cfg_file, monkeypatch):
+    cfg_file.write_text(cfg_file.read_text() + "refcat:\n  mode: gaia_ps1\n")
+    res, _ = _invoke(
+        cfg_file,
+        monkeypatch,
+        bootstrap_module.BootstrapResult(True, None, monster_skipped=True),
+    )
+    assert res.exit_code == 0, res.output
+    line = next(ln for ln in res.output.splitlines() if "MONSTER" in ln)
+    assert "skipped" in line
+    assert "gaia_ps1" in line

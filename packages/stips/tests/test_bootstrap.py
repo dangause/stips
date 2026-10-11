@@ -959,3 +959,40 @@ def test_not_required_with_present_monster_run_counts_as_ingested(tmp_path):
     with _patched(bootstrap, fake):
         res = bootstrap.run(cfg, require_monster=False)
     assert res.success and res.refcats_ingested and not res.monster_skipped
+
+
+@pytest.mark.parametrize(
+    "required, phrase",
+    [
+        (True, "ingest MONSTER, register the skymap"),
+        (
+            False,
+            "ingest MONSTER if shards are present, else register an empty "
+            "refcats chain",
+        ),
+    ],
+)
+def test_dry_run_message_follows_require_monster(tmp_path, caplog, required, phrase):
+    import logging
+
+    from stips.core import bootstrap
+
+    caplog.set_level(logging.INFO, logger="stips.core.bootstrap")
+    cfg = _full_cfg(tmp_path, refcat_repo=None)
+    assert bootstrap.run(cfg, dry_run=True, require_monster=required).success
+    assert phrase in caplog.text
+    if required:
+        assert "if shards are present" not in caplog.text
+
+
+def test_register_empty_chain_error_points_at_stack_output(tmp_path, monkeypatch):
+    from stips.core import bootstrap
+
+    cfg = _full_cfg(tmp_path)
+    monkeypatch.setattr(
+        bootstrap, "run_butler_python_json", lambda script, config: None
+    )
+    with pytest.raises(
+        bootstrap.BootstrapError, match="preceding run_butler_python warning"
+    ):
+        bootstrap.register_empty_chain(cfg, "refcats")

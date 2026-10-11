@@ -322,7 +322,8 @@ def register_empty_chain(
     )
     if not isinstance(out, dict) or out.get("registered") != name:
         raise BootstrapError(
-            f"could not register the empty chain {name!r} in {config.repo}"
+            f"could not register the empty chain {name!r} in {config.repo} "
+            "(see the preceding run_butler_python warning for the stack output)"
         )
     log.info(
         "Chain %s %s",
@@ -444,9 +445,16 @@ def run(
     else:
         log.info("Bootstrapping repository: %s", config.repo)
     if dry_run:
+        monster_step = (
+            "ingest MONSTER"
+            if require_monster
+            else "ingest MONSTER if shards are present, else register an "
+            "empty refcats chain"
+        )
         log.info(
             "[DRY RUN] Would create the repo, register the instrument, "
-            "ingest MONSTER, register the skymap"
+            "%s, register the skymap",
+            monster_step,
         )
         result.success = True
         return result

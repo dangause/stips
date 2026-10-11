@@ -455,6 +455,10 @@ _FATAL_ERROR_PATTERNS: tuple[str, ...] = (
     "ConflictingDefinitionError",
     "Permission denied",
     "No space left on device",
+    # an unregistered reference catalog (e.g. MONSTER never ingested in a
+    # gaia_ps1-bootstrapped repo run in monster mode): no calibrateImage config
+    # can fix that
+    "MissingDatasetTypeError",
 )
 
 

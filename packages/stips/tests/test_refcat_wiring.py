@@ -225,3 +225,116 @@ def test_cli_refcat_status_computes_coverage_in_stack(monkeypatch):
     assert "(210.91, 54.31, 0.3)" in scripts[0]
     assert "gaia_dr3: 3/3 trixels present" in result.output
     assert "panstarrs1_dr2: 1/3 trixels present" in result.output
+
+
+def test_refcat_null_section_defaults_to_monster(tmp_path):
+    cfg = RunConfig.from_yaml(_write(tmp_path, {"refcat": None}))
+    assert cfg.refcat_mode == "monster"
+    assert cfg.refcat_radius_deg == 0.3
+
+
+def test_refcat_non_dict_section_defaults_to_monster(tmp_path):
+    cfg = RunConfig.from_yaml(_write(tmp_path, {"refcat": "gaia_ps1"}))
+    assert cfg.refcat_mode == "monster"
+
+
+# ---------------------------------------------------------------------------
+# _run_bootstrap_step: refcat.mode -> require_monster (issue #75)
+# ---------------------------------------------------------------------------
+
+
+def _patch_bootstrap(monkeypatch, *, needs=True, result=None):
+    from stips.core import bootstrap
+
+    calls = []
+
+    def fake_run(config, **kw):
+        calls.append(kw)
+        return result or bootstrap.BootstrapResult(True, None)
+
+    monkeypatch.setattr(bootstrap, "needs_bootstrap", lambda config: needs)
+    monkeypatch.setattr(bootstrap, "run", fake_run)
+    import stips.core.run as run
+
+    monkeypatch.setattr(run, "_get_step_log_file", lambda step: None)
+    return calls
+
+
+@pytest.mark.parametrize(
+    "mode, required",
+    [("monster", True), ("gaia_ps1", False), ("gaia", False)],
+)
+def test_run_bootstrap_step_passes_require_monster(
+    monkeypatch, tmp_path, mode, required
+):
+    from types import SimpleNamespace
+
+    import stips.core.run as run
+
+    calls = _patch_bootstrap(monkeypatch)
+    out = run._run_bootstrap_step(
+        SimpleNamespace(repo=tmp_path / "repo"),
+        SimpleNamespace(refcat_mode=mode),
+        dry_run=False,
+        run_log_dir=tmp_path,
+    )
+    assert out is None
+    assert len(calls) == 1
+    assert calls[0]["require_monster"] is required
+
+
+def test_run_bootstrap_step_failure_is_early_exit(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+
+    import stips.core.run as run
+    from stips.core.bootstrap import BootstrapResult
+
+    _patch_bootstrap(
+        monkeypatch, result=BootstrapResult(False, "No MONSTER refcat shards")
+    )
+    out = run._run_bootstrap_step(
+        SimpleNamespace(repo=tmp_path / "repo"),
+        SimpleNamespace(refcat_mode="monster"),
+        dry_run=False,
+        run_log_dir=tmp_path,
+    )
+    assert out is not None
+    assert out.success is False
+    assert "No MONSTER refcat shards" in out.error
+    assert out.log_dir == str(tmp_path)
+
+
+@pytest.mark.parametrize("needs, dry_run", [(False, False), (True, True)])
+def test_run_bootstrap_step_skips(monkeypatch, tmp_path, needs, dry_run):
+    from types import SimpleNamespace
+
+    import stips.core.run as run
+
+    calls = _patch_bootstrap(monkeypatch, needs=needs)
+    out = run._run_bootstrap_step(
+        SimpleNamespace(repo=tmp_path / "repo"),
+        SimpleNamespace(refcat_mode="monster"),
+        dry_run=dry_run,
+        run_log_dir=tmp_path,
+    )
+    assert out is None
+    assert calls == []
+
+
+def test_run_invalid_refcat_mode_returns_failure(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+
+    import stips.core.run as run
+    from stips.core import bootstrap
+
+    monkeypatch.setattr(run, "_setup_run_logging", lambda run_id, config: tmp_path)
+
+    def boom(*a, **k):
+        raise AssertionError("no bootstrap")
+
+    monkeypatch.setattr(bootstrap, "needs_bootstrap", boom)
+    p = _write(tmp_path, {"refcat": {"mode": "bogus"}})
+    out = run.run(p, SimpleNamespace(repo=tmp_path / "repo"))
+    assert out.success is False
+    assert "bogus" in out.error
+    assert out.log_dir == str(tmp_path)

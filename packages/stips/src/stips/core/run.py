@@ -255,7 +255,9 @@ class RunConfig:
 
         # Extract refcat config (on-demand Gaia/PS1; absent section => defaults).
         # Staging default "monster" keeps behavior unchanged until validated.
-        refcat = data.get("refcat", {})
+        refcat = data.get("refcat") or {}
+        if not isinstance(refcat, dict):
+            refcat = {}
         refcat_mode = parse_refcat_mode(refcat.get("mode"))
         refcat_radius_deg = float(refcat.get("radius_deg", 0.3))
         refcat_gaia_quality = refcat.get("gaia_quality")
@@ -1718,6 +1720,48 @@ def _run_refcat_step(run_cfg, config, result, dry_run):
     return None
 
 
+def _run_bootstrap_step(
+    config: Config,
+    run_cfg: RunConfig,
+    *,
+    dry_run: bool,
+    run_log_dir: Path,
+) -> RunResult | None:
+    """Bootstrap the repository when it is not initialized.
+
+    MONSTER is required only in ``refcat.mode: monster``; other modes ingest it
+    when shards are present and otherwise register an empty ``refcats`` chain.
+    Returns a failed ``RunResult`` to stop the run, else None.
+    """
+    from stips.core import bootstrap
+
+    if not bootstrap.needs_bootstrap(config):
+        return None
+    log.info(f"Repository not initialized, running bootstrap: {config.repo}")
+    if dry_run:
+        log.info("[DRY RUN] Would run bootstrap")
+        return None
+    bootstrap_result = bootstrap.run(
+        config,
+        log_file=_get_step_log_file("bootstrap"),
+        require_monster=(run_cfg.refcat_mode == "monster"),
+    )
+    if not bootstrap_result.success:
+        return RunResult(
+            success=False,
+            error=f"Bootstrap failed: {bootstrap_result.error}",
+            log_dir=str(run_log_dir),
+        )
+    if bootstrap_result.monster_skipped:
+        log.info(
+            "MONSTER shards not found; skipped (refcat mode %s fetches "
+            "catalogs on demand)",
+            run_cfg.refcat_mode,
+        )
+    log.info("Bootstrap complete")
+    return None
+
+
 def run(
     config_file: Path,
     config: Config,
@@ -1748,7 +1792,6 @@ def run(
     Returns:
         RunResult with status and any failures
     """
-    from stips.core import bootstrap
     from stips.core.science import ScienceConfig
 
     # Set up unified logging directory for this pipeline run
@@ -1756,24 +1799,20 @@ def run(
     run_log_dir = _setup_run_logging(run_id, config)
     log.info(f"Logs: {run_log_dir}")
 
-    # Step 0: Check if bootstrap is needed
-    if bootstrap.needs_bootstrap(config):
-        log.info(f"Repository not initialized, running bootstrap: {config.repo}")
-        if not dry_run:
-            bootstrap_log = _get_step_log_file("bootstrap")
-            bootstrap_result = bootstrap.run(config, log_file=bootstrap_log)
-            if not bootstrap_result.success:
-                return RunResult(
-                    success=False,
-                    error=f"Bootstrap failed: {bootstrap_result.error}",
-                    log_dir=str(run_log_dir),
-                )
-            log.info("Bootstrap complete")
-        else:
-            log.info("[DRY RUN] Would run bootstrap")
+    # Load run configuration first: bootstrap needs its refcat.mode, and an
+    # invalid config (e.g. an unknown refcat mode) must fail before any work.
+    try:
+        run_cfg = RunConfig.from_yaml(config_file)
+    except ValueError as exc:
+        log.error("Invalid run config %s: %s", config_file, exc)
+        return RunResult(success=False, error=str(exc), log_dir=str(run_log_dir))
 
-    # Load run configuration
-    run_cfg = RunConfig.from_yaml(config_file)
+    # Step 0: Bootstrap the repository if needed
+    early_exit = _run_bootstrap_step(
+        config, run_cfg, dry_run=dry_run, run_log_dir=run_log_dir
+    )
+    if early_exit is not None:
+        return early_exit
 
     # Apply CLI overrides
     if site_override:
