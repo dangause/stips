@@ -3,6 +3,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
 import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
@@ -37,6 +38,11 @@ def test_refcat_section_parsed(tmp_path):
     )
     assert cfg.refcat_mode == "monster"
     assert cfg.refcat_radius_deg == 0.5
+
+
+def test_refcat_invalid_mode_raises(tmp_path):
+    with pytest.raises(ValueError, match="bogus"):
+        RunConfig.from_yaml(_write(tmp_path, {"refcat": {"mode": "bogus"}}))
 
 
 def test_run_refcat_step_calls_ensure(monkeypatch):

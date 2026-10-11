@@ -150,17 +150,13 @@ def _vega_bands_from_ctx(ctx: click.Context, config: cfg_module.Config) -> tuple
     ``InstrumentProfile.vega_bands``. Without a -c YAML there is no mode, so
     every band is reported as AB.
     """
-    import yaml
-
-    from stips.core.run import DEFAULT_REFCAT_MODE
+    from stips.core.refcat import refcat_mode_from_yaml
 
     config_path = (ctx.obj or {}).get("config_path")
     profile = getattr(config, "profile", None)
     if not config_path or profile is None:
         return ()
-    with open(config_path) as fh:
-        raw = yaml.safe_load(fh) or {}
-    mode = (raw.get("refcat") or {}).get("mode", DEFAULT_REFCAT_MODE)
+    mode = refcat_mode_from_yaml(config_path)
     return tuple(getattr(profile, "vega_bands", {}).get(mode, ()))
 
 

@@ -101,6 +101,38 @@ GAIA_PS1_OVERLAY = "refcats_gaia_ps1.py"
 # PS1's -30deg floor (most of CTIO's sky). See refcats_gaia_only.py.
 GAIA_ONLY_OVERLAY = "refcats_gaia_only.py"
 
+#: Reference-catalog modes a config may select (``refcat.mode``).
+REFCAT_MODES: tuple[str, ...] = ("monster", "gaia_ps1", "gaia")
+#: Staging default: keeps legacy behaviour until Gaia/PS1 is validated across
+#: every band (see docs/refcat-validation-runbook.md). Single source of truth
+#: for RunConfig, the CLI and bootstrap.
+DEFAULT_REFCAT_MODE = "monster"
+
+
+def parse_refcat_mode(value: object | None) -> str:
+    """Validate a ``refcat.mode`` value; ``None`` means the default.
+
+    An unknown value used to fall back to MONSTER silently; now it is an error
+    naming the valid modes.
+    """
+    if value is None:
+        return DEFAULT_REFCAT_MODE
+    if value in REFCAT_MODES:
+        return str(value)
+    raise ValueError(
+        f"Unknown refcat.mode {value!r}; valid modes: {', '.join(REFCAT_MODES)}"
+    )
+
+
+def refcat_mode_from_yaml(path) -> str:
+    """The validated ``refcat.mode`` of a ``-c`` config YAML (default when absent)."""
+    import yaml
+
+    with open(path) as fh:
+        raw = yaml.safe_load(fh) or {}
+    section = raw.get("refcat") or {}
+    return parse_refcat_mode(section.get("mode") if isinstance(section, dict) else None)
+
 
 def refcat_overlay_config(mode: str) -> str | None:
     """calibrateImage overlay config name for a refcat mode.

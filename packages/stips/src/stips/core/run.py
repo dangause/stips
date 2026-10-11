@@ -71,7 +71,7 @@ from typing import TYPE_CHECKING
 
 import yaml
 
-from stips.core.refcat import ensure_refcats
+from stips.core.refcat import DEFAULT_REFCAT_MODE, ensure_refcats, parse_refcat_mode
 from stips.core.run_logging import (
     generate_run_id as _generate_run_id,
 )
@@ -96,9 +96,9 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 # Staging default: "monster" preserves legacy behavior until Gaia/PS1 is
-# validated (see docs/refcat-validation-runbook.md). Single source of truth for
-# both the RunConfig field default and the from_yaml fallback.
-DEFAULT_REFCAT_MODE = "monster"
+# validated (see docs/refcat-validation-runbook.md). Single source of truth
+# lives in stips.core.refcat (DEFAULT_REFCAT_MODE above is re-exported from
+# there for existing callers, e.g. `from stips.core.run import DEFAULT_REFCAT_MODE`).
 
 
 @dataclass
@@ -256,7 +256,7 @@ class RunConfig:
         # Extract refcat config (on-demand Gaia/PS1; absent section => defaults).
         # Staging default "monster" keeps behavior unchanged until validated.
         refcat = data.get("refcat", {})
-        refcat_mode = refcat.get("mode", DEFAULT_REFCAT_MODE)
+        refcat_mode = parse_refcat_mode(refcat.get("mode"))
         refcat_radius_deg = float(refcat.get("radius_deg", 0.3))
         refcat_gaia_quality = refcat.get("gaia_quality")
 
