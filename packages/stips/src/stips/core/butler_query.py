@@ -236,7 +236,15 @@ def _build_chain_members_script(repo: str, name: str) -> str:
     name_literal = json.dumps(name)
     return f"""
 import json
-from lsst.daf.butler import Butler, MissingCollectionError
+from lsst.daf.butler import Butler
+try:
+    from lsst.daf.butler import MissingCollectionError
+except Exception:  # pragma: no cover - relocated/absent on some stacks
+    try:
+        from lsst.daf.butler.registry import MissingCollectionError
+    except Exception:
+        class MissingCollectionError(Exception):
+            pass
 
 butler = Butler.from_config({repo!r}, writeable=False)
 try:
