@@ -35,11 +35,14 @@ def test_relative_sibling_import_passes(tmp_path):
     "line",
     [
         "from helpers import x",
-        "    from helpers import x",
+        "if True:\n    from helpers import x",
         "from helpers.sub import x",
         "import helpers",
         "import helpers as h",
         "import helpers, os",
+        "import os, helpers",
+        "import helpers;",
+        "import helpers.sub",
     ],
 )
 def test_absolute_sibling_import_fails(tmp_path, line):
@@ -76,6 +79,30 @@ def test_nameplate_and_profile_stems_are_not_siblings(tmp_path):
     # profile.py / instrument.py are excluded from the sibling set: a profile
     # importing e.g. ``instrument`` from elsewhere is not this contract's job.
     info = _demo_instrument(tmp_path, "import instrument\nimport profile\n", ())
+    ic.assert_profile_imports_relatively(info)
+
+
+def test_docstring_mention_of_sibling_import_passes(tmp_path):
+    # A sibling's name appearing in a module docstring's text is not a real
+    # import -- the ast-based check parses syntax, not substrings, so it must
+    # not be fooled by prose that merely looks like an import statement.
+    src = (
+        '"""Example profile.\n'
+        "\n"
+        "Do not write ``from helpers import x`` here; use a relative import.\n"
+        '"""\n'
+    )
+    info = _demo_instrument(tmp_path, src)
+    ic.assert_profile_imports_relatively(info)
+
+
+def test_from_dot_import_helpers_passes(tmp_path):
+    info = _demo_instrument(tmp_path, "from . import helpers\n")
+    ic.assert_profile_imports_relatively(info)
+
+
+def test_from_dot_helpers_import_passes(tmp_path):
+    info = _demo_instrument(tmp_path, "from .helpers import x\n")
     ic.assert_profile_imports_relatively(info)
 
 
