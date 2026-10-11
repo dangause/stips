@@ -18,6 +18,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 
@@ -810,3 +812,150 @@ def test_ensure_monster_map_falls_back_to_tempdir_when_read_only(tmp_path, monke
     out = bootstrap.ensure_monster_map(shards)
     assert out == tmp_path / "tmp" / "stips_refcat_ecsv" / "filename_to_htm.ecsv"
     assert out.exists()
+
+
+# --- MONSTER optional (refcat mode does not use it) --------------------------
+
+
+def test_register_chain_script_registers_chained_collection():
+    from stips.core.bootstrap import _build_register_chain_script
+
+    s = _build_register_chain_script("/repo", "refcats")
+    assert "writeable=True" in s and "'/repo'" in s
+    assert "CollectionType.CHAINED" in s and "refcats" in s
+    assert "registerCollection" in s  # v27 fallback
+    compile(s, "<snippet>", "exec")
+
+
+def test_register_empty_chain_raises_when_snippet_fails(tmp_path, monkeypatch):
+    from stips.core import bootstrap
+
+    cfg = _full_cfg(tmp_path)
+    monkeypatch.setattr(
+        bootstrap, "run_butler_python_json", lambda script, config: None
+    )
+    with pytest.raises(bootstrap.BootstrapError, match="refcats"):
+        bootstrap.register_empty_chain(cfg, "refcats")
+
+
+def test_register_empty_chain_runs_snippet(tmp_path, monkeypatch):
+    from stips.core import bootstrap
+
+    cfg = _full_cfg(tmp_path)
+    seen = []
+
+    def fake(script, config):
+        seen.append(script)
+        return {"registered": "refcats", "created": True}
+
+    monkeypatch.setattr(bootstrap, "run_butler_python_json", fake)
+    bootstrap.register_empty_chain(cfg, "refcats")
+    assert len(seen) == 1 and str(cfg.repo) in seen[0]
+
+
+def test_not_required_without_shards_skips_and_registers_empty_chain(
+    tmp_path, monkeypatch, caplog
+):
+    from stips.core import bootstrap
+
+    cfg = _full_cfg(tmp_path, refcat_repo=None)
+    fake = _Butler({"collections": set(), "chains": {}, "datasets": set()})
+    registered = []
+    monkeypatch.setattr(
+        bootstrap,
+        "register_empty_chain",
+        lambda config, name, log_file=None: registered.append(name),
+    )
+    with _patched(bootstrap, fake):
+        res = bootstrap.run(cfg, require_monster=False)
+    assert res.success and res.monster_skipped and not res.refcats_ingested
+    assert registered == ["refcats"]
+    cmds = [c[0] for c in fake.calls]
+    assert "ingest-files" not in cmds and "register-dataset-type" not in cmds
+    assert any(
+        r.levelname == "WARNING"
+        and "MONSTER" in r.getMessage()
+        and "skipp" in r.getMessage()
+        for r in caplog.records
+    )
+
+
+def test_not_required_with_empty_refcat_repo_names_the_directory(
+    tmp_path, monkeypatch, caplog
+):
+    from stips.core import bootstrap
+
+    cfg = _full_cfg(tmp_path, refcat_repo=tmp_path / "empty")
+    fake = _Butler({"collections": set(), "chains": {}, "datasets": set()})
+    registered = []
+    monkeypatch.setattr(
+        bootstrap,
+        "register_empty_chain",
+        lambda config, name, log_file=None: registered.append(name),
+    )
+    with _patched(bootstrap, fake):
+        res = bootstrap.run(cfg, require_monster=False)
+    assert res.success and res.monster_skipped and registered == ["refcats"]
+    assert any(
+        r.levelname == "WARNING" and "the_monster_20250219_afw" in r.getMessage()
+        for r in caplog.records
+    )
+
+
+def test_not_required_with_shards_still_ingests(tmp_path, monkeypatch):
+    from stips.core import bootstrap
+
+    refcat_repo, _ = _shards(tmp_path)
+    cfg = _full_cfg(tmp_path, refcat_repo=refcat_repo)
+    fake = _Butler({"collections": set(), "chains": {}, "datasets": set()})
+    monkeypatch.setattr(
+        bootstrap,
+        "register_empty_chain",
+        lambda *a, **k: pytest.fail("should not be called"),
+    )
+    with _patched(bootstrap, fake):
+        res = bootstrap.run(cfg, require_monster=False)
+    assert res.success and res.refcats_ingested and not res.monster_skipped
+    assert "ingest-files" in [c[0] for c in fake.calls]
+
+
+def test_required_without_shards_still_fails(tmp_path):
+    from stips.core import bootstrap
+
+    cfg = _full_cfg(tmp_path, refcat_repo=tmp_path / "empty")
+    fake = _Butler({"collections": set(), "chains": {}, "datasets": set()})
+    with _patched(bootstrap, fake):
+        res = bootstrap.run(cfg, require_monster=True)
+    assert not res.success and "the_monster_20250219_afw" in res.error
+    assert not res.monster_skipped
+
+
+def test_not_required_with_existing_chain_does_not_reregister(tmp_path, monkeypatch):
+    from stips.core import bootstrap
+
+    cfg = _full_cfg(tmp_path, refcat_repo=None)
+    state = _initialized_state()
+    state["collections"].discard("refcats/the_monster_20250219_local")
+    state["chains"]["refcats"] = ["refcats/gaia_dr3/x"]
+    fake = _Butler(state)
+    monkeypatch.setattr(
+        bootstrap,
+        "register_empty_chain",
+        lambda *a, **k: pytest.fail("chain exists"),
+    )
+    with _patched(bootstrap, fake):
+        res = bootstrap.run(cfg, require_monster=False)
+    assert res.success and res.monster_skipped
+    assert state["chains"]["refcats"] == ["refcats/gaia_dr3/x"]
+
+
+def test_not_required_with_present_monster_run_counts_as_ingested(tmp_path):
+    from stips.core import bootstrap
+
+    cfg = _full_cfg(tmp_path, refcat_repo=None)
+    cfg.repo.mkdir(parents=True)
+    (cfg.repo / "butler.yaml").write_text("")
+    fake = _Butler(_initialized_state())
+    with _patched(bootstrap, fake):
+        res = bootstrap.run(cfg, require_monster=False)
+    assert res.success and res.refcats_ingested and not res.monster_skipped
