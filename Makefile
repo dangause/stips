@@ -1,37 +1,19 @@
 SHELL := /bin/bash
-ENV_FILE ?= .env
-EXTRA_ENV ?=
 PYTHON ?= python
 PIP ?= $(PYTHON) -m pip
 
-# Multi-repo support:
-# - Switch primary env file:   ENV_FILE=repo2.env make calibs NIGHT=20240625
-# - Layer common overrides:    EXTRA_ENV=".env.common .env.prod" make calibs NIGHT=20240625
-define load_envs
-for f in $(ENV_FILE) $(EXTRA_ENV); do \
-	if [[ -n "$$f" && -f "$$f" ]]; then \
-		set -a; source "$$f"; set +a; \
-	elif [[ -n "$$f" && "$$f" != ".env" ]]; then \
-		echo "Warning: env file $$f not found" >&2; \
-	fi; \
-done; \
-if [[ -f "$${PWD}/scripts/utilities/repo_paths.sh" ]]; then \
-	source "$${PWD}/scripts/utilities/repo_paths.sh"; \
-fi; \
-export REPO_ROOT="$${REPO_ROOT:-$${PWD}}"; \
-export INSTRUMENT_DIR="$${INSTRUMENT_DIR:-$${REPO_ROOT}/instruments/nickel}"; \
-export TESTDATA_NICKEL_DIR="$${TESTDATA_NICKEL_DIR:-$${REPO_ROOT}/instruments/nickel/testdata}"; \
-export REPO="$${REPO:-}"; \
-export LSST_CONDA_ENV_NAME="$${LSST_CONDA_ENV_NAME:-}"
-endef
-
+# Settings come from the environment: export STACK_DIR (the LSST stack) and,
+# for instrument data packages, INSTRUMENT_DIR (default instruments/nickel).
 # Spliced directly before a command (like setup_stack), so it ends with ';'.
-define envsource
-$(load_envs);
+define env_defaults
+export REPO_ROOT="$(CURDIR)"; \
+export INSTRUMENT_DIR="$${INSTRUMENT_DIR:-$(CURDIR)/instruments/nickel}"; \
+export TESTDATA_NICKEL_DIR="$${TESTDATA_NICKEL_DIR:-$(CURDIR)/instruments/nickel/testdata}";
 endef
 
 define setup_stack
-$(load_envs); \
+$(env_defaults) \
+: "$${STACK_DIR:?export STACK_DIR=/path/to/lsst_stack}"; \
 if [ -f "$${STACK_DIR}/loadLSST.zsh" ]; then \
 	source "$${STACK_DIR}/loadLSST.zsh"; \
 elif [ -f "$${STACK_DIR}/loadLSST.bash" ]; then \
@@ -84,8 +66,8 @@ refcat-cones: ## Generate cones.csv + htm7_list.txt via stips-refcats (pass ARGS
 		PYTHONPATH=$${PYTHONPATH}:$${PWD}/packages/refcats/src python -u -m stips_refcats cones $(ARGS)'
 
 .PHONY: declare-eups
-declare-eups: ## Declare obs_stips + the active instrument's EUPS packages in the current stack (uses STACK_DIR, INSTRUMENT_DIR, env files)
-	$(SHELL) -lc '$(envsource) \
+declare-eups: ## Declare obs_stips + the active instrument's EUPS packages in the current stack (uses STACK_DIR, INSTRUMENT_DIR)
+	$(SHELL) -lc '$(env_defaults) \
 	  if [ -f "$${STACK_DIR}/loadLSST.zsh" ]; then source "$${STACK_DIR}/loadLSST.zsh"; \
 	  elif [ -f "$${STACK_DIR}/loadLSST.bash" ]; then source "$${STACK_DIR}/loadLSST.bash"; \
 	  else echo "STACK_DIR loader not found (loadLSST)"; exit 1; fi; \
@@ -104,7 +86,7 @@ stack-install: ## Install an LSST stack release into STACK_PREFIX/TAG (default ~
 ifndef TAG
 	$(error TAG is required, e.g. TAG=v30_0_3)
 endif
-	$(SHELL) -lc '$(envsource) \
+	$(SHELL) -lc '$(env_defaults) \
 	  prefix="$${STACK_PREFIX:-$$HOME/lsst_stacks}"; \
 	  ./scripts/utilities/install_stack_version.sh --release $(TAG) --prefix "$$prefix" $(if $(INSTALL_DISTRIB),--install-distrib,)'
 
@@ -137,15 +119,6 @@ notebook: ## Start Jupyter Lab with LSST stack + UV venv active
 	@echo "Starting Jupyter Lab with LSST stack..."
 	@echo "Note: You may need to select the .venv kernel in Jupyter"
 	$(SHELL) -lc '$(setup_stack) source .venv/bin/activate && jupyter lab'
-
-.PHONY: env-info
-env-info: ## Show which env file(s) will be loaded and key paths
-	$(SHELL) -lc '$(load_envs); \
-		echo "ENV_FILE=$(ENV_FILE)"; \
-		echo "EXTRA_ENV=$(EXTRA_ENV)"; \
-		printf "REPO_ROOT=%s\nSTACK_DIR=%s\nREPO=%s\nINSTRUMENT_DIR=%s\nCP_PIPE_DIR=%s\nLSST_CONDA_ENV_NAME=%s\n" \
-			"$${REPO_ROOT:-<unset>}" "$${STACK_DIR:-<unset>}" "$${REPO:-<unset>}" "$${INSTRUMENT_DIR:-<unset>}" "$${CP_PIPE_DIR:-<unset>}" "$${LSST_CONDA_ENV_NAME:-<unset>}"; \
-	'
 
 # =============================================================================
 # Docker targets
