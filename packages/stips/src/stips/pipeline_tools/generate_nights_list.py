@@ -134,7 +134,7 @@ Examples:
     input_group.add_argument(
         "--auto-discover",
         action="store_true",
-        help="Auto-discover nights from RAW_PARENT_DIR (from .env)",
+        help="Auto-discover nights from RAW_PARENT_DIR (RAW_PARENT_DIR from the environment)",
     )
 
     parser.add_argument(
@@ -183,7 +183,7 @@ Examples:
                     "ERROR: RAW_PARENT_DIR not set. Either:",
                     file=sys.stderr,
                 )
-                print("  1. Source .env file first", file=sys.stderr)
+                print("  1. Export RAW_PARENT_DIR", file=sys.stderr)
                 print("  2. Use --raw-parent-dir argument", file=sys.stderr)
                 sys.exit(1)
 

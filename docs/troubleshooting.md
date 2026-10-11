@@ -36,9 +36,11 @@ Community Forum](https://community.lsst.org/) is the place to ask.
   `REFCAT_REPO/data/refcats/the_monster_20250219_afw/`. See
   {doc}`reference-catalogs`.
 
-**`Bootstrap script not found`**
-: Run `stips` from the STIPS checkout, or keep your instrument directory at
-  `instruments/<name>/` inside it.
+**`No skyMap dataset visible in <collection>` after bootstrap**
+: The `skymap` dimension record survives `butler remove-runs skymaps`, so
+  `register-skymap` cannot re-write the dataset; bootstrap warns and
+  continues. Do not remove the `skymaps` run; to change skymap geometry
+  create a repository instead.
 
 **Database or locking errors**
 : The repository's filesystem must support `flock`; some network filesystems

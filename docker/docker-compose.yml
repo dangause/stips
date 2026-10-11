@@ -75,9 +75,6 @@ services:
       - STIPS_DEFAULTS=/opt/stips/packages/obs_stips/instrument_defaults
       - KMP_AFFINITY=disabled
 
-      # Optional: Profile to load from /config/.env.{profile}
-      - STIPS_PROFILE=${STIPS_PROFILE:-}
-
       # LSST stack configuration
       - LSST_CONDA_ENV_NAME=${LSST_CONDA_ENV_NAME:-}
 

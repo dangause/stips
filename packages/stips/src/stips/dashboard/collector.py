@@ -188,10 +188,12 @@ def get_run(logs_dir: Path, run_id: str) -> RunInfo | None:
 def _is_completed_bootstrap(run_dir: Path, info: RunInfo) -> bool:
     """Detect a bootstrap-only run that has already finished.
 
-    Bootstrap runs (from ``00_bootstrap_repo.sh``) create a log directory
-    with ``run_info.txt`` and ``bootstrap/`` but no ``pipeline.log`` or
-    ``summary.txt``.  Once the bootstrap subdirectory has log content, the
-    run is complete.
+    A standalone ``stips bootstrap`` writes ``logs/<RUN_ID>/bootstrap/bootstrap.log``
+    plus ``pipeline.log`` and a ``summary.txt`` with its outcome, so it is
+    parsed like any finished run. This covers older log directories (from
+    the removed bootstrap shell script) that have ``run_info.txt`` and
+    ``bootstrap/`` but no ``pipeline.log`` or ``summary.txt``: once the
+    bootstrap subdirectory has log content, the run is complete.
     """
     bootstrap_dir = run_dir / "bootstrap"
     if not bootstrap_dir.is_dir():

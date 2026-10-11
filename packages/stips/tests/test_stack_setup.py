@@ -40,9 +40,11 @@ def test_setup_script_exports_stips_defaults(tmp_path):
     assert env["STIPS_DEFAULTS"] not in script
 
 
-def test_setup_script_exports_profile_skymap_identity(tmp_path):
-    # The bootstrap script registers/chains the skymap under profile-driven names;
-    # core/stack.py must export them (regression for the hardcoded-nickelRings bug).
+def test_setup_script_no_longer_exports_bootstrap_script_values(tmp_path, monkeypatch):
+    # Only the removed bootstrap shell script read the skymap identity/config,
+    # the instrument class and RUN_ID from the environment; stips.core.bootstrap
+    # takes them from the profile and Config directly.
+    monkeypatch.setenv("RUN_ID", "20261011_000000_1")
     (tmp_path / "loadLSST.bash").write_text("")
     cfg = Config(
         repo=tmp_path,
@@ -56,14 +58,14 @@ def test_setup_script_exports_profile_skymap_identity(tmp_path):
         skymap_collection="skymaps/ctio1mRings",
     )
     script, env = _build_setup_script(cfg)
-    assert 'export SKYMAP_NAME="$SKYMAP_NAME"' in script
-    assert 'export SKYMAP_COLLECTION="$SKYMAP_COLLECTION"' in script
-    assert env["SKYMAP_NAME"] == "ctio1mRings-v1"
-    assert env["SKYMAP_COLLECTION"] == "skymaps/ctio1mRings"
-    # SKYMAP_CFG is resolved instrument-dir-first; here it falls back to the
-    # framework reference geometry (tmp_path has no configs/makeSkyMap.py).
-    assert 'export SKYMAP_CFG="$SKYMAP_CFG"' in script
-    assert "configs/makeSkyMap.py" in env["SKYMAP_CFG"]
+    for name in (
+        "SKYMAP_NAME",
+        "SKYMAP_COLLECTION",
+        "SKYMAP_CFG",
+        "STIPS_INSTRUMENT_CLASS",
+        "RUN_ID",
+    ):
+        assert name not in script and name not in env, name
 
 
 def test_setup_script_sets_up_colocated_data_package(tmp_path):
@@ -101,24 +103,6 @@ def test_setup_script_skips_data_package_when_unresolved(tmp_path):
     script, env = _build_setup_script(cfg)
     assert "obs_missing_data" not in script
     assert "STIPS_DATA_DIR" not in env
-
-
-def test_setup_script_omits_skymap_when_profile_has_none(tmp_path):
-    # A profile without skymap fields (partial mock) must not crash and must not
-    # emit SKYMAP_NAME/COLLECTION exports.
-    (tmp_path / "loadLSST.bash").write_text("")
-    cfg = Config(
-        repo=tmp_path,
-        stack_dir=tmp_path,
-        instrument_dir=_instrument_dir(tmp_path),
-        raw_parent_dir=tmp_path,
-    )
-    cfg.profile = types.SimpleNamespace(obs_data_package=None)
-    script, env = _build_setup_script(cfg)
-    assert "SKYMAP_NAME" not in script
-    assert "SKYMAP_COLLECTION" not in script
-    assert "SKYMAP_NAME" not in env
-    assert "SKYMAP_COLLECTION" not in env
 
 
 def test_setup_script_does_not_interpolate_shell_metacharacters(tmp_path):

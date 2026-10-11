@@ -344,7 +344,7 @@ flowchart LR
 ```
 
 The same instrument-dir-first logic applies to pipelines (`<dir>/pipelines/`) and the skymap
-geometry config (`SKYMAP_CFG`).
+geometry config (`makeSkyMap.py`, which `stips bootstrap` passes to `butler register-skymap`).
 
 ---
 
@@ -367,7 +367,7 @@ sequenceDiagram
     Cfg->>Cfg: load_active_profile(INSTRUMENT_DIR)  ← profile object
     Cfg-->>CLI: Config(profile=...)
     CLI->>Stack: build setup script
-    Note over Stack: export REPO / STACK_DIR / RAW_PARENT_DIR / INSTRUMENT_DIR<br/>PYTHONPATH += STIPS_INSTRUMENTS_ROOT<br/>export STIPS_INSTRUMENT_CLASS / SKYMAP_* (from profile)<br/>setup obs_stips, stips, obs_data_package
+    Note over Stack: export REPO / STACK_DIR / RAW_PARENT_DIR / INSTRUMENT_DIR<br/>PYTHONPATH += STIPS_INSTRUMENTS_ROOT<br/>setup obs_stips, stips, obs_data_package
     Stack-->>Sh: source loadLSST#59; setup#59; #lt;pipetask ...#gt;
     Sh->>Sh: import instruments.nickel.instrument (by name)
     Sh-->>U: pipeline runs as the active instrument
@@ -379,9 +379,6 @@ What `stack.py` exports and why it matters (all in `_build_setup_script`):
 |--------|--------|---------|
 | `INSTRUMENT_DIR` | `config.instrument_dir` | Config overrides (`$INSTRUMENT_DIR/configs/...`) and the in-stack refcat overlays' profile import |
 | `STIPS_INSTRUMENTS_ROOT` | `instruments_root(INSTRUMENT_DIR)` | Put on `PYTHONPATH`, so `instruments.<name>` imports by name |
-| `STIPS_INSTRUMENT_CLASS` | `config.instrument_class` | Class path the bootstrap script registers (`register-instrument --update`) |
-| `SKYMAP_NAME` / `SKYMAP_COLLECTION` | `profile.skymap_*` | Instrument-specific skymap identity |
-| `SKYMAP_CFG` | `resolve_config("makeSkyMap.py")` | Instrument-dir-first skymap geometry |
 | `obs_data_package` setup | `profile.obs_data_package` | `setup -r` only the active instrument's calib data |
 
 Note there is **no** per-instrument EUPS `setup` — the instrument is purely declarative and

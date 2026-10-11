@@ -5,8 +5,7 @@
 # 1. Sources the LSST stack
 # 2. Sets up obs_stips + the active instrument's EUPS packages discovered under
 #    INSTRUMENT_DIR (instrument itself is declarative, loaded by path)
-# 3. Loads environment from mounted config if present
-# 4. Executes the provided command
+# 3. Executes the provided command
 
 set -e
 
@@ -58,26 +57,6 @@ fi
 # Ensure conda bin is in PATH (for pip-installed scripts like 'stips')
 if [[ -n "${CONDA_PREFIX}" ]]; then
     export PATH="${CONDA_PREFIX}/bin:${PATH}"
-fi
-
-# =============================================================================
-# Configuration Loading
-# =============================================================================
-
-# Load .env from mounted config directory if present
-if [[ -f "/config/.env" ]]; then
-    echo "[STIPS] Loading configuration from /config/.env"
-    set -a
-    source /config/.env
-    set +a
-fi
-
-# Load profile-specific .env if STIPS_PROFILE is set
-if [[ -n "${STIPS_PROFILE}" && -f "/config/.env.${STIPS_PROFILE}" ]]; then
-    echo "[STIPS] Loading profile configuration from /config/.env.${STIPS_PROFILE}"
-    set -a
-    source "/config/.env.${STIPS_PROFILE}"
-    set +a
 fi
 
 # =============================================================================

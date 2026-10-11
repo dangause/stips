@@ -132,7 +132,6 @@ stips/
 │   └── ctio1m/               # CTIO 1.0m / Y4KCam (4-amp camera, NOIRLab fetch, tests)
 ├── scripts/
 │   ├── config/               # Per-target YAML configs (2023ixf, 2020wnt, ctio1m, ...)
-│   ├── pipeline/             # Bootstrap script
 │   └── utilities/            # Helper scripts
 ├── docs/                     # User guides, architecture docs, diagrams
 ├── docker/
@@ -753,14 +752,6 @@ The LSST stack must be active:
 ```bash
 source $STACK_DIR/loadLSST.bash
 setup lsst_distrib
-```
-
-### Bootstrap fails to find script
-
-Run from the repository root directory:
-```bash
-cd /path/to/stips
-stips -c scripts/config/2023ixf/pipeline_ps1_template.yaml bootstrap
 ```
 
 ### Forced photometry finds no processCcd collection
