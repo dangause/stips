@@ -10,7 +10,8 @@ A telescope is defined entirely by the files in this directory:
 
 | File / dir        | Purpose                                                        |
 |-------------------|---------------------------------------------------------------|
-| `profile.py`      | `InstrumentProfile` (name, site, filters, header translation hooks, `instrument_class`, `obs_data_package`) — loaded **by path** |
+| `profile.py`      | `InstrumentProfile` (name, site, filters, header translation hooks, `obs_data_package`) — imported as `instruments.nickel.profile` |
+| `instrument.py`   | Three-line nameplate; `bind(__name__)` gives Butler its class path, `instruments.nickel.instrument.Instrument` |
 | `camera/`         | Camera geometry yaml (loaded from `INSTRUMENT_DIR`)            |
 | `fetch.py`        | Optional Lick-archive data-fetch hook (referenced by the profile) |
 | `template_metadata.json` | PS1 template metadata for this instrument              |
