@@ -16,6 +16,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+import shlex
 import subprocess
 import tempfile
 from dataclasses import dataclass
@@ -113,7 +114,8 @@ def build_monster_map(shard_dir: Path, out_path: Path) -> Path:
     for fn in Path(shard_dir).glob(MONSTER_SHARD_GLOB):
         m = _SHARD_RE.search(fn.name)
         if m:
-            rows.append((str(fn.resolve()), int(m.group(1))))
+            # abspath, not resolve(): a symlinked REFCAT_REPO keeps its link path.
+            rows.append((os.path.abspath(fn), int(m.group(1))))
     rows.sort(key=lambda r: r[1])
     out_path.parent.mkdir(parents=True, exist_ok=True)
     Table(rows=rows, names=["path", "htm7"]).write(
@@ -136,7 +138,12 @@ def _map_is_valid(map_path: Path) -> bool:
             return False
         for line in fh:
             if "refcat_htm7_" in line:
-                first = line.split()[0].strip('"')
+                # astropy quotes a path containing whitespace; its ECSV quoting
+                # is shell-compatible, so shlex recovers the whole first field.
+                try:
+                    first = shlex.split(line)[0]
+                except (ValueError, IndexError):
+                    return False
                 return Path(first).is_file()
     return True
 
@@ -306,6 +313,12 @@ def run(
     skymap. A failing step stops the run and is reported in
     ``BootstrapResult.error``; the per-step flags record how far it got.
 
+    On an already-initialized repo (``needs_bootstrap`` is False) only the
+    instrument is re-registered (``register-instrument --update``): that is
+    how ``stips bootstrap`` adds the active instrument to a shared repo or
+    migrates a legacy class name, as ``ensure_instrument_registered``'s error
+    messages advise. A failure there is reported in ``BootstrapResult.error``.
+
     ``require_monster`` is the policy knob for the MONSTER step; today it is
     always required (the Gaia/PS1 path still needs the ``refcats`` chain that
     this step creates).
@@ -313,6 +326,19 @@ def run(
     result = BootstrapResult(success=False)
     if not needs_bootstrap(config):
         log.info("Repository already initialized: %s", config.repo)
+        if dry_run:
+            log.info("[DRY RUN] Would re-register the instrument")
+            return BootstrapResult(True, None, True, True, True, True)
+        try:
+            register_instrument(config, log_file)
+        except BootstrapError as exc:
+            log.error("Bootstrap failed: %s", exc)
+            return BootstrapResult(False, str(exc), True, False, True, True)
+        except Exception as exc:  # e.g. stack activation
+            log.exception("Bootstrap failed unexpectedly")
+            return BootstrapResult(
+                False, f"Bootstrap failed: {exc}", True, False, True, True
+            )
         return BootstrapResult(True, None, True, True, True, True)
     log.info("Bootstrapping repository: %s", config.repo)
     if dry_run:

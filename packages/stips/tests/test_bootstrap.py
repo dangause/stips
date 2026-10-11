@@ -9,6 +9,7 @@ replaced by a recording fake.
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from contextlib import ExitStack, contextmanager
@@ -140,7 +141,7 @@ class _Butler:
         )
 
     def has_datasets(self, config, dataset_type, collections, **kw):
-        return True
+        return self.state.get("has_datasets", True)
 
 
 @contextmanager
@@ -347,6 +348,74 @@ def test_register_skymap_failure_is_a_warning(tmp_path, caplog):
     )
 
 
+def test_register_skymap_warns_when_no_skymap_visible(tmp_path, caplog):
+    from stips.core import bootstrap
+
+    refcat_repo, _ = _shards(tmp_path)
+    cfg = _full_cfg(tmp_path, refcat_repo=refcat_repo)
+    fake = _Butler({"collections": set(), "chains": {}, "has_datasets": False})
+    with mock.patch.object(bootstrap, "needs_bootstrap", return_value=True), _patched(
+        bootstrap, fake
+    ):
+        res = bootstrap.run(cfg)
+    assert res.success
+    assert any(
+        "No skyMap dataset visible" in r.getMessage() and r.levelname == "WARNING"
+        for r in caplog.records
+    )
+
+
+def test_initialized_repo_still_re_registers_instrument(tmp_path):
+    from stips.core import bootstrap
+
+    cfg = _full_cfg(tmp_path, refcat_repo=None)
+    fake = _Butler({"collections": set(), "chains": {}})
+    with mock.patch.object(bootstrap, "needs_bootstrap", return_value=False), _patched(
+        bootstrap, fake
+    ):
+        res = bootstrap.run(cfg)
+    assert fake.calls == [
+        ["register-instrument", str(cfg.repo), cfg.instrument_class, "--update"]
+    ]
+    assert res.success and res.error is None
+    assert (
+        res.repo_created
+        and res.instrument_registered
+        and res.refcats_ingested
+        and res.skymap_registered
+    )
+
+
+def test_initialized_repo_re_register_failure_becomes_result_error(tmp_path):
+    from stips.core import bootstrap
+
+    cfg = _full_cfg(tmp_path, refcat_repo=None)
+    fake = _Butler({"collections": set(), "chains": {}})
+
+    def boom(args, config, **kw):
+        raise subprocess.CalledProcessError(3, ["butler", *args])
+
+    with mock.patch.object(bootstrap, "needs_bootstrap", return_value=False), _patched(
+        bootstrap, fake
+    ):
+        with mock.patch.object(bootstrap, "run_butler", boom):
+            res = bootstrap.run(cfg)
+    assert not res.success
+    assert "register-instrument" in res.error and "exit 3" in res.error
+
+
+def test_initialized_repo_dry_run_touches_nothing(tmp_path):
+    from stips.core import bootstrap
+
+    cfg = _full_cfg(tmp_path, refcat_repo=None)
+    fake = _Butler({"collections": set(), "chains": {}})
+    with mock.patch.object(bootstrap, "needs_bootstrap", return_value=False), _patched(
+        bootstrap, fake
+    ):
+        assert bootstrap.run(cfg, dry_run=True).success
+    assert fake.calls == []
+
+
 def test_butler_failure_becomes_result_error(tmp_path):
     from stips.core import bootstrap
 
@@ -392,7 +461,37 @@ def test_build_monster_map_writes_sorted_absolute_ecsv(tmp_path):
     t = Table.read(out, format="ascii.ecsv")
     assert list(t.colnames) == ["path", "htm7"]
     assert list(t["htm7"]) == [131072, 131073, 131074]
-    assert all(p.startswith(str(shards.resolve())) for p in t["path"])
+    assert all(p.startswith(os.path.abspath(shards)) for p in t["path"])
+
+
+def test_build_monster_map_keeps_symlinked_refcat_path(tmp_path):
+    from astropy.table import Table
+    from stips.core import bootstrap
+
+    _, shards = _shards(tmp_path)
+    link = tmp_path / "linked_shards"
+    link.symlink_to(shards, target_is_directory=True)
+    out = bootstrap.build_monster_map(link, tmp_path / "map.ecsv")
+    t = Table.read(out, format="ascii.ecsv")
+    assert all(p.startswith(str(link) + os.sep) for p in t["path"])
+
+
+def test_ensure_monster_map_reuses_map_whose_path_has_a_space(tmp_path):
+    from stips.core import bootstrap
+
+    _, shards = _shards(tmp_path / "a b")
+    m = bootstrap.ensure_monster_map(shards)
+    mtime = m.stat().st_mtime_ns
+    assert bootstrap.ensure_monster_map(shards) == m
+    assert m.stat().st_mtime_ns == mtime  # reused, not rebuilt
+
+
+def test_map_with_unparseable_row_is_invalid(tmp_path):
+    from stips.core import bootstrap
+
+    m = tmp_path / "filename_to_htm.ecsv"
+    m.write_text('# %ECSV 1.0\n"/x/refcat_htm7_1.fits 1\n')  # unbalanced quote
+    assert bootstrap._map_is_valid(m) is False
 
 
 def test_ensure_monster_map_reuses_valid_rebuilds_stale_or_non_ecsv(tmp_path):
@@ -410,7 +509,7 @@ def test_ensure_monster_map_reuses_valid_rebuilds_stale_or_non_ecsv(tmp_path):
     bootstrap.ensure_monster_map(shards)
     assert m.read_text().startswith("# %ECSV")
     m.write_text(
-        m.read_text().replace(str(shards.resolve()), "/stale/host")
+        m.read_text().replace(os.path.abspath(shards), "/stale/host")
     )  # stale -> rebuilt
     bootstrap.ensure_monster_map(shards)
     assert "/stale/host" not in m.read_text()
