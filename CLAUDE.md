@@ -484,8 +484,8 @@ A different root cause for a downstream `astrometry_ref_cat`/`panstarrs1_dr2`
 network, missing `astroquery`), reporting the root cause — rather than warning
 and limping into science where every night dies with an opaque missing-dataset
 error. Fix the reported cause, or use `refcat.mode: monster` if the repo already
-holds refcats. Science treats `MissingDatasetTypeError` as fatal: it stops at the
-first night instead of trying every `calibrateImage` fallback. A repo
+holds refcats. Science treats `MissingDatasetTypeError` as fatal: each night fails
+immediately instead of exhausting every `calibrateImage` fallback. A repo
 bootstrapped in `gaia_ps1`/`gaia` mode without shards has no MONSTER run, so
 switching it to `monster` mode hits this error.
 

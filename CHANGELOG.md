@@ -26,8 +26,8 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
   present, and otherwise skips MONSTER with a warning and creates an empty
   `refcats` chain for the on-demand Gaia/PS1 catalogs. (#75)
 - Science treats `MissingDatasetTypeError` as fatal, so a repo without the
-  reference catalogs its mode needs stops at the first night instead of
-  trying every `calibrateImage` fallback.
+  reference catalogs its mode needs fails each night immediately instead of
+  exhausting every `calibrateImage` fallback.
 - Every instrument registers under its own Butler class path,
   `instruments.<name>.instrument.Instrument`, from a three-line nameplate
   `instrument.py` in the instrument dir; the stored `class_name` now identifies
