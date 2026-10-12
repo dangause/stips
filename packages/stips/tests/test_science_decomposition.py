@@ -26,7 +26,6 @@ def _profile() -> SimpleNamespace:
         collection_prefix="Nickel",
         skymap_name="nickelRings-v1",
         skymap_collection="skymaps/nickelRings",
-        instrument_class="lsst.obs.stips.active.Instrument",
         night_to_dayobs_offset_days=1,
         isr_overrides=None,
         crosstalk=None,
@@ -40,6 +39,8 @@ def _ctx(tmp_path, executor):
     cols = CollectionNames("20230519", "20230519T000000Z", prefix="Nickel")
     config = SimpleNamespace(
         repo=tmp_path,
+        instrument_dir=tmp_path / "instruments" / "nickel",
+        instrument_class="instruments.nickel.instrument.Instrument",
         resolve_config=lambda name: tmp_path / name,
     )
     return science._AttemptContext(
@@ -482,6 +483,8 @@ class TestIsFatalError:
             "sqlite3.OperationalError: ConflictingDefinitionError follows",
             "OSError: [Errno 13] Permission denied: '/repo'",
             "OSError: [Errno 28] No space left on device",
+            "lsst.daf.butler.MissingDatasetTypeError: Dataset type "
+            "'the_monster_20250219_local' is not registered",
         ],
     )
     def test_fatal(self, text):
@@ -509,6 +512,73 @@ class TestIsFatalError:
         from stips.core.science import _is_fatal_error
 
         assert _is_fatal_error(text) is False
+
+
+class _LogWritingExecutor:
+    """qgraph build appends ``log_text`` to the log file, then raises like
+    ``run_with_stack`` does (a CalledProcessError naming only the command)."""
+
+    def __init__(self, log_text):
+        self.log_text = log_text
+
+    def run_pipetask(self, args, config, **kwargs):
+        import subprocess
+
+        log_file = kwargs.get("log_file")
+        with open(log_file, "a") as f:
+            f.write(self.log_text)
+        raise subprocess.CalledProcessError(1, ["pipetask"])
+
+
+class TestAttemptConfigFatalFromLog:
+    """The fatal classifier must see the pipetask log, not just str(e)."""
+
+    def _run(self, tmp_path, log_text):
+        import dataclasses
+
+        from stips.core import science
+
+        log_file = tmp_path / "science.log"
+        log_file.write_text("earlier night: MissingCollectionError (old)\n")
+        ctx = dataclasses.replace(
+            _ctx(tmp_path, _LogWritingExecutor(log_text)), log_file=log_file
+        )
+        return science._attempt_config(ctx, 0, tmp_path / "primary.py", [])
+
+    def test_missing_dataset_type_in_log_is_fatal(self, tmp_path):
+        outcome = self._run(
+            tmp_path,
+            "lsst.daf.butler.registry._exceptions.MissingDatasetTypeError: "
+            "Dataset type 'the_monster_20250219_local' is not registered.\n",
+        )
+        assert outcome.raised
+        assert outcome.fatal is True
+
+    def test_benign_log_is_not_fatal(self, tmp_path):
+        # Also proves only the log written since the attempt started is
+        # classified: the pre-existing MissingCollectionError line is ignored.
+        outcome = self._run(tmp_path, "ValueError: something odd happened\n")
+        assert outcome.raised
+        assert outcome.fatal is False
+
+    def test_missing_log_file_still_classifies_exception(self, tmp_path):
+        import dataclasses
+        import subprocess
+
+        from stips.core import science
+
+        ctx = dataclasses.replace(
+            _ctx(
+                tmp_path,
+                _FakeExecutor(
+                    qgraph_exc=subprocess.CalledProcessError(1, ["pipetask"])
+                ),
+            ),
+            log_file=tmp_path / "absent.log",
+        )
+        outcome = science._attempt_config(ctx, 0, tmp_path / "primary.py", [])
+        assert outcome.raised
+        assert outcome.fatal is False
 
 
 # ---------------------------------------------------------------------------
@@ -606,6 +676,8 @@ def test_run_chains_fallback_runs_first(tmp_path, monkeypatch):
     resolve.write_text("# config\n")
     config = SimpleNamespace(
         repo=tmp_path,
+        instrument_dir=tmp_path / "instruments" / "nickel",
+        instrument_class="instruments.nickel.instrument.Instrument",
         require_profile=lambda: profile,
         resolve_config=lambda name: resolve,
         resolve_pipeline=lambda name: tmp_path / "DRP.yaml",
@@ -644,6 +716,9 @@ def test_run_chains_fallback_runs_first(tmp_path, monkeypatch):
         pipeline_mod,
         "run_butler",
         lambda args, cfg, **k: butler_calls.append(list(args)),
+    )
+    monkeypatch.setattr(
+        pipeline_mod.butler_query, "list_instruments", lambda config: {}
     )
     monkeypatch.setattr(
         science.butler_query,

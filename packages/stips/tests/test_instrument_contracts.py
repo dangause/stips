@@ -8,7 +8,8 @@ test code to copy.
 
 Optional assets skip-with-reason rather than fail:
   - no ``tests/contract_data.py`` -> the data-driven contracts skip
-  - no ``fetch.py``               -> the fetch contract skips
+  - no ``fetch.py``               -> the fetch-status contract skips (the
+                                     inherited hook is still checked)
   - no ``camera/``                -> the camera-assembly contract skips
   - no ``testdata/``              -> the testdata-layout contract skips
   - no LSST stack in the venv     -> stack-dependent contracts skip
@@ -79,6 +80,14 @@ def test_unknown_filter_contract(profile, contract_data):
     ic.assert_unknown_filter_contract(profile, contract_data)
 
 
+def test_nameplate_contract(instrument):
+    ic.assert_nameplate_contract(instrument)
+
+
+def test_profile_relative_imports_contract(instrument):
+    ic.assert_profile_imports_relatively(instrument)
+
+
 def test_fetch_contract(instrument, contract_data):
     if not instrument.has_fetch:
         pytest.skip(f"{instrument.name}: no fetch.py")
@@ -92,6 +101,12 @@ def test_fetch_hook_registered(instrument, profile):
     assert (
         profile.fetch_data is not None
     ), f"{instrument.name}: ships fetch.py but profile.fetch_data is not wired"
+
+
+def test_fetch_hook_is_framework_wrapper(profile):
+    """Runs for every instrument -- including variants with no fetch.py whose
+    fetch_data is inherited -- so no hook escapes the shared-wrapper check."""
+    ic.assert_fetch_hook_is_framework_wrapper(profile)
 
 
 # --------------------------------------------------------------------------- #
@@ -132,6 +147,17 @@ def test_testdata_layout_contract(instrument):
 # --------------------------------------------------------------------------- #
 
 
+def test_nameplate_binds_the_profile(instrument, profile):
+    """The Butler class path is the directory name and reports profile.name."""
+    pytest.importorskip("lsst.obs.base")
+    from lsst.utils.introspection import get_full_type_name
+    from stips.profile import instrument_class_for
+
+    m = ic.bound_instrument(instrument.path)
+    assert m.Instrument.getName() == profile.name
+    assert get_full_type_name(m.Instrument) == instrument_class_for(instrument.path)
+
+
 def test_camera_assembly_contract(instrument, contract_data):
     """The synthesized Instrument assembles an afw Camera with the pinned
     detector/amplifier counts (EXPECTED_DETECTORS / EXPECTED_AMPS)."""
@@ -145,12 +171,12 @@ def test_camera_assembly_contract(instrument, contract_data):
     if n_det is None or n_amp is None:
         pytest.skip("no EXPECTED_DETECTORS/EXPECTED_AMPS in contract_data")
 
-    with ic.active_instrument_dir(instrument.path) as active:
-        cam = active.Instrument().getCamera()
-        dets = list(cam)
-        assert len(dets) == n_det, f"{len(dets)} detectors, expected {n_det}"
-        amps = list(dets[0])
-        assert len(amps) == n_amp, f"{len(amps)} amplifiers, expected {n_amp}"
+    active = ic.bound_instrument(instrument.path)
+    cam = active.Instrument().getCamera()
+    dets = list(cam)
+    assert len(dets) == n_det, f"{len(dets)} detectors, expected {n_det}"
+    amps = list(dets[0])
+    assert len(amps) == n_amp, f"{len(amps)} amplifiers, expected {n_amp}"
 
 
 def test_translator_synthesis_contract(instrument, contract_data):
@@ -159,12 +185,12 @@ def test_translator_synthesis_contract(instrument, contract_data):
     pytest.importorskip("lsst.obs.base")
     expected = contract_data.EXPECTED_TRANSLATION
 
-    with ic.active_instrument_dir(instrument.path) as active:
-        tr = active.Translator(dict(contract_data.SAMPLE_HEADER))
-        assert tr.to_exposure_id() == expected["exposure_id"]
-        assert tr.to_visit_id() == expected["visit_id"]
-        assert tr.to_observation_type() == expected["observation_type"]
-        assert tr.to_observation_id() == expected["observation_id"]
+    active = ic.bound_instrument(instrument.path)
+    tr = active.Translator(dict(contract_data.SAMPLE_HEADER))
+    assert tr.to_exposure_id() == expected["exposure_id"]
+    assert tr.to_visit_id() == expected["visit_id"]
+    assert tr.to_observation_type() == expected["observation_type"]
+    assert tr.to_observation_id() == expected["observation_id"]
 
 
 # --------------------------------------------------------------------------- #

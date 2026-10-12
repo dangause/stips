@@ -9,19 +9,13 @@
 # calibrateImage overlay (refcats_gaia_ps1.py). Color terms are left off for
 # the neutral QA tier; an instrument can override with its own copy under
 # instruments/<name>/configs/.
-import json
 import os
 
 config.connections.refCat = "panstarrs1_dr2"
-# Band map via env (see refcats_gaia_ps1.py for why importing the profile
-# inside a pex_config file breaks quantum-graph reloading).
-_ps1_band_map = json.loads(os.environ.get("STIPS_PS1_BAND_MAP", "{}"))
-if not _ps1_band_map:
-    from lsst.obs.stips.profile_loader import load_profile_from_dir
+# Band map from the profile, imported by name (see refcats_gaia_ps1.py).
+from stips.profile import import_profile  # noqa: E402
 
-    _ps1_band_map = dict(
-        load_profile_from_dir(os.environ["INSTRUMENT_DIR"]).ps1_band_map
-    )
+_ps1_band_map = dict(import_profile(os.environ["INSTRUMENT_DIR"]).ps1_band_map)
 # The matcher looks up reference fluxes by PHYSICAL filter as well as by band
 # (e.g. Y4KCam physical 'I' for band 'i'), so map both spellings. Instruments
 # whose physical filter names are not simply the upper-cased band should ship

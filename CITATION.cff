@@ -25,14 +25,17 @@ url: "https://stips-lsst.readthedocs.io"
 doi: "10.5281/zenodo.23243456"
 identifiers:
   - type: doi
+    value: "10.5281/zenodo.23270726"
+    description: "This version (v2.3.0)"
+  - type: doi
     value: "10.5281/zenodo.23243456"
     description: "All versions (concept DOI; resolves to the latest)"
   - type: doi
     value: "10.5281/zenodo.23243457"
     description: "v2.2.4"
 license: GPL-3.0-or-later
-version: 2.3.0
-date-released: "2026-10-09"
+version: 2.4.0
+date-released: "2026-10-12"
 keywords:
   - astronomy
   - image processing

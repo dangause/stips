@@ -2,11 +2,10 @@
 
 Stack-required: imports ``lsst.obs.base`` and builds an in-memory Butler
 registry to exercise ``register()``. The test binds a profile that reuses the
-real Nickel camera geometry; ``getCamera`` loads the camera yaml BY PATH from
-INSTRUMENT_DIR (set in setUp to instruments/nickel).
+real Nickel camera geometry; ``getCamera`` resolves the camera yaml against the
+class's ``instrumentDir`` (what ``binding.bind`` sets; set by hand here).
 """
 
-import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -22,8 +21,8 @@ from lsst.obs.stips.instrument import StipsInstrument  # noqa: E402
 from stips import Field, InstrumentProfile, Site  # noqa: E402
 
 # instruments/nickel/ holds the real camera yaml (camera/nickel.yaml). getCamera
-# loads it by path from INSTRUMENT_DIR, so the camera-loading tests point
-# INSTRUMENT_DIR here. tests/ -> obs_stips -> packages -> repo root => parents[3].
+# resolves it against instrumentDir, so DemoInst points there.
+# tests/ -> obs_stips -> packages -> repo root => parents[3].
 NICKEL_INSTRUMENT_DIR = Path(__file__).resolve().parents[3] / "instruments" / "nickel"
 
 PROFILE = InstrumentProfile(
@@ -38,21 +37,12 @@ PROFILE = InstrumentProfile(
 
 class DemoInst(StipsInstrument):
     profile = PROFILE
+    # Normally set by binding.bind; the real nickel dir's camera/nickel.yaml
+    # matches profile.camera.
+    instrumentDir = NICKEL_INSTRUMENT_DIR
 
 
 class TestStipsInstrument(unittest.TestCase):
-    def setUp(self):
-        # getCamera fails loud without INSTRUMENT_DIR; point it at the real
-        # instruments/nickel dir (whose camera/nickel.yaml matches profile.camera).
-        self._old_instrument_dir = os.environ.get("INSTRUMENT_DIR")
-        os.environ["INSTRUMENT_DIR"] = str(NICKEL_INSTRUMENT_DIR)
-
-    def tearDown(self):
-        if self._old_instrument_dir is None:
-            os.environ.pop("INSTRUMENT_DIR", None)
-        else:
-            os.environ["INSTRUMENT_DIR"] = self._old_instrument_dir
-
     def test_getName(self):
         self.assertEqual(DemoInst.getName(), "DemoInst")
         self.assertEqual(DemoInst().getName(), "DemoInst")
@@ -105,10 +95,10 @@ class TestStipsInstrument(unittest.TestCase):
             self.assertEqual(det.raft, "R00")
             self.assertEqual(det.name_in_raft, "S00")
 
-    def test_getcamera_uses_instrument_dir_env(self):
+    def test_getcamera_resolves_yaml_against_instrument_dir(self):
         import shutil
 
-        # getCamera loads the camera yaml BY PATH from INSTRUMENT_DIR. Build a
+        # getCamera resolves profile.camera against instrumentDir. Build a
         # throwaway instrument dir containing the camera yaml at profile.camera
         # and prove getCamera resolves it.
         REAL_CAMERA = NICKEL_INSTRUMENT_DIR / "camera" / "nickel.yaml"
@@ -120,19 +110,21 @@ class TestStipsInstrument(unittest.TestCase):
         cam_dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy(REAL_CAMERA, cam_dst)
 
-        os.environ["INSTRUMENT_DIR"] = str(d)
-        cam = DemoInst().getCamera()
+        class TmpInst(DemoInst):
+            instrumentDir = d
+
+        cam = TmpInst().getCamera()
         self.assertGreaterEqual(len(cam), 1)
 
     def test_getcamera_requires_instrument_dir(self):
-        # With INSTRUMENT_DIR unset, getCamera must fail loud (no EUPS fallback).
-        os.environ.pop("INSTRUMENT_DIR", None)
-        with self.assertRaises(RuntimeError):
-            DemoInst().getCamera()
+        # An unbound class (no instrumentDir) must fail loud for a yaml camera.
+        class UnboundInst(StipsInstrument):
+            profile = PROFILE
+
+        with self.assertRaisesRegex(RuntimeError, "instrumentDir"):
+            UnboundInst().getCamera()
 
     def test_getcamera_dispatches_cameraspec(self):
-        import os
-
         import lsst.afw.cameraGeom as cg
         from lsst.obs.stips.instrument import StipsInstrument
         from stips import CameraSpec, Field, InstrumentProfile, Site
@@ -154,14 +146,9 @@ class TestStipsInstrument(unittest.TestCase):
         class DemoCamInst(StipsInstrument):
             profile = prof
 
-        # INSTRUMENT_DIR unset → would break the str path, but a CameraSpec
-        # needs no file:
-        old = os.environ.pop("INSTRUMENT_DIR", None)
-        try:
-            cam = DemoCamInst().getCamera()
-        finally:
-            if old is not None:
-                os.environ["INSTRUMENT_DIR"] = old
+        # No instrumentDir → would break the str path, but a CameraSpec needs
+        # no file:
+        cam = DemoCamInst().getCamera()
         self.assertIsInstance(cam, cg.Camera)
         self.assertEqual(len(list(cam)), 1)
 

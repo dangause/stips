@@ -24,7 +24,7 @@ STIPS reads the filter from the `FILTNAM` header.
 |---|---|---|
 | B, V | `b`, `v` | Johnson |
 | R, I | `r`, `i` | Cousins |
-| g′, r′, i′ | `gp`, `rp`, `ip` | Sloan-like |
+| g′, r′, i′ | `gp`, `rp`, `ip` | SDSS |
 | Hα, [OIII] | `halpha`, `oiii` | Narrow-band |
 | clear | | No band; unrecognized `FILTNAM` values also map here |
 

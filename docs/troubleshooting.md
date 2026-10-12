@@ -33,12 +33,22 @@ Community Forum](https://community.lsst.org/) is the place to ask.
 
 **`No MONSTER refcat shards found under ...`**
 : Bootstrap needs MONSTER shards in
-  `REFCAT_REPO/data/refcats/the_monster_20250219_afw/`. See
-  {doc}`reference-catalogs`.
+  `REFCAT_REPO/data/refcats/the_monster_20250219_afw/` (only in
+  `refcat.mode: monster`; other modes skip MONSTER when the shards are
+  absent). To move a repository bootstrapped without shards to `monster`
+  mode, add the shards under `REFCAT_REPO` and run `stips bootstrap` (or
+  `stips run`) with `refcat.mode: monster`; it ingests them and extends the
+  existing `refcats` chain. See {doc}`reference-catalogs`.
 
-**`Bootstrap script not found`**
-: Run `stips` from the STIPS checkout, or keep your instrument directory at
-  `instruments/<name>/` inside it.
+**`Unknown refcat.mode ...`**
+: The config's `refcat.mode` is misspelled or unsupported. Valid values are
+  `monster`, `gaia_ps1` and `gaia`.
+
+**`No skyMap dataset visible in <collection>` after bootstrap**
+: The `skymap` dimension record survives `butler remove-runs skymaps`, so
+  `register-skymap` cannot re-write the dataset; bootstrap warns and
+  continues. Do not remove the `skymaps` run; to change skymap geometry
+  create a repository instead.
 
 **Database or locking errors**
 : The repository's filesystem must support `flock`; some network filesystems

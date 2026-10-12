@@ -1,9 +1,27 @@
 from __future__ import annotations
 
+import re
+
 import astropy.units as u
 from astro_metadata_translator.translator import cache_translation
 from astro_metadata_translator.translators.fits import FitsTranslator
 from astropy.coordinates import Angle, EarthLocation
+
+
+def _header_binning(value) -> int | None:
+    """Binning from a header value when every integer in it agrees.
+
+    ``"2 2"`` -> 2, ``2`` -> 2; a blank value reads as unbinned (1), like a
+    missing keyword. Asymmetric (``"2 1"``) or digit-less (``"N/A"``) values
+    return ``None`` so no profile claims the file. ``None`` stays ``None``.
+    """
+    if value is None:
+        return None
+    text = str(value)
+    if not text.strip():
+        return 1
+    nums = {int(n) for n in re.findall(r"\d+", text)}
+    return nums.pop() if len(nums) == 1 else None
 
 
 class StipsTranslator(FitsTranslator):
@@ -28,7 +46,19 @@ class StipsTranslator(FitsTranslator):
         # FITS INSTRUME — supports instruments whose name differs from INSTRUME
         # (e.g. name "CTIO1m" but INSTRUME "Y4KCam").
         match = cls.profile.instrument_header_value or cls.profile.name
-        return match.lower() in str(header.get("INSTRUME", "")).lower()
+        if match.lower() not in str(header.get("INSTRUME", "")).lower():
+            return False
+        # On-chip binning: when the profile names the binning keyword, claim the
+        # file only if its binning equals the profile's, so an unbinned profile
+        # and its binned variant (a separate instrument) never both match. A
+        # missing or blank keyword reads as unbinned; an asymmetric or
+        # unparseable value is claimed by no profile.
+        key = cls.profile.binning_header
+        if key is None:
+            return True
+        value = header.get(key)
+        binning = 1 if value is None else _header_binning(value)
+        return binning is not None and binning == int(cls.profile.ccd_binning)
 
     def _hook(self, name):
         return self.profile.hooks.get(name)

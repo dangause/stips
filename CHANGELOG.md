@@ -4,6 +4,92 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
 
 ## [Unreleased]
 
+## [2.4.0] — 2026-10-12
+
+### Added
+- `InstrumentProfile.ccd_binning` and `binning_header`; the translator claims
+  only raws whose binning matches. `instruments/ctio1m_bin2/` is the 2×2-binned
+  Y4KCam instrument.
+- Colour terms for the CTIO 1.0m / Y4KCam in `refcat.mode: gaia_ps1`
+  (`instruments/ctio1m/configs/colorterms.py`). Y4KCam's BVRI are a standard
+  Kron-Cousins set that Clem & Landolt 2013 (AJ 146, 88) found to realise the
+  Cousins system to within 0.02 mag/mag in V, R and I, so the library carries
+  the PS1 → Johnson-Cousins transformations of Tonry et al. 2012 (ApJ 750, 99,
+  Table 6); R and I are the bands reachable today and the profile declares
+  them Vega (`vega_bands`). Until now Y4KCam had no colour terms in any mode,
+  so SN 2009Y sat on the PS1 AB zero point with the bandpass uncorrected
+  (about −0.2 mag in R and −0.45 mag in I, mostly the AB → Vega constant).
+
+### Changed
+- `stips bootstrap` and the bootstrap step of `stips run` run in Python
+  (`stips.core.bootstrap`) instead of shelling out to a bash script. The
+  `refcats` and skymap chains are extended, never redefined, so a
+  re-bootstrap keeps the Gaia DR3 / PS1 runs fetched by `stips refcat fetch`.
+  `stips bootstrap` (standalone) re-runs every idempotent step on an existing
+  repo: it re-registers the instrument with `register-instrument --update` and
+  re-ingests MONSTER if its run was removed; `stips run` still bootstraps
+  only when the repo lacks `skymaps`, `refcats` or the active profile's
+  skymap chain. Failures are the command's exit status, and a standalone
+  `stips bootstrap` writes the unified logs (`logs/<RUN_ID>/pipeline.log`,
+  `bootstrap/bootstrap.log`, `summary.txt`), so the dashboard sees it finish.
+- Bootstrap honours `refcat.mode`: MONSTER shards are required only in
+  `monster` mode. In `gaia_ps1` and `gaia` mode bootstrap ingests them if
+  present, and otherwise skips MONSTER with a warning and creates an empty
+  `refcats` chain for the on-demand Gaia/PS1 catalogs. (#75)
+- Science treats `MissingDatasetTypeError` as fatal, so a repo without the
+  reference catalogs its mode needs fails each night immediately instead of
+  exhausting every `calibrateImage` fallback.
+- Every instrument registers under its own Butler class path,
+  `instruments.<name>.instrument.Instrument`, from a three-line nameplate
+  `instrument.py` in the instrument dir; the stored `class_name` now identifies
+  the instrument on its own and several instruments can share a repo. Existing
+  repos migrate on their next `calibs`/`science`/`dia`/`coadd`/`measure-crosstalk`
+  step or `stips bootstrap` (`register-instrument --update`); `fphot`,
+  `lightcurve`, `ps1-template` and `clean` do not migrate a repo but keep
+  working through the `lsst.obs.stips.active` shim, which stays. (#59)
+- Profiles are imported by name (`instruments.<name>.profile`) by one loader,
+  `stips.profile.import_profile`; `profile.py` imports `fetch` relatively.
+- `stips` refuses to run a step against a repo that holds other instruments
+  than the configured one, and `stips env` lists the registered instruments.
+
+### Removed
+- `InstrumentProfile.instrument_class` (derived from the directory name),
+  the `CCD_BINNING` config key (rejected with a message), the
+  `STIPS_PS1_BAND_MAP` env export, `lsst.obs.stips.profile_loader`, and the
+  `instrument:` line in `ForcedPhotRaDec.yaml`.
+- `scripts/pipeline/00_bootstrap_repo.sh` and the shell helpers
+  `scripts/utilities/logging.sh`, `repo_paths.sh` and
+  `observing_night_to_ut.sh` (the night → UT `day_obs` mapping is the
+  profile's `night_to_dayobs_offset_days`).
+- `.env` loading everywhere: the Makefile's `ENV_FILE`/`EXTRA_ENV` and its
+  `env-info` and `bootstrap` targets (`STACK_DIR=/path make test`), and the
+  container's `/config/.env` and `STIPS_PROFILE` loaders (containers take the
+  mounted `-c` config YAML).
+- The `SKYMAP_NAME`, `SKYMAP_COLLECTION`, `SKYMAP_CFG` and
+  `STIPS_INSTRUMENT_CLASS` stack env exports and the `RUN_ID` passthrough;
+  nothing in the stack read them any more.
+
+### Fixed
+- Colour terms switch on only when the instrument's library has a block for
+  the refcat in use (exact key, else exactly one glob, mirroring the stack's
+  lookup). `apply_colorterms.py` and the MONSTER QA ref-match overlay used to
+  enable them for any non-empty library, so a library with a PS1 block only
+  would raise `ColortermNotFoundError` in `gaia` and MONSTER modes.
+- An unknown `refcat.mode` is rejected (by config loading, `stips run` and
+  `stips bootstrap`, naming the valid modes) instead of silently selecting
+  MONSTER.
+- `refcat: null` in the config no longer crashes config loading; it means the
+  defaults.
+- The on-demand PS1 DR2 fetch reads the whole cone. MAST serves at most one
+  page (50 000 rows) per request and, unsorted, an arbitrary slice of it, so
+  a cone larger than a page (`radius_deg: 0.3` at Dec +54 holds ~112 000
+  objects) silently got a different ~45 % sample on every fetch; a field could
+  lose its bright PS1 stars and `calibrateImage` would fit the zeropoint to
+  one star. `stips_refcats.ps1.query_ps1_mean_pages` now pages through the
+  cone sorted by `objID`, which makes the result complete and repeatable;
+  the bulk `ps1_fetch_mast.py` script uses it too. Cones of 0.1 deg and
+  smaller fit in one page and were unaffected.
+
 ## [2.3.0] — 2026-10-09
 
 A documentation site (<https://stips-lsst.readthedocs.io>), and fixes for
