@@ -51,7 +51,7 @@ class TestNickelFilterAliases(unittest.TestCase):
     def test_malformed_sloan_card_as_the_stack_reads_it(self):
         """2020-2023 headers carry FILTNAM = 'r'                ' . The stack's
         FITS reader (used by ingest) returns "r", not "r'". It must still be
-        the Sloan-like filter, while uppercase stays Cousins."""
+        the SDSS filter, while uppercase stays Cousins."""
         self.assertEqual(_phys("r"), "rp")
         self.assertEqual(_phys("i"), "ip")
         self.assertEqual(_phys("R"), "R")
