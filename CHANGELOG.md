@@ -4,6 +4,8 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
 
 ## [Unreleased]
 
+## [2.4.0] — 2026-10-12
+
 ### Added
 - `InstrumentProfile.ccd_binning` and `binning_header`; the translator claims
   only raws whose binning matches. `instruments/ctio1m_bin2/` is the 2×2-binned
@@ -17,13 +19,6 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
   them Vega (`vega_bands`). Until now Y4KCam had no colour terms in any mode,
   so SN 2009Y sat on the PS1 AB zero point with the bandpass uncorrected
   (about −0.2 mag in R and −0.45 mag in I, mostly the AB → Vega constant).
-
-### Fixed (colour-term gate)
-- Colour terms switch on only when the instrument's library has a block for
-  the refcat in use (exact key, else exactly one glob, mirroring the stack's
-  lookup). `apply_colorterms.py` and the MONSTER QA ref-match overlay used to
-  enable them for any non-empty library, so a library with a PS1 block only
-  would raise `ColortermNotFoundError` in `gaia` and MONSTER modes.
 
 ### Changed
 - `stips bootstrap` and the bootstrap step of `stips run` run in Python
@@ -75,6 +70,11 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
   nothing in the stack read them any more.
 
 ### Fixed
+- Colour terms switch on only when the instrument's library has a block for
+  the refcat in use (exact key, else exactly one glob, mirroring the stack's
+  lookup). `apply_colorterms.py` and the MONSTER QA ref-match overlay used to
+  enable them for any non-empty library, so a library with a PS1 block only
+  would raise `ColortermNotFoundError` in `gaia` and MONSTER modes.
 - An unknown `refcat.mode` is rejected (by config loading, `stips run` and
   `stips bootstrap`, naming the valid modes) instead of silently selecting
   MONSTER.
