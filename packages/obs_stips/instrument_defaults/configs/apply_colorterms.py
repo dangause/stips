@@ -12,6 +12,7 @@
 # run_with_stack and the pipeline-graph test) in preference to the empty neutral
 # library co-located here. The reference Nickel fit lives at
 # ``instruments/nickel/configs/colorterms.py`` and is picked up automatically.
+import fnmatch
 import os
 
 config_dir = os.path.dirname(__file__)
@@ -39,7 +40,18 @@ config.photometry.photoCatName = alias.get(refname, refname)
 # load the library defining config.data = {...}
 config.photometry.colorterms.load(_colorterms_path)
 
-# Enable color terms only when the resolved library is non-empty. A fork with no
-# colorterms.py inherits the empty neutral library and calibrates with a plain
-# per-visit zeropoint (no color correction) instead of failing config validation.
-config.photometry.applyColorTerms = len(config.photometry.colorterms.data) > 0
+# Enable color terms only when the library has a block for THIS refcat. A fork
+# with no colorterms.py inherits the empty neutral library, and a fork that fit
+# terms for one refcat only (CTIO: PS1) must still calibrate in its other modes;
+# either way it falls back to a plain per-visit zeropoint (no color correction).
+# The stack raises ColortermNotFoundError at run time for a missing block, so
+# mirror its lookup: an exact key, else exactly one matching glob.
+# (A plain loop, not a comprehension: pex_config execs this file with separate
+# global/local scopes, which a nested comprehension scope cannot see.)
+_library = config.photometry.colorterms.data
+_matches = 0
+for _glob in _library:
+    _matches += fnmatch.fnmatch(config.photometry.photoCatName, _glob)
+config.photometry.applyColorTerms = (
+    config.photometry.photoCatName in _library or _matches == 1
+)

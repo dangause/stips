@@ -8,9 +8,11 @@
 # Color terms and the band->refcat-column filter map are per-telescope, so this
 # file loads the ACTIVE instrument's ``configs/{colorterms,filter_map}.py``
 # (via $INSTRUMENT_DIR) in preference to the co-located neutral defaults.
-# doApplyColorTerms is enabled ONLY when the resolved colorterm library is
-# non-empty -- an empty library with doApplyColorTerms=True raises a
-# FieldValidationError at graph-build time.
+# doApplyColorTerms is enabled ONLY when the resolved colorterm library has a
+# block for the MONSTER refcat -- an empty library with doApplyColorTerms=True
+# raises a FieldValidationError at graph-build time, a missing block a
+# ColortermNotFoundError at run time.
+import fnmatch
 import os
 
 OBS_DIR = os.path.dirname(__file__)
@@ -37,8 +39,14 @@ config.connections.refCatalog = "the_monster_20250219_local"
 config.referenceCatalogLoader.refObjLoader.load(_filter_map_path)
 
 # Load the color-term library (instrument fit, else empty neutral library) and
-# enable color terms only if it is non-empty.
+# enable color terms only if it has a block for this refcat. The loader looks the
+# block up by the refcat's dataset name (exact key, else exactly one glob) and
+# raises ColortermNotFoundError if there is none -- e.g. CTIO fits PS1 terms only.
 config.referenceCatalogLoader.colorterms.load(_colorterms_path)
+_library = config.referenceCatalogLoader.colorterms.data
+_matches = 0
+for _glob in _library:
+    _matches += fnmatch.fnmatch(config.connections.refCatalog, _glob)
 config.referenceCatalogLoader.doApplyColorTerms = (
-    len(config.referenceCatalogLoader.colorterms.data) > 0
+    config.connections.refCatalog in _library or _matches == 1
 )
