@@ -8,6 +8,22 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
 - `InstrumentProfile.ccd_binning` and `binning_header`; the translator claims
   only raws whose binning matches. `instruments/ctio1m_bin2/` is the 2×2-binned
   Y4KCam instrument.
+- Colour terms for the CTIO 1.0m / Y4KCam in `refcat.mode: gaia_ps1`
+  (`instruments/ctio1m/configs/colorterms.py`). Y4KCam's BVRI are a standard
+  Kron-Cousins set that Clem & Landolt 2013 (AJ 146, 88) found to realise the
+  Cousins system to within 0.02 mag/mag in V, R and I, so the library carries
+  the PS1 → Johnson-Cousins transformations of Tonry et al. 2012 (ApJ 750, 99,
+  Table 6); R and I are the bands reachable today and the profile declares
+  them Vega (`vega_bands`). Until now Y4KCam had no colour terms in any mode,
+  so SN 2009Y sat on the PS1 AB zero point with the bandpass uncorrected
+  (about −0.2 mag in R and −0.45 mag in I, mostly the AB → Vega constant).
+
+### Fixed (colour-term gate)
+- Colour terms switch on only when the instrument's library has a block for
+  the refcat in use (exact key, else exactly one glob, mirroring the stack's
+  lookup). `apply_colorterms.py` and the MONSTER QA ref-match overlay used to
+  enable them for any non-empty library, so a library with a PS1 block only
+  would raise `ColortermNotFoundError` in `gaia` and MONSTER modes.
 
 ### Changed
 - `stips bootstrap` and the bootstrap step of `stips run` run in Python

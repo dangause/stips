@@ -45,7 +45,8 @@ fallback. Pan-STARRS and SkyMapper templates are available for `r` and `i`.
 - Guidance for southern fields outside Pan-STARRS ({doc}`southern-fields`).
 
 CTIO is validated on archival standard fields and on the southern cluster
-NGC 2298, and has been used for SN 2009Y. It has no fitted colour terms yet;
+NGC 2298, and has been used for SN 2009Y. Its R and I colour terms come from
+the literature rather than a STIPS fit ({doc}`southern-fields`);
 {doc}`campaigns` lists what has been run and what is still open.
 
 ```{toctree}

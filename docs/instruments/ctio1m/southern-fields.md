@@ -13,13 +13,26 @@ which changes both the reference catalog and the template.
 For CTIO, `gaia_ps1` calibrates only R and I; B and V need `gaia` or
 MONSTER, and U has no reference in any mode.
 
+In `gaia_ps1` mode, R and I are placed on the Johnson-Cousins (Vega) system
+by `instruments/ctio1m/configs/colorterms.py`. Y4KCam's BVRI filters are a
+standard Kron-Cousins set, and Clem & Landolt (2013, AJ 146, 88) calibrated
+the camera against Landolt standards on 139 nights spanning the STIPS data,
+finding V, R and I within 0.02 mag/mag of the standard system. The library
+therefore applies the PS1 to Johnson-Cousins transformations of Tonry et al.
+(2012, ApJ 750, 99, Table 6) directly; the I term is linearised in r − i
+(Tonry's relation is in g − r) and agrees with the slope measured on SN 2009Y
+field stars. These are literature values, not a STIPS fit: a check against
+Landolt fields through this path is still open.
+
 The SA98 and other standard-field configs set no mode, so they use the
 default, MONSTER.
 
 With `gaia`, each band is calibrated against the nearest Gaia band (B against
 BP, V against G, R and I against RP). Colour terms would correct for the
-differences, but CTIO has none yet for any reference catalog, so treat its
-absolute magnitudes as approximate. See {doc}`../../reference-catalogs`.
+differences, but CTIO has none for Gaia or MONSTER, so treat absolute
+magnitudes from those modes as approximate: they sit on the reference
+catalog's AB zero point with the bandpass uncorrected. See
+{doc}`../../reference-catalogs`.
 
 ## Templates
 
