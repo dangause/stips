@@ -33,8 +33,10 @@ same field.
 
 **Still open:**
 
-- **Colour terms.** None are fitted for Y4KCam, so absolute magnitudes are
-  approximate (see {doc}`southern-fields`).
+- **Colour terms.** R and I use literature transformations in `gaia_ps1`
+  mode (see {doc}`southern-fields`); none exist for B, V or for the `gaia`
+  and MONSTER modes, where magnitudes stay on the reference catalog's AB
+  zero point with the bandpass uncorrected.
 - **Read noise** is a 7 e⁻ placeholder, not a measurement.
 - **Crosstalk** coefficients come from one binned night and are indicative.
 - **Amplifier A01** is masked from 2010 onward; see {doc}`calibration`.

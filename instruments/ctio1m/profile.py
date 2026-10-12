@@ -74,6 +74,11 @@ profile = InstrumentProfile(
     # to PS1 r/i. u/b/v have no PS1 equivalent and fall back to coadd templates in
     # "auto" mode. Matches the reference Nickel r/i policy.
     ps1_band_map={"r": "r", "i": "i"},
+    # In gaia_ps1 mode R and I are calibrated through configs/colorterms.py
+    # (Tonry et al. 2012 PS1 -> Cousins; Y4KCam's RI are Cousins to 0.02
+    # mag/mag per Clem & Landolt 2013), which puts them on the Vega system.
+    # Every band in gaia and monster mode stays AB.
+    vega_bands={"gaia_ps1": ("r", "i")},
     # External-template band policy per source. SkyMapper (DR4) serves u/v/g/r/i/z
     # but its "v" is a Stromgren-like ~384nm VIOLET filter — NOT Johnson V
     # (~551nm), which Y4KCam's "v" is. Mapping v->v would fetch a near-UV

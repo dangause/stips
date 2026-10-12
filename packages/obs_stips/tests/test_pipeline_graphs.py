@@ -254,10 +254,12 @@ def test_stage1_nickel_colorterms_parity(monkeypatch) -> None:
 def test_stage1_builds_for_ctio1m(monkeypatch) -> None:
     """The neutral defaults tier builds for a second instrument (F-012).
 
-    ctio1m ships no configs/colorterms.py, so the instrument-aware glue must
-    fall back to the empty neutral library and leave color terms OFF (an empty
-    library with applyColorTerms=True fails config validation) -- proving a
-    fork does not silently inherit Nickel's photometric calibration.
+    ctio1m's configs/colorterms.py holds a PS1 block only (Tonry et al. 2012
+    PS1 -> Cousins), so in this MONSTER-mode graph the instrument-aware glue
+    must load that library but leave color terms OFF: the stack would raise
+    ColortermNotFoundError for a refcat the library has no block for. This
+    proves a fork neither inherits Nickel's calibration nor trips over its own
+    partial library.
     """
     lsst_pipe_base = pytest.importorskip("lsst.pipe.base")
     graph = _build_stage1(lsst_pipe_base, CTIO1M_INSTRUMENT_DIR, monkeypatch)
@@ -265,7 +267,11 @@ def test_stage1_builds_for_ctio1m(monkeypatch) -> None:
 
     calib = graph.tasks["calibrateImage"].config
     assert calib.photometry.applyColorTerms is False
-    assert len(calib.photometry.colorterms.data) == 0
+    assert set(calib.photometry.colorterms.data) == {"ps1*"}
+    # Spot-check the Tonry R-band term (c0=-0.137, c1=+0.108 on r-g).
+    r_term = calib.photometry.colorterms.data["ps1*"].data["R"]
+    assert r_term.c0 == pytest.approx(-0.137)
+    assert r_term.c1 == pytest.approx(0.108)
 
     qa = graph.tasks[_PHOTOM_REFMATCH_LABEL].config
     assert qa.referenceCatalogLoader.doApplyColorTerms is False
@@ -314,6 +320,8 @@ def test_gaia_ps1_overlay_builds(instrument_dir, monkeypatch) -> None:
         assert fmap["b"] == "gMeanPSFMag" and fmap["v"] == "gMeanPSFMag"
         assert calib.photometry.applyColorTerms is True
     else:
-        # Neutral overlay: map derived from ctio1m ps1_band_map, colorterms OFF.
+        # Neutral overlay: map derived from ctio1m ps1_band_map; the overlay
+        # picks up ctio1m's own PS1-only library (Tonry terms), colorterms ON.
         assert fmap == {"r": "rMeanPSFMag", "i": "iMeanPSFMag"}
-        assert calib.photometry.applyColorTerms is False
+        assert calib.photometry.applyColorTerms is True
+        assert set(calib.photometry.colorterms.data) == {"ps1*"}
