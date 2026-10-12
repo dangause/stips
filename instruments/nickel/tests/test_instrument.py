@@ -77,7 +77,7 @@ class TestNickelInstrument(unittest.TestCase):
         self.assertIs(self.inst.getDefineVisitsTask(), DefineVisitsTask)
 
     def test_filters_registered(self):
-        # Broadband BVRI + clear, plus Sloan-like (gp/rp) and narrowband
+        # Broadband BVRI + clear, plus SDSS (gp/rp) and narrowband
         # (Halpha/OIII) filters used for extended-object workflows.
         filter_definitions = self.Instrument.filterDefinitions
         pfs = {fd.physical_filter for fd in filter_definitions}

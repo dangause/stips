@@ -2,7 +2,7 @@
 
 This walks through a first reduction: three nights of SN 2023ixf, a Type II
 supernova in M101, taken with the Nickel 1-m in May 2023 and public in the
-Lick archive. It ends with a lightcurve in Nickel's Sloan-like r′ and i′
+Lick archive. It ends with a lightcurve in Nickel's SDSS r′ and i′
 filters, which the Nickel profile calls `rp` and `ip`.
 
 You need a {doc}`native install <installation>` of STIPS. The quickstart

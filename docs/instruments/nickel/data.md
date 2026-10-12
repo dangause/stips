@@ -57,7 +57,7 @@ processing. A standalone `stips science` does the same when given `--ra` and
 `--dec`.
 
 **r′ and i′ look like r and i.** Headers from 2020 to 2023 record the
-Sloan-like filters in a malformed card that the stack reads as `r` and `i`.
+SDSS filters in a malformed card that the stack reads as `r` and `i`.
 STIPS maps those values to the `rp` and `ip` bands, not to Cousins R and I,
 because the two filter sets need different colour terms.
 
