@@ -89,6 +89,7 @@ copybutton_prompt_is_regexp = True
 
 html_theme = "furo"
 html_title = f"STIPS {release}"
+html_logo = "_static/stips_logo.svg"
 html_static_path = ["_static"]
 html_css_files = ["custom.css"]
 html_theme_options = {
