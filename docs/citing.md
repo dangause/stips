@@ -7,6 +7,10 @@ STIPS is archived on Zenodo:
 
 - **All versions** (concept DOI, resolves to the latest release):
   [10.5281/zenodo.23243456](https://doi.org/10.5281/zenodo.23243456)
+- **v2.4.0**:
+  [10.5281/zenodo.23320419](https://doi.org/10.5281/zenodo.23320419)
+- **v2.3.0**:
+  [10.5281/zenodo.23270726](https://doi.org/10.5281/zenodo.23270726)
 - **v2.2.4**:
   [10.5281/zenodo.23243457](https://doi.org/10.5281/zenodo.23243457)
 

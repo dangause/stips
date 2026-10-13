@@ -1,6 +1,8 @@
 from .fetch import make_fetch_data, parse_night, status_for_code
 from .profile import (
     EXPOSURE_ID_EPOCH,
+    INSTRUMENTS_PACKAGE,
+    LEGACY_INSTRUMENT_CLASS,
     CameraSpec,
     CrosstalkSpec,
     Field,
@@ -8,12 +10,20 @@ from .profile import (
     Site,
     coerce_date,
     hook,
+    import_instrument_module,
+    import_instrument_submodule,
+    import_profile,
+    instrument_class_for,
+    instrument_dir_name,
+    instruments_root,
     make_exposure_id,
     pack_exposure_id,
 )
 
 __all__ = [
     "EXPOSURE_ID_EPOCH",
+    "INSTRUMENTS_PACKAGE",
+    "LEGACY_INSTRUMENT_CLASS",
     "CameraSpec",
     "CrosstalkSpec",
     "Field",
@@ -21,6 +31,12 @@ __all__ = [
     "Site",
     "coerce_date",
     "hook",
+    "import_instrument_module",
+    "import_instrument_submodule",
+    "import_profile",
+    "instrument_class_for",
+    "instrument_dir_name",
+    "instruments_root",
     "make_exposure_id",
     "make_fetch_data",
     "pack_exposure_id",

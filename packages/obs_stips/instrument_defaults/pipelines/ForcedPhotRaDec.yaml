@@ -41,8 +41,6 @@ description: |
   Forced photometry at user-specified RA/Dec coordinates.
   Supports both calibrated visit images and difference images.
 
-instrument: lsst.obs.stips.active.Instrument
-
 tasks:
   # ============================================
   # Forced photometry on calibrated visit images

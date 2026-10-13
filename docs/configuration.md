@@ -20,17 +20,20 @@ has many more.
 |---|---|---|
 | `REPO` | yes | Butler repository; created by the first run |
 | `STACK_DIR` | yes | Rubin stack installation: the directory containing `loadLSST.sh` |
-| `INSTRUMENT_DIR` | yes | Instrument profile directory, containing `profile.py` |
+| `INSTRUMENT_DIR` | yes | Instrument directory `instruments/<name>/`, containing `profile.py` and `instrument.py` |
 | `RAW_PARENT_DIR` | yes | Raw data, as `<night>/raw/*.fits` |
-| `REFCAT_REPO` | for bootstrap | MONSTER shard directory; see {doc}`reference-catalogs` |
+| `REFCAT_REPO` | in `refcat.mode: monster` | MONSTER shard directory (required in `refcat.mode: monster`); fetched Gaia/PS1 shards are stored under it (under `REPO` if unset). See {doc}`reference-catalogs` |
 | `CP_PIPE_DIR` | no | `cp_pipe` location; found from the stack if unset |
-| `CCD_BINNING` | no | On-chip binning factor of the raws, such as `2`; default `1` |
 | `LICK_ARCHIVE_DIR` | Nickel `download` | The Lick archive client, normally `instruments/nickel/vendor/lick_searchable_archive` |
 | `NOIRLAB_PROPOSAL` | no | Restrict CTIO `download` to one proposal ID |
 
 Values can refer to other keys in the block, as in
 `CP_PIPE_DIR: "${STACK_DIR}/cp_pipe"`. The old `INSTRUMENT_PACKAGE` key is
 rejected with a message to use `INSTRUMENT_DIR`.
+
+On-chip binning is a profile field (`ccd_binning`), not a config key; binned
+data is its own instrument dir (see `instruments/ctio1m_bin2/`). A leftover
+`CCD_BINNING` key is rejected with a message.
 
 ## Target
 
@@ -64,6 +67,15 @@ rejected with a message to use `INSTRUMENT_DIR`.
 | `mode` | `monster` | `monster`, `gaia_ps1`, or `gaia`; see {doc}`reference-catalogs` |
 | `radius_deg` | `0.3` | Radius of the cone fetched around `ra`/`dec` |
 | `gaia_quality` | | Gaia cuts, such as `{ruwe_max: 1.4, require_5param: true}` |
+
+`mode` must be `monster`, `gaia_ps1` or `gaia`; any other value is rejected
+by `stips run` and `stips bootstrap` (and by any command that reads the run
+config); `stips calibs`/`science`/`download` do not read it. An empty `refcat:`
+section means the defaults; a `refcat:` that is not a mapping (such as
+`refcat: gaia_ps1`) is rejected. Bootstrap follows the mode: `monster` requires MONSTER shards
+under `REFCAT_REPO` and ingests them; `gaia_ps1` and `gaia` ingest the shards
+if present and otherwise skip MONSTER with a warning and create an empty
+`refcats` chain, which the on-demand Gaia/PS1 fetch then extends.
 
 ## `configs`
 

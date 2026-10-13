@@ -40,7 +40,7 @@ config.data = {
                 c1=0.352,
                 c2=0.0,
             ),
-            # Sloan-like r'/i' (2020-2023 headers; see the filter_aliases note in
+            # SDSS r'/i' (2020-2023 headers; see the filter_aliases note in
             # profile.py). Slopes measured against PS1 on 13 2020wnt visits
             # (2026-10-04): r -0.033 +/- 0.006 per mag of r-i, i -0.053 +/- 0.006.
             # c0 = 0 keeps these bands on the PS1 AB system.
@@ -122,7 +122,7 @@ config.data = {
                 c1=0.2159,
                 c2=0.0,
             ),
-            # Sloan-like filters (approximate: treat as close to LSST g/r)
+            # SDSS filters (approximate: treat as close to LSST g/r)
             "gp": Colorterm(
                 primary="monster_ComCam_g",
                 secondary="monster_ComCam_r",

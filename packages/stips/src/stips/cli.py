@@ -150,17 +150,13 @@ def _vega_bands_from_ctx(ctx: click.Context, config: cfg_module.Config) -> tuple
     ``InstrumentProfile.vega_bands``. Without a -c YAML there is no mode, so
     every band is reported as AB.
     """
-    import yaml
-
-    from stips.core.run import DEFAULT_REFCAT_MODE
+    from stips.core.refcat import refcat_mode_from_yaml
 
     config_path = (ctx.obj or {}).get("config_path")
     profile = getattr(config, "profile", None)
     if not config_path or profile is None:
         return ()
-    with open(config_path) as fh:
-        raw = yaml.safe_load(fh) or {}
-    mode = (raw.get("refcat") or {}).get("mode", DEFAULT_REFCAT_MODE)
+    mode = refcat_mode_from_yaml(config_path)
     return tuple(getattr(profile, "vega_bands", {}).get(mode, ()))
 
 
@@ -250,6 +246,9 @@ def env(ctx: click.Context, config: cfg_module.Config) -> None:
     click.echo(f"{'STACK_DIR:':<20} {config.stack_dir}")
     click.echo(f"{'INSTRUMENT_DIR:':<20} {config.instrument_dir}")
     click.echo(f"{'RAW_PARENT_DIR:':<20} {config.raw_parent_dir}")
+    if config.profile is not None:
+        click.echo(f"\n{'Instrument:':<20} {config.profile.name}")
+        click.echo(f"{'Class:':<20} {config.instrument_class}")
 
     if config.cp_pipe_dir:
         click.echo(f"{'CP_PIPE_DIR:':<20} {config.cp_pipe_dir}")
@@ -272,6 +271,23 @@ def env(ctx: click.Context, config: cfg_module.Config) -> None:
 
     if check_stack(config):
         click.echo(click.style(" ✓ available", fg="green"))
+        if (config.repo / "butler.yaml").is_file():
+            from stips.core import butler_query
+            from stips.profile import LEGACY_INSTRUMENT_CLASS
+
+            registered = butler_query.list_instruments(config)
+            click.echo("\nRegistered instruments:")
+            if registered is None:
+                click.echo("  (could not query the registry; see the stack log above)")
+            elif not registered:
+                click.echo("  (none; run `stips bootstrap`)")
+            for name, cls in sorted((registered or {}).items()):
+                note = (
+                    "  <- legacy; migrates on the next step"
+                    if cls == LEGACY_INSTRUMENT_CLASS
+                    else ""
+                )
+                click.echo(f"  {name:<12} {cls}{note}")
     else:
         click.echo(click.style(" ✗ not accessible", fg="red"))
         click.echo("  Make sure LSST stack is installed at STACK_DIR")
@@ -743,6 +759,13 @@ def bootstrap(ctx: click.Context, config: cfg_module.Config) -> None:
 
     Creates the Butler repo, registers the instrument, ingests reference
     catalogs, and sets up the skymap. Run this once before processing data.
+    Safe to re-run on an existing repo: it re-registers the instrument
+    (`register-instrument --update`) and repairs anything missing (the MONSTER
+    run, the refcats and skymap chains, the skymap); steps whose result already
+    exists are skipped. Logs go to logs/<RUN_ID>/bootstrap/.
+
+    MONSTER shards are required only in `refcat.mode: monster`; in
+    `gaia_ps1`/`gaia` they are ingested if present and skipped otherwise.
 
     Configuration comes from the group -c config YAML's env: block.
 
@@ -752,11 +775,35 @@ def bootstrap(ctx: click.Context, config: cfg_module.Config) -> None:
         stips -c scripts/config/2020wnt/pipeline_nickel_template.yaml bootstrap
     """
     from stips.core import bootstrap as bootstrap_module
+    from stips.core.refcat import refcat_mode_from_yaml
+    from stips.core.run_logging import (
+        generate_run_id,
+        get_step_log_file,
+        setup_run_logging,
+    )
 
+    try:
+        mode = refcat_mode_from_yaml(ctx.obj["config_path"])
+    except ValueError as exc:
+        _print_error(str(exc))
+        sys.exit(1)
+
+    run_log_dir = setup_run_logging(generate_run_id(), config)
     _print_info("Bootstrapping Butler repository...")
     _print_info(f"  Repo: {config.repo}")
+    _print_info(f"  Logs: {run_log_dir}")
 
-    result = bootstrap_module.run(config)
+    result = bootstrap_module.run(
+        config,
+        log_file=get_step_log_file("bootstrap"),
+        require_monster=(mode == "monster"),
+    )
+    # pipeline.log alone reads as an active run on the dashboard; record the outcome.
+    (run_log_dir / "summary.txt").write_text(
+        "Step: bootstrap\n"
+        f"Status: {'SUCCESS' if result.success else 'FAILED'}\n"
+        + (f"Error: {result.error}\n" if result.error else "")
+    )
 
     _report_result(
         result,
@@ -764,6 +811,11 @@ def bootstrap(ctx: click.Context, config: cfg_module.Config) -> None:
         fail_msg="Bootstrap failed",
         details=[f"  Repository ready: {config.repo}"],
     )
+    if result.monster_skipped:
+        _print_info(
+            f"  MONSTER shards not found; skipped (refcat mode {mode} "
+            "fetches catalogs on demand)"
+        )
 
 
 # =============================================================================
@@ -1692,7 +1744,9 @@ def refcat_status(
     """Report Gaia/PS1 coverage for a target cone without fetching."""
     from stips.core import refcat as refcat_mod
 
-    needed = set(refcat_mod.cones_to_htm([(ra, dec, radius_deg)], depth=7))
+    # Venv-safe, same as ``refcat fetch``: computed in-stack when ``lsst`` is
+    # not importable here (calling ``cones_to_htm`` directly crashed the venv).
+    needed = refcat_mod._cones_to_htm_ids(config, [(ra, dec, radius_deg)], depth=7)
     for name in (refcat_mod.GAIA_DATASET, refcat_mod.PS1_DATASET):
         present = refcat_mod.present_trixels(config, name)
         have = len(needed & present)

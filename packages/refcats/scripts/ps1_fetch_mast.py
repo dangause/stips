@@ -27,13 +27,8 @@ import time
 from pathlib import Path
 from typing import Iterable, Optional, Tuple
 
-import astropy.units as u
 import numpy as np
 import pandas as pd
-from astropy.coordinates import SkyCoord
-
-# astroquery.mast + astropy
-from astroquery.mast import Catalogs
 
 # ------------ Defaults ------------
 RADIUS_ARCMIN_DEFAULT = 5.4  # ≈0.09 deg (Nickel ~6' FOV + margin)
@@ -43,7 +38,7 @@ MAX_RETRIES_DEFAULT = 3
 
 # Columns needed by convert config (and useful extras).
 # Single source of truth lives in the importable library module.
-from stips_refcats.ps1 import PS1_COLUMNS  # noqa: E402
+from stips_refcats.ps1 import PS1_COLUMNS, query_ps1_mean_pages  # noqa: E402
 
 # ----------------------------------
 
@@ -306,20 +301,12 @@ def pointings_from_fits_dir(
 def _fetch_one_cone(
     ra: float, dec: float, r_arcmin: float, sleep: float, max_retries: int
 ) -> pd.DataFrame:
-    coord = SkyCoord(ra=ra * u.deg, dec=dec * u.deg)
     last_err: Optional[Exception] = None
     for attempt in range(1, max_retries + 1):
         try:
-            tab = Catalogs.query_region(
-                coordinates=coord,
-                radius=r_arcmin * u.arcmin,
-                catalog="Panstarrs",
-                data_release="dr2",
-                table="mean",
-                columns=PS1_COLUMNS,
-                pagesize=50000,
-            )
-            return tab.to_pandas()
+            # Paged + sorted: one unsorted request returns an arbitrary
+            # 50000-row slice of any cone larger than a page.
+            return query_ps1_mean_pages(ra, dec, r_arcmin / 60.0)
         except Exception as e:
             last_err = e
             if attempt == max_retries:

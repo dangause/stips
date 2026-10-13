@@ -4,10 +4,11 @@ Copy this directory and edit profile.py + camera/ for your telescope."""
 
 import logging
 
+from stips import Field, InstrumentProfile, Site, hook, make_exposure_id
+
 # Safe to import at module load: fetch.py is stdlib-only at import time
 # (the lick_archive client is lazy-imported inside the fetch implementation).
-from fetch import fetch_data as _fetch_data
-from stips import Field, InstrumentProfile, Site, hook, make_exposure_id
+from .fetch import fetch_data as _fetch_data
 
 log = logging.getLogger("lsst.obs.stips.nickel.profile")
 
@@ -24,7 +25,14 @@ profile = InstrumentProfile(
         elevation=1290.0,
         name="Lick Observatory",
     ),
-    # physical_filter -> band
+    # physical_filter -> band. The Nickel direct camera's filters, per Lick's
+    # 1-m filter list (mthamilton.ucolick.org/techdocs/filters/f40.html) and
+    # the Nickel Direct Imaging Camera manual: U B V R I are the Bessell set
+    # (Johnson-Cousins system for CCDs, Bessell 1990); g' r' i' z' are the SDSS
+    # set; Halpha and OIII are the 2-inch 6563/100 and 5000/100 narrowband
+    # filters from the Mount Hamilton library; "clear" is the wheel's empty
+    # position 0 (FILTNAM "Open"). The wheel holds four 2x2-inch filters, so a
+    # night carries at most four of these.
     filters={
         "B": "b",
         "V": "v",
@@ -41,10 +49,10 @@ profile = InstrumentProfile(
     # exactly, then upper-cased, so the lowercase "r"/"i" entries below are
     # exact-match only and do not shadow Cousins "R"/"I".
     #
-    # 2020-2023 Nickel headers write the Sloan-like filters as a malformed card,
+    # 2020-2023 Nickel headers write the SDSS filters as a malformed card,
     # FILTNAM = 'r'                ' . astropy reads it as "r'"; the stack's
     # FITS reader (which ingest uses) stops at the second quote and returns
-    # "r". Both must land on the Sloan-like filter: its colour slope against
+    # "r". Both must land on the SDSS filter: its colour slope against
     # PS1 is -0.03 (r) / -0.05 (i) per mag of r-i, against -0.24 / -0.35 for
     # Cousins R/I (measured 2026-10-04 on 13 2020wnt visits, see #42 and the
     # stips-paper repo's docs/paper-readiness.md). Mapping "r" to Cousins "R"
@@ -76,11 +84,11 @@ profile = InstrumentProfile(
     # PS1 templates (LOCAL band -> PS1 band). PS1 serves grizy; Nickel's r/i
     # (Cousins R/I) map to PS1 r/i. b/v have no PS1 equivalent and fall back to
     # coadd templates in "auto" mode. This reproduces the historical r/i policy.
-    # The Sloan-like rp/ip bands take PS1 r/i templates too.
+    # The SDSS rp/ip bands take PS1 r/i templates too.
     ps1_band_map={"r": "r", "i": "i", "rp": "r", "ip": "i"},
     # In gaia_ps1 mode the Cousins B/V/R/I colour terms (configs/colorterms.py,
     # Landolt-fitted; constants match Tonry+2012's Johnson-Cousins minus PS1)
-    # put those bands on the Vega system. The Sloan-like rp/ip bands, and every
+    # put those bands on the Vega system. The SDSS rp/ip bands, and every
     # band in MONSTER mode, stay AB.
     vega_bands={"gaia_ps1": ("b", "v", "r", "i")},
     # The Nickel direct-imaging camera covers ~6.3' (2048 px at 0.37"/px).
@@ -96,7 +104,6 @@ profile = InstrumentProfile(
     },
     const_map={"boresight_rotation_angle": 0.0, "boresight_rotation_coord": "sky"},
     camera="camera/nickel.yaml",
-    instrument_class="lsst.obs.stips.active.Instrument",
     night_to_dayobs_offset_days=1,
     skymap_name="nickelRings-v1",
     skymap_collection="skymaps/nickelRings",

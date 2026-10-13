@@ -57,7 +57,11 @@ published magnitudes to within 0.012 mag on average:
 | I | −0.008 | 0.06 |
 
 MONSTER mode does not reach this: it leaves B off by −0.44 mag and V by
-+0.27 mag. Use `gaia_ps1` for Nickel photometry.
++0.27 mag. Use `gaia_ps1` for Nickel B, V, R, I, r′ and i′. g′, Hα and [OIII]
+have no Pan-STARRS colour terms and calibrate only with MONSTER, and Gaia
+mode does not work for Nickel yet (see {doc}`../../reference-catalogs`).
+Crowded Galactic fields are an exception: there `gaia_ps1` astrometry is
+worse, so the variable-star and transit configs use MONSTER.
 
 ## Checking the calibration
 

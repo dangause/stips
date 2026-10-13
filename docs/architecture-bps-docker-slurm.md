@@ -295,7 +295,7 @@ parsl:
     setup lsst_distrib
     setup -r /opt/stips/packages/obs_stips obs_stips 2>/dev/null || true
     export REPO=/data/repo
-    export INSTRUMENT_DIR=/opt/stips/instruments/nickel
+    export INSTRUMENT_DIR="{instrument_dir}"   # the config's INSTRUMENT_DIR
     ...
 ```
 

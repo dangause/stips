@@ -67,8 +67,8 @@ fi
 # Resolve repo root + package path for monorepo layout.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_SCRIPTS_DIR="${SCRIPT_DIR%/utilities}"
-# shellcheck source=/dev/null
-source "$REPO_SCRIPTS_DIR/utilities/repo_paths.sh"
+REPO_ROOT="${REPO_ROOT:-$(cd "$REPO_SCRIPTS_DIR/.." && pwd)}"
+export REPO_ROOT
 TESTDATA_NICKEL_DIR="${TESTDATA_NICKEL_DIR:-$REPO_ROOT/instruments/nickel/testdata}"
 
 # --------- Activate LSST stack (prefer bash variant) ----------
@@ -147,7 +147,8 @@ fi
 # Ensure workspace packages are importable. obs_stips is python-layout (not
 # matched by the */src loop below) so add it explicitly in case the EUPS setup
 # above did not; the loop covers every src-layout package (stips, refcats, ...).
-export PYTHONPATH="${REPO_ROOT}/packages/obs_stips/python:${PYTHONPATH:-}"
+# The repo root makes instruments/ (a namespace package) importable by name.
+export PYTHONPATH="${REPO_ROOT}:${REPO_ROOT}/packages/obs_stips/python:${PYTHONPATH:-}"
 for pkg_dir in "${REPO_ROOT}"/packages/*/src; do
   if [[ -d "$pkg_dir" ]]; then
     export PYTHONPATH="${pkg_dir}:${PYTHONPATH:-}"

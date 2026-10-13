@@ -18,6 +18,10 @@ dependencies = [
     "matplotlib>=3.5.0",
     "click>=8.0.0",
     "stips-refcats",
+    # Needed by the vendored Lick archive client
+    # (instruments/nickel/vendor/lick_searchable_archive) that the Nickel
+    # `stips download` hook imports. The client also needs `requests` (above).
+    "tenacity>=8.0.0",
 ]
 
 [project.optional-dependencies]

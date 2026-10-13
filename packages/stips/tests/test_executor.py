@@ -570,14 +570,18 @@ class TestExecutorWiring:
             collection_prefix="Nickel",
             skymap_name="x",
             skymap_collection="skymaps/x",
-            instrument_class="lsst.obs.stips.active.Instrument",
         )
         config = SimpleNamespace(
             repo=tmp_path,
+            instrument_dir=tmp_path / "instruments" / "nickel",
+            instrument_class="instruments.nickel.instrument.Instrument",
             require_profile=lambda: prof,
             resolve_pipeline=lambda name: "DRP.yaml",
         )
         monkeypatch.setattr(pipeline_mod, "run_butler", lambda *a, **k: None)
+        monkeypatch.setattr(
+            pipeline_mod.butler_query, "list_instruments", lambda config: {}
+        )
         monkeypatch.setattr(
             coadd,
             "find_science_collections_for_nights",

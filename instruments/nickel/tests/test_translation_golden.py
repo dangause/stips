@@ -11,8 +11,6 @@ Do NOT edit the literals; if a value changes, the reimplementation diverged from
 the legacy and must be fixed, not the test.
 """
 
-import importlib
-import os
 import unittest
 from pathlib import Path
 
@@ -20,8 +18,8 @@ import astropy.units as u
 import pytest
 from astropy.time import Time
 
-# The translator is synthesized from lsst.obs.stips.active, which requires the
-# LSST stack; skip cleanly in a plain venv.
+# The translator is bound through the nameplate, which requires the LSST
+# stack; skip cleanly in a plain venv.
 pytest.importorskip("lsst.daf.butler")
 
 # instruments/nickel/tests/test_translation_golden.py -> parents[1] == instruments/nickel
@@ -29,16 +27,14 @@ _INSTRUMENT_DIR = str(Path(__file__).resolve().parents[1])
 
 
 def _load_translator():
-    """Synthesize the Nickel-bound Translator from the generic machinery.
+    """The Nickel-bound Translator, via the nameplate ``instrument.py``.
 
-    Sets ``INSTRUMENT_DIR`` to the reference Nickel dir and (re)loads
-    ``lsst.obs.stips.active`` so the golden literals below run against the
-    profile loaded from ``instruments/nickel/profile.py``.
+    Runs the golden literals below against the profile loaded from
+    ``instruments/nickel/profile.py``.
     """
-    os.environ["INSTRUMENT_DIR"] = _INSTRUMENT_DIR
-    import lsst.obs.stips.active as active
+    from stips.profile import import_instrument_module
 
-    return importlib.reload(active).Translator
+    return import_instrument_module(_INSTRUMENT_DIR).Translator
 
 
 NickelTranslator = _load_translator()

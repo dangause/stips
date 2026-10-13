@@ -172,6 +172,7 @@ def _run_calibs(tmp_path: Path, collisions):
         # pipeline helpers, which call pipeline.run_butler.
         patch.object(pipeline, "run_butler", run_butler),
         patch.object(calibs, "butler_query", bq),
+        patch.object(pipeline.butler_query, "list_instruments", lambda config: {}),
         patch.object(calibs, "get_raw_dir", return_value=raw_dir),
         patch.object(calibs, "find_aliasing_exposure_ids", return_value=collisions),
     ):
@@ -233,11 +234,11 @@ def _run_crosstalk_resolve(tmp_path: Path, collisions, *, existing=None):
     prof = MagicMock()
     prof.collection_prefix = "Nickel"
     prof.name = "Nickel"
-    prof.instrument_class = "lsst.obs.stips.active.Instrument"
 
     with (
         patch.object(crosstalk, "run_butler", run_butler),
         patch.object(crosstalk, "butler_query", bq),
+        patch.object(crosstalk, "ensure_instrument_registered", lambda *a, **k: None),
         patch.object(crosstalk, "get_raw_dir", return_value=raw_dir),
         patch.object(crosstalk, "find_aliasing_exposure_ids", scan),
     ):

@@ -1,4 +1,4 @@
-"""Minimal fixture instrument profile for profile_loader tests."""
+"""Minimal fixture instrument profile (camera yaml path) for binding tests."""
 
 from stips import Field, InstrumentProfile, Site
 

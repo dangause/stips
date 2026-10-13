@@ -52,9 +52,33 @@ def test_neutral_overlay_derives_filtermap_from_profile(monkeypatch):
         "r": "rMeanPSFMag",
         "i": "iMeanPSFMag",
     }
-    # ctio1m ships no configs/colorterms.py, so the neutral (empty) library is
-    # loaded and color terms stay OFF (len(MagicMock) == 0 mirrors the empty lib).
+    # ctio1m ships its own configs/colorterms.py (PS1-only Tonry terms), which
+    # the overlay prefers to the neutral library. The MagicMock library is
+    # empty (len == 0), so the gate reads OFF here; the non-empty case is
+    # covered by test_neutral_overlay_enables_colorterms_for_a_shipped_library.
     config.photometry.colorterms.load.assert_called_once()
+    loaded_path = Path(config.photometry.colorterms.load.call_args[0][0])
+    assert loaded_path == CTIO1M_DIR / "configs" / "colorterms.py"
+    assert config.photometry.applyColorTerms is False
+
+
+def test_neutral_overlay_enables_colorterms_for_a_shipped_library(monkeypatch):
+    """With a non-empty instrument library the neutral overlay turns terms ON."""
+    monkeypatch.setenv("INSTRUMENT_DIR", str(CTIO1M_DIR))
+    config = MagicMock()
+    config.photometry.colorterms.data = {"ps1*": object()}
+    ns = {"config": config, "__file__": str(NEUTRAL_OVERLAY)}
+    exec(compile(NEUTRAL_OVERLAY.read_text(), str(NEUTRAL_OVERLAY), "exec"), ns)
+    assert config.photometry.applyColorTerms is True
+
+
+def test_neutral_overlay_falls_back_to_neutral_library(monkeypatch, tmp_path):
+    """An instrument dir without colorterms.py gets the neutral (empty) library."""
+    monkeypatch.setenv("INSTRUMENT_DIR", str(tmp_path))
+    monkeypatch.setattr(
+        "stips.profile.import_profile", lambda _dir: MagicMock(ps1_band_map={"r": "r"})
+    )
+    config = _exec_overlay(NEUTRAL_OVERLAY)
     loaded_path = Path(config.photometry.colorterms.load.call_args[0][0])
     assert loaded_path == NEUTRAL_OVERLAY.parent / "colorterms.py"
     assert config.photometry.applyColorTerms is False

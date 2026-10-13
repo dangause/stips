@@ -25,7 +25,6 @@ NIGHT = "20230519"
 def _profile() -> MagicMock:
     prof = MagicMock()
     prof.collection_prefix = "Nickel"
-    prof.instrument_class = "lsst.obs.nickel.Nickel"
     prof.name = "Nickel"
     prof.crosstalk = None
     prof.isr_overrides = {}
@@ -82,6 +81,7 @@ def _invoke(tmp_path, *, run_rc, counts, ingest_rc=0, ingest_stderr=""):
         # certify-calibrations assertions still see every relevant call.
         patch.object(pipeline, "run_butler", run_butler),
         patch.object(calibs, "butler_query", bq),
+        patch.object(pipeline.butler_query, "list_instruments", lambda config: {}),
         patch.object(calibs, "get_raw_dir", return_value=raw_dir),
     ):
         result = calibs.run(NIGHT, config, jobs=1, executor=executor, skip_curated=True)

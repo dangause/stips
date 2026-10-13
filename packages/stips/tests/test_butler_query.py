@@ -48,6 +48,14 @@ class TestScriptBuilders:
         ast.parse(s)
         assert "limit=1" in s
 
+    def test_count_script_maps_missing_collection_to_zero(self):
+        from stips.core.butler_query import _build_count_script
+
+        s = _build_count_script("/repo", "skyMap", ["skymaps"], "", 1)
+        ast.parse(s)
+        assert "except (MissingDatasetTypeError, MissingCollectionError):" in s
+        assert "from lsst.daf.butler import MissingCollectionError" in s
+
     def test_list_collections_script_valid(self):
         from stips.core.butler_query import _build_list_collections_script
 
@@ -56,6 +64,15 @@ class TestScriptBuilders:
         assert "collections.query" in s
         assert "queryCollections" in s  # fallback
         assert "templates/*" in s
+
+    def test_list_collections_script_maps_missing_collection_to_empty(self):
+        from stips.core.butler_query import _build_list_collections_script
+
+        s = _build_list_collections_script("/repo", "skymaps/nickelRings")
+        ast.parse(s)
+        assert "except MissingCollectionError:" in s
+        assert "from lsst.daf.butler import MissingCollectionError" in s
+        assert "    names = []" in s  # -> {"collections": []}
 
     def test_data_id_values_script_valid(self):
         from stips.core.butler_query import _build_data_id_values_script
@@ -270,6 +287,13 @@ class TestCollections:
         )
         assert "include_summary=True" in s
 
+    def test_collection_types_script_maps_missing_collection_to_empty(self):
+        from stips.core.butler_query import _build_collection_types_script
+
+        s = _build_collection_types_script("/repo", "Nickel/runs/x")
+        ast.parse(s)
+        assert "except MissingCollectionError:" in s
+
 
 class TestQuantumGraph:
     def test_is_empty_true_false_none(self):
@@ -293,3 +317,63 @@ class TestQuantumGraph:
             butler_query, "run_butler_python_json", return_value={"count": 12}
         ):
             assert butler_query.quantum_graph_quanta_count(_cfg(), "/x.qg") == 12
+
+
+def test_list_instruments_script_queries_dimension_records():
+    from stips.core.butler_query import _build_list_instruments_script
+
+    s = _build_list_instruments_script("/repo")
+    assert 'query_dimension_records("instrument", explain=False)' in s
+    assert 'queryDimensionRecords("instrument")' in s  # v27 fallback
+    assert "except (AttributeError, TypeError):" in s  # unexpected explain= kwarg
+    assert "class_name" in s
+
+
+def test_list_instruments_returns_name_to_class(monkeypatch):
+    from stips.core import butler_query as bq
+
+    monkeypatch.setattr(
+        bq,
+        "run_butler_python_json",
+        lambda script, config: {
+            "instruments": {"CTIO1m": "lsst.obs.stips.active.Instrument"}
+        },
+    )
+    assert bq.list_instruments(_cfg()) == {"CTIO1m": "lsst.obs.stips.active.Instrument"}
+    monkeypatch.setattr(bq, "run_butler_python_json", lambda script, config: None)
+    assert bq.list_instruments(_cfg()) is None
+
+
+def test_chain_members_script_uses_collection_info_with_registry_fallback():
+    from stips.core.butler_query import _build_chain_members_script
+
+    s = _build_chain_members_script("/repo", "refcats")
+    ast.parse(s)
+    # v30 get_info() has no include_chains kwarg (TypeError); children are
+    # always populated for a CHAINED collection.
+    assert 'butler.collections.get_info("refcats")' in s
+    assert "include_chains=True" not in s
+    assert 'getCollectionChain("refcats")' in s  # v27 fallback
+    assert "MissingCollectionError" in s
+
+
+def test_chain_members_returns_ordered_children(monkeypatch):
+    from stips.core import butler_query as bq
+
+    monkeypatch.setattr(
+        bq,
+        "run_butler_python_json",
+        lambda script, config: {
+            "members": ["refcats/the_monster_20250219_local", "refcats/gaia_dr3/x"]
+        },
+    )
+    assert bq.chain_members(_cfg(), "refcats") == [
+        "refcats/the_monster_20250219_local",
+        "refcats/gaia_dr3/x",
+    ]
+    monkeypatch.setattr(
+        bq, "run_butler_python_json", lambda script, config: {"members": None}
+    )
+    assert bq.chain_members(_cfg(), "refcats") is None
+    monkeypatch.setattr(bq, "run_butler_python_json", lambda script, config: None)
+    assert bq.chain_members(_cfg(), "refcats") is None
