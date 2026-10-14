@@ -8,8 +8,6 @@
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23243456.svg)](https://doi.org/10.5281/zenodo.23243456)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](pyproject.toml)
 
-## STIPS
-
 STIPS, the Small Telescope Image Processing Suite, reduces imaging from
 1-meter class telescopes with the Rubin Observatory's
 [LSST Science Pipelines](https://pipelines.lsst.io/). One YAML file per target
