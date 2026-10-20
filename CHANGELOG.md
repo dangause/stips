@@ -4,6 +4,16 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
 
 ## [Unreleased]
 
+### Fixed
+- SN 2020wnt run configs (`scripts/config/2020wnt/`) set `explosion_mjd: 59180.0`,
+  commented as the discovery date; the supernova was discovered on 2020 Oct 14
+  (MJD 59136.4). They now use MJD 59135.42, the explosion epoch of Gutierrez et
+  al. 2022 (MNRAS 517, 2056), the midpoint of the last ZTF non-detection and the
+  first detection. Only the `days_since_explosion` column of 2020wnt light curves
+  changes, by +44.6 d. The 2023ixf configs keep MJD 60082.75, whose comment now
+  gives its source (Hosseinzadeh et al. 2023, ApJL 953, L16) instead of calling
+  it the discovery date.
+
 ## [2.4.0] — 2026-10-12
 
 ### Added
