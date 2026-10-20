@@ -4,6 +4,25 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
 
 ## [Unreleased]
 
+### Added
+- Light-curve CSVs (`lightcurve_<object>.csv`, `differential_<object>.csv`) carry a
+  `time_scale` column, and `transit_results.json` a `time_scale` key, giving the
+  scale of `mjd` and `t0`: `TAI`, the scale on which the Butler records exposure
+  times. The docs say so and show the conversion to BJD_TDB.
+
+### Changed
+- `stips lightcurve` time-stamps each measurement at the middle of its exposure,
+  as the differential-photometry and DIA-plot tasks already did (`expMidptMJD`).
+  It used the exposure start, so its times move later by half the exposure time
+  (5-165 s for the 10-330 s SN 2020wnt exposures). Phases and periods are
+  unaffected beyond that shift.
+
+### Fixed
+- `scripts/config/hd189733/pipeline_transit.yaml`: the comment claiming the
+  mid-transit matches the Agol et al. 2010 ephemeris to 0.0 min treated TAI
+  times as UTC and that BJD_UTC ephemeris as BJD_TDB, two offsets that nearly
+  cancel. It now gives the corrected comparison.
+
 ## [2.4.0] — 2026-10-12
 
 ### Added

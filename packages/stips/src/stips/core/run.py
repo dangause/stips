@@ -1538,6 +1538,8 @@ def _export_differential_lightcurve(
     """Write the newest ``differential_phot_lightcurve_table`` in
     ``output_coll`` to ``out_csv`` with the transit search's columns
     (mjd, band, flux, flux_err, plus the normalised and diagnostic columns).
+    ``mjd`` is the visit table's ``expMidptMJD``: the mid-exposure MJD on
+    the TAI scale, which a ``time_scale`` column records.
 
     Returns the number of rows written; 0 when the table is missing or empty.
     """
@@ -1559,6 +1561,7 @@ if refs:
     df = table.to_pandas() if hasattr(table, "to_pandas") else table
     if len(df):
         df = df.rename(columns={{"diff_flux": "flux", "diff_flux_err": "flux_err"}})
+        df["time_scale"] = "TAI"
         df.to_csv({str(out_csv)!r}, index=False)
         rows = len(df)
 print(json.dumps({{"rows": rows}}))

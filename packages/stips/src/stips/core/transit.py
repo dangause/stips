@@ -335,9 +335,15 @@ def _save_results(result: TransitResult, output_dir: Path, df: pd.DataFrame) -> 
 
     # --- JSON summary -------------------------------------------------------
     bands = sorted(result.phase_folded.keys())
+    # t0 is an MJD on the light curve's time scale (TAI for STIPS light
+    # curves); convert to BJD_TDB before comparing with an ephemeris.
+    time_scale = "TAI"
+    if "time_scale" in df.columns and len(df):
+        time_scale = str(df["time_scale"].iloc[0])
     summary = {
         "best_period": result.best_period,
         "t0": result.t0,
+        "time_scale": time_scale,
         "duration_hours": result.duration,
         "depth": result.depth,
         "depth_err": result.depth_err,
