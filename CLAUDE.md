@@ -333,13 +333,14 @@ FITS headers carry **UT dates**. The convention:
 ### 2023ixf (SN 2023ixf in M101)
 - RA: 210.910750°, Dec: 54.311694° (14:03:38.580, +54:18:42.10)
 - Distance: 6.7 Mpc (distance_modulus: 29.05)
-- Explosion MJD: 60082.75 (2023-05-19)
+- Explosion MJD: 60082.75 (2023-05-18 18:00 UT; Hosseinzadeh et al. 2023, ApJL 953, L16)
 - Nights: 20230519, 20230521, 20230523, ... through 20231211
 - Config: `scripts/config/2023ixf/`
 
 ### 2020wnt (SN 2020wnt, SLSN-I at z=0.032)
 - RA: 56.658125°, Dec: 43.229250° (03:46:37.950, +43:13:45.30)
-- Explosion MJD: 59180.0 (2020-11-27)
+- Explosion MJD: 59135.42 (2020-10-13; Gutierrez et al. 2022, MNRAS 517, 2056: midpoint of the
+  last ZTF non-detection and the first detection)
 - Nights: 20201207, 20210228, 20210324, ... through 20211111
 - Config: `scripts/config/2020wnt/`
 
