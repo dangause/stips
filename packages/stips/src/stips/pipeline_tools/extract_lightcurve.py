@@ -373,6 +373,23 @@ def _apparent_mag_label(df) -> str:
     return f"Apparent Magnitude (Vega: {' '.join(b.upper() for b in vega)}; others AB)"
 
 
+# The Butler records visit timespans on the TAI scale; light-curve times are
+# their midpoints, as in the differential and DIA-plot tasks (expMidptMJD).
+TIME_SCALE = "TAI"
+
+
+def _mid_exposure_mjd(timespan) -> float:
+    """Mid-exposure MJD (TAI) of a visit, from its Butler timespan.
+
+    Falls back to the start when the timespan has no end.
+    """
+    if timespan is None or timespan.begin is None:
+        return np.nan
+    if timespan.end is None:
+        return float(timespan.begin.mjd)
+    return float((timespan.begin.mjd + timespan.end.mjd) / 2.0)
+
+
 def main():
     args = parse_args()
 
@@ -472,7 +489,7 @@ def main():
             print(f"  WARNING: Failed to load catalog: {e}")
             continue
 
-        # Get visit MJD from visit record
+        # Get the visit's mid-exposure MJD (TAI) from its visit record
         try:
             visit_id = ref.dataId["visit"]
             visit_records = list(
@@ -481,7 +498,7 @@ def main():
                 )
             )
             if visit_records:
-                visit_mjd = visit_records[0].timespan.begin.mjd
+                visit_mjd = _mid_exposure_mjd(visit_records[0].timespan)
             else:
                 visit_mjd = np.nan
         except Exception:
@@ -694,6 +711,7 @@ def main():
 
     df = pd.DataFrame(all_detections)
     df = df.sort_values("mjd")
+    df["time_scale"] = TIME_SCALE
     vega_bands = {b for b in args.vega_bands.split(",") if b}
     df["mag_system"] = np.where(df["band"].isin(vega_bands), "Vega", "AB")
 
@@ -709,7 +727,8 @@ def main():
     print("\n=== LIGHT CURVE SUMMARY ===")
     print(f"Total detections: {len(df)}")
     print(f"Bands: {sorted(df['band'].unique())}")
-    print(f"MJD range: {df['mjd'].min():.3f} - {df['mjd'].max():.3f}")
+    lo, hi = df["mjd"].min(), df["mjd"].max()
+    print(f"MJD range (mid-exposure, {TIME_SCALE}): {lo:.3f} - {hi:.3f}")
     if "days_since_explosion" in df.columns:
         print(
             f"Days since explosion: {df['days_since_explosion'].min():.1f} - "

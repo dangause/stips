@@ -50,7 +50,8 @@ also runs differential aperture photometry, dividing the target's
 flux by that of comparison stars in the same frame to cancel transparency
 changes, and writes `lightcurves/differential_<object>.csv`. The BLS search
 runs on that lightcurve and writes to `lightcurves/transit_analysis/`:
-`transit_results.json` (period, depth, duration, signal-to-noise),
+`transit_results.json` (period, depth, duration, signal-to-noise, and the
+mid-transit `t0` as an MJD on the TAI scale given by `time_scale`),
 `bls_periodogram.png`, `lightcurve.png`, and `phase_folded_transit.png`.
 
 Give the host star's position at the epoch of observation. Nearby stars can
