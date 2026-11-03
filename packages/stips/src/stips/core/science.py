@@ -162,27 +162,34 @@ class ScienceResult:
     quanta_failed: int = 0
 
 
-def _read_landolt_target_names() -> list[str]:
-    """Read fits_object names from scripts/config/landolt_validation/landolt_catalog.csv.
+def _read_landolt_target_names(catalog: Path | None = None) -> list[str]:
+    """Distinct ``fits_object`` names from a Landolt catalogue CSV.
 
-    Used by run() when object='landolt_validation' to filter the science qgraph
-    to just Landolt-field exposures.
+    Used by run() when object='landolt_validation' to filter the science
+    qgraph to Landolt-field exposures. The catalogue is, in order:
+    ``catalog``, ``$STIPS_LANDOLT_CATALOG``, then the repository's
+    ``scripts/config/landolt_validation/landolt_catalog.csv``.
     """
     import csv
+    import os
 
-    # science.py → core/ → stips/ → src/ → stips/ → packages/ → repo root
-    #   (parents[0]=core, [1]=stips, [2]=src, [3]=stips, [4]=packages, [5]=root)
-    repo_root = Path(__file__).resolve().parents[5]
-    catalog = (
-        repo_root / "scripts" / "config" / "landolt_validation" / "landolt_catalog.csv"
-    )
+    if catalog is None:
+        env = os.environ.get("STIPS_LANDOLT_CATALOG")
+        if env:
+            catalog = Path(env)
+        else:
+            repo_root = Path(__file__).resolve().parents[5]
+            catalog = (
+                repo_root / "scripts" / "config" / "landolt_validation" / "landolt_catalog.csv"
+            )
     if not catalog.exists():
+        log.warning("Landolt catalogue %s not found", catalog)
         return []
     names: list[str] = []
     with open(catalog, newline="") as fh:
         for row in csv.DictReader(fh):
             name = (row.get("fits_object") or "").strip()
-            if name:
+            if name and name not in names:
                 names.append(name)
     return names
 
