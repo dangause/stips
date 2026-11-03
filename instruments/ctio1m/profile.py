@@ -59,15 +59,22 @@ profile = InstrumentProfile(
         "V": "v",
         "R": "r",
         "I": "i",
+        # Bessell I on loan from SOAR, used by the TraMoS transit program in
+        # October 2009 (FILTERID "I bessell Soar"; wheel slot 12, which held
+        # SDSS filters on other dates). Same band as I; no Landolt frames exist
+        # through it, so it shares the I colour terms (see colorterms.py).
+        "I_SOAR": "i",
     },
     # raw FITS FILTERID value (upper-cased on lookup) -> physical_filter
     filter_aliases={
         "U": "U",
+        "U+CUSO4": "U+CuSO4",
         "U+CuSO4": "U+CuSO4",
         "B": "B",
         "V": "V",
         "R": "R",
         "I": "I",
+        "I BESSELL SOAR": "I_SOAR",
     },
     filter_key="FILTERID",
     # PS1 templates (LOCAL band -> PS1 band). PS1 serves grizy; Y4KCam's r/i map
