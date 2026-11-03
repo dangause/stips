@@ -1,0 +1,48 @@
+# WASP-18 transit, TraMoS, 2011-09-06 (local night), Y4KCam 2x2 binned, Bessell I
+# (FILTERID = 'I'), 225 frames of 15 s. Published: Cortes-Zuleta et al. 2020,
+# A&A 636, A98, Table 1 (epoch -1184, rms 2.40 mmag); light curve at VizieR J/A+A/636/A98.
+env:
+  REPO: "/lustre/cv/users/dgause/stips/repos/wasp18_20110906_repo"
+  STACK_DIR: "/opt/lsst/software/stack"
+  INSTRUMENT_DIR: "/opt/stips/instruments/ctio1m_bin2"
+  RAW_PARENT_DIR: "/lustre/cv/users/dgause/stips/raw"
+  REFCAT_REPO: "/lustre/cv/users/dgause/stips/refcats"
+object: "WASP-18"            # case-insensitive substring: matches "WASP-18" and "wasp18"
+# Gaia DR3 position (epoch 2016.0): ra=24.354467, dec=-45.677791,
+# pmra=25.40, pmdec=20.48 mas/yr (source match: G=9.17, as expected for
+# WASP-18). Propagated to epoch 2010.5 (one position for all four WASP-18
+# nights, 2009.8-2011.7): shift 0.18" (179 mas) from the catalogue epoch.
+ra: 24.354411
+dec: -45.677822
+bands: ["i"]
+refcat:
+  mode: gaia
+  radius_deg: 0.25
+template:
+  type: none
+science:
+  nights:
+    - 20110906
+configs:
+  science:
+    colorterms: apply_colorterms.py
+options:
+  jobs: 22
+  skip_calibs: false
+  skip_science: false
+  skip_dia: true
+  forced_phot: true
+  continue_on_error: true
+  use_fallbacks: true
+  pipeline_type: transit
+  period_min: 0.5
+  period_max: 5.0
+  transit_duration_min: 1.0
+  transit_duration_max: 4.0
+  period_samples: 10000
+lightcurve:
+  enabled: true
+  dataset_type: forced_phot_radec
+  min_snr: 0
+  y_axis: flux_nJy
+  x_axis: mjd
