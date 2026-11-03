@@ -92,7 +92,7 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
 
 ## [2.3.0] — 2026-10-09
 
-A documentation site (<https://stips-lsst.readthedocs.io>), and fixes for
+A documentation site (<https://stips-docs.readthedocs.io>), and fixes for
 problems a new user hits installing and first running STIPS. No pipeline,
 task or calibration-config changes.
 
