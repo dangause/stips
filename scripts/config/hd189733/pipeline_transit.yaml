@@ -38,8 +38,12 @@ dec: 22.709071
 # visits fell back to dense_relaxed), whose star selection drops the B = 8.6
 # host: it is within 2" of a catalogued source in only 6% of visits, so the
 # differential task finds no target. MONSTER mode: differential lightcurve of
-# 332 points, transit depth 2.09 +/- 0.03%, S/N 83, mid-transit 7.4 min from
-# the Agol+2010 ephemeris.
+# 332 points, transit depth 2.09 +/- 0.03% (BLS box), S/N 83, mid-transit on
+# the Agol+2010 ephemeris to 0.0 min once the UTC time is converted to
+# BJD_TDB (light travel +6.3 min, TDB-UTC +1.2 min; an earlier "-7.4 min"
+# was exactly that missing conversion). The host's core reaches 40-65k ADU
+# at 4 s: 31 hard-saturated frames are rejected by the star selector, so
+# 66/398 frames are missing, mostly the sharpest near mid-transit.
 refcat:
   mode: monster
 
