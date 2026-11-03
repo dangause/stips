@@ -50,7 +50,7 @@ def test_ps1_block_only(library):
     # PS1 is the only reference the terms are derived for; gaia/MONSTER modes
     # must find no block and run with colour terms off (see the gate tests).
     assert set(library) == {"ps1*"}
-    assert set(library["ps1*"].data) == {"B", "V", "R", "I"}
+    assert set(library["ps1*"].data) == {"B", "V", "R", "I", "I_SOAR"}
 
 
 @pytest.mark.parametrize(
@@ -63,6 +63,7 @@ def test_ps1_block_only(library):
         ("R", "rMeanPSFMag", "gMeanPSFMag", -0.137, 0.108, -0.029),
         # Ic - i = -0.366 - 0.136 x, linearised on the locus x ~ 1.7 (r - i).
         ("I", "iMeanPSFMag", "rMeanPSFMag", -0.366, 0.23, 0.0),
+        ("I_SOAR", "iMeanPSFMag", "rMeanPSFMag", -0.366, 0.23, 0.0),
     ],
 )
 def test_tonry_terms(library, band, primary, secondary, c0, c1, c2):

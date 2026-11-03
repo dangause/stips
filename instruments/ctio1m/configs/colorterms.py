@@ -64,6 +64,16 @@ config.data = {
                 c1=0.23,
                 c2=0.0,
             ),
+            # SOAR Bessell I (October 2009 only): no standards were observed
+            # through it, so it takes the I terms. Stated as an assumption in
+            # the paper for the three 2009 WASP-18 nights.
+            "I_SOAR": Colorterm(
+                primary="iMeanPSFMag",
+                secondary="rMeanPSFMag",
+                c0=-0.366,
+                c1=0.23,
+                c2=0.0,
+            ),
         }
     ),
 }

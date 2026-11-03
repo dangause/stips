@@ -30,6 +30,7 @@ STIPS reads the filter from the `FILTERID` header.
 | U, U+CuSO4 | `u` |
 | B, V | `b`, `v` |
 | R, I | `r`, `i` |
+| I bessell Soar (October 2009 only) | `i`, physical filter `I_SOAR` |
 
 There is no clear position, so an unknown filter is an error rather than a
 fallback. Pan-STARRS and SkyMapper templates are available for `r` and `i`.

@@ -75,3 +75,14 @@ def test_crosstalk_is_measured_4x4():
                 assert coeffs[i][j] > 0.0  # all off-diagonals measured/populated
     # Largest measured term is the adjacent A03<-A02 coupling (~4.4e-3).
     assert coeffs[3][2] == 4.400683e-03
+
+
+def test_soar_i_filter_is_recognized():
+    """TraMoS used a Bessell I borrowed from SOAR in October 2009; the header
+    FILTERID is 'I bessell Soar'. It must resolve to an i-band physical filter
+    rather than raise in unknown_filter (which would reject 4300 WASP-18 frames)."""
+    prof = load_ctio1m_profile()
+    raw = "I bessell Soar"
+    phys = prof.filter_aliases.get(raw) or prof.filter_aliases.get(raw.upper())
+    assert phys == "I_SOAR"
+    assert prof.filters[phys] == "i"
