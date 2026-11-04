@@ -27,13 +27,23 @@ STIPS reads the filter from the `FILTERID` header.
 
 | Filter | Band |
 |---|---|
-| U, U+CuSO4 | `u` |
+| U, U+CuSO4, U CuSo4 (2011 Landolt nights) | `u` |
 | B, V | `b`, `v` |
 | R, I | `r`, `i` |
 | I bessell Soar (October 2009 only) | `i`, physical filter `I_SOAR` |
+| BG 40 (20110424 only) | `bg40`, physical filter `BG40` |
+| u stromg Tololo (20110428 only) | `us`, physical filter `u_Stromgren` |
+| C Wash (20111019/20111021 only) | `cw`, physical filter `C_Washington` |
+| M Wash (20111019/20111021 only) | `mw`, physical filter `M_Washington` |
 
 There is no clear position, so an unknown filter is an error rather than a
 fallback. Pan-STARRS and SkyMapper templates are available for `r` and `i`.
+The last four rows above (`bg40`, `us`, `cw`, `mw`) are recognized but never
+calibrated: there is no reference-catalogue mapping or colour term for them,
+so STIPS simply never selects their science frames via a run's `bands:` list.
+They are listed only so the biases and flats taken through them ingest; see
+{doc}`calibration` for why an unrecognized filter on a bias is worse than on a
+science frame.
 
 ## What STIPS provides
 
