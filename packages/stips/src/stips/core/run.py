@@ -201,6 +201,7 @@ class RunConfig:
     skip_dia: bool = False
     forced_phot: bool = True
     forced_phot_image_type: str = "diffim"  # visit, diffim, or both
+    min_comparison_fraction: float = 0.7  # differentialPhot:minComparisonFraction
     lc_config: "LightcurveConfig" = field(
         default_factory=lambda: __import__(
             "stips.core.lightcurve", fromlist=["LightcurveConfig"]
@@ -235,6 +236,11 @@ class RunConfig:
 
     def __post_init__(self) -> None:
         validate_template_type(self.template_type)
+        if not 0.0 <= self.min_comparison_fraction <= 1.0:
+            raise ValueError(
+                "min_comparison_fraction must be in [0.0, 1.0], got "
+                f"{self.min_comparison_fraction!r}"
+            )
 
     @classmethod
     def from_yaml(cls, path: Path) -> RunConfig:
@@ -358,6 +364,9 @@ class RunConfig:
             forced_phot=options.get("forced_phot", True),
             forced_phot_image_type=options.get(
                 "forced_phot_image_type", default_fphot_type
+            ),
+            min_comparison_fraction=float(
+                options.get("min_comparison_fraction", 0.7)
             ),
             lc_config=LightcurveConfig.from_yaml(data.get("lightcurve"), options),
             rebuild_templates=options.get("rebuild_templates", False),
@@ -1477,6 +1486,8 @@ def _run_differential_phot_step(
         f"differentialPhot:targetDec={run_cfg.dec}",
         "-c",
         f"differentialPhot:targetName={run_cfg.object_name}",
+        "-c",
+        f"differentialPhot:minComparisonFraction={run_cfg.min_comparison_fraction}",
         "--register-dataset-types",
         "--clobber-outputs",
     ]
