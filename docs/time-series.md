@@ -57,6 +57,29 @@ Give the host star's position at the epoch of observation. Nearby stars can
 have large proper motions (HD 189733 moves about 0.25″ per year), and a stale
 position can miss the target in the differential step.
 
+### Trimming the science step to what the lightcurve path needs
+
+Transit and variable-star campaigns don't read most of what the science
+step's full `stage1-single-visit` subset produces: the lightcurve path only
+needs `calibrateImage`'s per-detector outputs (`preliminary_visit_image`,
+`single_visit_star_unstandardized`) and `consolidateVisitSummary`'s
+`preliminary_visit_summary`. The rest of the subset is analysis_tools plots
+and metrics for per-visit, per-tract and survey-wide QA that forced
+photometry, differential photometry and `stips calib-metrics` never consume.
+On a measured Y4KCam night, `isr` took 37 s and `calibrateImage` 115 s per
+frame, but the whole science step cost about 470 core-seconds per frame --
+the difference is those analysis_tools tasks. Set
+
+```yaml
+configs:
+  science:
+    pipeline_labels: "step1a-single-visit-detectors,consolidateVisitSummary"
+```
+
+to run only that minimal set (`stips.core.science.TRANSIT_SCIENCE_LABELS`).
+This is an explicit opt-in -- existing campaigns that rely on the full QA
+subset are unaffected until they set it.
+
 ### Comparison star normalisation
 
 Each selected comparison star has its own reference flux (the median of its

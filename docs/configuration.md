@@ -88,6 +88,7 @@ defaults (`packages/obs_stips/instrument_defaults/configs/`).
 | `science.calibrate_image` | `calibrateImage`; see {doc}`instruments/nickel/science-configs` for Nickel's |
 | `science.calibrate_image_fallbacks` | Configs to retry failed exposures with, in order |
 | `science.colorterms` | Colour terms for photometric calibration |
+| `science.pipeline_labels` | Comma-separated `DRP.yaml` task labels/subset names to run instead of the full `stage1-single-visit` subset, e.g. `step1a-single-visit-detectors,consolidateVisitSummary`; no whitespace or `#`. Default (unset) is unchanged. See {doc}`time-series` |
 | `dia.subtract_images` | Image subtraction |
 | `dia.detect_and_measure` | Detection and measurement on difference images |
 | `coadd.make_direct_warp`, `coadd.select_template_coadd_visits`, `coadd.select_deep_coadd_visits` | Coadd templates |

@@ -110,6 +110,12 @@ class ScienceConfigs:
     calibrate_image: str | None = None
     calibrate_image_fallbacks: list[str] = field(default_factory=list)
     colorterms: str | None = None
+    #: Comma-separated DRP.yaml task labels/subset names, run as
+    #: ``DRP.yaml#<pipeline_labels>`` instead of the full
+    #: "stage1-single-visit" subset. Empty/None keeps current behaviour.
+    #: See ``stips.core.science.TRANSIT_SCIENCE_LABELS`` for the set
+    #: recommended for transit and variable-star campaigns.
+    pipeline_labels: str | None = None
 
 
 @dataclass
@@ -241,6 +247,10 @@ class RunConfig:
                 "min_comparison_fraction must be in [0.0, 1.0], got "
                 f"{self.min_comparison_fraction!r}"
             )
+        if self.science_configs.pipeline_labels:
+            from stips.core.science import validate_pipeline_labels
+
+            validate_pipeline_labels(self.science_configs.pipeline_labels)
 
     @classmethod
     def from_yaml(cls, path: Path) -> RunConfig:
@@ -301,6 +311,7 @@ class RunConfig:
                 "calibrate_image_fallbacks", []
             ),
             colorterms=science_cfg_data.get("colorterms"),
+            pipeline_labels=science_cfg_data.get("pipeline_labels"),
         )
 
         dia_configs = DIAConfigs(
@@ -1858,6 +1869,8 @@ def run(
             config.resolve_config(fb)
             for fb in run_cfg.science_configs.calibrate_image_fallbacks
         ]
+    if run_cfg.science_configs.pipeline_labels:
+        science_cfg.pipeline_labels = run_cfg.science_configs.pipeline_labels
 
     result = RunResult(success=True, log_dir=str(run_log_dir))
     all_nights = list(run_cfg.nights)
