@@ -5,6 +5,19 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
 ## [Unreleased]
 
 ### Added
+- `configs.science.pipeline_labels` (string, optional, default unset): a
+  comma-separated list of `DRP.yaml` task labels and/or subset names to run
+  for the science step, in place of the full `stage1-single-visit` subset.
+  Rejected if it contains whitespace or `#`. On a measured Y4KCam night,
+  `isr` cost 37 s and `calibrateImage` 115 s per frame, but the whole
+  science step cost about 470 core-seconds per frame -- the difference is
+  the analysis_tools plot and metric tasks that transit/variable campaigns
+  never read. `stips.core.science.TRANSIT_SCIENCE_LABELS`
+  (`step1a-single-visit-detectors,consolidateVisitSummary`) is the minimal
+  set that keeps `ForcedPhotRaDec.yaml`, `DifferentialPhot.yaml` and `stips
+  calib-metrics` working; set `pipeline_labels` to it explicitly for
+  transit and variable-star campaigns (see `docs/time-series.md`). Not
+  auto-applied, so existing campaigns are unaffected.
 - `differentialPhot:minComparisonFraction` (default 0.7, a `RangeField` in
   [0.0, 1.0]): drops a visit when fewer than this fraction of the *usable*
   selected comparison stars (those with a valid reference flux) are

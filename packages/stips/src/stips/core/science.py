@@ -34,6 +34,46 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
+#: pipetask label expression the science step has always run: the full
+#: stage-1 single-visit cascade (per-detector, per-visit, per-tract and
+#: global analysis_tools plot/metric tasks). Used whenever
+#: ``configs.science.pipeline_labels`` is unset, so existing campaigns are
+#: unaffected.
+_DEFAULT_SCIENCE_LABELS = "stage1-single-visit"
+
+#: Minimal DRP.yaml label set for transit and variable-star campaigns.
+#:
+#: ``step1a-single-visit-detectors`` runs isr + calibrateImage (producing
+#: ``preliminary_visit_image`` and ``single_visit_star_unstandardized``,
+#: which ForcedPhotRaDec.yaml and DifferentialPhot.yaml read) plus the two
+#: per-detector analysis_tools tasks that feed
+#: ``calibrateImage_metadata_metrics`` (read by ``stips calib-metrics``).
+#: ``consolidateVisitSummary`` additionally produces
+#: ``preliminary_visit_summary``, read by DifferentialPhot.yaml's
+#: makeVisitTable and by ``stips calib-metrics``. Dropped: the remaining
+#: step1b analysis_tools tasks (ref-match plots/metrics -- optional,
+#: gated behind ``extract_calib_metrics.py --include-refcat-metrics``) and
+#: all of step1c/step1d (isolated-star association, survey-wide tables and
+#: plots), which the transit/variable lightcurve path never reads. See
+#: docs/time-series.md for the measured cost this drops.
+TRANSIT_SCIENCE_LABELS = "step1a-single-visit-detectors,consolidateVisitSummary"
+
+
+def validate_pipeline_labels(labels: str) -> str:
+    """Reject a ``pipeline_labels`` string containing whitespace or ``#``.
+
+    pipetask's own ``-p path#label1,label2`` syntax splits the pipeline
+    expression on ``#``; an embedded ``#`` (or whitespace, which pipetask
+    would otherwise choke on less legibly) would silently build a broken
+    pipeline expression instead of failing at config-parse time.
+    """
+    if re.search(r"[\s#]", labels):
+        raise ValueError(
+            "configs.science.pipeline_labels must not contain whitespace "
+            f"or '#', got {labels!r}"
+        )
+    return labels
+
 
 def _night_is_boresight_covered(prof, night):
     """Whether the night's campaign has a characterized boresight offset.
@@ -118,6 +158,11 @@ class ScienceConfig:
     # Reference-catalog mode; "gaia_ps1" applies the Gaia/PS1 overlay on top of
     # the tuned calibrateImage config. "monster" uses the DRP.yaml default.
     refcat_mode: str = "monster"
+
+    # Comma-separated DRP.yaml task labels and/or subset names to run
+    # instead of the full "stage1-single-visit" subset (e.g.
+    # TRANSIT_SCIENCE_LABELS). None/"" means unchanged, existing behaviour.
+    pipeline_labels: str | None = None
 
     @classmethod
     def default(cls, config: "Config") -> "ScienceConfig":
@@ -577,6 +622,7 @@ class _AttemptContext:
     qg_dir: Path
     jobs: int
     log_file: Path | None
+    pipeline_labels: str = _DEFAULT_SCIENCE_LABELS
 
 
 def _attempt_config(
@@ -681,7 +727,7 @@ def _attempt_config(
         summary_file = qg_science.with_suffix(".summary.json")
         stage = PipetaskStage(
             repo=repo,
-            pipeline=f"{ctx.pipeline}#stage1-single-visit",
+            pipeline=f"{ctx.pipeline}#{ctx.pipeline_labels}",
             inputs=f"{ctx.raw_run},{ctx.cols.calib_chain},{REFCATS_CHAIN},{ctx.prof.skymap_collection}",
             output_parent=ctx.cols.science_parent,
             output_run=output_run,
@@ -1182,6 +1228,7 @@ def run(
         qg_dir=qg_dir,
         jobs=jobs,
         log_file=log_file,
+        pipeline_labels=science_cfg.pipeline_labels or _DEFAULT_SCIENCE_LABELS,
     )
     attempts = _run_config_attempts(ctx, configs_to_try, use_fallbacks, plog)
 

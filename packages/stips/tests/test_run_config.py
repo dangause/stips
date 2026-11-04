@@ -474,6 +474,77 @@ def test_template_type_none_is_a_supported_no_template_run(tmp_path):
     assert RunConfig.from_yaml(_write_cfg(tmp_path, "none")).template_type == "none"
 
 
+# ---------------------------------------------------------------------------
+# configs.science.pipeline_labels (DRP.yaml subset for the science step)
+# ---------------------------------------------------------------------------
+
+
+def _write_pipeline_labels_cfg(tmp_path, pipeline_labels):
+    cfg = {
+        "object": "WASP-12",
+        "ra": 97.637,
+        "dec": 29.672,
+        "bands": ["r"],
+        "science": {"nights": [20230901]},
+        "options": {"pipeline_type": "transit"},
+        "configs": {"science": {"pipeline_labels": pipeline_labels}},
+    }
+    path = tmp_path / "pipeline_labels.yaml"
+    with open(path, "w") as f:
+        yaml.dump(cfg, f)
+    return path
+
+
+class TestPipelineLabels:
+    def test_absent_defaults_to_none(self, transit_defaults_yaml):
+        """No configs.science.pipeline_labels -> unchanged behaviour."""
+        from stips.core.run import RunConfig
+
+        cfg = RunConfig.from_yaml(transit_defaults_yaml)
+        assert cfg.science_configs.pipeline_labels is None
+
+    def test_present_is_parsed(self, tmp_path):
+        from stips.core.run import RunConfig
+
+        path = _write_pipeline_labels_cfg(
+            tmp_path, "step1a-single-visit-detectors,consolidateVisitSummary"
+        )
+        cfg = RunConfig.from_yaml(path)
+        assert (
+            cfg.science_configs.pipeline_labels
+            == "step1a-single-visit-detectors,consolidateVisitSummary"
+        )
+
+    def test_whitespace_is_rejected_at_parse_time(self, tmp_path):
+        from stips.core.run import RunConfig
+
+        path = _write_pipeline_labels_cfg(
+            tmp_path, "step1a-single-visit-detectors, consolidateVisitSummary"
+        )
+        with pytest.raises(ValueError, match="pipeline_labels"):
+            RunConfig.from_yaml(path)
+
+    def test_hash_is_rejected_at_parse_time(self, tmp_path):
+        from stips.core.run import RunConfig
+
+        path = _write_pipeline_labels_cfg(tmp_path, "DRP.yaml#step1a")
+        with pytest.raises(ValueError, match="pipeline_labels"):
+            RunConfig.from_yaml(path)
+
+    def test_direct_construction_gets_the_same_guard(self):
+        """Not only from_yaml -- a RunConfig built in code gets the same guard."""
+        from stips.core.run import RunConfig, ScienceConfigs
+
+        with pytest.raises(ValueError, match="pipeline_labels"):
+            RunConfig(
+                object_name="x",
+                ra=1.0,
+                dec=2.0,
+                bands=["r"],
+                science_configs=ScienceConfigs(pipeline_labels="bad label"),
+            )
+
+
 def test_every_shipped_config_declares_a_valid_template_type():
     """Guards the validation against rejecting a config we actually ship."""
     from pathlib import Path
