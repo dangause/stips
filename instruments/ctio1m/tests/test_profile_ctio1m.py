@@ -8,6 +8,8 @@ fetch contracts are covered by the shared auto-discovered suite
 
 from pathlib import Path
 
+import pytest
+
 from stips.testing.instrument_contract import InstrumentDirInfo, load_profile
 
 # instruments/ctio1m/tests/... -> parents[1] == instruments/ctio1m
@@ -86,3 +88,43 @@ def test_soar_i_filter_is_recognized():
     phys = prof.filter_aliases.get(raw) or prof.filter_aliases.get(raw.upper())
     assert phys == "I_SOAR"
     assert prof.filters[phys] == "i"
+
+
+@pytest.mark.parametrize(
+    "raw, expected_physical, expected_band",
+    [
+        # 2011 Landolt standard-field nights (20110413/24/25/28/0502): the raw
+        # FILTERID spelling differs from the header-parsed "U+CuSO4" used on
+        # other dates, but it is the SAME near-UV filter, so it maps to the
+        # existing physical filter U+CuSO4 (band u) rather than a new one.
+        ("U CuSo4", "U+CuSO4", "u"),
+        # The remaining four are filters the Y4KCam wheel held on some 2011
+        # nights that STIPS never calibrates: no reference-catalogue mapping
+        # and no colour terms exist for them. They are recognized here only so
+        # that (a) bias/flat frames taken with the wheel parked at one of them
+        # ingest instead of failing the whole night's calibration, and (b)
+        # science frames taken through them are simply not selected by a run's
+        # ``bands:`` list -- they are never processed.
+        ("BG 40", "BG40", "bg40"),
+        ("u stromg Tololo", "u_Stromgren", "us"),
+        ("C Wash", "C_Washington", "cw"),
+        ("M Wash", "M_Washington", "mw"),
+    ],
+)
+def test_2011_landolt_night_filter_spellings_are_recognized(
+    raw, expected_physical, expected_band
+):
+    """Raw FILTERID strings seen on the 2011 Landolt standard-field nights
+    (20110413, 20110424, 20110425, 20110428, 20111019, 20111021) must resolve
+    through filter_aliases, mirroring translator.to_physical_filter's
+    resolution order (literal lookup, then upper-cased lookup).
+
+    Before this fix, an unrecognized FILTERID raises in ``unknown_filter``. On
+    these nights the bias frames were taken with the wheel parked at one of
+    these filters, so the whole night's calibration failed
+    ("Skipping science ... (calibrations failed)").
+    """
+    prof = load_ctio1m_profile()
+    phys = prof.filter_aliases.get(raw) or prof.filter_aliases.get(raw.upper())
+    assert phys == expected_physical, f"{raw!r} did not resolve to {expected_physical!r}"
+    assert prof.filters.get(phys) == expected_band

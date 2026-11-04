@@ -64,6 +64,19 @@ profile = InstrumentProfile(
         # SDSS filters on other dates). Same band as I; no Landolt frames exist
         # through it, so it shares the I colour terms (see colorterms.py).
         "I_SOAR": "i",
+        # The four entries below are filters the Y4KCam wheel held on some
+        # 2011 Landolt standard-field nights (20110424/28, 20111019/21) that
+        # STIPS never calibrates through: no reference-catalogue mapping (not
+        # in ps1_band_map/template_band_maps) and no colour terms exist for
+        # them. They are listed here only so that (a) bias/flat frames taken
+        # with the wheel parked at one of them ingest instead of raising in
+        # unknown_filter and failing the whole night's calibration, and (b)
+        # science frames taken through them are simply never selected by a
+        # run's ``bands:`` list.
+        "BG40": "bg40",
+        "u_Stromgren": "us",
+        "C_Washington": "cw",
+        "M_Washington": "mw",
     },
     # raw FITS FILTERID value (upper-cased on lookup) -> physical_filter
     filter_aliases={
@@ -75,6 +88,22 @@ profile = InstrumentProfile(
         "R": "R",
         "I": "I",
         "I BESSELL SOAR": "I_SOAR",
+        # 2011 Landolt standard-field nights (20110413/24/25/28/0502): the
+        # near-UV filter's FITS FILTERID is spelled "U CuSo4" there instead of
+        # "U+CuSO4" (seen on other dates); same physical filter, band u.
+        "U CUSO4": "U+CuSO4",
+        "U CuSo4": "U+CuSO4",
+        # Seen on 20110424 (padded raw string "BG 40" with trailing blanks
+        # stripped by the translator).
+        "BG 40": "BG40",
+        # Seen on 20110428 (raw "u stromg Tololo").
+        "U STROMG TOLOLO": "u_Stromgren",
+        "u stromg Tololo": "u_Stromgren",
+        # Seen on 20111019/20111021 (raw "C Wash" / "M Wash").
+        "C WASH": "C_Washington",
+        "C Wash": "C_Washington",
+        "M WASH": "M_Washington",
+        "M Wash": "M_Washington",
     },
     filter_key="FILTERID",
     # PS1 templates (LOCAL band -> PS1 band). PS1 serves grizy; Y4KCam's r/i map
