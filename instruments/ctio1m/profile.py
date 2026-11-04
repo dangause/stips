@@ -292,6 +292,20 @@ _BORESIGHT_OFFSET_TABLE = [
         "morning date, one day past its local-night label)",
     ),
     (
+        "2009-10-28",
+        "2009-10-31",
+        192.0,
+        308.0,
+        "blind astrometry.net-style solve against Gaia DR3 (G<16.5), DAOStarFinder "
+        "sources, brute-force translation search, 3 local nights 20091028-20091030 "
+        "(2026-11); dRA*cosDec +192\" (night-to-night scatter ~15), dDec +308\" "
+        "(scatter ~15), ~363\" @ PA~32 E-of-N, same sense as the 2006 offset; "
+        "UT DATE-OBS extent 2009-10-28..2009-10-31 (local night 20091030's morning "
+        "frame is UT 2009-10-31, one day past its local-night label); WASP-18 "
+        "TraMoS run; same-run nights 20091024 and 20091027 (WASP-5, WASP-4) not "
+        "measured and not covered",
+    ),
+    (
         "2010-01-17",
         "2010-01-22",
         0.0,

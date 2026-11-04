@@ -49,6 +49,7 @@ automatically:
 | Dates (UT) | Correction | Measured on |
 |---|---|---|
 | 27 Sep – 17 Dec 2006 | 257″ east, 320″ north | Blind astrometric solutions of four nights |
+| 28 – 31 Oct 2009 | 192″ east, 308″ north | Blind solves against Gaia DR3 of three WASP-18 TraMoS nights |
 | 17 – 22 Jan 2010 | None needed (about 60″, within the matcher's range) | The SA98 run |
 
 Data from other dates get no correction, and science processing warns when a
