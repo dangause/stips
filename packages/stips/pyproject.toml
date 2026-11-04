@@ -1,11 +1,12 @@
 [build-system]
-requires = ["setuptools>=61"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "stips"
 version = "0.1.0"
 description = "STIPS framework core: instrument profiles and hooks"
+license = "BSD-3-Clause"
 requires-python = ">=3.12"
 dependencies = [
     "astropy",

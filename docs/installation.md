@@ -126,6 +126,7 @@ possibly `RAW_PARENT_DIR`. It checks the stack only once every path exists.
 : STIPS reads `RAW_PARENT_DIR/<night>/raw/*.fits`. `stips download` fetches
   nights from the instrument's archive: the Lick archive for Nickel, the
   NOIRLab archive for CTIO. For Nickel, set `LICK_ARCHIVE_DIR` to the client
-  vendored in `instruments/nickel/vendor/lick_searchable_archive`.
+  vendored in `instruments/nickel/vendor/lick_searchable_archive` (under its
+  own BSD 3-Clause license).
 
 Next: {doc}`quickstart`.

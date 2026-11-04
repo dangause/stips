@@ -11,6 +11,12 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
   times. The docs say so and show the conversion to BJD_TDB.
 
 ### Changed
+- STIPS is relicensed from GPL-3.0-or-later to BSD-3-Clause (`LICENSE`,
+  `CITATION.cff`, `.zenodo.json`, the package metadata and the container image
+  labels). Releases up to and including v2.4.0 remain GPL-3.0-or-later. The
+  vendored Lick archive client keeps its own BSD 3-Clause license.
+  `packages/obs_stips/python/lsst/obs/stips/calibCombine.py` contains code
+  derived from cp_pipe and stays GPL-3.0-or-later; its header now says so.
 - `stips lightcurve` time-stamps each measurement at the middle of its exposure,
   as the differential-photometry and DIA-plot tasks already did (`expMidptMJD`).
   It used the exposure start, so its times move later by half the exposure time
