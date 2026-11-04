@@ -117,6 +117,52 @@ class TestRunConfigNewFields:
         rc = RunConfig.from_yaml(path)
         assert rc.forced_phot_image_type == "diffim"
 
+    def test_min_comparison_fraction_defaults_to_0_7(self, sn_yaml):
+        from stips.core.run import RunConfig
+
+        cfg = RunConfig.from_yaml(sn_yaml)
+        assert cfg.min_comparison_fraction == 0.7
+
+    def test_min_comparison_fraction_is_configurable(self, tmp_path):
+        from stips.core.run import RunConfig
+
+        cfg = {
+            "object": "test",
+            "ra": 100.0,
+            "dec": 10.0,
+            "bands": ["r"],
+            "science": {"nights": [20230101]},
+            "options": {
+                "pipeline_type": "transit",
+                "min_comparison_fraction": 0.4,
+            },
+        }
+        path = tmp_path / "min_comp_frac.yaml"
+        with open(path, "w") as f:
+            yaml.dump(cfg, f)
+        rc = RunConfig.from_yaml(path)
+        assert rc.min_comparison_fraction == 0.4
+
+    def test_min_comparison_fraction_out_of_range_raises(self, tmp_path):
+        from stips.core.run import RunConfig
+
+        cfg = {
+            "object": "test",
+            "ra": 100.0,
+            "dec": 10.0,
+            "bands": ["r"],
+            "science": {"nights": [20230101]},
+            "options": {
+                "pipeline_type": "transit",
+                "min_comparison_fraction": 1.4,
+            },
+        }
+        path = tmp_path / "min_comp_frac_bad.yaml"
+        with open(path, "w") as f:
+            yaml.dump(cfg, f)
+        with pytest.raises(ValueError, match="min_comparison_fraction"):
+            RunConfig.from_yaml(path)
+
 
 @pytest.fixture
 def transit_yaml(tmp_path):

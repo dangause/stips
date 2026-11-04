@@ -29,6 +29,7 @@ def _run_cfg():
         period_min=0.5, period_max=5.0, transit_duration_min=0.5,
         transit_duration_max=4.0, period_samples=100,
         ra=300.18, dec=22.71, object_name="HD_189733", bands=["b"],
+        min_comparison_fraction=0.7,
     )  # fmt: skip
 
 
@@ -70,11 +71,10 @@ def _run_diff_step(rows_exported):
     result = _result()
     bq = MagicMock()
     bq.list_collections.return_value = ["Nickel/runs/20250802/processCcd/ts"]
+    run_pipetask_mock = MagicMock(return_value=SimpleNamespace(returncode=0))
     with (
         patch("stips.core.butler_query.list_collections", bq.list_collections),
-        patch(
-            "stips.core.stack.run_pipetask", return_value=SimpleNamespace(returncode=0)
-        ),
+        patch("stips.core.stack.run_pipetask", run_pipetask_mock),
         patch.object(run_mod, "_get_step_log_file", return_value=None),
         patch.object(
             run_mod, "_export_differential_lightcurve", return_value=rows_exported
@@ -83,21 +83,32 @@ def _run_diff_step(rows_exported):
         run_mod._run_differential_phot_step(
             ["20250802"], _run_cfg(), config, result, dry_run=False
         )
-    return result
+    return result, run_pipetask_mock
 
 
 def test_differential_step_records_the_exported_lightcurve():
-    result = _run_diff_step(332)
+    result, _ = _run_diff_step(332)
     assert result.differential_phot_success is True
     assert result.differential_lightcurve_path.endswith(
         "lightcurves/differential_HD_189733.csv"
     )
 
 
+def test_differential_step_passes_min_comparison_fraction():
+    """RunConfig.min_comparison_fraction must be threaded through to the
+    pipetask invocation as differentialPhot:minComparisonFraction, so a
+    configured override (options.min_comparison_fraction in the group
+    YAML) actually reaches the task instead of silently using its own
+    default."""
+    _, run_pipetask_mock = _run_diff_step(332)
+    run_args = run_pipetask_mock.call_args.args[0]
+    assert "differentialPhot:minComparisonFraction=0.7" in run_args
+
+
 def test_empty_differential_output_is_a_failure():
     """The task finds no target (e.g. a J2000 position for a high proper-motion
     star) and writes an empty table: that must not count as success."""
-    result = _run_diff_step(0)
+    result, _ = _run_diff_step(0)
     assert result.differential_phot_success is False
     assert result.differential_lightcurve_path is None
 

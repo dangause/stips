@@ -4,6 +4,51 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
 
 ## [Unreleased]
 
+### Added
+- `differentialPhot:minComparisonFraction` (default 0.7, a `RangeField` in
+  [0.0, 1.0]): drops a visit when fewer than this fraction of the *usable*
+  selected comparison stars (those with a valid reference flux) are
+  detected in it, rather than normalising against a degraded ensemble.
+  `stips run`'s `options.min_comparison_fraction` (default 0.7, validated
+  to [0.0, 1.0] when the YAML is parsed) threads this through when running
+  the full pipeline via the `stips` CLI.
+
+### Fixed
+- `differentialPhot` normalised comparisons by summing whichever selected
+  comparison stars were detected in a frame, with no correction for the
+  ensemble shrinking. A comparison star missing from a frame (poor seeing,
+  clouds) inflated the target's differential flux by roughly
+  `n_selected / n_present` on that frame. Found while validating Y4KCam
+  WASP-19 transit light curves against Cortés-Zuleta et al. (2020): 63 of
+  379 frames on 2011-12-24 had 3–9 of 10 comparisons present, inflating
+  `norm_flux` by a factor matching `10 / n_comps` (median ratio 0.998, rms
+  0.8%). Each comparison star is now normalised to its own reference flux
+  (the median of its aperture flux over the visits where it is detected,
+  ignoring any NaN, None or non-positive measurement), and the per-visit
+  comparison signal is the flux-weighted ratio of sums of the comparisons
+  present, `Σ c_i / Σ ref_i`, rather than a raw flux sum or a mean of
+  relative fluxes: dropping a comparison from a visit removes both its
+  flux and its reference flux from the ratio, so a missing comparison
+  changes the signal's noise, not its level, and the pre-fix result is
+  reproduced exactly whenever every comparison is present (`Σ ref_i` is
+  then a per-visit constant that the light curve's median normalisation
+  removes). The `comp_sum` output column keeps its name but now holds this
+  flux-weighted ratio (≈1.0 for a complete, stable ensemble). A comparison
+  star with no valid (finite, positive) flux in any visit is dropped from
+  the ensemble entirely and no longer counts toward `minComparisonFraction`'s
+  completeness threshold; a star with only an occasional bad measurement
+  keeps its reference flux and is just skipped in the visits where that
+  measurement is unusable. The comparison-star *stability ranking* (which
+  picks the ensemble in the first place) was not NaN-safe either: an RMS
+  computed over a candidate's raw, unfiltered per-visit fluxes propagated
+  a single NaN into an undefined sort key, which could silently rank the
+  single most stable comparison star -- and any candidate sorted after it
+  -- out of the ensemble entirely, replacing it with a noisier one. The
+  ranking now computes both the detection fraction and the RMS over the
+  same finite, positive subset the reference flux uses, and a candidate
+  with no valid measurement at all is excluded from ranking (with a
+  warning naming it) rather than given an undefined rank.
+
 ## [2.4.0] — 2026-10-12
 
 ### Added
