@@ -5,8 +5,9 @@ Stack-free: execs ``configs/colorterms.py`` against stand-ins for the LSST
 Tonry et al. 2012 PS1 -> Johnson-Cousins terms in the sign convention the
 stack applies (m = primary + c0 + c1 (p - s) + c2 (p - s)^2), and that the
 profile declares the bands calibrated through it as Vega. Also checks the
-Gaia DR3 block (a STIPS fit against Landolt standards -- see
-``scripts/analysis/fit_gaia_colorterms_landolt.py``), and that its glob
+Gaia DR3 block (a STIPS fit of Gaia AB magnitudes against Landolt standards
+-- see ``scripts/analysis/fit_gaia_colorterms_landolt.py``), its Vega
+declaration in ``gaia`` mode, and that its glob
 resolves for the refcat name the ``gaia`` mode actually uses, mirroring the
 lookup in ``packages/obs_stips/instrument_defaults/configs/
 apply_colorterms.py`` (exact key, else exactly one matching glob).
@@ -91,9 +92,23 @@ def test_r_term_matches_tonry_at_a_solar_colour(library):
 
 def test_profile_declares_r_i_vega_in_gaia_ps1_mode():
     profile = load_profile(_INFO)
-    assert profile.vega_bands == {"gaia_ps1": ("r", "i")}
+    assert profile.vega_bands["gaia_ps1"] == ("r", "i")
     # The Vega bands are exactly the ones the PS1 band map can calibrate.
     assert set(profile.vega_bands["gaia_ps1"]) == set(profile.ps1_band_map)
+
+
+def test_profile_declares_bvri_vega_in_gaia_mode(library):
+    # The gaia* terms are fitted from Gaia AB magnitudes onto Landolt (Vega)
+    # magnitudes, so every band they calibrate comes out Vega; monster mode
+    # has no colour terms and stays AB.
+    profile = load_profile(_INFO)
+    assert profile.vega_bands == {
+        "gaia_ps1": ("r", "i"),
+        "gaia": ("b", "v", "r", "i"),
+    }
+    # The Vega bands are exactly the bands the gaia* block reaches.
+    gaia_bands = {profile.filters[f] for f in library["gaia*"].data}
+    assert set(profile.vega_bands["gaia"]) == gaia_bands
 
 
 @pytest.mark.parametrize(
@@ -116,6 +131,30 @@ def test_gaia_terms_use_flux_column_primary_secondary_names(
     # block's "*_mag" names (which the catalogue lacks).
     term = library["gaia*"].data[band]
     assert (term.primary, term.secondary) == (primary, secondary)
+
+
+@pytest.mark.parametrize(
+    ("band", "c0", "c1"),
+    [
+        # 2026-11-07 fit on Gaia AB magnitudes (LSST converter zero points).
+        ("B", 0.1694, 0.6532),
+        ("V", -0.1148, 0.8007),
+        ("R", -0.2295, -0.7236),
+        ("I", -0.3942, 0.1387),
+    ],
+)
+def test_gaia_terms_are_the_ab_fit(library, band, c0, c1):
+    term = library["gaia*"].data[band]
+    assert (term.c0, term.c1, term.c2) == pytest.approx((c0, c1, 0.0))
+
+
+def test_gaia_c0_is_not_the_vega_fit(library):
+    # The 2026-11-03 terms were fitted on Gaia Vega magnitudes; their c0
+    # differed from the AB fit by the constant Vega-AB offsets (I by 0.40
+    # mag). Guard against the Vega constants coming back.
+    vega_c0 = {"B": -0.0016, "V": -0.2186, "R": -0.0510, "I": 0.0103}
+    for band, old in vega_c0.items():
+        assert abs(library["gaia*"].data[band].c0 - old) > 0.05
 
 
 def test_gaia_i_soar_matches_i(library):

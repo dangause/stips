@@ -2,11 +2,21 @@
 """Fit Gaia DR3 -> Y4KCam B/V/R/I colour terms against Landolt standard stars.
 
 For every star in the Landolt catalogue CSV, query Gaia DR3 (gaia_source) within
-3 arcsec, take phot_g/bp/rp_mean_mag, and least-squares fit
-    landolt = primary + c0 + c1 * (primary - secondary)
+3 arcsec, take phot_g/bp/rp_mean_flux (e-/s), convert them to AB magnitudes and
+least-squares fit
+    landolt = primary_AB + c0 + c1 * (primary_AB - secondary_AB)
 per band with 3-sigma clipping. Prints the block to paste into
 instruments/ctio1m/configs/colorterms.py. The LSST Colorterm reads
 "<primary>_flux", so the names are phot_g_mean, phot_bp_mean, phot_rp_mean.
+
+The Gaia side is on the AB system because the LSST reference catalogue is:
+ConvertGaiaManager (meas_algorithms convertRefcatManager.py, gaiaFluxToFlux)
+stores phot_{g,bp,rp}_mean_flux in nJy as m_AB = ZP - 2.5 log10(flux_e/s) with
+the zero points in GAIA_AB_ZEROPOINTS, and the Colorterm is applied to those
+fluxes. Fitting against the Gaia archive's Vega magnitudes (phot_*_mean_mag)
+instead would leave the primary band's Vega-to-AB offset in c0, a constant
+per-band bias in every calibrated magnitude (c1 barely changes, since the
+colour shifts only by a constant too).
 
 Usage (needs astroquery, present in the LSST environment and the stips venv):
     python scripts/analysis/fit_gaia_colorterms_landolt.py \
@@ -20,6 +30,15 @@ import argparse
 import numpy as np
 import pandas as pd
 
+# Gaia DR3 e-/s flux -> AB magnitude zero points, verbatim from the LSST
+# converter (ConvertGaiaManager._getFluxes; Gaia DR2 documentation Table 5.3),
+# keyed by the refcat column stem.
+GAIA_AB_ZEROPOINTS = {
+    "phot_g_mean": 25.7934,
+    "phot_bp_mean": 25.3806,
+    "phot_rp_mean": 25.1161,
+}
+
 # band -> (primary, secondary): the LSST Colorterm expresses only
 # primary + c0 + c1 * (primary - secondary), so the colour is fixed by the pair.
 BANDS = {
@@ -28,6 +47,17 @@ BANDS = {
     "R": ("phot_rp_mean", "phot_g_mean"),    # colour RP - G
     "I": ("phot_rp_mean", "phot_g_mean"),    # colour RP - G
 }
+
+
+def gaia_ab_mag(flux, zp: float):
+    """AB magnitude of a Gaia e-/s flux, as the LSST refcat converter computes it.
+
+    m_AB = zp - 2.5 log10(flux); non-positive or missing fluxes give NaN.
+    """
+    f = np.asarray(flux, float)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        m = zp - 2.5 * np.log10(f)
+    return np.where(f > 0, m, np.nan)
 
 
 def fit_band(landolt_mag, primary, secondary, n_sigma: float = 3.0, n_iter: int = 5):
@@ -49,7 +79,7 @@ def fit_band(landolt_mag, primary, secondary, n_sigma: float = 3.0, n_iter: int 
 def gaia_match(ra: float, dec: float):
     from astroquery.gaia import Gaia
 
-    q = f"""SELECT phot_g_mean_mag, phot_bp_mean_mag, phot_rp_mean_mag,
+    q = f"""SELECT phot_g_mean_flux, phot_bp_mean_flux, phot_rp_mean_flux,
                    DISTANCE(POINT('ICRS', ra, dec), POINT('ICRS', {ra}, {dec})) AS d
             FROM gaiadr3.gaia_source
             WHERE 1 = CONTAINS(POINT('ICRS', ra, dec), CIRCLE('ICRS', {ra}, {dec}, {3.0 / 3600.0}))
@@ -68,10 +98,12 @@ def main() -> None:
         m = gaia_match(s.ra_deg, s.dec_deg)
         if m is None:
             continue
-        recs.append({"star": s.star_name, "B": s.B, "V": s.V, "R": s.R, "I": s.I,
-                     "phot_g_mean": float(m["phot_g_mean_mag"]),
-                     "phot_bp_mean": float(m["phot_bp_mean_mag"]),
-                     "phot_rp_mean": float(m["phot_rp_mean_mag"])})
+        rec = {"star": s.star_name, "B": s.B, "V": s.V, "R": s.R, "I": s.I}
+        for col, zp in GAIA_AB_ZEROPOINTS.items():
+            flux = m[f"{col}_flux"]
+            flux = np.nan if np.ma.is_masked(flux) else float(flux)
+            rec[col] = float(gaia_ab_mag(flux, zp))
+        recs.append(rec)
     d = pd.DataFrame(recs)
     print(f"{len(d)} stars matched of {len(cat)}")
     print('    "gaia*": ColortermDict(\n        data={')
