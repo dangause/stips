@@ -51,6 +51,7 @@ automatically:
 | 27 Sep – 17 Dec 2006 | 257″ east, 320″ north | Blind astrometric solutions of four nights |
 | 28 – 31 Oct 2009 | 192″ east, 308″ north | Blind solves against Gaia DR3 of three WASP-18 TraMoS nights |
 | 17 – 22 Jan 2010 | None needed (about 60″, within the matcher's range) | The SA98 run |
+| 22 – 23 Apr 2011 | 157″ east, 148″ south | Blind solves against Gaia DR3 of the WASP-19 TraMoS night of 22 Apr 2011 (the neighbouring Landolt nights and the 24 Dec 2011 night are within the matcher's range) |
 
 Data from other dates get no correction, and science processing warns when a
 night falls outside every measured range. If astrometry fails on such a
