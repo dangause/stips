@@ -14,9 +14,10 @@ ConvertGaiaManager (meas_algorithms convertRefcatManager.py, gaiaFluxToFlux)
 stores phot_{g,bp,rp}_mean_flux in nJy as m_AB = ZP - 2.5 log10(flux_e/s) with
 the zero points in GAIA_AB_ZEROPOINTS, and the Colorterm is applied to those
 fluxes. Fitting against the Gaia archive's Vega magnitudes (phot_*_mean_mag)
-instead would leave the primary band's Vega-to-AB offset in c0, a constant
-per-band bias in every calibrated magnitude (c1 barely changes, since the
-colour shifts only by a constant too).
+instead would change c0 by exactly -(delta_primary) - c1 * delta_colour,
+where delta is AB minus Vega for the relevant Gaia band(s); c1 is exactly
+unchanged, because those offsets are constants per band, not functions of
+colour.
 
 Usage (needs astroquery, present in the LSST environment and the stips venv):
     python scripts/analysis/fit_gaia_colorterms_landolt.py \
@@ -32,7 +33,11 @@ import pandas as pd
 
 # Gaia DR3 e-/s flux -> AB magnitude zero points, verbatim from the LSST
 # converter (ConvertGaiaManager._getFluxes; Gaia DR2 documentation Table 5.3),
-# keyed by the refcat column stem.
+# keyed by the refcat column stem. These are the DR2 Table 5.3 zero points
+# that the LSST converter applies to DR3 fluxes; they must match the
+# converter, not be "upgraded" to the DR3 values (25.8010 / 25.3540 /
+# 25.1040) -- using the DR3 zero points here would fit against magnitudes
+# the refcat never actually produces.
 GAIA_AB_ZEROPOINTS = {
     "phot_g_mean": 25.7934,
     "phot_bp_mean": 25.3806,

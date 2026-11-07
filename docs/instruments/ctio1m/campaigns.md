@@ -34,9 +34,11 @@ same field.
 **Still open:**
 
 - **Colour terms.** R and I use literature transformations in `gaia_ps1`
-  mode (see {doc}`southern-fields`); none exist for B, V or for the `gaia`
-  and MONSTER modes, where magnitudes stay on the reference catalog's AB
-  zero point with the bandpass uncorrected.
+  mode (see {doc}`southern-fields`); `gaia` mode now has Landolt-fitted terms
+  for B, V, R and I, whose output is on the Vega system (declared in the
+  profile's `vega_bands`). MONSTER still has none, so magnitudes from that
+  mode stay on the reference catalog's AB zero point with the bandpass
+  uncorrected.
 - **Read noise** is a 7 e⁻ placeholder, not a measurement.
 - **Crosstalk** coefficients come from one binned night and are indicative.
 - **Amplifier A01** is masked from 2010 onward; see {doc}`calibration`.

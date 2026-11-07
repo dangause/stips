@@ -259,8 +259,10 @@ def _datetime_end(header):
 
 # --- Date-characterized boresight pointing offsets (see tracking_radec) --------
 # The CTIO Y4KCam mount carries a per-campaign systematic pointing offset: the
-# TRUE field center is EAST/NORTH of the header RA/DEC by a campaign-specific
-# amount (measured by BLIND astrometry.net solves). It is a pure boresight
+# TRUE field center is offset from the header RA/DEC by a campaign-specific,
+# SIGNED (delta_east, delta_north) amount, positive meaning east/north
+# (negative is south/west -- see the 2011-04-22 row), measured by BLIND
+# astrometry.net solves. It is a pure boresight
 # TRANSLATION -- camera plate scale (0.2889"/pix), orientation (PA~0) and
 # distortion (negligible) were all confirmed correct -- NOT a parse/geometry bug.
 #
