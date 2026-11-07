@@ -105,6 +105,30 @@ def test_2009_wasp18_adjacent_dates_are_uncovered():
         assert prof_mod.boresight_offset_arcsec(d) == (0.0, 0.0)
 
 
+def test_2011_wasp19_april_night_in_window_offset():
+    # 2011-04-23T02:22:31 UT -- a WASP-19 "test" frame of local night 20110422,
+    # one of the two frames the offset was measured on.
+    d = "2011-04-23T02:22:31"
+    assert prof_mod.boresight_offset_covered(d) is True
+    east, north = prof_mod.boresight_offset_arcsec(d)
+    assert east == pytest.approx(157.0)
+    assert north == pytest.approx(-148.0)
+
+
+def test_2011_wasp19_april_window_boundaries_are_inclusive():
+    for d in ("2011-04-22", "2011-04-23"):
+        assert prof_mod.boresight_offset_covered(d) is True
+        assert prof_mod.boresight_offset_arcsec(d) == (157.0, -148.0)
+
+
+def test_2011_landolt_and_december_nights_stay_uncovered():
+    # The surrounding April/May 2011 Landolt nights and the December WASP-19
+    # night were measured at <=99" and must NOT inherit the 20110422 offset.
+    for d in ("2011-04-13", "2011-04-21", "2011-04-24", "2011-05-03", "2011-12-25"):
+        assert prof_mod.boresight_offset_covered(d) is False
+        assert prof_mod.boresight_offset_arcsec(d) == (0.0, 0.0)
+
+
 def test_table_windows_do_not_overlap():
     import datetime as _d
 
