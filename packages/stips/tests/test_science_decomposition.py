@@ -20,7 +20,6 @@ from types import SimpleNamespace
 
 import pytest
 
-
 #: Real DRP.yaml, used by tests that need to resolve ``pipeline_labels``
 #: against actual subsets/task labels (resolve_pipeline_task_labels),
 #: rather than the synthetic `_ctx` pipeline path (never written to disk).
@@ -784,10 +783,13 @@ class TestPipelineLabels:
         i = qgraph_args.index("-p")
         assert qgraph_args[i + 1] == f"{tmp_path / 'DRP.yaml'}#stage1-single-visit"
 
-    def test_custom_labels_are_appended_instead(self, tmp_path, monkeypatch):
+    def test_custom_labels_select_the_subset_via_a_derived_pipeline(
+        self, tmp_path, monkeypatch
+    ):
         import dataclasses
         import shutil
 
+        import yaml
         from stips.core import science
 
         executor = _FakeExecutor(
@@ -806,10 +808,15 @@ class TestPipelineLabels:
 
         qgraph_args = executor.calls[0]
         i = qgraph_args.index("-p")
-        assert qgraph_args[i + 1] == (
-            f"{tmp_path / 'DRP.yaml'}#"
-            "step1a-single-visit-detectors,consolidateVisitSummary"
-        )
+        # Not the "#labels" fragment form: see TestWriteLabelSubsetPipeline.
+        derived = Path(qgraph_args[i + 1])
+        assert derived.parent == ctx.qg_dir
+        assert derived.suffix == ".yaml"
+        doc = yaml.safe_load(derived.read_text())
+        assert doc["imports"][0]["include"] == [
+            "step1a-single-visit-detectors",
+            "consolidateVisitSummary",
+        ]
 
     def test_default_labels_keep_all_overrides(self, tmp_path):
         """Unlabelled (default) runs are unchanged: the gaia_ps1 overlay's
@@ -962,7 +969,6 @@ def test_transit_science_labels_exist_in_drp_yaml():
     either as a task label or as a subset name -- or pipetask's own
     ``-p DRP.yaml#<labels>`` would fail at qgraph-build time."""
     import yaml
-
     from stips.core import science
 
     drp_path = (
@@ -1009,6 +1015,77 @@ class TestResolvePipelineTaskLabels:
 
         with pytest.raises(ValueError, match="nosuchlabel"):
             science.resolve_pipeline_task_labels(_DRP_YAML_PATH, "nosuchlabel")
+
+
+class TestWriteLabelSubsetPipeline:
+    """write_label_subset_pipeline: the derived YAML pipetask gets instead
+    of ``-p DRP.yaml#labels`` (cluster jobs 90912/90913: the fragment form
+    fails with "InvalidStepsError: No step contains task(s)
+    {'consolidateVisitSummary'}" because DRP.yaml's steps survive the
+    subset while the step1b subset that held the task is dropped)."""
+
+    def test_writes_import_with_steps_dropped(self, tmp_path):
+        import yaml
+        from stips.core import science
+
+        out = science.write_label_subset_pipeline(
+            _DRP_YAML_PATH, science.TRANSIT_SCIENCE_LABELS, tmp_path / "x.yaml"
+        )
+
+        doc = yaml.safe_load(out.read_text())
+        assert out == tmp_path / "x.yaml"
+        assert "steps" not in doc
+        assert doc["imports"] == [
+            {
+                "location": str(_DRP_YAML_PATH.resolve()),
+                "include": [
+                    "step1a-single-visit-detectors",
+                    "consolidateVisitSummary",
+                ],
+                "importSteps": False,
+            }
+        ]
+
+    def test_attempt_passes_derived_pipeline_not_fragment(self, tmp_path):
+        import dataclasses
+        import shutil
+
+        from stips.core import science
+
+        executor = _FakeExecutor(
+            run_result=SimpleNamespace(returncode=0, stdout="", stderr="")
+        )
+        ctx = _ctx(tmp_path, executor)
+        shutil.copyfile(_DRP_YAML_PATH, ctx.pipeline)
+        ctx = dataclasses.replace(
+            ctx, pipeline_labels=science.TRANSIT_SCIENCE_LABELS
+        )
+
+        science._attempt_config(ctx, 0, tmp_path / "primary.py", [])
+
+        qgraph_args = executor.calls[0]
+        pipeline_arg = qgraph_args[qgraph_args.index("-p") + 1]
+        assert "#" not in pipeline_arg
+        assert pipeline_arg.endswith(".pipeline.yaml")
+        assert Path(pipeline_arg).exists()
+        assert "importSteps: false" in Path(pipeline_arg).read_text()
+
+    def test_default_labels_keep_the_fragment_form(self, tmp_path):
+        import shutil
+
+        from stips.core import science
+
+        executor = _FakeExecutor(
+            run_result=SimpleNamespace(returncode=0, stdout="", stderr="")
+        )
+        ctx = _ctx(tmp_path, executor)
+        shutil.copyfile(_DRP_YAML_PATH, ctx.pipeline)
+
+        science._attempt_config(ctx, 0, tmp_path / "primary.py", [])
+
+        qgraph_args = executor.calls[0]
+        pipeline_arg = qgraph_args[qgraph_args.index("-p") + 1]
+        assert pipeline_arg == f"{ctx.pipeline}#stage1-single-visit"
 
 
 class TestStockConfigDefault:

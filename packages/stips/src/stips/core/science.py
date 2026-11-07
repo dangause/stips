@@ -123,6 +123,54 @@ def resolve_pipeline_task_labels(pipeline_yaml_path, labels: str) -> set[str]:
     return resolved
 
 
+def write_label_subset_pipeline(
+    pipeline_yaml_path, labels: str, out_path
+) -> Path:
+    """Write a derived pipeline YAML that imports only ``labels`` from
+    ``pipeline_yaml_path`` and drops the parent's ``steps:`` definitions.
+
+    Why not ``-p DRP.yaml#labels``: the ``#labels`` fragment subsets the
+    pipeline in pipe_base's DROP mode, which removes every ``subsets:``
+    entry that lost a member but keeps the parent's ``steps:`` list. A
+    selection that cuts across a step (e.g. ``TRANSIT_SCIENCE_LABELS`` =
+    all of step1a plus ``consolidateVisitSummary`` from step1b) therefore
+    leaves a task that belongs to no surviving step, and pipetask's
+    ``PipelineGraph._resolve_step_flow`` rejects the graph with
+    ``InvalidStepsError: No step contains task(s) {...}``. An ``imports:``
+    entry with ``importSteps: false`` performs the same label subset but
+    discards the steps, which only matter for BPS step-wise submission.
+
+    Args:
+        pipeline_yaml_path: The parent pipeline YAML (e.g. DRP.yaml).
+        labels: Comma-separated subset names and/or task labels, as passed
+            to ``configs.science.pipeline_labels``.
+        out_path: Where to write the derived YAML.
+
+    Returns:
+        ``out_path`` as a `Path`.
+    """
+    pipeline_yaml_path = Path(pipeline_yaml_path)
+    out_path = Path(out_path)
+    include = [label.strip() for label in labels.split(",") if label.strip()]
+    doc = {
+        "description": (
+            f"{pipeline_yaml_path.name} restricted to pipeline_labels "
+            f"{labels!r} (steps dropped; written by stips.core.science)"
+        ),
+        "imports": [
+            {
+                "location": str(pipeline_yaml_path.resolve()),
+                "include": include,
+                "importSteps": False,
+            }
+        ],
+    }
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(out_path, "w") as f:
+        yaml.safe_dump(doc, f, sort_keys=False)
+    return out_path
+
+
 #: ``pipetask qgraph`` flags that carry a per-task override as their next
 #: argument, in ``<label>:<rest>`` form (``-C``/``--config-file label:file``,
 #: ``-c``/``--config label:key=value``).
@@ -812,6 +860,7 @@ def _attempt_config(
         # '<label>' in the pipeline". A still-default pipeline_labels covers
         # every task these overrides can name, so nothing is dropped and
         # behaviour is unchanged.
+        pipeline_arg = f"{ctx.pipeline}#{ctx.pipeline_labels}"
         if ctx.pipeline_labels != _DEFAULT_SCIENCE_LABELS:
             allowed_labels = resolve_pipeline_task_labels(
                 ctx.pipeline, ctx.pipeline_labels
@@ -821,6 +870,15 @@ def _attempt_config(
             )
             post_query_args = _drop_overrides_outside_labels(
                 post_query_args, allowed_labels
+            )
+            # A cross-step label subset is only accepted by pipetask when
+            # the parent's steps are dropped; see write_label_subset_pipeline.
+            pipeline_arg = str(
+                write_label_subset_pipeline(
+                    ctx.pipeline,
+                    ctx.pipeline_labels,
+                    qg_science.with_suffix(".pipeline.yaml"),
+                )
             )
 
         # For fallback attempts, build a qgraph that excludes quanta
@@ -840,7 +898,7 @@ def _attempt_config(
         summary_file = qg_science.with_suffix(".summary.json")
         stage = PipetaskStage(
             repo=repo,
-            pipeline=f"{ctx.pipeline}#{ctx.pipeline_labels}",
+            pipeline=pipeline_arg,
             inputs=f"{ctx.raw_run},{ctx.cols.calib_chain},{REFCATS_CHAIN},{ctx.prof.skymap_collection}",
             output_parent=ctx.cols.science_parent,
             output_run=output_run,
