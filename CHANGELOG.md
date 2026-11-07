@@ -27,6 +27,17 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
   the full pipeline via the `stips` CLI.
 
 ### Fixed
+- `configs.science.pipeline_labels`: the science step always appended
+  per-task `--config`/`--config-file` overrides (e.g. `calibrateImage`,
+  `isr`, and the gaia/gaia_ps1 overlay's `makeAnalysisSingleVisitStar*RefMatchVisit`
+  overrides) regardless of the selected label subset, so a restricted
+  `pipeline_labels` (e.g. `TRANSIT_SCIENCE_LABELS`) made `pipetask qgraph`
+  fail immediately with `LookupError: There are no tasks labeled '<label>'
+  in the pipeline` whenever an override's task fell outside the subset.
+  Found on three CTIO cluster nights (jobs 90773, 90775, 90776). Overrides
+  addressed to a task label outside the selected subset are now dropped
+  before the argv reaches `pipetask`, logged at INFO; an unset
+  `pipeline_labels` (the full `stage1-single-visit` subset) is unaffected.
 - `differentialPhot` normalised comparisons by summing whichever selected
   comparison stars were detected in a frame, with no correction for the
   ensemble shrinking. A comparison star missing from a frame (poor seeing,
