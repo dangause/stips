@@ -8,6 +8,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import yaml
+
 from stips.core import butler_query, quanta_report
 from stips.core.pipeline import (
     REFCATS_CHAIN,
@@ -73,6 +75,97 @@ def validate_pipeline_labels(labels: str) -> str:
             f"or '#', got {labels!r}"
         )
     return labels
+
+
+def resolve_pipeline_task_labels(pipeline_yaml_path, labels: str) -> set[str]:
+    """Expand a pipetask ``#label1,label2`` selector into its task labels.
+
+    Mirrors how pipetask itself resolves ``-p pipeline.yaml#labels`` at
+    qgraph-build time: each comma-separated entry in ``labels`` is either a
+    ``subsets:`` name (expanded to the task labels in its ``subset:`` list)
+    or a task label already (kept as-is). Used to decide which per-task
+    ``--config``/``--config-file`` overrides pipetask will accept for a
+    given ``pipeline_labels`` selection -- pipetask rejects an override
+    addressed to a task label outside the selected subset.
+
+    Args:
+        pipeline_yaml_path: Path to the pipeline YAML (e.g. DRP.yaml).
+        labels: Comma-separated subset names and/or task labels, as passed
+            to ``configs.science.pipeline_labels``.
+
+    Returns:
+        The set of task labels covered by ``labels``.
+
+    Raises:
+        ValueError: if an entry in ``labels`` is neither a task label nor a
+            subset name defined in the pipeline YAML.
+    """
+    with open(pipeline_yaml_path) as f:
+        data = yaml.safe_load(f)
+
+    task_labels = set(data.get("tasks", {}) or {})
+    subsets = data.get("subsets", {}) or {}
+
+    resolved: set[str] = set()
+    for label in labels.split(","):
+        label = label.strip()
+        if label in subsets:
+            subset = subsets[label]
+            members = subset["subset"] if isinstance(subset, dict) else subset
+            resolved.update(members)
+        elif label in task_labels:
+            resolved.add(label)
+        else:
+            raise ValueError(
+                f"{label!r} is not a task label or subset name in "
+                f"{pipeline_yaml_path}"
+            )
+    return resolved
+
+
+#: ``pipetask qgraph`` flags that carry a per-task override as their next
+#: argument, in ``<label>:<rest>`` form (``-C``/``--config-file label:file``,
+#: ``-c``/``--config label:key=value``).
+_TASK_OVERRIDE_FLAGS = frozenset({"--config-file", "-C", "--config", "-c"})
+
+
+def _drop_overrides_outside_labels(
+    args: list[str], allowed_labels: set[str]
+) -> list[str]:
+    """Drop ``<flag> <label>:<rest>`` pairs whose label isn't in ``allowed_labels``.
+
+    pipetask rejects any ``--config``/``--config-file`` override addressed
+    to a task label that isn't part of the ``#labels`` subset selected on
+    ``-p``, so once ``pipeline_labels`` restricts the graph to a subset,
+    overrides for tasks outside it must be dropped before the argv ever
+    reaches pipetask. Logs each dropped override at INFO.
+    """
+    filtered: list[str] = []
+    i = 0
+    n = len(args)
+    while i < n:
+        flag = args[i]
+        if flag in _TASK_OVERRIDE_FLAGS and i + 1 < n:
+            spec = args[i + 1]
+            label = spec.split(":", 1)[0]
+            if label not in allowed_labels:
+                log.info(
+                    "pipeline_labels restricts this run to %s; dropping %s %s "
+                    "(task label %r is outside the selected subset)",
+                    sorted(allowed_labels),
+                    flag,
+                    spec,
+                    label,
+                )
+                i += 2
+                continue
+            filtered.append(flag)
+            filtered.append(spec)
+            i += 2
+            continue
+        filtered.append(flag)
+        i += 1
+    return filtered
 
 
 def _night_is_boresight_covered(prof, night):
@@ -709,6 +802,26 @@ def _attempt_config(
         # Applied as inline config so instruments need not fork the shared DRP
         # pipeline; the same overrides feed the calib-build ISR (calibs.py).
         post_query_args = list(isr_config_args(ctx.prof))
+
+        # When pipeline_labels restricts the graph to a subset (e.g. the
+        # transit/variable-star TRANSIT_SCIENCE_LABELS), drop any per-task
+        # override above addressed to a task label outside that subset
+        # (e.g. the step1b makeAnalysis*RefMatchVisit overrides added by the
+        # gaia/gaia_ps1 overlay branch above) -- pipetask's own qgraph build
+        # otherwise fails immediately with "There are no tasks labeled
+        # '<label>' in the pipeline". A still-default pipeline_labels covers
+        # every task these overrides can name, so nothing is dropped and
+        # behaviour is unchanged.
+        if ctx.pipeline_labels != _DEFAULT_SCIENCE_LABELS:
+            allowed_labels = resolve_pipeline_task_labels(
+                ctx.pipeline, ctx.pipeline_labels
+            )
+            config_file_args = _drop_overrides_outside_labels(
+                config_file_args, allowed_labels
+            )
+            post_query_args = _drop_overrides_outside_labels(
+                post_query_args, allowed_labels
+            )
 
         # For fallback attempts, build a qgraph that excludes quanta
         # whose outputs already exist in any prior successful RUN.

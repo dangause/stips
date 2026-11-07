@@ -21,6 +21,18 @@ from types import SimpleNamespace
 import pytest
 
 
+#: Real DRP.yaml, used by tests that need to resolve ``pipeline_labels``
+#: against actual subsets/task labels (resolve_pipeline_task_labels),
+#: rather than the synthetic `_ctx` pipeline path (never written to disk).
+_DRP_YAML_PATH = (
+    Path(__file__).resolve().parents[2]
+    / "obs_stips"
+    / "instrument_defaults"
+    / "pipelines"
+    / "DRP.yaml"
+)
+
+
 def _profile() -> SimpleNamespace:
     return SimpleNamespace(
         name="Nickel",
@@ -774,6 +786,7 @@ class TestPipelineLabels:
 
     def test_custom_labels_are_appended_instead(self, tmp_path, monkeypatch):
         import dataclasses
+        import shutil
 
         from stips.core import science
 
@@ -784,6 +797,10 @@ class TestPipelineLabels:
             _ctx(tmp_path, executor),
             pipeline_labels=science.TRANSIT_SCIENCE_LABELS,
         )
+        # Custom pipeline_labels now resolves task labels against the real
+        # pipeline YAML (to decide which overrides to drop -- see below), so
+        # the file at ctx.pipeline must be readable.
+        shutil.copyfile(_DRP_YAML_PATH, ctx.pipeline)
 
         science._attempt_config(ctx, 0, tmp_path / "primary.py", [])
 
@@ -793,6 +810,83 @@ class TestPipelineLabels:
             f"{tmp_path / 'DRP.yaml'}#"
             "step1a-single-visit-detectors,consolidateVisitSummary"
         )
+
+    def test_default_labels_keep_all_overrides(self, tmp_path):
+        """Unlabelled (default) runs are unchanged: the gaia_ps1 overlay's
+        makeAnalysis*RefMatchVisit overrides, and the calibrateImage/isr
+        overrides, all still reach pipetask when pipeline_labels is unset."""
+        import dataclasses
+
+        from stips.core import science
+
+        executor = _FakeExecutor(
+            run_result=SimpleNamespace(returncode=0, stdout="", stderr="")
+        )
+        ctx = _ctx(tmp_path, executor)
+        ctx = dataclasses.replace(
+            ctx,
+            refcat_mode="gaia_ps1",
+            prof=SimpleNamespace(
+                name="Nickel",
+                collection_prefix="Nickel",
+                skymap_name="nickelRings-v1",
+                skymap_collection="skymaps/nickelRings",
+                night_to_dayobs_offset_days=1,
+                isr_overrides={"doDefect": False},
+                crosstalk=None,
+            ),
+        )
+        assert ctx.pipeline_labels == science._DEFAULT_SCIENCE_LABELS
+
+        science._attempt_config(ctx, 0, tmp_path / "primary.py", [])
+
+        qgraph_args = executor.calls[0]
+        joined = " ".join(qgraph_args)
+        assert "makeAnalysisSingleVisitStarAstrometricRefMatchVisit:" in joined
+        assert "makeAnalysisSingleVisitStarPhotometricRefMatchVisit:" in joined
+        assert f"calibrateImage:{tmp_path / 'primary.py'}" in joined
+        assert "isr:doDefect=False" in joined
+
+    def test_overrides_outside_the_label_subset_are_dropped(self, tmp_path):
+        """F-0xx regression (jobs 90773/90775/90776): with pipeline_labels
+        restricted to step1a + consolidateVisitSummary, the step1b
+        makeAnalysis*RefMatchVisit overrides added by the gaia_ps1 overlay
+        must be dropped (pipetask's qgraph build otherwise fails with
+        "There are no tasks labeled '<label>' in the pipeline"), while the
+        step1a calibrateImage and isr overrides are kept."""
+        import dataclasses
+        import shutil
+
+        from stips.core import science
+
+        executor = _FakeExecutor(
+            run_result=SimpleNamespace(returncode=0, stdout="", stderr="")
+        )
+        ctx = _ctx(tmp_path, executor)
+        shutil.copyfile(_DRP_YAML_PATH, ctx.pipeline)
+        ctx = dataclasses.replace(
+            ctx,
+            pipeline_labels=science.TRANSIT_SCIENCE_LABELS,
+            refcat_mode="gaia_ps1",
+            prof=SimpleNamespace(
+                name="Nickel",
+                collection_prefix="Nickel",
+                skymap_name="nickelRings-v1",
+                skymap_collection="skymaps/nickelRings",
+                night_to_dayobs_offset_days=1,
+                isr_overrides={"doDefect": False},
+                crosstalk=None,
+            ),
+        )
+
+        science._attempt_config(ctx, 0, tmp_path / "primary.py", [])
+
+        qgraph_args = executor.calls[0]
+        joined = " ".join(qgraph_args)
+        assert "makeAnalysisSingleVisitStarAstrometricRefMatchVisit:" not in joined
+        assert "makeAnalysisSingleVisitStarPhotometricRefMatchVisit:" not in joined
+        assert f"calibrateImage:{tmp_path / 'primary.py'}" in joined
+        assert "isr:doDefect=False" in joined
 
     def test_run_wires_science_cfg_pipeline_labels_into_the_attempt_context(
         self, tmp_path, monkeypatch
@@ -889,6 +983,32 @@ def test_transit_science_labels_exist_in_drp_yaml():
         assert label in known, (
             f"{label!r} is not a task label or subset name in {drp_path}"
         )
+
+
+class TestResolvePipelineTaskLabels:
+    """resolve_pipeline_task_labels against the real DRP.yaml."""
+
+    def test_transit_labels_resolve_to_step1a_plus_consolidate(self):
+        from stips.core import science
+
+        resolved = science.resolve_pipeline_task_labels(
+            _DRP_YAML_PATH, science.TRANSIT_SCIENCE_LABELS
+        )
+
+        assert resolved == {
+            "isr",
+            "calibrateImage",
+            "standardizeSingleVisitStar",
+            "analyzeCalibrateImageMetadataVisit",
+            "analyzeInitialSummaryStats",
+            "consolidateVisitSummary",
+        }
+
+    def test_unknown_label_raises(self):
+        from stips.core import science
+
+        with pytest.raises(ValueError, match="nosuchlabel"):
+            science.resolve_pipeline_task_labels(_DRP_YAML_PATH, "nosuchlabel")
 
 
 class TestStockConfigDefault:
