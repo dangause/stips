@@ -136,7 +136,7 @@ pipetask run \
   -b <REPO> \
   -p <stack>/obs_stips/instrument_defaults/pipelines/DifferentialPhot.yaml \
   -i <prefix>/runs/<night>/processCcd/<chain>,<prefix>/calib/current,refcats,<skymap_collection> \
-  -o <prefix>/runs/<night>/differentialPhot \
+  -o <prefix>/runs/<night>/differentialPhot/<run_ts> \
   -c differentialPhot:targetRa=<RA_DEG> \
   -c differentialPhot:targetDec=<DEC_DEG> \
   -c differentialPhot:targetName=<OBJECT> \
@@ -146,12 +146,18 @@ pipetask run \
   --clobber-outputs
 ```
 
-`-o` is the same chained-collection name every time (`CollectionNames.differential_phot`
-has no run timestamp), so repeated runs are non-destructive: `pipetask`
-writes each run into a new timestamped `RUN` collection and chains it in
-front, it does not overwrite prior output. Omit `-c differentialPhot:bandFilter=...`
-when processing more than one band. **Prefer this `pipetask run` form for a
-pure re-run** of the differential-photometry step alone.
+`-o` carries a fresh `<run_ts>` (e.g. `20260101T000000Z`) every time
+(`CollectionNames.differential_phot`, like `science_parent` and
+`forced_phot_parent`, is timestamped), so each invocation gets its own new
+CHAINED collection. A fixed, untimestamped name does not work here: `pipetask`
+refuses to reuse a CHAINED collection across runs unless the new run's
+(flattened) input-collection sequence exactly matches the one the chain was
+created with, and a rerun after reprocessing a night's `processCcd` inputs
+changes that sequence (`ValueError: Output CHAINED collection '...' exists
+and does not include the same sequence of (flattened) input collections`).
+Omit `-c differentialPhot:bandFilter=...` when processing more than one
+band. **Prefer this `pipetask run` form for a pure re-run** of the
+differential-photometry step alone.
 
 The `stips -c <config.yaml> run` CLI route is *not* equivalent to the
 command above: it is a full pipeline run that happens to include the

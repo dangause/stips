@@ -1438,7 +1438,7 @@ def _run_differential_phot_step(
     differential flux ratios.
     """
     from stips.core import butler_query
-    from stips.core.pipeline import CollectionNames
+    from stips.core.pipeline import CollectionNames, generate_run_timestamp
     from stips.core.stack import run_pipetask
 
     prof = config.require_profile()
@@ -1473,8 +1473,9 @@ def _run_differential_phot_step(
         f"{science_coll},{prof.collection_prefix}/calib/current,"
         f"refcats,{prof.skymap_collection}"
     )
+    run_ts = generate_run_timestamp()
     output_coll = CollectionNames(
-        all_nights[0], prefix=prof.collection_prefix
+        all_nights[0], run_ts, prefix=prof.collection_prefix
     ).differential_phot
 
     bands = run_cfg.bands
