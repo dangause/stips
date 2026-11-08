@@ -171,8 +171,15 @@ class CollectionNames:
     # Differential photometry
     @property
     def differential_phot(self) -> str:
-        """Output collection for LSST differential photometry (no run timestamp)."""
-        return f"{self.prefix}/runs/{self.night}/differentialPhot"
+        """Timestamped CHAINED output parent for LSST differential photometry.
+
+        Carries ``run_ts`` (like :attr:`science_parent` / :meth:`forced_phot_parent`)
+        rather than being fixed per night: a fixed name forces every rerun to
+        reuse the same CHAINED collection, which `pipetask` refuses once the
+        rerun's (flattened) input-collection sequence differs from the one the
+        chain was created with (e.g. a reprocessed night's processCcd inputs).
+        """
+        return f"{self.prefix}/runs/{self.night}/differentialPhot/{self.run_ts}"
 
     # Glob patterns (for discovery / cleanup across nights and timestamps)
     @classmethod

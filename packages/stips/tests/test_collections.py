@@ -61,8 +61,19 @@ class TestCollectionNames(unittest.TestCase):
         )
 
     def test_differential_phot(self):
-        c = CollectionNames("20230519", prefix="Nickel")
-        self.assertEqual(c.differential_phot, "Nickel/runs/20230519/differentialPhot")
+        c = CollectionNames("20230519", "ts1", prefix="Nickel")
+        self.assertEqual(
+            c.differential_phot, "Nickel/runs/20230519/differentialPhot/ts1"
+        )
+
+    def test_differential_phot_timestamps_differ(self):
+        # Two runs for the same night with different run_ts must get distinct
+        # differential-phot parents, so a rerun never reuses the prior run's
+        # CHAINED collection (which pipetask refuses once the rerun's input
+        # collections differ from what the chain was created with).
+        c1 = CollectionNames("20230519", "ts1", prefix="Nickel")
+        c2 = CollectionNames("20230519", "ts2", prefix="Nickel")
+        self.assertNotEqual(c1.differential_phot, c2.differential_phot)
 
     def test_science_glob(self):
         self.assertEqual(
