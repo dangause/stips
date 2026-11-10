@@ -562,16 +562,10 @@ docker exec stips-hpc bash -c 'munge -n | unmunge'
 docker exec c1 bash -c 'munge -n | unmunge'
 ```
 
-**BPS submit fails with FileExistsError:**
-The submit directory already exists from a previous run. Either clean it up or ensure timestamps differ:
-```bash
-docker exec stips-hpc rm -rf /data/repo/bps/submit/custom_*
-```
-
 **Clean restart (wipe everything):**
 ```bash
 docker exec stips-hpc rm -rf /data/repo/*
-docker exec stips-hpc rm -rf /data/repo/bps /data/repo/parsl_runinfo
+docker exec stips-hpc rm -rf /data/repo/bps
 # Then re-run bootstrap + pipeline
 ```
 

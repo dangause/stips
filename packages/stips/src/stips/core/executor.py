@@ -364,7 +364,8 @@ class BPSExecutor:
         summary_file = parsed.get("summary_file")
 
         # Build BPSConfig for submission
-        output_run = parsed.get("output_run") or ""
+        # The coadd stage names its RUN by keyword rather than --output-run.
+        output_run = parsed.get("output_run") or kwargs.get("output_run") or ""
         bps_cfg = bps.BPSConfig(
             pipeline="custom",  # Will use pre-built qgraph, not pipeline YAML
             night="00000000",  # Placeholder — qgraph has the actual data query

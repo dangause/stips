@@ -35,5 +35,6 @@ qgraphFile: "{qgraph_file}"
 # =============================================================================
 # Submit Directory
 # =============================================================================
-# Include pipeline/night/timestamp to avoid FileExistsError on repeated runs.
-submitPath: "{repo}/bps/submit/{pipeline}_{night}_{timestamp}"
+# One per submission (stips.core.bps.submission_name): BPS refuses an existing
+# submit directory, and concurrent nights submit within the same second.
+submitPath: "{repo}/bps/submit/{submit_name}"

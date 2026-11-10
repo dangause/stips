@@ -491,6 +491,25 @@ class TestBPSExecutor:
         assert result.returncode == 0
         assert quanta_report.parse_summary_file(summary_file) == (3, 0)
 
+    def test_output_run_kwarg_reaches_bps(self):
+        """The coadd stage names its RUN by keyword, not ``--output-run``.
+
+        BPS rewrites the graph's RUN when ``outputRun`` is empty, and
+        ``pipetask update-graph-run`` then fails for want of an argument.
+        """
+        from stips.core.executor import BPSExecutor
+
+        executor = BPSExecutor(site="htcondor")
+        with patch("stips.core.executor.bps") as mock_bps_mod:
+            mock_bps_mod.submit.return_value = MagicMock(success=False, error="x")
+            executor.run_pipetask(
+                ["run", "-b", "/repo", "-g", "/g.qg"],
+                MagicMock(),
+                check=False,
+                output_run="templates/deep/run",
+            )
+        assert mock_bps_mod.BPSConfig.call_args.kwargs["output_run"] == "templates/deep/run"
+
     def test_async_site_no_run_id_is_degraded(self, tmp_path, caplog):
         """HTCondor (async) site with no run id: loud degraded mode, not silent.
 

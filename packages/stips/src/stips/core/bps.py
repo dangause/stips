@@ -243,10 +243,48 @@ def generate_timestamp() -> str:
     return datetime.now().strftime("%Y%m%dT%H%M%S")
 
 
+def submission_name(bps_cfg: BPSConfig, timestamp: str) -> str:
+    """Name a submission's config directory and BPS submit directory.
+
+    A pre-built graph's file name already says what it holds (stage, night,
+    band and the graph's own timestamp), so it names the submission; a
+    graph-less submission falls back to pipeline and night.
+    """
+    if bps_cfg.qgraph_file:
+        return f"{Path(bps_cfg.qgraph_file).stem}_{timestamp}"
+    return f"{bps_cfg.pipeline}_{bps_cfg.night}_{timestamp}"
+
+
+def _reserve_config_dir(config: Config, name: str) -> tuple[Path, str]:
+    """Create a config directory no other submission uses, and return it.
+
+    Nights run concurrently submit within the same second, so ``name`` can
+    clash; a numeric suffix is added until ``mkdir`` (atomic, also on shared
+    filesystems) succeeds and BPS has no submit directory of that name.
+    """
+    parent = config.repo / "bps" / "configs"
+    parent.mkdir(parents=True, exist_ok=True)
+    submit_root = config.repo / "bps" / "submit"
+    n = 1
+    while True:
+        candidate = name if n == 1 else f"{name}_{n}"
+        n += 1
+        if (submit_root / candidate).exists():
+            continue
+        try:
+            (parent / candidate).mkdir()
+        except FileExistsError:
+            continue
+        return parent / candidate, candidate
+
+
 def render_bps_config(
     bps_cfg: BPSConfig,
     config: Config,
     output_dir: Path,
+    *,
+    timestamp: str | None = None,
+    submit_name: str | None = None,
 ) -> Path:
     """Render a BPS config file with variable substitution.
 
@@ -259,10 +297,15 @@ def render_bps_config(
         config: Pipeline configuration
         output_dir: Directory to write rendered config
 
+        timestamp: Run timestamp (default: now)
+        submit_name: Name of the BPS submit directory under
+            ``<repo>/bps/submit`` (default: :func:`submission_name`)
+
     Returns:
         Path to the rendered config file
     """
-    timestamp = generate_timestamp()
+    timestamp = timestamp or generate_timestamp()
+    submit_name = submit_name or submission_name(bps_cfg, timestamp)
     prof = config.require_profile()
 
     # Default band / PS1 template collection follow the profile's band->template
@@ -290,6 +333,7 @@ def render_bps_config(
         "repo": str(config.repo),
         "night": bps_cfg.night,
         "timestamp": timestamp,
+        "submit_name": submit_name,
         # STIPS framework: the instrument is imported by name
         # (instruments.<name>); the repo root is on PYTHONPATH. LSST machinery
         # lives in obs_stips + stips (src-layout).
@@ -337,7 +381,9 @@ def render_bps_config(
         # name) is rejected by any cluster that checks accounts.
         "account": bps_cfg.account or bps_cfg.project or "",
         "max_blocks": str(bps_cfg.max_blocks),
-        "run_dir": str(config.repo / "parsl_runinfo"),
+        # Parsl numbers run directories by listing the existing ones, which
+        # races between concurrent submissions: give each its own.
+        "run_dir": str(config.repo / "bps" / "submit" / submit_name / "parsl_runinfo"),
     }
 
     # Perform substitution
@@ -379,9 +425,7 @@ def render_bps_config(
     )
 
     # Write rendered config
-    output_file = (
-        output_dir / f"bps_{bps_cfg.pipeline}_{bps_cfg.night}_{timestamp}.yaml"
-    )
+    output_file = output_dir / f"bps_{submit_name}.yaml"
     output_file.write_text(rendered)
 
     return output_file
@@ -509,13 +553,18 @@ def submit(
     """
     from stips.core.stack import run_with_stack
 
-    # Create submit directory
-    submit_dir = config.repo / "bps" / f"{bps_cfg.pipeline}_{bps_cfg.night}"
-    submit_dir.mkdir(parents=True, exist_ok=True)
+    # Each submission renders into a directory of its own: concurrent nights
+    # sharing one overwrote each other's config.
+    timestamp = generate_timestamp()
+    submit_dir, submit_name = _reserve_config_dir(
+        config, submission_name(bps_cfg, timestamp)
+    )
 
     try:
         # Render the BPS config
-        rendered_config = render_bps_config(bps_cfg, config, submit_dir)
+        rendered_config = render_bps_config(
+            bps_cfg, config, submit_dir, timestamp=timestamp, submit_name=submit_name
+        )
 
         # For dry-run, just return the rendered config without submitting
         if bps_cfg.dry_run:

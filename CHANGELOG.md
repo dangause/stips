@@ -61,6 +61,14 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
   profile name (`ctio1m_bin2`, say) as the Slurm account when none is given,
   which a cluster without such an account rejects; the account is
   `options.cluster.account` or `--project`, or else the user's default.
+- Nights run concurrently under BPS (`options.concurrent_nights`) could submit
+  within the same second and share a rendered config and submit directory: one
+  night failed with `FileExistsError` and another ran the wrong night's graph.
+  Each submission now renders into a directory of its own, named after its
+  quantum graph, and gets its own submit directory and Parsl run directory.
+- A coadd template built under BPS failed before running: the executor read the
+  output run only from `--output-run`, which the coadd stage does not pass, so
+  BPS tried to rename the graph's run and `pipetask update-graph-run` failed.
 - `scripts/config/hd189733/pipeline_transit.yaml`: the comment claiming the
   mid-transit matches the Agol et al. 2010 ephemeris to 0.0 min treated TAI
   times as UTC and that BJD_UTC ephemeris as BJD_TDB, two offsets that nearly

@@ -7,6 +7,7 @@
 #   {repo}              - Butler repository path
 #   {night}             - Observing night (YYYYMMDD)
 #   {timestamp}         - Run timestamp
+#   {submit_name}       - This submission's submit directory name (unique)
 #   {instrument_dir}    - Path to the declarative instrument package
 #   {stips_defaults}    - Path to framework reference pipelines/configs
 #   {obs_stips_dir}     - Path to obs_stips (LSST glue) package
@@ -107,7 +108,7 @@ output:
 # =============================================================================
 
 # Where to create submit directories
-submitPath: "{repo}/bps/submit/{pipeline}_{night}_{timestamp}"
+submitPath: "{repo}/bps/submit/{submit_name}"
 
 # Keep logs for debugging
 saveClusteredQgraph: true

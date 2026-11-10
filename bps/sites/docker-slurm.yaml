@@ -45,8 +45,9 @@ site:
       #SBATCH --partition=normal
       #SBATCH --export=ALL
 
-    # Parsl run_dir on shared volume (accessible from STIPS + compute nodes)
-    run_dir: /data/repo/parsl_runinfo
+    # Parsl run_dir on shared volume (accessible from STIPS + compute nodes),
+    # one per submission
+    run_dir: "{run_dir}"
 
     # Command prefix: sourced before each pipetask command on compute nodes.
     # Note: ctrl_bps_parsl's Slurm class does NOT pass worker_init through
