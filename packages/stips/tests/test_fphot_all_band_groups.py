@@ -9,6 +9,7 @@ v2.2.1 paper rebuild 2023ixf had rp photometry on 2 of ~17 nights.
 from __future__ import annotations
 
 import sys
+import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -25,7 +26,7 @@ PARENTS = [
 
 def _inputs(image_type):
     config = MagicMock()
-    config.repo = Path("/repo")
+    config.repo = Path(tempfile.mkdtemp())
     config.require_profile.return_value = SimpleNamespace(
         name="Nickel", collection_prefix="Nickel", skymap_collection="skymaps/x",
         night_to_dayobs_offset_days=1,
@@ -47,11 +48,16 @@ def _inputs(image_type):
             fphot, "_select_diff_collection",
             return_value=("Nickel/runs/20211030/diff/ts/run", []),
         ),
+        patch.object(fphot.butler_query, "quantum_graph_is_empty", return_value=False),
+        patch.object(fphot, "redefine_chain"),
     ):  # fmt: skip
         fphot.run("20211030", 56.65, 43.23, config, band="rp",
                   image_type=image_type, executor=executor)  # fmt: skip
-    args = executor.run_pipetask.call_args.args[0]
-    return seen["kw"], args[args.index("--input") + 1]
+    # The inputs go to the graph build (`pipetask qgraph -i`).
+    args = next(
+        c.args[0] for c in executor.run_pipetask.call_args_list if c.args[0][0] == "qgraph"
+    )
+    return seen["kw"], args[args.index("-i") + 1]
 
 
 def test_asks_for_every_band_group():

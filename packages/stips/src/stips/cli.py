@@ -25,6 +25,7 @@ import sys
 from pathlib import Path
 
 import click
+import yaml
 
 from stips.core import config as cfg_module
 
@@ -1583,7 +1584,7 @@ def landolt_validate(
 @click.option("--dry-run", is_flag=True, help="Print commands without executing")
 @click.option(
     "--site",
-    type=click.Choice(["local", "slurm", "htcondor"]),
+    type=click.Choice(["local", "slurm", "singularity-slurm", "htcondor", "docker-slurm"]),
     default=None,
     help="Execution site (implies BPS execution)",
 )
@@ -1788,7 +1789,7 @@ def bps(ctx: click.Context) -> None:
 @click.option(
     "--site",
     default="slurm",
-    type=click.Choice(["slurm", "htcondor", "local"]),
+    type=click.Choice(["slurm", "singularity-slurm", "htcondor", "local", "docker-slurm"]),
     help="Compute site (default: slurm)",
 )
 @click.option("-b", "--band", help="Band for DIA pipeline (required for dia)")
@@ -1833,6 +1834,12 @@ def bps_submit(
 
     from stips.core import bps as bps_module
 
+    # Container image and Slurm sizing come from the config's options block,
+    # as for `stips run` (options.container_image, options.cluster).
+    options = {}
+    if ctx.obj.get("config_path"):
+        with open(ctx.obj["config_path"]) as f:
+            options = (yaml.safe_load(f) or {}).get("options") or {}
     bps_cfg = bps_module.BPSConfig(
         pipeline=pipeline,
         night=night,
@@ -1843,6 +1850,8 @@ def bps_submit(
         coord_collection=coords,
         project=project,
         dry_run=dry_run,
+        container_image=options.get("container_image"),
+        **bps_module.cluster_options(options.get("cluster")),
     )
 
     mode_str = "[DRY RUN] " if dry_run else ""

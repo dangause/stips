@@ -233,6 +233,19 @@ class TestResolveRunIdViaWms:
             assert bps._resolve_run_id_via_wms(cfg, self._cfg()) is None
 
 
+class TestExtractSubmitDir:
+    def test_banner(self):
+        from stips.core import bps
+
+        out = "Submit dir: /r/bps/submit/custom_00000000_20261110T091202\nRun Id: None\n"
+        assert bps._extract_submit_dir(out) == "/r/bps/submit/custom_00000000_20261110T091202"
+
+    def test_missing(self):
+        from stips.core import bps
+
+        assert bps._extract_submit_dir("Run Id: 42.0\n") is None
+
+
 class TestExtractRunId:
     def test_v30_banner_run_id_label(self):
         from stips.core import bps
@@ -268,6 +281,13 @@ class TestExtractRunId:
         from stips.core import bps
 
         assert bps._extract_run_id("nothing here\n") is None
+
+    def test_parsl_none_banner_returns_none(self):
+        from stips.core import bps
+
+        # ctrl_bps_parsl has no run id and prints the Python None.
+        out = "Submit dir: /x\nRun Id: None\nRun Name: custom_00000000\n"
+        assert bps._extract_run_id(out) is None
 
 
 class TestSubmitLayeredRunId:

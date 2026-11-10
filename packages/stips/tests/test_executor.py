@@ -365,6 +365,8 @@ class TestBPSExecutor:
 
         with patch("stips.core.executor.bps") as mock_bps_mod, patch(
             "stips.core.executor._check_output_collection", return_value=True
+        ), patch(
+            "stips.core.executor.butler_query.quantum_graph_outcome", return_value=None
         ), caplog.at_level(logging.WARNING, logger="stips.core.executor"):
             mock_bps_mod.submit.return_value = mock_bps_result
             mock_bps_mod.is_synchronous_site.return_value = True
@@ -392,6 +394,102 @@ class TestBPSExecutor:
         assert not any(
             "cannot poll wms" in r.getMessage().lower() for r in caplog.records
         )
+
+    def test_sync_site_never_polls(self, tmp_path):
+        """A synchronous site has finished when submit returns; never poll it.
+
+        Polling a Parsl run (whose banner says ``Run Id: None``) waited out the
+        whole timeout before reporting failure.
+        """
+        from stips.core.executor import BPSExecutor
+
+        executor = BPSExecutor(site="singularity-slurm", poll_interval=0.01, timeout=30.0)
+        mock_bps_result = MagicMock()
+        mock_bps_result.success = True
+        mock_bps_result.run_id = "None"
+        mock_bps_result.stderr = ""
+
+        with patch("stips.core.executor.bps") as mock_bps_mod, patch(
+            "stips.core.executor.bps_report"
+        ) as mock_report, patch(
+            "stips.core.executor._check_output_collection", return_value=True
+        ), patch(
+            "stips.core.executor.butler_query.quantum_graph_outcome", return_value=None
+        ):
+            mock_bps_mod.submit.return_value = mock_bps_result
+            mock_bps_mod.is_synchronous_site.return_value = True
+            mock_bps_mod.BPSConfig = MagicMock()
+
+            result = executor.run_pipetask(
+                ["run", "-b", "/repo", "-g", "/g.qg", "--output-run", "r/run"],
+                MagicMock(),
+                check=False,
+            )
+
+        assert result.returncode == 0
+        mock_report.summary_for_run.assert_not_called()
+        mock_bps_mod.status.assert_not_called()
+
+    def test_sync_site_counts_quanta_from_graph(self, tmp_path):
+        """On a Parsl site the counts come from the graph and the butler.
+
+        Some quanta failing makes the run partial (non-zero return code), as a
+        local ``pipetask run`` would report it.
+        """
+        from stips.core import quanta_report
+        from stips.core.butler_query import GraphOutcome
+        from stips.core.executor import BPSExecutor
+
+        executor = BPSExecutor(site="singularity-slurm")
+        summary_file = tmp_path / "s.summary.json"
+        mock_bps_result = MagicMock(success=True, run_id=None, stderr="", submit_dir="/sub")
+        outcome = GraphOutcome(
+            expected={"isr": 24, "analyze": 24}, succeeded_by_task={"isr": 24}
+        )
+
+        with patch("stips.core.executor.bps") as mock_bps_mod, patch(
+            "stips.core.executor.butler_query.quantum_graph_outcome", return_value=outcome
+        ) as mock_outcome, patch(
+            "stips.core.executor._check_output_collection"
+        ) as mock_probe:
+            mock_bps_mod.submit.return_value = mock_bps_result
+            mock_bps_mod.is_synchronous_site.return_value = True
+            result = executor.run_pipetask(
+                ["run", "-b", "/repo", "-g", "/g.qg", "--output-run", "r/run",
+                 "--summary", str(summary_file)],
+                MagicMock(),
+                check=False,
+            )
+
+        mock_outcome.assert_called_once()
+        assert mock_outcome.call_args.args[1:] == ("/g.qg", "r/run")
+        mock_probe.assert_not_called()
+        assert result.returncode == 1
+        assert quanta_report.parse_summary_file(summary_file) == (24, 24)
+        assert "analyze" in result.stderr
+        assert "/sub" in result.stderr
+
+    def test_sync_site_all_quanta_ok_is_success(self, tmp_path):
+        from stips.core import quanta_report
+        from stips.core.butler_query import GraphOutcome
+        from stips.core.executor import BPSExecutor
+
+        executor = BPSExecutor(site="slurm")
+        summary_file = tmp_path / "s.summary.json"
+        outcome = GraphOutcome(expected={"isr": 3}, succeeded_by_task={"isr": 3})
+        with patch("stips.core.executor.bps") as mock_bps_mod, patch(
+            "stips.core.executor.butler_query.quantum_graph_outcome", return_value=outcome
+        ):
+            mock_bps_mod.submit.return_value = MagicMock(success=True, run_id=None, stderr="")
+            mock_bps_mod.is_synchronous_site.return_value = True
+            result = executor.run_pipetask(
+                ["run", "-b", "/repo", "-g", "/g.qg", "--output-run", "r/run",
+                 "--summary", str(summary_file)],
+                MagicMock(),
+                check=False,
+            )
+        assert result.returncode == 0
+        assert quanta_report.parse_summary_file(summary_file) == (3, 0)
 
     def test_async_site_no_run_id_is_degraded(self, tmp_path, caplog):
         """HTCondor (async) site with no run id: loud degraded mode, not silent.
@@ -461,7 +559,7 @@ class TestBPSExecutor:
         """If polling exceeds timeout, return failure."""
         from stips.core.executor import BPSExecutor
 
-        executor = BPSExecutor(site="local", poll_interval=0.01, timeout=0.05)
+        executor = BPSExecutor(site="htcondor", poll_interval=0.01, timeout=0.05)
         mock_config = MagicMock()
         mock_config.repo = Path("/repo")
         mock_config.instrument_dir = Path("/instrument_dir")
@@ -484,6 +582,7 @@ class TestBPSExecutor:
         ) as mock_report_mod:
             mock_bps_mod.submit.return_value = mock_bps_result
             mock_bps_mod.status.return_value = mock_status
+            mock_bps_mod.is_synchronous_site.return_value = False
             mock_bps_mod.BPSConfig = MagicMock()
             mock_bps_mod.render_bps_config = MagicMock(
                 return_value=Path("/rendered.yaml")

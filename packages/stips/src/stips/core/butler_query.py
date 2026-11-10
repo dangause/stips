@@ -32,6 +32,7 @@ in-stack snippet fails to run, so callers can distinguish "query failed" from
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Sequence
 
 from stips.core.stack import run_butler_python_json
@@ -330,6 +331,61 @@ print(json.dumps({{"count": len(qg)}}))
 """
 
 
+def _build_qg_outcome_script(repo: str, qg_path: str, output_run: str) -> str:
+    """Build a snippet printing the quanta per task in a graph, and how many succeeded.
+
+    Prints ``{"expected": {label: n}, "succeeded": {label: n}}``. A quantum
+    has succeeded when its task's ``<label>_metadata`` dataset is in
+    ``output_run``: a task writes it last, and only when the quantum finishes.
+    """
+    return f"""
+import json
+from lsst.daf.butler import Butler
+from lsst.pipe.base import QuantumGraph
+try:
+    from lsst.daf.butler import MissingDatasetTypeError
+except Exception:  # pragma: no cover - older stacks lack the symbol
+    class MissingDatasetTypeError(Exception):
+        pass
+try:
+    from lsst.daf.butler import MissingCollectionError
+except Exception:  # pragma: no cover - relocated/absent on some stacks
+    try:
+        from lsst.daf.butler.registry import MissingCollectionError
+    except Exception:
+        class MissingCollectionError(Exception):
+            pass
+
+qg = QuantumGraph.loadUri({qg_path!r})
+expected = {{}}
+try:
+    for label in qg.pipeline_graph.tasks:
+        expected[label] = len(qg.get_task_quanta(label))
+except AttributeError:  # older stacks: TaskDef API
+    for task_def in qg.iterTaskGraph():
+        expected[task_def.label] = qg.getNumberOfQuantaForTask(task_def)
+
+butler = Butler.from_config({repo!r}, writeable=False)
+succeeded = {{}}
+for label, n in expected.items():
+    if not n:
+        continue
+    try:
+        try:
+            refs = butler.query_datasets(
+                label + "_metadata", collections=[{output_run!r}], explain=False
+            )
+        except (AttributeError, TypeError):
+            refs = butler.registry.queryDatasets(
+                label + "_metadata", collections=[{output_run!r}]
+            )
+        succeeded[label] = len(list(refs))
+    except (MissingDatasetTypeError, MissingCollectionError):
+        succeeded[label] = 0
+print(json.dumps({{"expected": expected, "succeeded": succeeded}}))
+"""
+
+
 # --------------------------------------------------------------------------- #
 # Public helpers
 # --------------------------------------------------------------------------- #
@@ -494,3 +550,52 @@ def quantum_graph_is_empty(config: "Config", qg_path: "Path | str") -> bool | No
     if count is None:
         return None
     return count == 0
+
+
+@dataclass
+class GraphOutcome:
+    """Quanta per task in a finished quantum graph, and how many succeeded."""
+
+    expected: dict[str, int]
+    succeeded_by_task: dict[str, int] = field(default_factory=dict)
+
+    def _ok(self, label: str) -> int:
+        return min(self.succeeded_by_task.get(label, 0), self.expected[label])
+
+    @property
+    def succeeded(self) -> int:
+        return sum(self._ok(label) for label in self.expected)
+
+    @property
+    def failed(self) -> int:
+        """Quanta that failed, or never ran because an input was missing."""
+        return sum(self.expected.values()) - self.succeeded
+
+    def failed_by_task(self) -> dict[str, int]:
+        return {
+            label: n - self._ok(label)
+            for label, n in self.expected.items()
+            if n > self._ok(label)
+        }
+
+
+def quantum_graph_outcome(
+    config: "Config", qg_path: "Path | str", output_run: str
+) -> GraphOutcome | None:
+    """Count the succeeded quanta of a graph run into ``output_run``.
+
+    For backends that report no per-quantum status (Parsl), this gives the
+    counts ``pipetask run --summary`` would. Returns ``None`` if the query
+    could not run.
+    """
+    reply = run_butler_python_json(
+        _build_qg_outcome_script(str(config.repo), str(qg_path), output_run), config
+    )
+    expected = _field(reply, "expected")
+    succeeded = _field(reply, "succeeded")
+    if not isinstance(expected, dict) or not isinstance(succeeded, dict):
+        return None
+    return GraphOutcome(
+        expected={str(k): int(v) for k, v in expected.items()},
+        succeeded_by_task={str(k): int(v) for k, v in succeeded.items()},
+    )

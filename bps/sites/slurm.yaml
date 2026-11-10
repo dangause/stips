@@ -21,6 +21,10 @@ includeConfigs:
 wmsServiceClass: lsst.ctrl.bps.parsl.ParslService
 computeSite: slurm
 
+# One job per visit: a job pays ~10 s of pipetask start-up, more than most
+# per-visit tasks take to run (see stips.core.bps_clustering).
+clusterAlgorithm: stips.core.bps_clustering.visit_clustering
+
 # =============================================================================
 # Parsl Configuration
 # =============================================================================
@@ -42,31 +46,32 @@ parsl:
 # =============================================================================
 site:
   slurm:
-    class: lsst.ctrl.bps.parsl.sites.Slurm
+    # StipsSlurm, not lsst.ctrl.bps.parsl.sites.Slurm: the latter ignores
+    # partition, max_blocks, mem_per_worker and worker_init, and asks for
+    # whole nodes (see stips.core.bps_sites).
+    class: stips.core.bps_sites.StipsSlurm
 
-    # Cluster resources per block (adjust for your cluster)
+    # One block = one Slurm job on one node, running
+    # min(cores_per_node, mem_per_node / mem_per_worker) quanta at once.
+    # Values in {braces} come from the run config's options.cluster block.
     nodes: 1
-    cores_per_node: 32
-    mem_per_node: 128            # GB
+    cores_per_node: {cores_per_node}
+    mem_per_node: {mem_per_node}         # GB
+    mem_per_worker: {mem_per_worker}     # GB
+    walltime: "{walltime}"
+    partition: "{partition}"             # empty: the cluster's default
+    account: "{account}"                 # empty: the user's default account
+    exclusive: false
 
-    # Job time limit
-    walltime: "04:00:00"         # 4 hours
-
-    # Slurm scheduler options (customize for your cluster)
-    # These are passed directly to sbatch
+    # Extra #SBATCH lines for your cluster, e.g. mail on failure:
     scheduler_options: |
-      #SBATCH --partition=normal
-      #SBATCH --account={project}
       #SBATCH --export=ALL
-      #SBATCH --mail-type=FAIL
-      #SBATCH --mail-user={operator}@example.edu
 
-    # Parallelism configuration
-    # max_blocks limits how many Slurm jobs can run simultaneously
-    max_blocks: 10
+    # How many blocks Parsl may hold at once.
+    max_blocks: {max_blocks}
     min_blocks: 0
     init_blocks: 1
-    parallelism: 1.0             # Scale up to max_blocks
+    parallelism: 1.0
 
     # Worker options
     worker_init: |

@@ -5,12 +5,37 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
 ## [Unreleased]
 
 ### Added
+- BPS on Slurm clusters whose nodes have no LSST stack: the `singularity-slurm`
+  site runs each Parsl worker inside the STIPS Apptainer image
+  (`stips.core.bps_sites.ApptainerSlurm`), and `scripts/hpc/stips-apptainer`
+  runs the controller inside the image with the host's Slurm client bound in
+  (the image's client can be too old for the cluster's controller).
+- `options.cluster` in a run config sets the Slurm request for the `slurm` and
+  `singularity-slurm` sites: `partition`, `account`, `cores_per_node`,
+  `mem_per_node`, `mem_per_worker`, `walltime` and `max_blocks`. An unknown key
+  or an unquoted walltime (YAML reads `4:00:00` as 14400) is an error.
+  `stips bps submit` reads it too. `docs/hpc.md` describes the setup.
+- A BPS step on Slurm stops once 3 blocks in a row have failed
+  (`max_failed_blocks` in the site file); Parsl's own rule resubmitted a
+  worker that could not start for as long as the controller lived.
 - Light-curve CSVs (`lightcurve_<object>.csv`, `differential_<object>.csv`) carry a
   `time_scale` column, and `transit_results.json` a `time_scale` key, giving the
   scale of `mjd` and `t0`: `TAI`, the scale on which the Butler records exposure
   times. The docs say so and show the conversion to BJD_TDB.
 
 ### Changed
+- On the `slurm` and `singularity-slurm` BPS sites a visit's quanta run as two
+  jobs (`stips.core.bps_clustering.visit_clustering`) instead of one job per
+  quantum; starting `pipetask` took longer than most per-visit tasks. Tasks
+  that later steps need and the visit's analysis tasks go in separate jobs, so
+  a failing analysis quantum does not stop the tasks that combine visits.
+- Forced photometry builds its quantum graph before running it, as the other
+  stages do, so under `execution: bps` it runs on the cluster rather than on
+  the machine running `stips`. Its output chain holds the same collections as
+  before.
+- BPS defaults for Slurm blocks are smaller: 8 cores, 32 GB, 4 GB per worker,
+  4 h, at most 4 blocks (were 32 cores, 128 GB, partition `normal`, 10 blocks).
+  Blocks no longer ask for whole nodes.
 - `stips lightcurve` time-stamps each measurement at the middle of its exposure,
   as the differential-photometry and DIA-plot tasks already did (`expMidptMJD`).
   It used the exposure start, so its times move later by half the exposure time
@@ -18,6 +43,24 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
   unaffected beyond that shift.
 
 ### Fixed
+- The `slurm` and `singularity-slurm` BPS sites ignored `max_blocks`,
+  `partition`, `worker_init` and `mem_per_worker`: `ctrl_bps_parsl` reads only
+  a few keys, so Parsl ran one exclusive Slurm job at a time in the default
+  partition. `stips.core.bps_sites.StipsSlurm` passes them through, and Slurm
+  jobs start in the BPS submit directory.
+- A BPS step on a Parsl site (`slurm`, `singularity-slurm`, `local`) reported
+  success with a count of 1 quantum whenever its output collection existed,
+  however many quanta had failed, so STIPS never tried a fallback config. It
+  now counts the graph's quanta against the `<task>_metadata` datasets in the
+  output run, fails the step as a local `pipetask run` would, and names the
+  tasks whose quanta failed or did not run.
+- A BPS step on a Parsl site waited out `bps_timeout` (2 h by default) after the
+  workflow had finished and then reported failure: Parsl's submit banner reads
+  `Run Id: None`, which STIPS took for a run to poll.
+- The `slurm` and `singularity-slurm` sites no longer pass the instrument
+  profile name (`ctio1m_bin2`, say) as the Slurm account when none is given,
+  which a cluster without such an account rejects; the account is
+  `options.cluster.account` or `--project`, or else the user's default.
 - `scripts/config/hd189733/pipeline_transit.yaml`: the comment claiming the
   mid-transit matches the Agol et al. 2010 ephemeris to 0.0 min treated TAI
   times as UTC and that BJD_UTC ephemeris as BJD_TDB, two offsets that nearly

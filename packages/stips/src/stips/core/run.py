@@ -71,6 +71,7 @@ from typing import TYPE_CHECKING
 
 import yaml
 
+from stips.core.bps import cluster_options
 from stips.core.refcat import (
     DEFAULT_REFCAT_MODE,
     ensure_refcats,
@@ -232,6 +233,9 @@ class RunConfig:
 
     # HPC container options
     container_image: str | None = None  # Path to Singularity/Apptainer SIF image
+    # Slurm sizing for the slurm/singularity-slurm sites (options.cluster;
+    # keys in stips.core.bps.CLUSTER_KEYS)
+    cluster: dict = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         validate_template_type(self.template_type)
@@ -378,6 +382,7 @@ class RunConfig:
             bps_poll_interval=float(options.get("bps_poll_interval", 5.0)),
             bps_timeout=float(options.get("bps_timeout", 7200.0)),
             container_image=options.get("container_image"),
+            cluster=cluster_options(options.get("cluster")),
         )
 
 
@@ -418,6 +423,7 @@ def _create_executor(run_cfg: RunConfig):
             poll_interval=run_cfg.bps_poll_interval,
             timeout=run_cfg.bps_timeout,
             container_image=run_cfg.container_image,
+            cluster=run_cfg.cluster,
         )
     return LocalExecutor()
 

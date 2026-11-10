@@ -234,6 +234,39 @@ def _emit_bps_result(
     )
 
 
+def _emit_graph_outcome(
+    outcome: butler_query.GraphOutcome,
+    bps_result: bps.BPSResult,
+    *,
+    summary_file: str | None = None,
+) -> subprocess.CompletedProcess:
+    """Report a finished synchronous BPS run from its graph's outcome.
+
+    The return code follows ``pipetask run``: non-zero when any quantum failed
+    or never ran, so the caller treats the run as partial exactly as it would
+    a local one.
+    """
+    total = outcome.succeeded + outcome.failed
+    failed_tasks = outcome.failed_by_task()
+    log.info(f"  BPS job completed: {outcome.succeeded} of {total} quanta succeeded")
+    lines = [bps_result.stderr or ""] if bps_result.stderr else []
+    if failed_tasks:
+        for label, n in failed_tasks.items():
+            line = f"{label}: {n} of {outcome.expected[label]} quanta failed or did not run"
+            log.warning(f"    {line}")
+            lines.append(line)
+        if bps_result.submit_dir:
+            lines.append(f"Quantum logs: {bps_result.submit_dir}/logs")
+            log.warning(f"    Quantum logs: {bps_result.submit_dir}/logs")
+    return _emit_bps_result(
+        1 if outcome.failed else 0,
+        outcome.succeeded,
+        outcome.failed,
+        summary_file=summary_file,
+        stderr="\n".join(lines),
+    )
+
+
 def _translate_bps_to_completed_process(
     bps_status: dict,
     *,
@@ -286,11 +319,14 @@ class BPSExecutor:
         poll_interval: float = 5.0,
         timeout: float = 7200.0,
         container_image: str | None = None,
+        cluster: dict | None = None,
     ):
         self.site = site
         self.poll_interval = poll_interval
         self.timeout = timeout
         self.container_image = container_image
+        # Validated options.cluster block (BPSConfig fields), e.g. partition
+        self.cluster = dict(cluster or {})
 
     def run_pipetask(
         self,
@@ -336,6 +372,7 @@ class BPSExecutor:
             container_image=self.container_image,
             qgraph_file=qgraph_file,
             output_run=output_run,
+            **self.cluster,
         )
 
         # Submit to BPS
@@ -351,7 +388,10 @@ class BPSExecutor:
                 stderr=bps_result.error or "BPS submission failed",
             )
 
-        run_id = bps_result.run_id
+        # A synchronous backend has finished by the time submit returns, so
+        # there is nothing to poll even if a run id came back.
+        synchronous = bps.is_synchronous_site(self.site)
+        run_id = None if synchronous else bps_result.run_id
 
         # No run id means we cannot poll the WMS. There are two very different
         # reasons for this, and conflating them is exactly finding F-015:
@@ -365,8 +405,19 @@ class BPSExecutor:
         #       mode: we wanted to poll and cannot. Previously this was silently
         #       misclassified as (a); now it is loud, and we fall back to the
         #       output-collection probe only as a last resort.
+        if synchronous and output_run:
+            outcome = butler_query.quantum_graph_outcome(config, qgraph_file, output_run)
+            if outcome is not None:
+                return _emit_graph_outcome(
+                    outcome, bps_result, summary_file=summary_file
+                )
+            log.warning(
+                "  Could not count the quanta of %s; checking only that %s has output",
+                qgraph_file,
+                output_run,
+            )
+
         if not run_id:
-            synchronous = bps.is_synchronous_site(self.site)
             if synchronous:
                 log.info("  BPS job completed (synchronous backend)")
             else:

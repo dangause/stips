@@ -56,6 +56,46 @@ VALID_SITES = ("slurm", "htcondor", "local", "singularity-slurm", "docker-slurm"
 _PARSL_SITES = frozenset({"local", "slurm", "singularity-slurm", "docker-slurm"})
 _HTCONDOR_SITES = frozenset({"htcondor"})
 
+#: Keys of a run config's ``options.cluster`` block, each a :class:`BPSConfig`
+#: field with the same name.
+CLUSTER_KEYS = (
+    "container_bind",
+    "cores_per_node",
+    "mem_per_node",
+    "mem_per_worker",
+    "walltime",
+    "partition",
+    "account",
+    "max_blocks",
+)
+
+
+def cluster_options(raw: dict | None) -> dict:
+    """Validate a run config's ``options.cluster`` block.
+
+    Returns the block with values coerced to the :class:`BPSConfig` field
+    types. Raises ``ValueError`` for an unknown key, so a typo (``mem_per_cpu``)
+    fails at config load rather than silently falling back to a default.
+    """
+    if not raw:
+        return {}
+    if not isinstance(raw, dict):
+        raise ValueError(f"options.cluster must be a mapping, got {type(raw).__name__}")
+    unknown = sorted(set(raw) - set(CLUSTER_KEYS))
+    if unknown:
+        raise ValueError(
+            f"Unknown options.cluster key(s): {', '.join(unknown)}. "
+            f"Known: {', '.join(CLUSTER_KEYS)}"
+        )
+    if "walltime" in raw and not isinstance(raw["walltime"], str):
+        # YAML 1.1 reads an unquoted 4:00:00 as the base-60 integer 14400.
+        raise ValueError(
+            f"options.cluster.walltime must be a quoted string such as "
+            f'"01:00:00", got {raw["walltime"]!r}'
+        )
+    kinds = {"cores_per_node": int, "mem_per_node": int, "max_blocks": int, "mem_per_worker": float}
+    return {key: kinds.get(key, str)(value) for key, value in raw.items()}
+
 
 def is_synchronous_site(site: str) -> bool:
     """Whether ``site`` runs synchronously (Parsl) with no pollable WMS run.
@@ -118,13 +158,18 @@ class BPSConfig:
     qgraph_file: str | None = None
     output_run: str | None = None
 
-    # HPC cluster options (used by singularity-slurm and slurm sites)
+    # HPC cluster options (the slurm and singularity-slurm sites; set from the
+    # run config's options.cluster block, see CLUSTER_KEYS). One block is one
+    # Slurm job on one node.
     container_image: str | None = None
-    cores_per_node: int = 32
-    mem_per_node: int = 128  # GB
+    container_bind: str = ""  # apptainer --bind list for workers ("" → $STIPS_APPTAINER_BIND)
+    cores_per_node: int = 8
+    mem_per_node: int = 32  # GB
+    mem_per_worker: float = 4.0  # GB per quantum slot
     walltime: str = "04:00:00"
-    partition: str = "normal"
-    max_blocks: int = 10
+    partition: str = ""  # "" → the cluster's default partition
+    account: str = ""  # "" → --project if given, else the user's default account
+    max_blocks: int = 4  # Slurm jobs Parsl may hold at once
 
     def __post_init__(self) -> None:
         """Validate configuration after initialization."""
@@ -282,10 +327,15 @@ def render_bps_config(
         "output_run": bps_cfg.output_run or "",
         # HPC cluster options
         "container_image": bps_cfg.container_image or "",
+        "container_bind": bps_cfg.container_bind,
         "cores_per_node": str(bps_cfg.cores_per_node),
         "mem_per_node": str(bps_cfg.mem_per_node),
+        "mem_per_worker": str(float(bps_cfg.mem_per_worker)),
         "walltime": bps_cfg.walltime,
         "partition": bps_cfg.partition,
+        # Only an account the user named: a made-up default (the profile
+        # name) is rejected by any cluster that checks accounts.
+        "account": bps_cfg.account or bps_cfg.project or "",
         "max_blocks": str(bps_cfg.max_blocks),
         "run_dir": str(config.repo / "parsl_runinfo"),
     }
@@ -359,8 +409,23 @@ def _extract_run_id(stdout: str) -> str | None:
             continue
         match = _RUN_ID_RE.search(line)
         if match:
-            return match.group(1).strip()
+            value = match.group(1).strip()
+            # ctrl_bps_parsl has no run id and prints ``Run Id: None``.
+            return None if value == "None" else value
     return None
+
+
+_SUBMIT_DIR_RE = re.compile(r"^\s*Submit dir:\s*(\S+)", re.MULTILINE)
+
+
+def _extract_submit_dir(stdout: str) -> str | None:
+    """Return the directory ``bps submit`` reports (``Submit dir: <path>``).
+
+    BPS writes the workflow, and the quantum logs, under its ``submitPath``,
+    not in the directory the config was rendered into.
+    """
+    match = _SUBMIT_DIR_RE.search(stdout)
+    return match.group(1) if match else None
 
 
 def _match_run_id(runs: list[dict], output_run: str) -> str | None:
@@ -507,7 +572,7 @@ def submit(
 
         return BPSResult(
             success=success,
-            submit_dir=str(submit_dir),
+            submit_dir=_extract_submit_dir(result.stdout or "") or str(submit_dir),
             run_id=run_id,
             config_file=str(rendered_config),
             stdout=result.stdout,

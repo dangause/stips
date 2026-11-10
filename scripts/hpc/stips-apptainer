@@ -1,0 +1,98 @@
+#!/bin/bash
+# Run a command inside the STIPS Apptainer image with the host's Slurm client,
+# so a BPS run on the singularity-slurm site can submit and watch its worker
+# jobs from inside the image.
+#
+#   export STIPS_SIF=/shared/images/stips.sif
+#   export STIPS_BIND=/shared/stips/checkout:/opt/stips,/shared/stips:/shared/stips
+#   scripts/hpc/stips-apptainer stips -c /shared/stips/configs/target.yaml run
+#
+# STIPS_SIF   the image (required)
+# STIPS_BIND  apptainer --bind list for the data, repositories and (optionally)
+#             a STIPS checkout over /opt/stips. The BPS workers get the same
+#             list (as STIPS_APPTAINER_BIND), so every path the run config names
+#             must be visible inside the image at the same path.
+#
+# Run it on a submit node or, better, inside a small Slurm job: it stays up for
+# the whole workflow, because Parsl's `bps submit` returns only when every
+# quantum has finished.
+#
+# Why the host client, not the image's: the image's Slurm client is whatever
+# its OS packages, and a controller rejects clients more than two releases
+# older than itself. The pieces bound in are the client commands, their
+# libraries and plugins, the Slurm config (a file, or the configless cache that
+# slurmd keeps under /run/slurm), the munge socket, and passwd/group entries for
+# SlurmUser, which the client looks up while reading the config.
+set -euo pipefail
+
+: "${STIPS_SIF:?set STIPS_SIF to the STIPS image}"
+user_bind=${STIPS_BIND:-}
+apptainer=${STIPS_APPTAINER:-apptainer}
+
+sbatch=$(command -v sbatch) || { echo "stips-apptainer: no sbatch on this host" >&2; exit 1; }
+
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/stips-apptainer.XXXXXX")
+trap 'rm -rf "$tmp"' EXIT
+
+bind=$user_bind
+add() { case ",$bind," in *",$1,"*) ;; *) bind=${bind:+$bind,}$1 ;; esac; }
+
+# Client commands Parsl calls (sbatch, sacct with squeue as fallback, scancel)
+# plus the ones useful for looking around.
+for cmd in sbatch sacct squeue scancel scontrol sinfo; do
+  if path=$(command -v "$cmd"); then add "$path"; fi
+done
+
+# Libraries: libslurm*, wherever the host keeps them, and the plugin directory
+# (which also holds libslurmfull.so).
+config=$(scontrol show config 2>/dev/null || true)
+plugindir=$(awk -F' = ' '/^PluginDir/ {print $2}' <<<"$config")
+for dir in ${plugindir//:/ }; do [ -d "$dir" ] && add "$dir"; done
+while read -r lib; do
+  [ -n "$lib" ] && add "$lib"
+done < <(ldd "$sbatch" | awk '$1 ~ /^libslurm/ && $3 ~ /^\// {print $3}')
+for lib in /usr/lib64/libslurm.so* /usr/lib/x86_64-linux-gnu/libslurm.so*; do
+  [ -e "$lib" ] && add "$lib"
+done
+
+# Config: an explicit file, else the configless cache.
+conf=${SLURM_CONF:-/etc/slurm/slurm.conf}
+if [ -f "$conf" ]; then
+  add "$(dirname "$conf")"
+elif [ -f /run/slurm/conf/slurm.conf ]; then
+  conf=/run/slurm/conf/slurm.conf
+  add /run/slurm
+  add "$(readlink -f /run/slurm/conf)"
+else
+  echo "stips-apptainer: no Slurm config (tried $conf and /run/slurm/conf)" >&2
+  exit 1
+fi
+
+# munge socket directory.
+for dir in /run/munge /var/run/munge; do
+  if [ -S "$dir/munge.socket.2" ]; then add "$(readlink -f "$dir")"; break; fi
+done
+
+# passwd/group: the image's own (with the user that apptainer adds) plus
+# SlurmUser, which may live only in the host's directory service.
+slurm_user=$(awk -F' = ' '/^SlurmUser/ {print $2}' <<<"$config" | sed 's/(.*//')
+"$apptainer" exec "$STIPS_SIF" cat /etc/passwd >"$tmp/passwd"
+"$apptainer" exec "$STIPS_SIF" cat /etc/group >"$tmp/group"
+if [ -n "$slurm_user" ]; then
+  grep -q "^$slurm_user:" "$tmp/passwd" || getent passwd "$slurm_user" >>"$tmp/passwd" || true
+  grep -q "^$slurm_user:" "$tmp/group" || getent group "$slurm_user" >>"$tmp/group" || true
+fi
+add "$tmp/passwd:/etc/passwd"
+add "$tmp/group:/etc/group"
+
+# Values with commas cannot go through --env; APPTAINERENV_* survives --cleanenv.
+export APPTAINERENV_STIPS_APPTAINER_BIND=$user_bind
+export APPTAINERENV_SLURM_CONF=$conf
+
+"$apptainer" exec --cleanenv --bind "$bind" "$STIPS_SIF" bash -c '
+  source /opt/lsst/software/stack/loadLSST.bash
+  setup lsst_distrib
+  setup -r /opt/stips/packages/obs_stips obs_stips 2>/dev/null || true
+  export STIPS_DEFAULTS=/opt/stips/packages/obs_stips/instrument_defaults
+  export PYTHONPATH=/opt/stips:/opt/stips/packages/stips/src:${PYTHONPATH:-}
+  exec "$@"' _ "$@"

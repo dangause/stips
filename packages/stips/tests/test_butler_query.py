@@ -377,3 +377,49 @@ def test_chain_members_returns_ordered_children(monkeypatch):
     assert bq.chain_members(_cfg(), "refcats") is None
     monkeypatch.setattr(bq, "run_butler_python_json", lambda script, config: None)
     assert bq.chain_members(_cfg(), "refcats") is None
+
+
+class TestQuantumGraphOutcome:
+    """Counting a finished graph's quanta from the ``<task>_metadata`` it wrote."""
+
+    def test_script_is_valid_and_parameterized(self):
+        from stips.core.butler_query import _build_qg_outcome_script
+
+        s = _build_qg_outcome_script("/repo", "/q/g.qg", "u/run/1")
+        ast.parse(s)
+        assert "QuantumGraph.loadUri('/q/g.qg')" in s
+        assert "'u/run/1'" in s
+        assert "_metadata" in s
+
+    def test_counts_per_task(self, monkeypatch):
+        from stips.core import butler_query as bq
+
+        monkeypatch.setattr(
+            bq,
+            "run_butler_python_json",
+            lambda script, config: {
+                "expected": {"isr": 24, "calibrateImage": 24, "analyze": 24},
+                "succeeded": {"isr": 24, "calibrateImage": 20, "analyze": 0},
+            },
+        )
+        out = bq.quantum_graph_outcome(_cfg(), "/g.qg", "r/run")
+        assert (out.succeeded, out.failed) == (44, 28)
+        assert out.failed_by_task() == {"calibrateImage": 4, "analyze": 24}
+
+    def test_more_outputs_than_quanta_is_not_negative(self, monkeypatch):
+        from stips.core import butler_query as bq
+
+        monkeypatch.setattr(
+            bq,
+            "run_butler_python_json",
+            lambda script, config: {"expected": {"a": 2}, "succeeded": {"a": 3}},
+        )
+        out = bq.quantum_graph_outcome(_cfg(), "/g.qg", "r/run")
+        assert (out.succeeded, out.failed) == (2, 0)
+
+    def test_none_when_query_fails_or_malformed(self, monkeypatch):
+        from stips.core import butler_query as bq
+
+        for reply in (None, {}, {"expected": {"a": 1}}, {"expected": [], "succeeded": {}}):
+            monkeypatch.setattr(bq, "run_butler_python_json", lambda s, c, r=reply: r)
+            assert bq.quantum_graph_outcome(_cfg(), "/g.qg", "r/run") is None

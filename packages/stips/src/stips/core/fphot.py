@@ -11,8 +11,10 @@ from stips.core import butler_query, dataset_types
 from stips.core.pipeline import (
     REFCATS_CHAIN,
     CollectionNames,
+    PipetaskStage,
     generate_run_timestamp,
     night_day_obs_expr,
+    redefine_chain,
     resolve_processccd_collections,
     validate_night,
 )
@@ -33,6 +35,71 @@ class ForcedPhotResult:
     night: str
     output_collections: list[str] = field(default_factory=list)
     error: str | None = None
+
+
+def _run_stage(
+    config: Config,
+    executor,
+    *,
+    pipeline: str,
+    task: str,
+    inputs: str,
+    output_coll: str,
+    output_run: str,
+    qgraph_path: Path,
+    data_query: str,
+    ra_config: str,
+    dec_config: str,
+    jobs: int,
+    log_file: Path | None,
+) -> str | None:
+    """Build a forced-photometry quantum graph and run it.
+
+    Building the graph first lets a BPS executor send the run to a cluster.
+    On success the CHAINED ``output_coll`` holds ``output_run`` and then the
+    inputs, as ``pipetask run --output`` would have made it.
+
+    Returns:
+        ``None`` on success, else the error text.
+    """
+    stage = PipetaskStage(
+        repo=str(config.repo),
+        pipeline=pipeline,
+        inputs=inputs,
+        output_parent=output_coll,
+        output_run=output_run,
+        qgraph_path=str(qgraph_path),
+        data_query=data_query,
+        post_query_args=[
+            "-c", f"{task}:useConfigCoords=True",
+            "-c", f"{task}:ra={ra_config}",
+            "-c", f"{task}:dec={dec_config}",
+        ],  # fmt: skip
+        jobs=jobs,
+        run_includes_output_run=True,
+        summary_file=str(qgraph_path.with_suffix(".summary.json")),
+    )
+    qgraph_path.parent.mkdir(parents=True, exist_ok=True)
+    built = executor.run_pipetask(
+        stage.qgraph_args(), config, capture_output=True, check=False, log_file=log_file
+    )
+    if built.returncode != 0:
+        return f"quantum graph build failed: {built.stderr or built.stdout}"
+    if butler_query.quantum_graph_is_empty(config, qgraph_path):
+        return f"the quantum graph has no quanta (query: {data_query})"
+
+    result = executor.run_pipetask(
+        stage.run_args(),
+        config,
+        capture_output=True,
+        check=False,
+        log_file=log_file,
+        output_run=output_run,
+    )
+    if result.returncode != 0:
+        return result.stderr or result.stdout or f"exit code {result.returncode}"
+    redefine_chain(config, output_coll, [output_run, *inputs.split(",")], log_file=log_file)
+    return None
 
 
 def _collection_has_difference_images(
@@ -138,7 +205,7 @@ def run(
     night = validate_night(night)
     run_ts = generate_run_timestamp()
     cols = CollectionNames(night, run_ts, prefix=prof.collection_prefix)
-    repo = str(config.repo)
+    qgraph_dir = Path(config.repo) / "qgraphs"
 
     output_collections: list[str] = []
     errors: list[str] = []
@@ -186,42 +253,26 @@ def run(
             log.info(f"  Input: {visit_input}")
             log.info(f"  Output: {output_coll}")
 
-            result = executor.run_pipetask(
-                [
-                    "run",
-                    "-b",
-                    repo,
-                    "--input",
-                    visit_input,
-                    "--output",
-                    output_coll,
-                    "--output-run",
-                    output_run,
-                    "-j",
-                    str(jobs),
-                    "--register-dataset-types",
-                    "--pipeline",
-                    f"{config.resolve_pipeline('ForcedPhotRaDec.yaml')}#visit-image",
-                    "--data-query",
-                    data_query,
-                    "-c",
-                    "forcedPhotRaDec:useConfigCoords=True",
-                    "-c",
-                    f"forcedPhotRaDec:ra={ra_config}",
-                    "-c",
-                    f"forcedPhotRaDec:dec={dec_config}",
-                ],
+            error = _run_stage(
                 config,
-                capture_output=True,
-                check=False,
+                executor,
+                pipeline=f"{config.resolve_pipeline('ForcedPhotRaDec.yaml')}#visit-image",
+                task="forcedPhotRaDec",
+                inputs=visit_input,
+                output_coll=output_coll,
+                output_run=output_run,
+                qgraph_path=qgraph_dir / f"forcedPhot_visit_{night}_{run_ts}.qg",
+                data_query=data_query,
+                ra_config=ra_config,
+                dec_config=dec_config,
+                jobs=jobs,
                 log_file=log_file,
             )
-
-            if result.returncode == 0:
+            if error is None:
                 output_collections.append(output_coll)
                 log.info("  Visit image forced photometry completed")
             else:
-                err_msg = f"Visit image forced photometry failed: {result.stderr or result.stdout}"
+                err_msg = f"Visit image forced photometry failed: {error}"
                 log.warning(err_msg)
                 errors.append(err_msg)
 
@@ -255,42 +306,26 @@ def run(
                 log.info(f"  Input: {input_colls}")
                 log.info(f"  Output: {output_coll}")
 
-                result = executor.run_pipetask(
-                    [
-                        "run",
-                        "-b",
-                        repo,
-                        "--input",
-                        input_colls,
-                        "--output",
-                        output_coll,
-                        "--output-run",
-                        output_run,
-                        "-j",
-                        str(jobs),
-                        "--register-dataset-types",
-                        "--pipeline",
-                        f"{config.resolve_pipeline('ForcedPhotRaDec.yaml')}#diffim",
-                        "--data-query",
-                        data_query,
-                        "-c",
-                        "forcedPhotDiffimRaDec:useConfigCoords=True",
-                        "-c",
-                        f"forcedPhotDiffimRaDec:ra={ra_config}",
-                        "-c",
-                        f"forcedPhotDiffimRaDec:dec={dec_config}",
-                    ],
+                error = _run_stage(
                     config,
-                    capture_output=True,
-                    check=False,
+                    executor,
+                    pipeline=f"{config.resolve_pipeline('ForcedPhotRaDec.yaml')}#diffim",
+                    task="forcedPhotDiffimRaDec",
+                    inputs=input_colls,
+                    output_coll=output_coll,
+                    output_run=output_run,
+                    qgraph_path=qgraph_dir / f"forcedPhot_diffim_{night}_{run_ts}.qg",
+                    data_query=data_query,
+                    ra_config=ra_config,
+                    dec_config=dec_config,
+                    jobs=jobs,
                     log_file=log_file,
                 )
-
-                if result.returncode == 0:
+                if error is None:
                     output_collections.append(output_coll)
                     log.info("  Difference image forced photometry completed")
                 else:
-                    err_msg = f"Diffim forced photometry failed: {result.stderr or result.stdout}"
+                    err_msg = f"Diffim forced photometry failed: {error}"
                     log.warning(err_msg)
                     errors.append(err_msg)
 
