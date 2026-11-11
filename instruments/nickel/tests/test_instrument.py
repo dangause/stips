@@ -1,12 +1,8 @@
 # This file is part of the STIPS reference-instrument (Nickel) test suite.
 #
-# Developed for the LSST Data Management System.
-# See the COPYRIGHT file at the top-level directory of this distribution
-# for details of code ownership.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+# Copyright (c) 2025-2026, the STIPS authors.
+# Distributed under the BSD 3-Clause License; see the LICENSE file at the
+# top level of the repository.
 
 """Tests of the nameplate STIPS instrument bound to the Nickel profile.
 
