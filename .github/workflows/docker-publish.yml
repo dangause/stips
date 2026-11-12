@@ -159,35 +159,16 @@ jobs:
 
       - name: Install Singularity
         run: |
-          # Install dependencies
+          # Prebuilt SingularityCE package for the runner's Ubuntu release.
+          # Building 4.0.2 from source broke once the runner's compiler
+          # defaulted to C23 ('false' and 'bool' are keywords there).
+          SINGULARITY_VERSION=4.5.1
+          CODENAME=$(. /etc/os-release && echo "$VERSION_CODENAME")
+          DEB="singularity-ce_${SINGULARITY_VERSION}-${CODENAME}_amd64.deb"
+          wget -q "https://github.com/sylabs/singularity/releases/download/v${SINGULARITY_VERSION}/${DEB}"
           sudo apt-get update
-          sudo apt-get install -y \
-            build-essential \
-            libseccomp-dev \
-            libglib2.0-dev \
-            libfuse-dev \
-            libfuse3-dev \
-            fuse2fs \
-            uidmap \
-            pkg-config \
-            squashfs-tools \
-            cryptsetup \
-            curl wget git
-
-          # Install Go
-          export VERSION=1.21.5 OS=linux ARCH=amd64
-          wget https://dl.google.com/go/go$VERSION.$OS-$ARCH.tar.gz
-          sudo tar -C /usr/local -xzvf go$VERSION.$OS-$ARCH.tar.gz
-          export PATH=/usr/local/go/bin:$PATH
-
-          # Install Singularity
-          export VERSION=4.0.2
-          wget https://github.com/sylabs/singularity/releases/download/v${VERSION}/singularity-ce-${VERSION}.tar.gz
-          tar -xzf singularity-ce-${VERSION}.tar.gz
-          cd singularity-ce-${VERSION}
-          ./mconfig
-          make -C builddir
-          sudo make -C builddir install
+          sudo apt-get install -y "./${DEB}"
+          singularity --version
 
       - name: Build Singularity image
         run: |
