@@ -932,9 +932,7 @@ class TestPipelineLabels:
 
         from stips.core import pipeline as pipeline_mod
 
-        monkeypatch.setattr(
-            pipeline_mod, "run_butler", lambda args, cfg, **k: None
-        )
+        monkeypatch.setattr(pipeline_mod, "run_butler", lambda args, cfg, **k: None)
         monkeypatch.setattr(
             pipeline_mod.butler_query, "list_instruments", lambda config: {}
         )
@@ -986,9 +984,9 @@ def test_transit_science_labels_exist_in_drp_yaml():
     known = task_labels | subset_names
 
     for label in science.TRANSIT_SCIENCE_LABELS.split(","):
-        assert label in known, (
-            f"{label!r} is not a task label or subset name in {drp_path}"
-        )
+        assert (
+            label in known
+        ), f"{label!r} is not a task label or subset name in {drp_path}"
 
 
 class TestResolvePipelineTaskLabels:
@@ -1057,9 +1055,7 @@ class TestWriteLabelSubsetPipeline:
         )
         ctx = _ctx(tmp_path, executor)
         shutil.copyfile(_DRP_YAML_PATH, ctx.pipeline)
-        ctx = dataclasses.replace(
-            ctx, pipeline_labels=science.TRANSIT_SCIENCE_LABELS
-        )
+        ctx = dataclasses.replace(ctx, pipeline_labels=science.TRANSIT_SCIENCE_LABELS)
 
         science._attempt_config(ctx, 0, tmp_path / "primary.py", [])
 

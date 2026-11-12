@@ -666,9 +666,7 @@ def test_complete_ensemble_matches_flux_weighted_sum():
     # Visits are output sorted by mjd, which increases with visit index v
     # here, so row order matches comp_flux_vals' visit order directly.
     expected_raw = target_flux / comp_flux_vals.sum(axis=1)
-    expected_norm, _ = _normalize_lightcurve(
-        expected_raw, np.ones_like(expected_raw)
-    )
+    expected_norm, _ = _normalize_lightcurve(expected_raw, np.ones_like(expected_raw))
     np.testing.assert_allclose(result["norm_flux"], expected_norm, atol=1e-9)
 
 
@@ -800,9 +798,7 @@ def test_all_nan_comparison_dropped_with_warning(caplog):
             min_detection_fraction=0.5,
             band_filter="",
         )
-    assert any(
-        "Dropping comparison candidate" in rec.message for rec in caplog.records
-    )
+    assert any("Dropping comparison candidate" in rec.message for rec in caplog.records)
     # The remaining 3 always-good comparisons meet minComparisonFraction
     # (default 0.7, ceil(0.7*3)=3) in every visit.
     assert len(result) == n_visits
@@ -920,8 +916,7 @@ def test_nan_in_best_candidate_does_not_change_selection():
                         "coord_ra": star_ras[i + 1],
                         "coord_dec": star_decs[i + 1],
                         "base_CircularApertureFlux_17_0_instFlux": flux,
-                        "base_CircularApertureFlux_17_0_instFluxErr": abs(base)
-                        * 0.01,
+                        "base_CircularApertureFlux_17_0_instFluxErr": abs(base) * 0.01,
                         "base_PixelFlags_flag_saturatedCenter": False,
                         "base_PixelFlags_flag_edge": False,
                         "deblend_nChild": 0,

@@ -47,10 +47,10 @@ GAIA_AB_ZEROPOINTS = {
 # band -> (primary, secondary): the LSST Colorterm expresses only
 # primary + c0 + c1 * (primary - secondary), so the colour is fixed by the pair.
 BANDS = {
-    "B": ("phot_bp_mean", "phot_rp_mean"),   # colour BP - RP
-    "V": ("phot_g_mean", "phot_rp_mean"),    # colour G - RP
-    "R": ("phot_rp_mean", "phot_g_mean"),    # colour RP - G
-    "I": ("phot_rp_mean", "phot_g_mean"),    # colour RP - G
+    "B": ("phot_bp_mean", "phot_rp_mean"),  # colour BP - RP
+    "V": ("phot_g_mean", "phot_rp_mean"),  # colour G - RP
+    "R": ("phot_rp_mean", "phot_g_mean"),  # colour RP - G
+    "I": ("phot_rp_mean", "phot_g_mean"),  # colour RP - G
 }
 
 
@@ -114,7 +114,9 @@ def main() -> None:
     print('    "gaia*": ColortermDict(\n        data={')
     for band, (prim, sec) in BANDS.items():
         c0, c1, rms = fit_band(d[band], d[prim], d[sec])
-        print(f'            "{band}": Colorterm(primary="{prim}", secondary="{sec}", c0={c0:.4f}, c1={c1:.4f}, c2=0.0),  # rms {rms:.3f} mag, n={len(d)}')
+        print(
+            f'            "{band}": Colorterm(primary="{prim}", secondary="{sec}", c0={c0:.4f}, c1={c1:.4f}, c2=0.0),  # rms {rms:.3f} mag, n={len(d)}'
+        )
     print("        }\n    ),")
 
 

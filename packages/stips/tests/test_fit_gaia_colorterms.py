@@ -37,7 +37,9 @@ def test_fit_band_recovers_known_terms():
     rng = np.random.default_rng(1)
     primary = rng.uniform(10, 15, 200)
     secondary = primary - rng.uniform(0.2, 1.8, 200)
-    landolt = primary + 0.35 + (-0.42) * (primary - secondary) + rng.normal(0, 0.005, 200)
+    landolt = (
+        primary + 0.35 + (-0.42) * (primary - secondary) + rng.normal(0, 0.005, 200)
+    )
     c0, c1, rms = fit_band(landolt, primary, secondary)
     assert abs(c0 - 0.35) < 0.01
     assert abs(c1 + 0.42) < 0.01

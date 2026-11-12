@@ -302,8 +302,8 @@ _BORESIGHT_OFFSET_TABLE = [
         308.0,
         "blind astrometry.net-style solve against Gaia DR3 (G<16.5), DAOStarFinder "
         "sources, brute-force translation search, 3 local nights 20091028-20091030 "
-        "(2026-11); dRA*cosDec +192\" (night-to-night scatter ~15), dDec +308\" "
-        "(scatter ~15), ~363\" @ PA~32 E-of-N, same sense as the 2006 offset; "
+        '(2026-11); dRA*cosDec +192" (night-to-night scatter ~15), dDec +308" '
+        '(scatter ~15), ~363" @ PA~32 E-of-N, same sense as the 2006 offset; '
         "UT DATE-OBS extent 2009-10-28..2009-10-31 (local night 20091030's morning "
         "frame is UT 2009-10-31, one day past its local-night label); WASP-18 "
         "TraMoS run; same-run nights 20091024 and 20091027 (WASP-5, WASP-4) not "
@@ -323,16 +323,16 @@ _BORESIGHT_OFFSET_TABLE = [
         -148.0,
         "brute-force translation search against Gaia DR3 (G<16.5, the night's own "
         "refcat shards), peak-finder sources, orientation-agnostic 8-way search "
-        "validated on a 2009 WASP-18 frame (recovers +182\"/+284\" vs the table's "
-        "+192\"/+308\"), 2 frames of local night 20110422 (UT 2011-04-22T23:51 and "
-        "2011-04-23T02:22; 2026-11); dRA*cosDec +157\" (156..157), dDec -148\" "
-        "(-151..-144), ~215\" @ PA~133 E-of-N -- a DIFFERENT sense from 2006/2009, "
+        'validated on a 2009 WASP-18 frame (recovers +182"/+284" vs the table\'s '
+        '+192"/+308"), 2 frames of local night 20110422 (UT 2011-04-22T23:51 and '
+        '2011-04-23T02:22; 2026-11); dRA*cosDec +157" (156..157), dDec -148" '
+        '(-151..-144), ~215" @ PA~133 E-of-N -- a DIFFERENT sense from 2006/2009, '
         "and beyond the matcher's 300-binned-pixel (173\") reach, which is why the "
-        "WASP-19 TraMoS night locked onto a ~6\" false solution at 10-60 min per "
+        'WASP-19 TraMoS night locked onto a ~6" false solution at 10-60 min per '
         "frame; UT DATE-OBS extent 2011-04-22..2011-04-23 (the local night's "
         "evening + morning). The neighbouring unbinned Landolt nights 20110413, "
-        "20110424/25/28 and 20110502 measured <=94\" (one or two frames each) and "
-        "the WASP-19 night 20111224 measured 99\", all within tolerance, so they "
+        '20110424/25/28 and 20110502 measured <=94" (one or two frames each) and '
+        'the WASP-19 night 20111224 measured 99", all within tolerance, so they '
         "stay uncovered",
     ),
 ]

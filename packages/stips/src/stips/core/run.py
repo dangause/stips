@@ -376,9 +376,7 @@ class RunConfig:
             forced_phot_image_type=options.get(
                 "forced_phot_image_type", default_fphot_type
             ),
-            min_comparison_fraction=float(
-                options.get("min_comparison_fraction", 0.7)
-            ),
+            min_comparison_fraction=float(options.get("min_comparison_fraction", 0.7)),
             lc_config=LightcurveConfig.from_yaml(data.get("lightcurve"), options),
             rebuild_templates=options.get("rebuild_templates", False),
             continue_on_error=options.get("continue_on_error", True),

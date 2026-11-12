@@ -304,9 +304,7 @@ def _process_catalogs(
     stable_comps = []
     for j in range(len(comp_indices)):
         valid_fluxes = [
-            f
-            for f in comp_flux_lists[j]
-            if f is not None and np.isfinite(f) and f > 0
+            f for f in comp_flux_lists[j] if f is not None and np.isfinite(f) and f > 0
         ]
         if not valid_fluxes:
             ra_deg, dec_deg = (

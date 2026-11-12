@@ -9,7 +9,6 @@ fetch contracts are covered by the shared auto-discovered suite
 from pathlib import Path
 
 import pytest
-
 from stips.testing.instrument_contract import InstrumentDirInfo, load_profile
 
 # instruments/ctio1m/tests/... -> parents[1] == instruments/ctio1m
@@ -126,5 +125,7 @@ def test_2011_landolt_night_filter_spellings_are_recognized(
     """
     prof = load_ctio1m_profile()
     phys = prof.filter_aliases.get(raw) or prof.filter_aliases.get(raw.upper())
-    assert phys == expected_physical, f"{raw!r} did not resolve to {expected_physical!r}"
+    assert (
+        phys == expected_physical
+    ), f"{raw!r} did not resolve to {expected_physical!r}"
     assert prof.filters.get(phys) == expected_band

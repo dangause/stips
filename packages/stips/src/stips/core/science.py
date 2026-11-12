@@ -123,9 +123,7 @@ def resolve_pipeline_task_labels(pipeline_yaml_path, labels: str) -> set[str]:
     return resolved
 
 
-def write_label_subset_pipeline(
-    pipeline_yaml_path, labels: str, out_path
-) -> Path:
+def write_label_subset_pipeline(pipeline_yaml_path, labels: str, out_path) -> Path:
     """Write a derived pipeline YAML that imports only ``labels`` from
     ``pipeline_yaml_path`` and drops the parent's ``steps:`` definitions.
 
@@ -366,7 +364,11 @@ def _read_landolt_target_names(catalog: Path | None = None) -> list[str]:
         else:
             repo_root = Path(__file__).resolve().parents[5]
             catalog = (
-                repo_root / "scripts" / "config" / "landolt_validation" / "landolt_catalog.csv"
+                repo_root
+                / "scripts"
+                / "config"
+                / "landolt_validation"
+                / "landolt_catalog.csv"
             )
     if not catalog.exists():
         log.warning("Landolt catalogue %s not found", catalog)

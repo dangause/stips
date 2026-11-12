@@ -57,29 +57,64 @@ FIELDS = [
     {"fits_object": "SA92 I", "ra_deg": 13.319, "dec_deg": 0.808},
     {"fits_object": "SA98 I", "ra_deg": 103.041, "dec_deg": -0.417},
 ]
-COLUMNS = ["star_name", "fits_object", "ra_deg", "dec_deg", "V", "B_V", "U_B", "V_R", "V_I",
-           "B", "R", "I", "V_err", "BV_err", "VR_err", "VI_err"]
+COLUMNS = [
+    "star_name",
+    "fits_object",
+    "ra_deg",
+    "dec_deg",
+    "V",
+    "B_V",
+    "U_B",
+    "V_R",
+    "V_I",
+    "B",
+    "R",
+    "I",
+    "V_err",
+    "BV_err",
+    "VR_err",
+    "VI_err",
+]
 
 
 def _sep_arcmin(ra1, dec1, ra2, dec2) -> float:
     d2r = math.pi / 180.0
-    c = (math.sin(dec1 * d2r) * math.sin(dec2 * d2r)
-         + math.cos(dec1 * d2r) * math.cos(dec2 * d2r) * math.cos((ra1 - ra2) * d2r))
+    c = math.sin(dec1 * d2r) * math.sin(dec2 * d2r) + math.cos(dec1 * d2r) * math.cos(
+        dec2 * d2r
+    ) * math.cos((ra1 - ra2) * d2r)
     return math.degrees(math.acos(max(-1.0, min(1.0, c)))) * 60.0
 
 
-def select_stars(landolt: pd.DataFrame, fields: list[dict], radius_arcmin: float = 10.0) -> pd.DataFrame:
+def select_stars(
+    landolt: pd.DataFrame, fields: list[dict], radius_arcmin: float = 10.0
+) -> pd.DataFrame:
     rows = []
     for f in fields:
         for _, s in landolt.iterrows():
-            if _sep_arcmin(s.ra_deg, s.dec_deg, f["ra_deg"], f["dec_deg"]) <= radius_arcmin:
-                rows.append({
-                    "star_name": s.star_name, "fits_object": f["fits_object"],
-                    "ra_deg": s.ra_deg, "dec_deg": s.dec_deg,
-                    "V": s.V, "B_V": s.B_V, "U_B": s.U_B, "V_R": s.V_R, "V_I": s.V_I,
-                    "B": s.V + s.B_V, "R": s.V - s.V_R, "I": s.V - s.V_I,
-                    "V_err": s.V_err, "BV_err": s.BV_err, "VR_err": s.VR_err, "VI_err": s.VI_err,
-                })
+            if (
+                _sep_arcmin(s.ra_deg, s.dec_deg, f["ra_deg"], f["dec_deg"])
+                <= radius_arcmin
+            ):
+                rows.append(
+                    {
+                        "star_name": s.star_name,
+                        "fits_object": f["fits_object"],
+                        "ra_deg": s.ra_deg,
+                        "dec_deg": s.dec_deg,
+                        "V": s.V,
+                        "B_V": s.B_V,
+                        "U_B": s.U_B,
+                        "V_R": s.V_R,
+                        "V_I": s.V_I,
+                        "B": s.V + s.B_V,
+                        "R": s.V - s.V_R,
+                        "I": s.V - s.V_I,
+                        "V_err": s.V_err,
+                        "BV_err": s.BV_err,
+                        "VR_err": s.VR_err,
+                        "VI_err": s.VI_err,
+                    }
+                )
     return pd.DataFrame(rows, columns=COLUMNS)
 
 
@@ -117,9 +152,18 @@ def read_vizier_tsv(path: str) -> pd.DataFrame:
     data_rows = rest[2:]
     df = pd.DataFrame([[c.strip() for c in r] for r in data_rows], columns=header)
 
-    rename = {"Vmag": "V", "e_Vmag": "V_err", "B-V": "B_V", "e_B-V": "BV_err",
-              "U-B": "U_B", "e_U-B": "UB_err", "V-R": "V_R", "e_V-R": "VR_err",
-              "V-I": "V_I", "e_V-I": "VI_err"}
+    rename = {
+        "Vmag": "V",
+        "e_Vmag": "V_err",
+        "B-V": "B_V",
+        "e_B-V": "BV_err",
+        "U-B": "U_B",
+        "e_U-B": "UB_err",
+        "V-R": "V_R",
+        "e_V-R": "VR_err",
+        "V-I": "V_I",
+        "e_V-I": "VI_err",
+    }
     df = df.rename(columns={k: v for k, v in rename.items() if k in df.columns})
 
     for c in ("V", "B_V", "U_B", "V_R", "V_I", "V_err", "BV_err", "VR_err", "VI_err"):
@@ -130,8 +174,9 @@ def read_vizier_tsv(path: str) -> pd.DataFrame:
     for c in ("V_err", "BV_err", "VR_err", "VI_err"):
         df[c] = df[c].fillna(0.0)
 
-    from astropy.coordinates import SkyCoord
     import astropy.units as u
+    from astropy.coordinates import SkyCoord
+
     coords = SkyCoord(df["RAJ2000"], df["DEJ2000"], unit=(u.hourangle, u.deg))
     df["ra_deg"] = coords.ra.deg
     df["dec_deg"] = coords.dec.deg
@@ -139,7 +184,9 @@ def read_vizier_tsv(path: str) -> pd.DataFrame:
     if "SimbadName" in df.columns:
         has_simbad = df["SimbadName"].astype(str).str.strip() != ""
         df["star_name"] = df["Name"].astype(str).str.strip()
-        df.loc[has_simbad, "star_name"] = df.loc[has_simbad, "SimbadName"].astype(str).str.strip()
+        df.loc[has_simbad, "star_name"] = (
+            df.loc[has_simbad, "SimbadName"].astype(str).str.strip()
+        )
     else:
         df["star_name"] = df["Name"].astype(str).str.strip()
 
