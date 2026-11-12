@@ -858,7 +858,7 @@ class TestPipelineLabels:
         assert "isr:doDefect=False" in joined
 
     def test_overrides_outside_the_label_subset_are_dropped(self, tmp_path):
-        """F-0xx regression (jobs 90773/90775/90776): with pipeline_labels
+        """Regression: with pipeline_labels
         restricted to step1a + consolidateVisitSummary, the step1b
         makeAnalysis*RefMatchVisit overrides added by the gaia_ps1 overlay
         must be dropped (pipetask's qgraph build otherwise fails with
@@ -1020,7 +1020,7 @@ class TestResolvePipelineTaskLabels:
 
 class TestWriteLabelSubsetPipeline:
     """write_label_subset_pipeline: the derived YAML pipetask gets instead
-    of ``-p DRP.yaml#labels`` (cluster jobs 90912/90913: the fragment form
+    of ``-p DRP.yaml#labels`` (the fragment form
     fails with "InvalidStepsError: No step contains task(s)
     {'consolidateVisitSummary'}" because DRP.yaml's steps survive the
     subset while the step1b subset that held the task is dropped)."""

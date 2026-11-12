@@ -5,15 +5,12 @@ Inputs are VizieR TSV dumps of the Landolt catalogues and the list of observed
 fields with the exact raw OBJECT string of their frames. Output has the
 columns of landolt_catalog.csv.
 
-VizieR source discovery (CDS at Strasbourg is unreachable from this machine;
-the CfA mirror is used instead, https://vizier.cfa.harvard.edu). The
-`/table2` suffixes used in early drafts of the plan do not exist on this
-mirror ("Table 'table2' does not exist in catalog"); dropping the suffix and
-querying the catalogue id directly works:
+The VizieR dumps were fetched from the CfA mirror
+(https://vizier.cfa.harvard.edu) by catalogue id:
 
     for cat in J/AJ/133/2502 J/AJ/137/4186 J/AJ/146/131; do
       curl -sS -L "https://vizier.cfa.harvard.edu/viz-bin/asu-tsv?-source=$cat&-out.max=unlimited&-out.all" \
-        -o "/tmp/$(echo $cat | tr / _).tsv"
+        -o "$(echo $cat | tr / _).tsv"
     done
 
 Table ids that worked, and what they contributed to FIELDS:
@@ -35,7 +32,7 @@ astropy.coordinates.SkyCoord before the numeric cast.
 
 Usage:
     python scripts/analysis/build_landolt_catalog_ctio.py \
-        --landolt /tmp/J_AJ_133_2502.tsv /tmp/J_AJ_137_4186.tsv \
+        --landolt J_AJ_133_2502.tsv J_AJ_137_4186.tsv \
         --out scripts/config/landolt_validation/landolt_catalog_ctio.csv
 """
 from __future__ import annotations

@@ -1,5 +1,6 @@
 # ruff: noqa: F821
-# CTIO 1.0m / Y4KCam (2x2 binned) -- sparse-field calibrateImage config.
+# CTIO 1.0m / Y4KCam -- sparse-field calibrateImage config. Written for the 2x2
+# binned TraMoS frames; ctio1m_bin2 reaches it through its configs/ symlink.
 #
 # For short exposures of bright targets (the 2009 WASP-18 TraMoS nights are
 # 1 s frames with ~15 Gaia DR3 stars per 20' field). The framework default
@@ -11,8 +12,8 @@
 # accepts. Photometric matching then finds nothing and the frame is lost
 # ("MatcherFailure: No matches to use for photocal") -- 37% of 2009-10-28.
 #
-# Measured on 24 such frames (cluster job 90975, 2026-11-07): maxIter=3 alone
-# recovers 16 of 18 run (final fits 0.3-0.4" on 12-16 matches), whereas a
+# Measured on 24 such frames (2026-11-07): maxIter=3 alone recovers 20 of
+# the 24 (final fits 0.3-0.4" on 12-16 matches), whereas a
 # tighter search window (matcher.maxOffsetPix=60) or minMatchDistanceArcSec=0.5
 # recover 1-5 of 24. Everything else is the neutral default (loaded first so
 # the stage-1 measurement schema is complete).

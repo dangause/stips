@@ -47,16 +47,8 @@ def test_fit_band_recovers_known_terms():
 
 
 def test_fit_band_clips_outliers():
-    # NOTE: the brief's literal version of this test used a constant
-    # `secondary = primary - 1.0`, which makes the colour term
-    # `primary - secondary` identical for every star. That collapses the
-    # design matrix in np.polyfit(x, y, 1) (the slope and intercept columns
-    # become identical), so fit_band's sigma-clip discards every point on
-    # the first iteration and np.polyfit crashes on an empty array -- this
-    # is a data bug in the test, not a bug in fit_band. Varying the colour
-    # across stars (as the first test already does) keeps the same "one bad
-    # star among otherwise-perfect photometry" intent while making the
-    # linear fit well-posed.
+    # The colour must vary across stars: a constant primary - secondary makes
+    # the slope and intercept columns of the fit identical.
     primary = np.linspace(10, 15, 50)
     secondary = primary - np.linspace(0.5, 1.5, 50)
     landolt = primary + 0.1 - 0.3 * (primary - secondary)

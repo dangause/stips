@@ -17,7 +17,13 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
   set that keeps `ForcedPhotRaDec.yaml`, `DifferentialPhot.yaml` and `stips
   calib-metrics` working; set `pipeline_labels` to it explicitly for
   transit and variable-star campaigns (see `docs/time-series.md`). Not
-  auto-applied, so existing campaigns are unaffected.
+  auto-applied, so existing campaigns are unaffected. Per-task
+  `--config`/`--config-file` overrides addressed to a task label outside the
+  selected subset are dropped before the argv reaches `pipetask` (logged at
+  INFO). The subset runs as a derived pipeline YAML that imports
+  the selected labels with `importSteps: false`, because the
+  `DRP.yaml#labels` fragment form fails with `InvalidStepsError` for a
+  subset that cuts across steps.
 - `differentialPhot:minComparisonFraction` (default 0.7, a `RangeField` in
   [0.0, 1.0]): drops a visit when fewer than this fraction of the *usable*
   selected comparison stars (those with a valid reference flux) are
@@ -25,19 +31,44 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
   `stips run`'s `options.min_comparison_fraction` (default 0.7, validated
   to [0.0, 1.0] when the YAML is parsed) threads this through when running
   the full pipeline via the `stips` CLI.
+- Y4KCam (`ctio1m`) Gaia DR3 colour terms for B, V, R and I (`gaia*` in
+  `instruments/ctio1m/configs/colorterms.py`), fitted to 101 Landolt
+  standards with `scripts/analysis/fit_gaia_colorterms_landolt.py`, and
+  `vega_bands["gaia"] = ("b", "v", "r", "i")`.
+- Y4KCam physical filters `I_SOAR` (the SOAR Bessell I used by TraMoS in
+  2009), `BG40`, `u_Stromgren`, `C_Washington` and `M_Washington`, and the
+  2011 FILTERID spellings as aliases. Existing `ctio1m` repositories must be
+  re-bootstrapped (`stips bootstrap`, which re-registers the instrument)
+  before ingesting frames in these filters, or ingest fails with
+  `DataIdValueError`.
+- Y4KCam boresight offsets for October 2009 (+192" E, +308" N) and
+  2011 April 22-23 (+157" E, 148" S).
+- `instruments/ctio1m/configs/calibrateImage/ctio_sparse.py`: a
+  sparse-field `calibrateImage` config (`astrometry.maxIter=3`) for short
+  exposures with few reference stars, where later astrometry iterations
+  drift onto false solutions.
+- Landolt validation for Y4KCam: `scripts/config/ctio1m/pipeline_landolt_2011.yaml`,
+  the catalogue `scripts/config/landolt_validation/landolt_catalog_ctio.csv`
+  (built with `scripts/analysis/build_landolt_catalog_ctio.py`), and the
+  `STIPS_LANDOLT_CATALOG` environment variable, which selects the catalogue
+  whose `fits_object` names the science step's `object: landolt_validation`
+  filter matches.
+- Run configurations for the TraMoS WASP-18 (2009) and WASP-19 (2011)
+  Y4KCam nights under `scripts/config/wasp18/` and `scripts/config/wasp19/`.
+- `stips clean --step diffphot` and differentialPhot collections in the
+  run patterns of `stips clean`.
+
+### Changed
+- `ctio1m` runs in `refcat.mode: gaia` now apply the Gaia colour terms and
+  report B, V, R and I on the Vega system; they were uncorrected before.
+- Differential photometry writes to a timestamped collection,
+  `<prefix>/runs/<night>/differentialPhot/<ts>`, so a rerun no longer
+  fails on an existing output collection. Scripts that read the old
+  collection name need updating.
+- The `comp_sum` column of the differential light curve now holds the
+  flux-weighted comparison ratio (see Fixed).
 
 ### Fixed
-- `configs.science.pipeline_labels`: the science step always appended
-  per-task `--config`/`--config-file` overrides (e.g. `calibrateImage`,
-  `isr`, and the gaia/gaia_ps1 overlay's `makeAnalysisSingleVisitStar*RefMatchVisit`
-  overrides) regardless of the selected label subset, so a restricted
-  `pipeline_labels` (e.g. `TRANSIT_SCIENCE_LABELS`) made `pipetask qgraph`
-  fail immediately with `LookupError: There are no tasks labeled '<label>'
-  in the pipeline` whenever an override's task fell outside the subset.
-  Found on three CTIO cluster nights (jobs 90773, 90775, 90776). Overrides
-  addressed to a task label outside the selected subset are now dropped
-  before the argv reaches `pipetask`, logged at INFO; an unset
-  `pipeline_labels` (the full `stage1-single-visit` subset) is unaffected.
 - `differentialPhot` normalised comparisons by summing whichever selected
   comparison stars were detected in a frame, with no correction for the
   ensemble shrinking. A comparison star missing from a frame (poor seeing,
@@ -72,6 +103,12 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
   same finite, positive subset the reference flux uses, and a candidate
   with no valid measurement at all is excluded from ranking (with a
   warning naming it) rather than given an undefined rank.
+- `differentialPhot` rejects a NaN target flux in the reference visit,
+  which made the comparison flux window NaN and admitted every candidate,
+  and the `minComparisonFraction` threshold no longer rounds a float
+  product such as 0.28 * 25 up to the next integer.
+- A `pipeline_labels` entry that the pipeline does not define is a
+  known-fatal error, so the `calibrateImage` fallbacks no longer repeat it.
 
 ## [2.4.0] — 2026-10-12
 

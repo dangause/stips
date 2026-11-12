@@ -307,7 +307,9 @@ _BORESIGHT_OFFSET_TABLE = [
         "UT DATE-OBS extent 2009-10-28..2009-10-31 (local night 20091030's morning "
         "frame is UT 2009-10-31, one day past its local-night label); WASP-18 "
         "TraMoS run; same-run nights 20091024 and 20091027 (WASP-5, WASP-4) not "
-        "measured and not covered",
+        "measured. 20091024 is not covered; the frames of 20091027 taken after UT "
+        "midnight (UT 2009-10-28) fall inside this window, so that night would "
+        "be split between no offset and this one",
     ),
     (
         "2010-01-17",
@@ -330,10 +332,12 @@ _BORESIGHT_OFFSET_TABLE = [
         "and beyond the matcher's 300-binned-pixel (173\") reach, which is why the "
         'WASP-19 TraMoS night locked onto a ~6" false solution at 10-60 min per '
         "frame; UT DATE-OBS extent 2011-04-22..2011-04-23 (the local night's "
-        "evening + morning). The neighbouring unbinned Landolt nights 20110413, "
-        '20110424/25/28 and 20110502 measured <=94" (one or two frames each) and '
-        'the WASP-19 night 20111224 measured 99", all within tolerance, so they '
-        "stay uncovered",
+        'evening + morning). The binned WASP-19 night 20111224 measured 99", '
+        'within the 173" binned reach. The neighbouring unbinned Landolt nights '
+        '20110413, 20110424/25/28 and 20110502 measured <=94" (one or two frames '
+        'each), beyond the unbinned reach of 300 px x 0.289" = 87" for some '
+        'fields: 17 frames of 20110413 (fields 89-93" off) fail astrometry. '
+        "Those nights stay uncovered here",
     ),
 ]
 

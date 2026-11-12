@@ -7,8 +7,10 @@ config.data = {
     # the original synthetic fit. The synthetic I slope (c1=1.032) was badly wrong;
     # the Landolt fit (c1=0.352) cut I-band residual RMS 3x (0.22 -> 0.08 mag), and
     # its zeropoint c0=-0.379 independently matches Tonry+2012 I_C - i_P1 = -0.366.
-    # c0 is absorbed by the per-visit photometric zeropoint in calibrateImage; the
-    # c1 (color) slope is what removes color-dependent systematics. Refit with more
+    # c0 is not absorbed by the per-visit zeropoint: the zeropoint is fitted to
+    # the transformed reference magnitudes, so c0 sets the offset of the
+    # calibrated magnitudes (here PS1 AB to Landolt Vega). The c1 (color) slope
+    # removes color-dependent systematics. Refit with more
     # Landolt nights/fields to tighten further.
     "ps1*": ColortermDict(
         data={

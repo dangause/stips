@@ -71,11 +71,10 @@ worse, so the variable-star and transit configs use MONSTER.
 - `stips landolt-validate --catalog <csv> -o <csv>` compares calibrated
   magnitudes of Landolt standards with their published values. The
   [`landolt_validation`](https://github.com/dangause/stips/tree/main/scripts/config/landolt_validation)
-  config processes standard-star nights for it. The catalogue CSV file is
-  selected in order: explicit `--catalog` argument, then the `$STIPS_LANDOLT_CATALOG`
-  environment variable if set, else the repository's default Landolt catalogue.
-  The CSV requires columns `star_name`, `fits_object`, `ra_deg`, `dec_deg`, `V`, `B_V`,
-  `U_B`, `V_R`, `V_I`, `B`, `R`, `I`, and errors for each band; `fits_object` must
-  exactly match the raw `OBJECT` string in the FITS headers for each exposure.
+  config processes standard-star nights for it. `--catalog` is required. The
+  CSV has columns `star_name`, `fits_object`, `ra_deg`, `dec_deg`, `V`, `B_V`,
+  `U_B`, `V_R`, `V_I`, `B`, `R`, `I` and the errors `V_err`, `BV_err`, `VR_err`
+  and `VI_err`; `fits_object` must exactly match the raw `OBJECT` string in the
+  FITS headers for each exposure.
 - {doc}`template-colorterm-fit` measures the colour term between PS1
   templates and Nickel science images, which affects difference photometry.

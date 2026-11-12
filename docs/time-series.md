@@ -108,7 +108,7 @@ One config field controls this: `minComparisonFraction` (default 0.7, a
 `RangeField` in [0.0, 1.0]) drops a visit outright when fewer than that
 fraction of the *usable* selected comparison stars (those with a valid
 reference flux) are detected in it, rather than normalising against a
-degraded ensemble. A peak-count cut on comparison candidates (`maxComparisonPeak`) is not implemented (see the TODO at
+degraded ensemble. A cut on the peak counts of comparison candidates is not implemented (see the TODO at
 the candidate-selection site in `differentialPhot.py`) because the star
 catalogs available to this task carry no raw peak-pixel or non-linearity
 column to check against.
@@ -186,12 +186,13 @@ only *builds the templates that are missing* -- it does not overwrite
 existing ones unless `rebuild_templates: true` is set; (4) `_run_lightcurve_step`,
 which extracts a light curve from forced photometry or DIA sources (this
 is a separate step/output from the differential-photometry lightcurve,
-and runs regardless of `pipeline_type`); (5) `_run_differential_phot_step`,
+runs when `lightcurve.enabled` is set, whatever the `pipeline_type`); (5) `_run_differential_phot_step`,
 which resolves the same input collections from the existing repository and
 runs a `pipetask run` command equivalent to the one above (including
 `-c differentialPhot:minComparisonFraction=<options.min_comparison_fraction>`,
 default 0.7), then exports `lightcurves/differential_<object>.csv`; and
-(6) the transit (BLS) search over the resulting light curve. There is no
+(6) the transit (BLS) search over the resulting light curve, when
+`options.transit_search` is set. There is no
 dedicated `stips` CLI subcommand for the differential-photometry step
 alone today.
 

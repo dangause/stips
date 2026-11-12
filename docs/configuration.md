@@ -108,6 +108,7 @@ defaults (`packages/obs_stips/instrument_defaults/configs/`).
 | `pipeline_type` | `supernova` | `supernova`, `variable`, or `transit`; see {doc}`time-series` |
 | `period_search`, `period_min`, `period_max`, `period_samples` | `false`, `0.1`, `100`, `10000` | Lomb–Scargle period search; periods in days |
 | `transit_search`, `transit_duration_min`, `transit_duration_max` | on for `transit`, `0.5`, `6` | BLS transit search; durations in hours |
+| `min_comparison_fraction` | `0.7` | Differential photometry: drop a visit in which fewer than this fraction of the usable comparison stars are detected; see {doc}`time-series` |
 | `execution`, `site` | `local`, `local` | Run on a cluster; see {doc}`hpc` |
 | `container_image` | | Apptainer image, for the `singularity-slurm` site |
 | `bps_poll_interval`, `bps_timeout` | `5`, `7200` | Cluster status polling and per-stage timeout, in seconds |

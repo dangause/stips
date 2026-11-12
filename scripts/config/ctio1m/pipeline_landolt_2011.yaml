@@ -4,8 +4,8 @@
 # Nights are local calendar dates; every frame of the date is downloaded.
 #
 # refcat cones: `object: landolt_validation` has no single ra/dec, so
-# `stips run`'s refcat step (packages/stips/src/stips/core/run.py:1667-1674,
-# `_run_refcat_step`) returns early on `run_cfg.ra is None or run_cfg.dec is
+# `stips run`'s refcat step (`_run_refcat_step` in
+# packages/stips/src/stips/core/run.py) returns early on `run_cfg.ra is None or run_cfg.dec is
 # None` and fetches NO cone at all -- not even one -- before science. Same
 # conclusion as the Nickel Landolt config's note (scripts/config/
 # landolt_validation/pipeline_landolt.yaml) and docs/reference-catalogs.md's
@@ -13,7 +13,7 @@
 # fields, fetch each field first with `stips refcat fetch`"). Pre-fetch all
 # nine CTIO field centres (scripts/analysis/build_landolt_catalog_ctio.py
 # FIELDS) before `stips run`; `--mode` only accepts gaia_ps1/monster on the
-# CLI (packages/stips/src/stips/cli.py:1688-1693), so the default is used --
+# CLI (`stips refcat fetch` in packages/stips/src/stips/cli.py), so the default is used --
 # PS1 fetch is attempted and gracefully skipped south of dec -30 (refcat.py
 # `PS1FootprintError` handling), leaving Gaia-only coverage, which is what
 # `refcat.mode: gaia` below uses anyway.
