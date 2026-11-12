@@ -4,6 +4,8 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
 
 ## [Unreleased]
 
+## [2.5.0] — 2026-11-12
+
 ### Added
 - `configs.science.pipeline_labels` (string, optional, default unset): a
   comma-separated list of `DRP.yaml` task labels and/or subset names to run
