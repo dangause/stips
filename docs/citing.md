@@ -41,7 +41,3 @@ STIPS runs on the LSST Science Pipelines, and the tasks in `obs_stips`
 subclass classes from them. The pipelines are distributed under their own
 licenses, largely GPL-3.0. The STIPS container images bundle the pipelines, so
 the images as a whole are also subject to the pipelines' licenses.
-
-One file, `packages/obs_stips/python/lsst/obs/stips/calibCombine.py`, contains
-code derived from cp_pipe and is distributed under GPL-3.0-or-later; see its
-header.
