@@ -222,3 +222,10 @@ def test_clean_cli_invalid_step_plan_error_exits_nonzero():
         res = CliRunner().invoke(cli_module.cli, ["clean", "-y"])
     assert res.exit_code == 1
     assert "Unknown" in res.output
+
+
+def test_differential_phot_collections_are_cleanable():
+    assert "Nickel/runs/*/differentialPhot/*" in clean.run_patterns("Nickel")
+    assert clean.step_patterns("Nickel")["diffphot"] == [
+        "Nickel/runs/{night}/differentialPhot/*"
+    ]

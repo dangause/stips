@@ -32,6 +32,7 @@ def run_patterns(prefix: str) -> list[str]:
         CollectionNames.science_glob(prefix),
         f"{prefix}/runs/*/diff/*",
         CollectionNames.forced_phot_glob(prefix),
+        f"{prefix}/runs/*/differentialPhot/*",
         f"{prefix}/runs/*/coadd/*",
     ]
 
@@ -62,6 +63,7 @@ def step_patterns(prefix: str) -> dict[str, list[str]]:
         "science": [f"{prefix}/runs/{{night}}/processCcd/*"],
         "dia": [f"{prefix}/runs/{{night}}/diff/*"],
         "fphot": [CollectionNames.forced_phot_glob(prefix, night="{night}")],
+        "diffphot": [f"{prefix}/runs/{{night}}/differentialPhot/*"],
         "coadd": [f"{prefix}/runs/{{night}}/coadd/*"],
     }
 

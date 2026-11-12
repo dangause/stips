@@ -16,9 +16,10 @@ The fitted **output** lives at `instruments/nickel/configs/colorterms.py`
 For each band it least-squares fits
 `m_Nickel = m_primary + c0 + c1·(primary − secondary) [+ c2·(…)²]`
 against matched standard-star photometry, then emits a drop-in
-`ColortermDict` config. `c0` is absorbed by `calibrateImage`'s per-visit
-photometric zeropoint; `c1` (the color slope) removes color-dependent
-systematics. See the module docstring for the full algorithm.
+`ColortermDict` config. `c0` is not absorbed by `calibrateImage`'s per-visit
+photometric zeropoint, which is fitted to the transformed reference
+magnitudes: it sets the offset of the calibrated magnitudes, e.g. from PS1 AB
+to Landolt Vega. `c1` (the color slope) removes color-dependent systematics. See the module docstring for the full algorithm.
 
 ## Nickel recipe — the live `ps1*` block (Landolt fit)
 

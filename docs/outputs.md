@@ -54,6 +54,7 @@ for the reference profile.
 | `Nickel/runs/<night>/diff/<ts>/run` | Difference images and difference-image sources |
 | `Nickel/runs/<night>/forcedPhotRaDec/<ts>/diffim_<band>` | Forced photometry on difference images |
 | `Nickel/runs/<night>/forcedPhotRaDec/<ts>/visit_<band>` | Forced photometry on direct images |
+| `Nickel/runs/<night>/differentialPhot/<ts>` | Differential aperture photometry (`pipeline_type: transit`) |
 | `templates/ps1/<band>`, `templates/deep/tract<N>/<band>` | PS1 and coadd templates |
 
 `<ts>` is the timestamp of the run that wrote the collection, so rerunning a

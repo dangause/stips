@@ -9,6 +9,7 @@ transits, variable stars) where PSF-fitting fails.
 from __future__ import annotations
 
 import logging
+import math
 
 import numpy as np
 
@@ -96,7 +97,9 @@ def _select_comparisons(
     Returns list of indices into sources.
     """
     target_flux = sources[target_idx][aperture_col]
-    if target_flux <= 0:
+    # A NaN reference flux would make the flux window NaN, which every
+    # comparison below passes, so reject it (and None) explicitly.
+    if target_flux is None or not np.isfinite(target_flux) or target_flux <= 0:
         return []
 
     # Convert magnitude bounds to flux bounds
@@ -118,6 +121,12 @@ def _select_comparisons(
             continue
         if src.get("deblend_nChild", 0) > 0:
             continue
+        # TODO: also exclude candidates whose raw peak pixel exceeds ~45000 ADU.
+        # base_PixelFlags_flag_saturated(Center) does not fire even for
+        # comparison stars observed at 50-65 kADU, well above calibrateImage's
+        # linear/saturation range; catching that needs a peak-pixel column
+        # that single_visit_star_unstandardized does not carry, so it isn't
+        # implemented here.
         candidates.append((i, flux))
 
     # Sort by flux descending (brightest first = highest SNR)
@@ -125,21 +134,41 @@ def _select_comparisons(
     return [idx for idx, _ in candidates[:n_max]]
 
 
-def _compute_differential_flux(target_flux, target_err, comp_fluxes, comp_errs):
-    """Compute differential flux = target / sum(comparisons).
+def _compute_differential_flux(
+    target_flux, target_err, comp_fluxes, comp_errs, comp_ref_fluxes
+):
+    """Compute differential flux = target / comp_signal.
+
+    ``comp_signal`` is the *flux-weighted* ratio of sums of the comparison
+    stars present in this visit: ``sum(comp_fluxes) / sum(comp_ref_fluxes)``,
+    where ``comp_ref_fluxes[i]`` is star ``i``'s own reference flux (the
+    median of its raw aperture flux over the visits where it was detected;
+    see ``_process_catalogs``). This still removes the N_selected/N_present
+    inflation of the pre-fix sum-of-raw-flux normalisation: dropping a star
+    from a frame removes both its flux *and* its reference flux from the
+    ratio, rather than just shrinking the denominator. And whenever every
+    comparison star is present, ``sum(comp_ref_fluxes)`` is the same
+    per-visit constant on every visit, so ``comp_signal`` is just
+    ``sum(comp_fluxes)`` rescaled by that constant -- a factor
+    ``_normalize_lightcurve``'s median normalisation removes, reproducing
+    the pre-fix result exactly (see docs/time-series.md).
 
     Returns (diff_flux, diff_err) or (None, None) if no comparisons.
     """
     if not comp_fluxes:
         return None, None
-    comp_sum = sum(comp_fluxes)
-    if comp_sum <= 0:
+    ref_sum = sum(comp_ref_fluxes)
+    if ref_sum <= 0:
         return None, None
-    diff = target_flux / comp_sum
-    # Error propagation: sigma_diff = diff * sqrt((sigma_t/t)^2 + (sigma_c/c_sum)^2)
+    comp_signal = sum(comp_fluxes) / ref_sum
+    if comp_signal <= 0:
+        return None, None
+    diff = target_flux / comp_signal
+    # Error propagation: sigma_diff = diff * sqrt((sigma_t/t)^2 + (sigma_c/c_signal)^2)
     comp_err_sum = np.sqrt(sum(e**2 for e in comp_errs))
+    comp_signal_err = comp_err_sum / ref_sum
     diff_err = abs(diff) * np.sqrt(
-        (target_err / target_flux) ** 2 + (comp_err_sum / comp_sum) ** 2
+        (target_err / target_flux) ** 2 + (comp_signal_err / comp_signal) ** 2
     )
     return diff, diff_err
 
@@ -170,6 +199,7 @@ def _process_catalogs(
     max_rel_mag,
     min_detection_fraction,
     band_filter,
+    min_comparison_fraction=0.7,
 ):
     """Core processing logic (static for testability without Butler).
 
@@ -181,6 +211,10 @@ def _process_catalogs(
         Visit metadata table with visit, expMidptMJD, band columns.
         The output ``mjd`` is ``expMidptMJD``, the mid-exposure MJD on
         the TAI scale.
+    min_comparison_fraction : float
+        Drop a visit when fewer than this fraction of the *usable*
+        selected comparison stars (those with a valid reference flux) are
+        detected in it (ensemble-completeness guard).
 
     Returns
     -------
@@ -250,7 +284,6 @@ def _process_catalogs(
 
     # Step 2: Cross-match across all visits, assess stability
     n_visits = len(catalogs)
-    comp_detections = [0] * len(comp_indices)
     comp_flux_lists = [[] for _ in range(len(comp_indices))]
 
     for vid, cat in catalogs:
@@ -259,18 +292,42 @@ def _process_catalogs(
             cdec_deg = np.degrees(cdec)
             ci = _find_target(cat, cra_deg, cdec_deg, match_radius)
             if ci is not None:
-                comp_detections[j] += 1
                 comp_flux_lists[j].append(cat[ci][ap_col])
 
-    # Filter by detection fraction and stability
+    # Filter by detection fraction and stability. Both are computed over the
+    # same valid (finite, positive) subset used for the per-star reference
+    # flux below -- a single NaN, None or non-positive measurement must not
+    # corrupt this star's rms (np.std/np.mean of a list containing a NaN is
+    # NaN) or inflate its apparent detection count. Sorting with a NaN key
+    # is undefined (Python's sort uses "<" comparisons, which are always
+    # False against NaN), so an unfiltered NaN rms can silently rank the
+    # best comparison star -- and everything sorted after it -- out of the
+    # final ensemble. A candidate with no valid measurement at all can't
+    # be ranked (and couldn't be given a reference flux below either), so
+    # it is dropped here entirely, with a warning naming it.
     stable_comps = []
     for j in range(len(comp_indices)):
-        frac = comp_detections[j] / n_visits
+        valid_fluxes = [
+            f for f in comp_flux_lists[j] if f is not None and np.isfinite(f) and f > 0
+        ]
+        if not valid_fluxes:
+            ra_deg, dec_deg = (
+                np.degrees(comp_positions[j][0]),
+                np.degrees(comp_positions[j][1]),
+            )
+            _LOG.warning(
+                "Dropping comparison candidate at RA=%.6f Dec=%.6f: no "
+                "finite, positive aperture flux in any visit",
+                ra_deg,
+                dec_deg,
+            )
+            continue
+        frac = len(valid_fluxes) / n_visits
         if frac < min_detection_fraction:
             continue
-        if len(comp_flux_lists[j]) < 2:
+        if len(valid_fluxes) < 2:
             continue
-        rms = np.std(comp_flux_lists[j]) / np.mean(comp_flux_lists[j])
+        rms = np.std(valid_fluxes) / np.mean(valid_fluxes)
         stable_comps.append((j, rms))
 
     # Sort by RMS (most stable first), take top N
@@ -285,7 +342,6 @@ def _process_catalogs(
         )
         return Table()
 
-    final_comp_positions = [comp_positions[j] for j in final_comp_indices]
     _LOG.info(
         "Selected %d comparison stars (RMS range: %.4f-%.4f)",
         len(final_comp_indices),
@@ -297,7 +353,33 @@ def _process_catalogs(
         ),
     )
 
+    # Per-star reference flux: the median of each selected comparison star's
+    # aperture flux over the visits where it was detected (collected above,
+    # in Step 2, over the same `catalogs`), ignoring NaN, None and
+    # non-positive values -- a single bad measurement must not corrupt the
+    # reference used for every other visit. Step 2 already excluded (with
+    # a warning) any candidate with no valid measurement at all, so every
+    # star reaching final_comp_indices is guaranteed at least one valid
+    # value here.
+    final_comp_positions = [comp_positions[j] for j in final_comp_indices]
+    final_comp_ref_flux = [
+        np.median(
+            [
+                f
+                for f in comp_flux_lists[j]
+                if f is not None and np.isfinite(f) and f > 0
+            ]
+        )
+        for j in final_comp_indices
+    ]
+
     # Step 3: Compute differential flux per visit
+    min_present = max(
+        min_comparisons,
+        # The epsilon keeps float products such as 0.28 * 25 = 7.000000000000001
+        # from rounding up to the next integer.
+        math.ceil(min_comparison_fraction * len(final_comp_positions) - 1e-9),
+    )
     rows = []
     for vid, cat in catalogs:
         mjd = visit_mjd.get(vid, np.nan)
@@ -308,22 +390,38 @@ def _process_catalogs(
             continue
         target_flux = cat[ti][ap_col]
         target_err = cat[ti][ap_err_col]
-        if target_flux is None or target_flux <= 0:
+        if target_flux is None or not np.isfinite(target_flux) or target_flux <= 0:
             continue
-        # Find comparisons
-        c_fluxes, c_errs = [], []
-        for cra, cdec in final_comp_positions:
+        # Find comparisons present in this visit. final_comp_ref_flux
+        # entries are already guaranteed finite and positive (filtered
+        # above), so only this visit's own flux/error need checking here;
+        # a NaN, missing or non-positive value for a star in this visit
+        # just drops that star from this visit's ensemble, same as the
+        # star being undetected -- it is not removed from the ensemble.
+        # A NaN/None *error* (but valid flux) also drops the star for this
+        # visit rather than being coerced to 0, which would understate
+        # this visit's propagated uncertainty.
+        c_fluxes, c_errs, c_ref_fluxes = [], [], []
+        for (cra, cdec), ref_cf in zip(final_comp_positions, final_comp_ref_flux):
             ci = _find_target(cat, np.degrees(cra), np.degrees(cdec), match_radius)
-            if ci is not None:
-                cf = cat[ci][ap_col]
-                ce = cat[ci][ap_err_col]
-                if cf is not None and cf > 0:
-                    c_fluxes.append(cf)
-                    c_errs.append(ce if ce else 0.0)
-        if len(c_fluxes) < min_comparisons:
+            if ci is None:
+                continue
+            cf = cat[ci][ap_col]
+            ce = cat[ci][ap_err_col]
+            if cf is None or not np.isfinite(cf) or cf <= 0:
+                continue
+            if ce is None or not np.isfinite(ce):
+                continue
+            c_fluxes.append(cf)
+            c_errs.append(ce)
+            c_ref_fluxes.append(ref_cf)
+        # Ensemble-completeness guard: drop visits with too few comparisons
+        # present, rather than silently normalizing against a smaller
+        # ensemble (minComparisonFraction).
+        if len(c_fluxes) < min_present:
             continue
         diff, diff_err = _compute_differential_flux(
-            target_flux, target_err, c_fluxes, c_errs
+            target_flux, target_err, c_fluxes, c_errs, c_ref_fluxes
         )
         if diff is None:
             continue
@@ -335,7 +433,10 @@ def _process_catalogs(
                 "diff_flux": diff,
                 "diff_flux_err": diff_err,
                 "target_flux": target_flux,
-                "comp_sum": sum(c_fluxes),
+                # Flux-weighted ensemble ratio sum(c_i)/sum(ref_i)
+                # (dimensionless, ~1.0 for a complete, stable ensemble),
+                # not a raw flux sum -- see _compute_differential_flux.
+                "comp_sum": float(sum(c_fluxes) / sum(c_ref_fluxes)),
                 "n_comps": len(c_fluxes),
                 "aperture_radius_px": aperture_radius,
             }
@@ -459,6 +560,15 @@ if _HAS_LSST:
             default=0.8,
             doc="Comparison stars must be detected in this fraction of visits.",
         )
+        minComparisonFraction = pexConfig.RangeField(
+            dtype=float,
+            default=0.7,
+            min=0.0,
+            max=1.0,
+            doc="Drop a visit when fewer than this fraction of the "
+            "*usable* selected comparison stars (those with a valid "
+            "reference flux) are detected in it.",
+        )
         bandFilter = pexConfig.Field(
             dtype=str,
             default="",
@@ -556,6 +666,7 @@ if _HAS_LSST:
                 max_rel_mag=self.config.maxRelMag,
                 min_detection_fraction=self.config.minDetectionFraction,
                 band_filter=self.config.bandFilter,
+                min_comparison_fraction=self.config.minComparisonFraction,
             )
 
             if len(result_table) == 0:

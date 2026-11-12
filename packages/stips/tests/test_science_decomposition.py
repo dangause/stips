@@ -15,9 +15,21 @@ Covers the pieces extracted from the former ~690-line run():
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+
+#: Real DRP.yaml, used by tests that need to resolve ``pipeline_labels``
+#: against actual subsets/task labels (resolve_pipeline_task_labels),
+#: rather than the synthetic `_ctx` pipeline path (never written to disk).
+_DRP_YAML_PATH = (
+    Path(__file__).resolve().parents[2]
+    / "obs_stips"
+    / "instrument_defaults"
+    / "pipelines"
+    / "DRP.yaml"
+)
 
 
 def _profile() -> SimpleNamespace:
@@ -485,6 +497,9 @@ class TestIsFatalError:
             "OSError: [Errno 28] No space left on device",
             "lsst.daf.butler.MissingDatasetTypeError: Dataset type "
             "'the_monster_20250219_local' is not registered",
+            # a bad configs.science.pipeline_labels entry fails every fallback
+            "ValueError: pipeline_labels entry 'step9' is not a task label "
+            "or subset name in DRP.yaml",
         ],
     )
     def test_fatal(self, text):
@@ -751,6 +766,325 @@ def test_run_chains_fallback_runs_first(tmp_path, monkeypatch):
     # Members after [cmd, repo, parent] and before --mode: fallback first.
     members = chain[3 : chain.index("--mode")]
     assert members == ["X/run_fb1", "X/run"]
+
+
+class TestPipelineLabels:
+    """configs.science.pipeline_labels -> the ``-p`` argument pipetask sees."""
+
+    def test_default_runs_stage1_single_visit(self, tmp_path):
+        from stips.core import science
+
+        executor = _FakeExecutor(
+            run_result=SimpleNamespace(returncode=0, stdout="", stderr="")
+        )
+        ctx = _ctx(tmp_path, executor)
+        assert ctx.pipeline_labels == science._DEFAULT_SCIENCE_LABELS
+
+        science._attempt_config(ctx, 0, tmp_path / "primary.py", [])
+
+        qgraph_args = executor.calls[0]
+        i = qgraph_args.index("-p")
+        assert qgraph_args[i + 1] == f"{tmp_path / 'DRP.yaml'}#stage1-single-visit"
+
+    def test_custom_labels_select_the_subset_via_a_derived_pipeline(
+        self, tmp_path, monkeypatch
+    ):
+        import dataclasses
+        import shutil
+
+        import yaml
+        from stips.core import science
+
+        executor = _FakeExecutor(
+            run_result=SimpleNamespace(returncode=0, stdout="", stderr="")
+        )
+        ctx = dataclasses.replace(
+            _ctx(tmp_path, executor),
+            pipeline_labels=science.TRANSIT_SCIENCE_LABELS,
+        )
+        # Custom pipeline_labels now resolves task labels against the real
+        # pipeline YAML (to decide which overrides to drop -- see below), so
+        # the file at ctx.pipeline must be readable.
+        shutil.copyfile(_DRP_YAML_PATH, ctx.pipeline)
+
+        science._attempt_config(ctx, 0, tmp_path / "primary.py", [])
+
+        qgraph_args = executor.calls[0]
+        i = qgraph_args.index("-p")
+        # Not the "#labels" fragment form: see TestWriteLabelSubsetPipeline.
+        derived = Path(qgraph_args[i + 1])
+        assert derived.parent == ctx.qg_dir
+        assert derived.suffix == ".yaml"
+        doc = yaml.safe_load(derived.read_text())
+        assert doc["imports"][0]["include"] == [
+            "step1a-single-visit-detectors",
+            "consolidateVisitSummary",
+        ]
+
+    def test_default_labels_keep_all_overrides(self, tmp_path):
+        """Unlabelled (default) runs are unchanged: the gaia_ps1 overlay's
+        makeAnalysis*RefMatchVisit overrides, and the calibrateImage/isr
+        overrides, all still reach pipetask when pipeline_labels is unset."""
+        import dataclasses
+
+        from stips.core import science
+
+        executor = _FakeExecutor(
+            run_result=SimpleNamespace(returncode=0, stdout="", stderr="")
+        )
+        ctx = _ctx(tmp_path, executor)
+        ctx = dataclasses.replace(
+            ctx,
+            refcat_mode="gaia_ps1",
+            prof=SimpleNamespace(
+                name="Nickel",
+                collection_prefix="Nickel",
+                skymap_name="nickelRings-v1",
+                skymap_collection="skymaps/nickelRings",
+                night_to_dayobs_offset_days=1,
+                isr_overrides={"doDefect": False},
+                crosstalk=None,
+            ),
+        )
+        assert ctx.pipeline_labels == science._DEFAULT_SCIENCE_LABELS
+
+        science._attempt_config(ctx, 0, tmp_path / "primary.py", [])
+
+        qgraph_args = executor.calls[0]
+        joined = " ".join(qgraph_args)
+        assert "makeAnalysisSingleVisitStarAstrometricRefMatchVisit:" in joined
+        assert "makeAnalysisSingleVisitStarPhotometricRefMatchVisit:" in joined
+        assert f"calibrateImage:{tmp_path / 'primary.py'}" in joined
+        assert "isr:doDefect=False" in joined
+
+    def test_overrides_outside_the_label_subset_are_dropped(self, tmp_path):
+        """Regression: with pipeline_labels
+        restricted to step1a + consolidateVisitSummary, the step1b
+        makeAnalysis*RefMatchVisit overrides added by the gaia_ps1 overlay
+        must be dropped (pipetask's qgraph build otherwise fails with
+        "There are no tasks labeled '<label>' in the pipeline"), while the
+        step1a calibrateImage and isr overrides are kept."""
+        import dataclasses
+        import shutil
+
+        from stips.core import science
+
+        executor = _FakeExecutor(
+            run_result=SimpleNamespace(returncode=0, stdout="", stderr="")
+        )
+        ctx = _ctx(tmp_path, executor)
+        shutil.copyfile(_DRP_YAML_PATH, ctx.pipeline)
+        ctx = dataclasses.replace(
+            ctx,
+            pipeline_labels=science.TRANSIT_SCIENCE_LABELS,
+            refcat_mode="gaia_ps1",
+            prof=SimpleNamespace(
+                name="Nickel",
+                collection_prefix="Nickel",
+                skymap_name="nickelRings-v1",
+                skymap_collection="skymaps/nickelRings",
+                night_to_dayobs_offset_days=1,
+                isr_overrides={"doDefect": False},
+                crosstalk=None,
+            ),
+        )
+
+        science._attempt_config(ctx, 0, tmp_path / "primary.py", [])
+
+        qgraph_args = executor.calls[0]
+        joined = " ".join(qgraph_args)
+        assert "makeAnalysisSingleVisitStarAstrometricRefMatchVisit:" not in joined
+        assert "makeAnalysisSingleVisitStarPhotometricRefMatchVisit:" not in joined
+        assert f"calibrateImage:{tmp_path / 'primary.py'}" in joined
+        assert "isr:doDefect=False" in joined
+
+    def test_run_wires_science_cfg_pipeline_labels_into_the_attempt_context(
+        self, tmp_path, monkeypatch
+    ):
+        """science.run() must plumb science_cfg.pipeline_labels to the ctx
+        used for the pipetask invocation, not just the default."""
+        from stips.core import processing_log, provenance, science
+
+        profile = _profile()
+        resolve = tmp_path / "resolved.py"
+        resolve.write_text("# config\n")
+        config = SimpleNamespace(
+            repo=tmp_path,
+            instrument_dir=tmp_path / "instruments" / "nickel",
+            instrument_class="instruments.nickel.instrument.Instrument",
+            require_profile=lambda: profile,
+            resolve_config=lambda name: resolve,
+            resolve_pipeline=lambda name: tmp_path / "DRP.yaml",
+        )
+        primary = tmp_path / "primary.py"
+        primary.write_text("# calibrateImage config\n")
+        science_cfg = science.ScienceConfig(
+            calibrate_image=primary,
+            colorterms=resolve,
+            refcat_mode="monster",
+            pipeline_labels=science.TRANSIT_SCIENCE_LABELS,
+        )
+
+        seen_ctx = {}
+
+        def fake_attempt(ctx, index, tuned_config, prior_runs):
+            seen_ctx["pipeline_labels"] = ctx.pipeline_labels
+            return science._AttemptOutcome(run_collection="X/run", rc=0, quanta_ok=1)
+
+        monkeypatch.setattr(science, "_attempt_config", fake_attempt)
+
+        from stips.core import pipeline as pipeline_mod
+
+        monkeypatch.setattr(pipeline_mod, "run_butler", lambda args, cfg, **k: None)
+        monkeypatch.setattr(
+            pipeline_mod.butler_query, "list_instruments", lambda config: {}
+        )
+        monkeypatch.setattr(
+            science.butler_query,
+            "list_collections",
+            lambda *a, **k: ["Nickel/raw/20230519/20230519T000000Z"],
+        )
+        monkeypatch.setattr(
+            science.butler_query, "collection_exists", lambda *a, **k: True
+        )
+        monkeypatch.setattr(science, "_count_matching_exposures", lambda *a, **k: 5)
+        monkeypatch.setattr(
+            processing_log, "save_log", lambda plog, cfg: tmp_path / "l.json"
+        )
+        monkeypatch.setattr(provenance, "upsert_from_log", lambda *a, **k: None)
+
+        science.run(
+            "20230519",
+            config,
+            skip_coadds=True,
+            science_cfg=science_cfg,
+            use_fallbacks=True,
+            executor=SimpleNamespace(run_pipetask=lambda *a, **k: None),
+        )
+
+        assert seen_ctx["pipeline_labels"] == science.TRANSIT_SCIENCE_LABELS
+
+
+def test_transit_science_labels_exist_in_drp_yaml():
+    """Every label in TRANSIT_SCIENCE_LABELS must resolve against DRP.yaml --
+    either as a task label or as a subset name -- or pipetask's own
+    ``-p DRP.yaml#<labels>`` would fail at qgraph-build time."""
+    import yaml
+    from stips.core import science
+
+    drp_path = (
+        Path(__file__).resolve().parents[2]
+        / "obs_stips"
+        / "instrument_defaults"
+        / "pipelines"
+        / "DRP.yaml"
+    )
+    with open(drp_path) as f:
+        data = yaml.safe_load(f)
+
+    task_labels = set(data.get("tasks", {}))
+    subset_names = set(data.get("subsets", {}))
+    known = task_labels | subset_names
+
+    for label in science.TRANSIT_SCIENCE_LABELS.split(","):
+        assert (
+            label in known
+        ), f"{label!r} is not a task label or subset name in {drp_path}"
+
+
+class TestResolvePipelineTaskLabels:
+    """resolve_pipeline_task_labels against the real DRP.yaml."""
+
+    def test_transit_labels_resolve_to_step1a_plus_consolidate(self):
+        from stips.core import science
+
+        resolved = science.resolve_pipeline_task_labels(
+            _DRP_YAML_PATH, science.TRANSIT_SCIENCE_LABELS
+        )
+
+        assert resolved == {
+            "isr",
+            "calibrateImage",
+            "standardizeSingleVisitStar",
+            "analyzeCalibrateImageMetadataVisit",
+            "analyzeInitialSummaryStats",
+            "consolidateVisitSummary",
+        }
+
+    def test_unknown_label_raises(self):
+        from stips.core import science
+
+        with pytest.raises(ValueError, match="nosuchlabel"):
+            science.resolve_pipeline_task_labels(_DRP_YAML_PATH, "nosuchlabel")
+
+
+class TestWriteLabelSubsetPipeline:
+    """write_label_subset_pipeline: the derived YAML pipetask gets instead
+    of ``-p DRP.yaml#labels`` (the fragment form
+    fails with "InvalidStepsError: No step contains task(s)
+    {'consolidateVisitSummary'}" because DRP.yaml's steps survive the
+    subset while the step1b subset that held the task is dropped)."""
+
+    def test_writes_import_with_steps_dropped(self, tmp_path):
+        import yaml
+        from stips.core import science
+
+        out = science.write_label_subset_pipeline(
+            _DRP_YAML_PATH, science.TRANSIT_SCIENCE_LABELS, tmp_path / "x.yaml"
+        )
+
+        doc = yaml.safe_load(out.read_text())
+        assert out == tmp_path / "x.yaml"
+        assert "steps" not in doc
+        assert doc["imports"] == [
+            {
+                "location": str(_DRP_YAML_PATH.resolve()),
+                "include": [
+                    "step1a-single-visit-detectors",
+                    "consolidateVisitSummary",
+                ],
+                "importSteps": False,
+            }
+        ]
+
+    def test_attempt_passes_derived_pipeline_not_fragment(self, tmp_path):
+        import dataclasses
+        import shutil
+
+        from stips.core import science
+
+        executor = _FakeExecutor(
+            run_result=SimpleNamespace(returncode=0, stdout="", stderr="")
+        )
+        ctx = _ctx(tmp_path, executor)
+        shutil.copyfile(_DRP_YAML_PATH, ctx.pipeline)
+        ctx = dataclasses.replace(ctx, pipeline_labels=science.TRANSIT_SCIENCE_LABELS)
+
+        science._attempt_config(ctx, 0, tmp_path / "primary.py", [])
+
+        qgraph_args = executor.calls[0]
+        pipeline_arg = qgraph_args[qgraph_args.index("-p") + 1]
+        assert "#" not in pipeline_arg
+        assert pipeline_arg.endswith(".pipeline.yaml")
+        assert Path(pipeline_arg).exists()
+        assert "importSteps: false" in Path(pipeline_arg).read_text()
+
+    def test_default_labels_keep_the_fragment_form(self, tmp_path):
+        import shutil
+
+        from stips.core import science
+
+        executor = _FakeExecutor(
+            run_result=SimpleNamespace(returncode=0, stdout="", stderr="")
+        )
+        ctx = _ctx(tmp_path, executor)
+        shutil.copyfile(_DRP_YAML_PATH, ctx.pipeline)
+
+        science._attempt_config(ctx, 0, tmp_path / "primary.py", [])
+
+        qgraph_args = executor.calls[0]
+        pipeline_arg = qgraph_args[qgraph_args.index("-p") + 1]
+        assert pipeline_arg == f"{ctx.pipeline}#stage1-single-visit"
 
 
 class TestStockConfigDefault:

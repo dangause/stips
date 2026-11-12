@@ -28,11 +28,18 @@ The SA98 and other standard-field configs set no mode, so they use the
 default, MONSTER.
 
 With `gaia`, each band is calibrated against the nearest Gaia band (B against
-BP, V against G, R and I against RP). Colour terms would correct for the
-differences, but CTIO has none for Gaia or MONSTER, so treat absolute
-magnitudes from those modes as approximate: they sit on the reference
-catalog's AB zero point with the bandpass uncorrected. See
-{doc}`../../reference-catalogs`.
+BP, V against G, R and I against RP). `instruments/ctio1m/configs/
+colorterms.py` carries Gaia DR3 -> Y4KCam terms for B, V, R and I, a STIPS
+fit (2026-11-07, `scripts/analysis/fit_gaia_colorterms_landolt.py`) against
+101 Landolt standards (90 from `landolt_catalog_ctio.csv`, 11 from
+`landolt_catalog.csv`), with per-band rms of 0.104 (B), 0.030 (V), 0.028 (R)
+and 0.011 (I) mag after 3-sigma clipping. The fit is on the Gaia magnitudes
+as the AB system in which the refcat holds them; gaia-mode B, V, R and I
+output is on the Vega (Landolt) system, as declared in the profile's
+`vega_bands`. CTIO still has no terms for MONSTER, so treat absolute
+magnitudes from that mode as approximate: they sit on the reference
+catalog's AB zero point with the bandpass uncorrected.
+See {doc}`../../reference-catalogs`.
 
 ## Templates
 

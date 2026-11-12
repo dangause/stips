@@ -5,6 +5,58 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
 ## [Unreleased]
 
 ### Added
+- `configs.science.pipeline_labels` (string, optional, default unset): a
+  comma-separated list of `DRP.yaml` task labels and/or subset names to run
+  for the science step, in place of the full `stage1-single-visit` subset.
+  Rejected if it contains whitespace or `#`. On a measured Y4KCam night,
+  `isr` cost 37 s and `calibrateImage` 115 s per frame, but the whole
+  science step cost about 470 core-seconds per frame -- the difference is
+  the analysis_tools plot and metric tasks that transit/variable campaigns
+  never read. `stips.core.science.TRANSIT_SCIENCE_LABELS`
+  (`step1a-single-visit-detectors,consolidateVisitSummary`) is the minimal
+  set that keeps `ForcedPhotRaDec.yaml`, `DifferentialPhot.yaml` and `stips
+  calib-metrics` working; set `pipeline_labels` to it explicitly for
+  transit and variable-star campaigns (see `docs/time-series.md`). Not
+  auto-applied, so existing campaigns are unaffected. Per-task
+  `--config`/`--config-file` overrides addressed to a task label outside the
+  selected subset are dropped before the argv reaches `pipetask` (logged at
+  INFO). The subset runs as a derived pipeline YAML that imports
+  the selected labels with `importSteps: false`, because the
+  `DRP.yaml#labels` fragment form fails with `InvalidStepsError` for a
+  subset that cuts across steps.
+- `differentialPhot:minComparisonFraction` (default 0.7, a `RangeField` in
+  [0.0, 1.0]): drops a visit when fewer than this fraction of the *usable*
+  selected comparison stars (those with a valid reference flux) are
+  detected in it, rather than normalising against a degraded ensemble.
+  `stips run`'s `options.min_comparison_fraction` (default 0.7, validated
+  to [0.0, 1.0] when the YAML is parsed) threads this through when running
+  the full pipeline via the `stips` CLI.
+- Y4KCam (`ctio1m`) Gaia DR3 colour terms for B, V, R and I (`gaia*` in
+  `instruments/ctio1m/configs/colorterms.py`), fitted to 101 Landolt
+  standards with `scripts/analysis/fit_gaia_colorterms_landolt.py`, and
+  `vega_bands["gaia"] = ("b", "v", "r", "i")`.
+- Y4KCam physical filters `I_SOAR` (the SOAR Bessell I used by TraMoS in
+  2009), `BG40`, `u_Stromgren`, `C_Washington` and `M_Washington`, and the
+  2011 FILTERID spellings as aliases. Existing `ctio1m` repositories must be
+  re-bootstrapped (`stips bootstrap`, which re-registers the instrument)
+  before ingesting frames in these filters, or ingest fails with
+  `DataIdValueError`.
+- Y4KCam boresight offsets for October 2009 (+192" E, +308" N) and
+  2011 April 22-23 (+157" E, 148" S).
+- `instruments/ctio1m/configs/calibrateImage/ctio_sparse.py`: a
+  sparse-field `calibrateImage` config (`astrometry.maxIter=3`) for short
+  exposures with few reference stars, where later astrometry iterations
+  drift onto false solutions.
+- Landolt validation for Y4KCam: `scripts/config/ctio1m/pipeline_landolt_2011.yaml`,
+  the catalogue `scripts/config/landolt_validation/landolt_catalog_ctio.csv`
+  (built with `scripts/analysis/build_landolt_catalog_ctio.py`), and the
+  `STIPS_LANDOLT_CATALOG` environment variable, which selects the catalogue
+  whose `fits_object` names the science step's `object: landolt_validation`
+  filter matches.
+- Run configurations for the TraMoS WASP-18 (2009) and WASP-19 (2011)
+  Y4KCam nights under `scripts/config/wasp18/` and `scripts/config/wasp19/`.
+- `stips clean --step diffphot` and differentialPhot collections in the
+  run patterns of `stips clean`.
 - Light-curve CSVs (`lightcurve_<object>.csv`, `differential_<object>.csv`) carry a
   `time_scale` column, and `transit_results.json` a `time_scale` key, giving the
   scale of `mjd` and `t0`: `TAI`, the scale on which the Butler records exposure
@@ -20,6 +72,14 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
   It used the exposure start, so its times move later by half the exposure time
   (5-165 s for the 10-330 s SN 2020wnt exposures). Phases and periods are
   unaffected beyond that shift.
+- `ctio1m` runs in `refcat.mode: gaia` now apply the Gaia colour terms and
+  report B, V, R and I on the Vega system; they were uncorrected before.
+- Differential photometry writes to a timestamped collection,
+  `<prefix>/runs/<night>/differentialPhot/<ts>`, so a rerun no longer
+  fails on an existing output collection. Scripts that read the old
+  collection name need updating.
+- The `comp_sum` column of the differential light curve now holds the
+  flux-weighted comparison ratio (see Fixed).
 
 ### Removed
 - `lsst.obs.stips.calibCombine` (`StipsCalibCombineTask`,
@@ -32,6 +92,46 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
   only GPL-3.0 file left; STIPS is now BSD-3-Clause throughout.
 
 ### Fixed
+- `differentialPhot` normalised comparisons by summing whichever selected
+  comparison stars were detected in a frame, with no correction for the
+  ensemble shrinking. A comparison star missing from a frame (poor seeing,
+  clouds) inflated the target's differential flux by roughly
+  `n_selected / n_present` on that frame. Found while validating Y4KCam
+  WASP-19 transit light curves against Cortés-Zuleta et al. (2020): 63 of
+  379 frames on 2011-12-24 had 3–9 of 10 comparisons present, inflating
+  `norm_flux` by a factor matching `10 / n_comps` (median ratio 0.998, rms
+  0.8%). Each comparison star is now normalised to its own reference flux
+  (the median of its aperture flux over the visits where it is detected,
+  ignoring any NaN, None or non-positive measurement), and the per-visit
+  comparison signal is the flux-weighted ratio of sums of the comparisons
+  present, `Σ c_i / Σ ref_i`, rather than a raw flux sum or a mean of
+  relative fluxes: dropping a comparison from a visit removes both its
+  flux and its reference flux from the ratio, so a missing comparison
+  changes the signal's noise, not its level, and the pre-fix result is
+  reproduced exactly whenever every comparison is present (`Σ ref_i` is
+  then a per-visit constant that the light curve's median normalisation
+  removes). The `comp_sum` output column keeps its name but now holds this
+  flux-weighted ratio (≈1.0 for a complete, stable ensemble). A comparison
+  star with no valid (finite, positive) flux in any visit is dropped from
+  the ensemble entirely and no longer counts toward `minComparisonFraction`'s
+  completeness threshold; a star with only an occasional bad measurement
+  keeps its reference flux and is just skipped in the visits where that
+  measurement is unusable. The comparison-star *stability ranking* (which
+  picks the ensemble in the first place) was not NaN-safe either: an RMS
+  computed over a candidate's raw, unfiltered per-visit fluxes propagated
+  a single NaN into an undefined sort key, which could silently rank the
+  single most stable comparison star -- and any candidate sorted after it
+  -- out of the ensemble entirely, replacing it with a noisier one. The
+  ranking now computes both the detection fraction and the RMS over the
+  same finite, positive subset the reference flux uses, and a candidate
+  with no valid measurement at all is excluded from ranking (with a
+  warning naming it) rather than given an undefined rank.
+- `differentialPhot` rejects a NaN target flux in the reference visit,
+  which made the comparison flux window NaN and admitted every candidate,
+  and the `minComparisonFraction` threshold no longer rounds a float
+  product such as 0.28 * 25 up to the next integer.
+- A `pipeline_labels` entry that the pipeline does not define is a
+  known-fatal error, so the `calibrateImage` fallbacks no longer repeat it.
 - `scripts/config/hd189733/pipeline_transit.yaml`: the comment claiming the
   mid-transit matches the Agol et al. 2010 ephemeris to 0.0 min treated TAI
   times as UTC and that BJD_UTC ephemeris as BJD_TDB, two offsets that nearly

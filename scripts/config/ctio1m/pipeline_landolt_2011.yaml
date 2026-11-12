@@ -1,0 +1,61 @@
+# Y4KCam Landolt fields through the KPNO BVRI filters, Clem's 2011A-0049 nights
+# (unbinned) plus Kunder's SA 92 / SA 98 I frames. Calibration against Gaia DR3
+# with the gaia* colour terms; validated with `stips landolt-validate`.
+# Nights are local calendar dates; every frame of the date is downloaded.
+#
+# refcat cones: `object: landolt_validation` has no single ra/dec, so
+# `stips run`'s refcat step (`_run_refcat_step` in
+# packages/stips/src/stips/core/run.py) returns early on `run_cfg.ra is None or run_cfg.dec is
+# None` and fetches NO cone at all -- not even one -- before science. Same
+# conclusion as the Nickel Landolt config's note (scripts/config/
+# landolt_validation/pipeline_landolt.yaml) and docs/reference-catalogs.md's
+# "On-demand Gaia and Pan-STARRS" section ("For a config spanning several
+# fields, fetch each field first with `stips refcat fetch`"). Pre-fetch all
+# nine CTIO field centres (scripts/analysis/build_landolt_catalog_ctio.py
+# FIELDS) before `stips run`; `--mode` only accepts gaia_ps1/monster on the
+# CLI (`stips refcat fetch` in packages/stips/src/stips/cli.py), so the default is used --
+# PS1 fetch is attempted and gracefully skipped south of dec -30 (refcat.py
+# `PS1FootprintError` handling), leaving Gaia-only coverage, which is what
+# `refcat.mode: gaia` below uses anyway.
+#
+#   stips -c scripts/config/ctio1m/pipeline_landolt_2011.yaml refcat fetch --ra 253.451 --dec -56.004 --radius 0.2   # LSE259
+#   stips -c scripts/config/ctio1m/pipeline_landolt_2011.yaml refcat fetch --ra 122.625 --dec -40.513 --radius 0.2   # LSS982
+#   stips -c scripts/config/ctio1m/pipeline_landolt_2011.yaml refcat fetch --ra 208.187 --dec -48.151 --radius 0.2   # LSE44
+#   stips -c scripts/config/ctio1m/pipeline_landolt_2011.yaml refcat fetch --ra 127.986 --dec -53.675 --radius 0.2   # WD0830-535
+#   stips -c scripts/config/ctio1m/pipeline_landolt_2011.yaml refcat fetch --ra 179.012 --dec -48.678 --radius 0.2   # WD1153-484
+#   stips -c scripts/config/ctio1m/pipeline_landolt_2011.yaml refcat fetch --ra 164.565 --dec -38.722 --radius 0.2   # WD1056-384
+#   stips -c scripts/config/ctio1m/pipeline_landolt_2011.yaml refcat fetch --ra 305.706 --dec -43.492 --radius 0.2   # MCT2019-4339
+#   stips -c scripts/config/ctio1m/pipeline_landolt_2011.yaml refcat fetch --ra 13.319 --dec 0.808 --radius 0.2     # SA92 I
+#   stips -c scripts/config/ctio1m/pipeline_landolt_2011.yaml refcat fetch --ra 103.041 --dec -0.417 --radius 0.2   # SA98 I
+env:
+  REPO: "/lustre/cv/users/dgause/stips/repos/landolt_ctio_repo"
+  STACK_DIR: "/opt/lsst/software/stack"
+  INSTRUMENT_DIR: "/opt/stips/instruments/ctio1m"
+  RAW_PARENT_DIR: "/lustre/cv/users/dgause/stips/raw"
+  REFCAT_REPO: "/lustre/cv/users/dgause/stips/refcats"
+object: "landolt_validation"
+bands: ["b", "v", "r", "i"]
+refcat:
+  mode: gaia
+  radius_deg: 0.2
+template:
+  type: none
+science:
+  nights:
+    - 20110413
+    - 20110424
+    - 20110425
+    - 20110428
+    - 20110502
+    - 20111019
+    - 20111021
+options:
+  jobs: 22
+  skip_calibs: false
+  skip_science: false
+  skip_dia: true
+  forced_phot: false
+  continue_on_error: true
+  use_fallbacks: true
+lightcurve:
+  enabled: false

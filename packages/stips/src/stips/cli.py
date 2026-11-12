@@ -834,7 +834,7 @@ def bootstrap(ctx: click.Context, config: cfg_module.Config) -> None:
     "--step",
     "steps",
     multiple=True,
-    type=click.Choice(["calibs", "science", "dia", "fphot", "coadd"]),
+    type=click.Choice(["calibs", "science", "dia", "fphot", "diffphot", "coadd"]),
     help="Only clean this step (repeatable, e.g. --step calibs --step science)",
 )
 @click.option(

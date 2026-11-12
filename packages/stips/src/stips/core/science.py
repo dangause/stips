@@ -8,6 +8,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import yaml
+
 from stips.core import butler_query, quanta_report
 from stips.core.pipeline import (
     REFCATS_CHAIN,
@@ -33,6 +35,183 @@ if TYPE_CHECKING:
     from stips.core.config import Config
 
 log = logging.getLogger(__name__)
+
+#: pipetask label expression the science step has always run: the full
+#: stage-1 single-visit cascade (per-detector, per-visit, per-tract and
+#: global analysis_tools plot/metric tasks). Used whenever
+#: ``configs.science.pipeline_labels`` is unset, so existing campaigns are
+#: unaffected.
+_DEFAULT_SCIENCE_LABELS = "stage1-single-visit"
+
+#: Minimal DRP.yaml label set for transit and variable-star campaigns.
+#:
+#: ``step1a-single-visit-detectors`` runs isr + calibrateImage (producing
+#: ``preliminary_visit_image`` and ``single_visit_star_unstandardized``,
+#: which ForcedPhotRaDec.yaml and DifferentialPhot.yaml read) plus the two
+#: per-detector analysis_tools tasks that feed
+#: ``calibrateImage_metadata_metrics`` (read by ``stips calib-metrics``).
+#: ``consolidateVisitSummary`` additionally produces
+#: ``preliminary_visit_summary``, read by DifferentialPhot.yaml's
+#: makeVisitTable and by ``stips calib-metrics``. Dropped: the remaining
+#: step1b analysis_tools tasks (ref-match plots/metrics -- optional,
+#: gated behind ``extract_calib_metrics.py --include-refcat-metrics``) and
+#: all of step1c/step1d (isolated-star association, survey-wide tables and
+#: plots), which the transit/variable lightcurve path never reads. See
+#: docs/time-series.md for the measured cost this drops.
+TRANSIT_SCIENCE_LABELS = "step1a-single-visit-detectors,consolidateVisitSummary"
+
+
+def validate_pipeline_labels(labels: str) -> str:
+    """Reject a ``pipeline_labels`` string containing whitespace or ``#``.
+
+    pipetask's own ``-p path#label1,label2`` syntax splits the pipeline
+    expression on ``#``; an embedded ``#`` (or whitespace, which pipetask
+    would otherwise choke on less legibly) would silently build a broken
+    pipeline expression instead of failing at config-parse time.
+    """
+    if re.search(r"[\s#]", labels):
+        raise ValueError(
+            "configs.science.pipeline_labels must not contain whitespace "
+            f"or '#', got {labels!r}"
+        )
+    return labels
+
+
+def resolve_pipeline_task_labels(pipeline_yaml_path, labels: str) -> set[str]:
+    """Expand a pipetask ``#label1,label2`` selector into its task labels.
+
+    Mirrors how pipetask itself resolves ``-p pipeline.yaml#labels`` at
+    qgraph-build time: each comma-separated entry in ``labels`` is either a
+    ``subsets:`` name (expanded to the task labels in its ``subset:`` list)
+    or a task label already (kept as-is). Used to decide which per-task
+    ``--config``/``--config-file`` overrides pipetask will accept for a
+    given ``pipeline_labels`` selection -- pipetask rejects an override
+    addressed to a task label outside the selected subset.
+
+    Args:
+        pipeline_yaml_path: Path to the pipeline YAML (e.g. DRP.yaml).
+        labels: Comma-separated subset names and/or task labels, as passed
+            to ``configs.science.pipeline_labels``.
+
+    Returns:
+        The set of task labels covered by ``labels``.
+
+    Raises:
+        ValueError: if an entry in ``labels`` is neither a task label nor a
+            subset name defined in the pipeline YAML.
+    """
+    with open(pipeline_yaml_path) as f:
+        data = yaml.safe_load(f)
+
+    task_labels = set(data.get("tasks", {}) or {})
+    subsets = data.get("subsets", {}) or {}
+
+    resolved: set[str] = set()
+    for label in labels.split(","):
+        label = label.strip()
+        if label in subsets:
+            subset = subsets[label]
+            members = subset["subset"] if isinstance(subset, dict) else subset
+            resolved.update(members)
+        elif label in task_labels:
+            resolved.add(label)
+        else:
+            raise ValueError(
+                f"pipeline_labels entry {label!r} is not a task label or "
+                f"subset name in {pipeline_yaml_path}"
+            )
+    return resolved
+
+
+def write_label_subset_pipeline(pipeline_yaml_path, labels: str, out_path) -> Path:
+    """Write a derived pipeline YAML that imports only ``labels`` from
+    ``pipeline_yaml_path`` and drops the parent's ``steps:`` definitions.
+
+    Why not ``-p DRP.yaml#labels``: the ``#labels`` fragment subsets the
+    pipeline in pipe_base's DROP mode, which removes every ``subsets:``
+    entry that lost a member but keeps the parent's ``steps:`` list. A
+    selection that cuts across a step (e.g. ``TRANSIT_SCIENCE_LABELS`` =
+    all of step1a plus ``consolidateVisitSummary`` from step1b) therefore
+    leaves a task that belongs to no surviving step, and pipetask's
+    ``PipelineGraph._resolve_step_flow`` rejects the graph with
+    ``InvalidStepsError: No step contains task(s) {...}``. An ``imports:``
+    entry with ``importSteps: false`` performs the same label subset but
+    discards the steps, which only matter for BPS step-wise submission.
+
+    Args:
+        pipeline_yaml_path: The parent pipeline YAML (e.g. DRP.yaml).
+        labels: Comma-separated subset names and/or task labels, as passed
+            to ``configs.science.pipeline_labels``.
+        out_path: Where to write the derived YAML.
+
+    Returns:
+        ``out_path`` as a `Path`.
+    """
+    pipeline_yaml_path = Path(pipeline_yaml_path)
+    out_path = Path(out_path)
+    include = [label.strip() for label in labels.split(",") if label.strip()]
+    doc = {
+        "description": (
+            f"{pipeline_yaml_path.name} restricted to pipeline_labels "
+            f"{labels!r} (steps dropped; written by stips.core.science)"
+        ),
+        "imports": [
+            {
+                "location": str(pipeline_yaml_path.resolve()),
+                "include": include,
+                "importSteps": False,
+            }
+        ],
+    }
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(out_path, "w") as f:
+        yaml.safe_dump(doc, f, sort_keys=False)
+    return out_path
+
+
+#: ``pipetask qgraph`` flags that carry a per-task override as their next
+#: argument, in ``<label>:<rest>`` form (``-C``/``--config-file label:file``,
+#: ``-c``/``--config label:key=value``).
+_TASK_OVERRIDE_FLAGS = frozenset({"--config-file", "-C", "--config", "-c"})
+
+
+def _drop_overrides_outside_labels(
+    args: list[str], allowed_labels: set[str]
+) -> list[str]:
+    """Drop ``<flag> <label>:<rest>`` pairs whose label isn't in ``allowed_labels``.
+
+    pipetask rejects any ``--config``/``--config-file`` override addressed
+    to a task label that isn't part of the ``#labels`` subset selected on
+    ``-p``, so once ``pipeline_labels`` restricts the graph to a subset,
+    overrides for tasks outside it must be dropped before the argv ever
+    reaches pipetask. Logs each dropped override at INFO.
+    """
+    filtered: list[str] = []
+    i = 0
+    n = len(args)
+    while i < n:
+        flag = args[i]
+        if flag in _TASK_OVERRIDE_FLAGS and i + 1 < n:
+            spec = args[i + 1]
+            label = spec.split(":", 1)[0]
+            if label not in allowed_labels:
+                log.info(
+                    "pipeline_labels restricts this run to %s; dropping %s %s "
+                    "(task label %r is outside the selected subset)",
+                    sorted(allowed_labels),
+                    flag,
+                    spec,
+                    label,
+                )
+                i += 2
+                continue
+            filtered.append(flag)
+            filtered.append(spec)
+            i += 2
+            continue
+        filtered.append(flag)
+        i += 1
+    return filtered
 
 
 def _night_is_boresight_covered(prof, night):
@@ -119,6 +298,11 @@ class ScienceConfig:
     # the tuned calibrateImage config. "monster" uses the DRP.yaml default.
     refcat_mode: str = "monster"
 
+    # Comma-separated DRP.yaml task labels and/or subset names to run
+    # instead of the full "stage1-single-visit" subset (e.g.
+    # TRANSIT_SCIENCE_LABELS). None/"" means unchanged, existing behaviour.
+    pipeline_labels: str | None = None
+
     @classmethod
     def default(cls, config: "Config") -> "ScienceConfig":
         """Create default config with standard paths (resolver-aware).
@@ -162,27 +346,38 @@ class ScienceResult:
     quanta_failed: int = 0
 
 
-def _read_landolt_target_names() -> list[str]:
-    """Read fits_object names from scripts/config/landolt_validation/landolt_catalog.csv.
+def _read_landolt_target_names(catalog: Path | None = None) -> list[str]:
+    """Distinct ``fits_object`` names from a Landolt catalogue CSV.
 
-    Used by run() when object='landolt_validation' to filter the science qgraph
-    to just Landolt-field exposures.
+    Used by run() when object='landolt_validation' to filter the science
+    qgraph to Landolt-field exposures. The catalogue is, in order:
+    ``catalog``, ``$STIPS_LANDOLT_CATALOG``, then the repository's
+    ``scripts/config/landolt_validation/landolt_catalog.csv``.
     """
     import csv
+    import os
 
-    # science.py → core/ → stips/ → src/ → stips/ → packages/ → repo root
-    #   (parents[0]=core, [1]=stips, [2]=src, [3]=stips, [4]=packages, [5]=root)
-    repo_root = Path(__file__).resolve().parents[5]
-    catalog = (
-        repo_root / "scripts" / "config" / "landolt_validation" / "landolt_catalog.csv"
-    )
+    if catalog is None:
+        env = os.environ.get("STIPS_LANDOLT_CATALOG")
+        if env:
+            catalog = Path(env)
+        else:
+            repo_root = Path(__file__).resolve().parents[5]
+            catalog = (
+                repo_root
+                / "scripts"
+                / "config"
+                / "landolt_validation"
+                / "landolt_catalog.csv"
+            )
     if not catalog.exists():
+        log.warning("Landolt catalogue %s not found", catalog)
         return []
     names: list[str] = []
     with open(catalog, newline="") as fh:
         for row in csv.DictReader(fh):
             name = (row.get("fits_object") or "").strip()
-            if name:
+            if name and name not in names:
                 names.append(name)
     return names
 
@@ -462,6 +657,9 @@ _FATAL_ERROR_PATTERNS: tuple[str, ...] = (
     # in principle be stopped early here; no shipped config mixes such configs
     # in one fallback chain.
     "MissingDatasetTypeError",
+    # a configs.science.pipeline_labels entry the pipeline does not define
+    # (resolve_pipeline_task_labels); every fallback would fail the same way.
+    "is not a task label or subset name",
 )
 
 
@@ -570,6 +768,7 @@ class _AttemptContext:
     qg_dir: Path
     jobs: int
     log_file: Path | None
+    pipeline_labels: str = _DEFAULT_SCIENCE_LABELS
 
 
 def _attempt_config(
@@ -657,6 +856,36 @@ def _attempt_config(
         # pipeline; the same overrides feed the calib-build ISR (calibs.py).
         post_query_args = list(isr_config_args(ctx.prof))
 
+        # When pipeline_labels restricts the graph to a subset (e.g. the
+        # transit/variable-star TRANSIT_SCIENCE_LABELS), drop any per-task
+        # override above addressed to a task label outside that subset
+        # (e.g. the step1b makeAnalysis*RefMatchVisit overrides added by the
+        # gaia/gaia_ps1 overlay branch above) -- pipetask's own qgraph build
+        # otherwise fails immediately with "There are no tasks labeled
+        # '<label>' in the pipeline". A still-default pipeline_labels covers
+        # every task these overrides can name, so nothing is dropped and
+        # behaviour is unchanged.
+        pipeline_arg = f"{ctx.pipeline}#{ctx.pipeline_labels}"
+        if ctx.pipeline_labels != _DEFAULT_SCIENCE_LABELS:
+            allowed_labels = resolve_pipeline_task_labels(
+                ctx.pipeline, ctx.pipeline_labels
+            )
+            config_file_args = _drop_overrides_outside_labels(
+                config_file_args, allowed_labels
+            )
+            post_query_args = _drop_overrides_outside_labels(
+                post_query_args, allowed_labels
+            )
+            # A cross-step label subset is only accepted by pipetask when
+            # the parent's steps are dropped; see write_label_subset_pipeline.
+            pipeline_arg = str(
+                write_label_subset_pipeline(
+                    ctx.pipeline,
+                    ctx.pipeline_labels,
+                    qg_science.with_suffix(".pipeline.yaml"),
+                )
+            )
+
         # For fallback attempts, build a qgraph that excludes quanta
         # whose outputs already exist in any prior successful RUN.
         # --skip-existing-in filters at graph-build time based on _metadata
@@ -674,7 +903,7 @@ def _attempt_config(
         summary_file = qg_science.with_suffix(".summary.json")
         stage = PipetaskStage(
             repo=repo,
-            pipeline=f"{ctx.pipeline}#stage1-single-visit",
+            pipeline=pipeline_arg,
             inputs=f"{ctx.raw_run},{ctx.cols.calib_chain},{REFCATS_CHAIN},{ctx.prof.skymap_collection}",
             output_parent=ctx.cols.science_parent,
             output_run=output_run,
@@ -1175,6 +1404,7 @@ def run(
         qg_dir=qg_dir,
         jobs=jobs,
         log_file=log_file,
+        pipeline_labels=science_cfg.pipeline_labels or _DEFAULT_SCIENCE_LABELS,
     )
     attempts = _run_config_attempts(ctx, configs_to_try, use_fallbacks, plog)
 
