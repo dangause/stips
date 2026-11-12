@@ -22,11 +22,14 @@ authors:
     orcid: "https://orcid.org/0000-0003-1809-6920"
 repository-code: "https://github.com/dangause/stips"
 url: "https://stips-docs.readthedocs.io"
-doi: "10.5281/zenodo.23243456"
+doi: "10.5281/zenodo.24167594"
 identifiers:
   - type: doi
+    value: "10.5281/zenodo.24167594"
+    description: "This version (v2.5.0)"
+  - type: doi
     value: "10.5281/zenodo.23320419"
-    description: "This version (v2.4.0)"
+    description: "v2.4.0"
   - type: doi
     value: "10.5281/zenodo.23243456"
     description: "All versions (concept DOI; resolves to the latest)"
