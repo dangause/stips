@@ -22,7 +22,7 @@ This guide walks through that fork end to end, using the reference instrument
 | Package | Import root | What it provides |
 |---------|-------------|------------------|
 | `stips` | `stips` | The `stips` CLI + tooling. Exposes `stips.InstrumentProfile`, `stips.Site`, `stips.Field`, `stips.hook`. Imports the active instrument's profile **by name** (`instruments.<x>.profile`, for the dir `INSTRUMENT_DIR` names), and drives all collection names / Butler queries / skymap from the profile. |
-| `obs_stips` | `lsst.obs.stips` | Generic LSST glue. The `lsst.obs.stips.binding` module binds your profile onto the generic classes when `instruments/<x>/instrument.py` is imported; Butler registers `instruments.<x>.instrument.Instrument`. Also ships the shared/generic pipeline tasks (`StipsCalibCombineTask`, `lsst.obs.stips.tasks.*`). |
+| `obs_stips` | `lsst.obs.stips` | Generic LSST glue. The `lsst.obs.stips.binding` module binds your profile onto the generic classes when `instruments/<x>/instrument.py` is imported; Butler registers `instruments.<x>.instrument.Instrument`. Also ships the shared/generic pipeline tasks (`lsst.obs.stips.tasks.*`). |
 
 **The fork — you DO write this (data, not code):**
 
@@ -502,9 +502,7 @@ searches `calibrateImage` parameters to produce your `tuned_configs/` (recipe:
   `$STIPS_DEFAULTS` and `$INSTRUMENT_DIR` are exported by stack activation and
   are safe to reference by path.
 - **Generic tasks stay generic.** Pipeline steps that reference
-  `lsst.obs.stips.tasks.*` or `lsst.obs.stips.calibCombine.StipsCalibCombineTask`
-  are framework tasks — keep those references as-is. (The robust calib-combine
-  that Nickel used to ship is now a generic obs_stips task.)
+  `lsst.obs.stips.tasks.*` are framework tasks — keep those references as-is.
 - **Pipelines name no instrument class.** The instrument comes from the
   registry (`-d instrument='<name>'` in every query STIPS runs).
 - **Genuinely instrument-specific tasks (rare).** If your telescope needs a

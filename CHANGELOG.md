@@ -15,13 +15,21 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
   `CITATION.cff`, `.zenodo.json`, the package metadata and the container image
   labels). Releases up to and including v2.4.0 remain GPL-3.0-or-later. The
   vendored Lick archive client keeps its own BSD 3-Clause license.
-  `packages/obs_stips/python/lsst/obs/stips/calibCombine.py` contains code
-  derived from cp_pipe and stays GPL-3.0-or-later; its header now says so.
 - `stips lightcurve` time-stamps each measurement at the middle of its exposure,
   as the differential-photometry and DIA-plot tasks already did (`expMidptMJD`).
   It used the exposure start, so its times move later by half the exposure time
   (5-165 s for the 10-330 s SN 2020wnt exposures). Phases and periods are
   unaffected beyond that shift.
+
+### Removed
+- `lsst.obs.stips.calibCombine` (`StipsCalibCombineTask`,
+  `StipsCalibCombineByFilterTask`). The bias and flat pipelines use cp_pipe's
+  `CalibCombineTask` and `CalibCombineByFilterTask` again. The subclasses only
+  replaced `combineHeaders`, to survive inputs without a valid observation
+  date; the Nickel and Y4KCam ISR outputs carry valid dates, so the fallback
+  never ran, and where it would have run it labelled UTC header dates as TAI
+  or stamped the current time. The module was derived from cp_pipe and was the
+  only GPL-3.0 file left; STIPS is now BSD-3-Clause throughout.
 
 ### Fixed
 - `scripts/config/hd189733/pipeline_transit.yaml`: the comment claiming the

@@ -1,12 +1,10 @@
 description: >
-  Nickel telescope bias calibration construction.
-  Uses StipsCalibCombineTask to handle missing VisitInfo dates
-  in ISR outputs (the standard CalibCombineTask crashes on invalid dates).
+  Bias construction with the cp_pipe tasks.
 imports:
   - location: $CP_PIPE_DIR/pipelines/_ingredients/cpBias.yaml
 tasks:
   cpBiasCombine:
-    class: lsst.obs.stips.calibCombine.StipsCalibCombineTask
+    class: lsst.cp.pipe.CalibCombineTask
     config:
       connections.inputExpHandles: 'cpBiasIsrExp'
       connections.outputData: 'bias'
