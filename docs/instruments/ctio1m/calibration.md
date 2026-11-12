@@ -5,6 +5,19 @@
 signature removal, which the profile's `isr_overrides` switch on for both the
 calibration builds and science, so they are corrected consistently.
 
+## Bias/flat filters
+
+Bias (and sometimes flat) frames are taken with the filter wheel parked
+wherever it happened to stop, not necessarily on a science filter. Because
+Y4KCam has no "clear" position, an unrecognized `FILTERID` is a hard error
+({doc}`index`): if every bias on a night is parked at a filter the profile
+doesn't know, the night has zero ingestable biases and its whole calibration
+build fails, taking the science frames down with it (seen on the 2011 Landolt
+standard-field nights, where the wheel also parked at `BG 40`, `u stromg
+Tololo`, `C Wash` and `M Wash`). This is why the filter table in {doc}`index`
+lists every spelling the wheel has ever held, including filters STIPS never
+calibrates science through.
+
 ## Amplifiers and overscan
 
 Each quadrant is read by its own amplifier toward the centre of the chip,

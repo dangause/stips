@@ -4,7 +4,7 @@
 
 [![CI](https://github.com/dangause/stips/actions/workflows/ci.yml/badge.svg)](https://github.com/dangause/stips/actions/workflows/ci.yml)
 [![Docs](https://readthedocs.org/projects/stips-docs/badge/?version=latest)](https://stips-docs.readthedocs.io/en/latest/)
-[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
+[![License: BSD-3-Clause](https://img.shields.io/badge/License-BSD_3--Clause-blue.svg)](LICENSE)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23243456.svg)](https://doi.org/10.5281/zenodo.23243456)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](pyproject.toml)
 
@@ -49,7 +49,21 @@ Find full citation information [here](./CITATION.cff).
 
 ## License
 
-STIPS is distributed under the [GPL-3.0-or-later](LICENSE) license.
+STIPS is distributed under the [BSD 3-Clause License](LICENSE). Releases up
+to and including v2.4.0 were distributed under GPL-3.0-or-later and remain
+under that license.
+
+The Lick archive client vendored in
+`instruments/nickel/vendor/lick_searchable_archive/` is distributed under its
+own BSD 3-Clause license (Copyright 2022 UC Observatories); see
+[its LICENSE](instruments/nickel/vendor/lick_searchable_archive/LICENSE).
+
+### Notice
+
+STIPS runs on the LSST Science Pipelines, and the tasks in `obs_stips`
+subclass classes from them. The pipelines are distributed under their own
+licenses, largely GPL-3.0. The STIPS container images bundle the pipelines, so
+the images as a whole are also subject to the pipelines' licenses.
 
 ## Acknowledgements
 

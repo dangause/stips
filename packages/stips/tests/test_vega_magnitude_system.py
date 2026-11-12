@@ -74,6 +74,7 @@ def test_plot_label_names_the_systems():
     except ImportError:
         pytest.skip("extract_lightcurve needs the LSST stack")
     label = mod._apparent_mag_label
+    assert mod.TIME_SCALE == "TAI"
     assert label(pd.DataFrame({"band": ["rp"], "mag_system": ["AB"]})).endswith("(AB)")
     mixed = pd.DataFrame({"band": ["r", "rp"], "mag_system": ["Vega", "AB"]})
     assert label(mixed) == "Apparent Magnitude (Vega: R; others AB)"

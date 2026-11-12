@@ -1,7 +1,5 @@
 description: >
-  Nickel telescope flat calibration construction.
-  Uses StipsCalibCombineByFilterTask to handle missing VisitInfo dates
-  in ISR outputs (the standard CalibCombineByFilterTask crashes on invalid dates).
+  Flat-field construction with the cp_pipe tasks.
 imports:
   - location: $CP_PIPE_DIR/pipelines/_ingredients/cpFlat.yaml
 tasks:
@@ -12,7 +10,7 @@ tasks:
       # detector info is unavailable (BPS run-qbb on compute nodes).
       doLinearize: false
   cpFlatCombine:
-    class: lsst.obs.stips.calibCombine.StipsCalibCombineByFilterTask
+    class: lsst.cp.pipe.CalibCombineByFilterTask
     config:
       connections.inputExpHandles: "cpFlatIsrExp"
       connections.inputScales: "cpFlatNormalizeScales"

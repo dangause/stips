@@ -15,12 +15,23 @@ A run writes to three places:
 
 | Column | Meaning |
 |---|---|
-| `mjd`, `band`, `visit` | When, in which band, and which exposure |
+| `mjd`, `band`, `visit` | When, in which band, and which exposure; `mjd` is the middle of the exposure |
+| `time_scale` | The time scale of `mjd`: `TAI`, the scale on which the Butler records exposure times |
 | `flux_nJy`, `flux_nJy_err` | Calibrated flux and its error, in nanojanskys |
 | `mag`, `mag_err` | Magnitude and its error |
 | `flux`, `flux_err` | Instrumental flux, in ADU |
 | `snr` | Signal-to-noise ratio |
 | `ra`, `dec`, `separation_arcsec` | Where the measurement was made, and its distance from the target |
+
+Times are MJD on the TAI scale, which runs 37 s ahead of UTC since 2017.
+Convert them before comparing with times on another scale, for example to
+BJD_TDB for transit ephemerides:
+
+```python
+from astropy.time import Time
+t = Time(df["mjd"], format="mjd", scale="tai", location=observatory)
+bjd_tdb = (t.tdb + t.light_travel_time(target)).jd
+```
 
 Magnitudes are AB, except that the Nickel profile puts B, V, R, and I on the
 Vega system when calibrating with `gaia_ps1`; the plot labels the system.
@@ -43,6 +54,7 @@ for the reference profile.
 | `Nickel/runs/<night>/diff/<ts>/run` | Difference images and difference-image sources |
 | `Nickel/runs/<night>/forcedPhotRaDec/<ts>/diffim_<band>` | Forced photometry on difference images |
 | `Nickel/runs/<night>/forcedPhotRaDec/<ts>/visit_<band>` | Forced photometry on direct images |
+| `Nickel/runs/<night>/differentialPhot/<ts>` | Differential aperture photometry (`pipeline_type: transit`) |
 | `templates/ps1/<band>`, `templates/deep/tract<N>/<band>` | PS1 and coadd templates |
 
 `<ts>` is the timestamp of the run that wrote the collection, so rerunning a

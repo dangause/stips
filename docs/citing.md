@@ -29,4 +29,15 @@ as BibTeX or APA.
 ## License
 
 STIPS is distributed under the
-[GPL-3.0-or-later](https://github.com/dangause/stips/blob/main/LICENSE) license.
+[BSD 3-Clause License](https://github.com/dangause/stips/blob/main/LICENSE).
+Releases up to and including v2.4.0 were distributed under GPL-3.0-or-later
+and remain under that license.
+
+The Lick archive client vendored in
+`instruments/nickel/vendor/lick_searchable_archive/` is distributed under its
+own BSD 3-Clause license (Copyright 2022 UC Observatories).
+
+STIPS runs on the LSST Science Pipelines, and the tasks in `obs_stips`
+subclass classes from them. The pipelines are distributed under their own
+licenses, largely GPL-3.0. The STIPS container images bundle the pipelines, so
+the images as a whole are also subject to the pipelines' licenses.

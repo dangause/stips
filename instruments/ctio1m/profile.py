@@ -59,15 +59,51 @@ profile = InstrumentProfile(
         "V": "v",
         "R": "r",
         "I": "i",
+        # Bessell I on loan from SOAR, used by the TraMoS transit program in
+        # October 2009 (FILTERID "I bessell Soar"; wheel slot 12, which held
+        # SDSS filters on other dates). Same band as I; no Landolt frames exist
+        # through it, so it shares the I colour terms (see colorterms.py).
+        "I_SOAR": "i",
+        # The four entries below are filters the Y4KCam wheel held on some
+        # 2011 Landolt standard-field nights (20110424/28, 20111019/21) that
+        # STIPS never calibrates through: no reference-catalogue mapping (not
+        # in ps1_band_map/template_band_maps) and no colour terms exist for
+        # them. They are listed here only so that (a) bias/flat frames taken
+        # with the wheel parked at one of them ingest instead of raising in
+        # unknown_filter and failing the whole night's calibration, and (b)
+        # science frames taken through them are simply never selected by a
+        # run's ``bands:`` list.
+        "BG40": "bg40",
+        "u_Stromgren": "us",
+        "C_Washington": "cw",
+        "M_Washington": "mw",
     },
     # raw FITS FILTERID value (upper-cased on lookup) -> physical_filter
     filter_aliases={
         "U": "U",
+        "U+CUSO4": "U+CuSO4",
         "U+CuSO4": "U+CuSO4",
         "B": "B",
         "V": "V",
         "R": "R",
         "I": "I",
+        "I BESSELL SOAR": "I_SOAR",
+        # 2011 Landolt standard-field nights (20110413/24/25/28/0502): the
+        # near-UV filter's FITS FILTERID is spelled "U CuSo4" there instead of
+        # "U+CuSO4" (seen on other dates); same physical filter, band u.
+        "U CUSO4": "U+CuSO4",
+        "U CuSo4": "U+CuSO4",
+        # Seen on 20110424 (padded raw string "BG 40" with trailing blanks
+        # stripped by the translator).
+        "BG 40": "BG40",
+        # Seen on 20110428 (raw "u stromg Tololo").
+        "U STROMG TOLOLO": "u_Stromgren",
+        "u stromg Tololo": "u_Stromgren",
+        # Seen on 20111019/20111021 (raw "C Wash" / "M Wash").
+        "C WASH": "C_Washington",
+        "C Wash": "C_Washington",
+        "M WASH": "M_Washington",
+        "M Wash": "M_Washington",
     },
     filter_key="FILTERID",
     # PS1 templates (LOCAL band -> PS1 band). PS1 serves grizy; Y4KCam's r/i map
@@ -77,8 +113,10 @@ profile = InstrumentProfile(
     # In gaia_ps1 mode R and I are calibrated through configs/colorterms.py
     # (Tonry et al. 2012 PS1 -> Cousins; Y4KCam's RI are Cousins to 0.02
     # mag/mag per Clem & Landolt 2013), which puts them on the Vega system.
-    # Every band in gaia and monster mode stays AB.
-    vega_bands={"gaia_ps1": ("r", "i")},
+    # In gaia mode B/V/R/I go through the gaia* block, fitted from Gaia DR3
+    # AB magnitudes straight onto Landolt (Vega) magnitudes, so they are
+    # Vega too. Every band in monster mode stays AB.
+    vega_bands={"gaia_ps1": ("r", "i"), "gaia": ("b", "v", "r", "i")},
     # External-template band policy per source. SkyMapper (DR4) serves u/v/g/r/i/z
     # but its "v" is a Stromgren-like ~384nm VIOLET filter — NOT Johnson V
     # (~551nm), which Y4KCam's "v" is. Mapping v->v would fetch a near-UV
@@ -221,8 +259,10 @@ def _datetime_end(header):
 
 # --- Date-characterized boresight pointing offsets (see tracking_radec) --------
 # The CTIO Y4KCam mount carries a per-campaign systematic pointing offset: the
-# TRUE field center is EAST/NORTH of the header RA/DEC by a campaign-specific
-# amount (measured by BLIND astrometry.net solves). It is a pure boresight
+# TRUE field center is offset from the header RA/DEC by a campaign-specific,
+# SIGNED (delta_east, delta_north) amount, positive meaning east/north
+# (negative is south/west -- see the 2011-04-22 row), measured by BLIND
+# astrometry.net solves. It is a pure boresight
 # TRANSLATION -- camera plate scale (0.2889"/pix), orientation (PA~0) and
 # distortion (negligible) were all confirmed correct -- NOT a parse/geometry bug.
 #
@@ -256,11 +296,48 @@ _BORESIGHT_OFFSET_TABLE = [
         "morning date, one day past its local-night label)",
     ),
     (
+        "2009-10-28",
+        "2009-10-31",
+        192.0,
+        308.0,
+        "blind astrometry.net-style solve against Gaia DR3 (G<16.5), DAOStarFinder "
+        "sources, brute-force translation search, 3 local nights 20091028-20091030 "
+        '(2026-11); dRA*cosDec +192" (night-to-night scatter ~15), dDec +308" '
+        '(scatter ~15), ~363" @ PA~32 E-of-N, same sense as the 2006 offset; '
+        "UT DATE-OBS extent 2009-10-28..2009-10-31 (local night 20091030's morning "
+        "frame is UT 2009-10-31, one day past its local-night label); WASP-18 "
+        "TraMoS run; same-run nights 20091024 and 20091027 (WASP-5, WASP-4) not "
+        "measured. 20091024 is not covered; the frames of 20091027 taken after UT "
+        "midnight (UT 2009-10-28) fall inside this window, so that night would "
+        "be split between no offset and this one",
+    ),
+    (
         "2010-01-17",
         "2010-01-22",
         0.0,
         0.0,
         'SA98 run; ~60" offset already within matcher tolerance, no correction',
+    ),
+    (
+        "2011-04-22",
+        "2011-04-23",
+        157.0,
+        -148.0,
+        "brute-force translation search against Gaia DR3 (G<16.5, the night's own "
+        "refcat shards), peak-finder sources, orientation-agnostic 8-way search "
+        'validated on a 2009 WASP-18 frame (recovers +182"/+284" vs the table\'s '
+        '+192"/+308"), 2 frames of local night 20110422 (UT 2011-04-22T23:51 and '
+        '2011-04-23T02:22; 2026-11); dRA*cosDec +157" (156..157), dDec -148" '
+        '(-151..-144), ~215" @ PA~133 E-of-N -- a DIFFERENT sense from 2006/2009, '
+        "and beyond the matcher's 300-binned-pixel (173\") reach, which is why the "
+        'WASP-19 TraMoS night locked onto a ~6" false solution at 10-60 min per '
+        "frame; UT DATE-OBS extent 2011-04-22..2011-04-23 (the local night's "
+        'evening + morning). The binned WASP-19 night 20111224 measured 99", '
+        'within the 173" binned reach. The neighbouring unbinned Landolt nights '
+        '20110413, 20110424/25/28 and 20110502 measured <=94" (one or two frames '
+        'each), beyond the unbinned reach of 300 px x 0.289" = 87" for some '
+        'fields: 17 frames of 20110413 (fields 89-93" off) fail astrometry. '
+        "Those nights stay uncovered here",
     ),
 ]
 

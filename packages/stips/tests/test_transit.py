@@ -404,6 +404,20 @@ class TestOutputGeneration:
         data = json_mod.loads(json_path.read_text())
         for key in ("best_period", "t0", "duration_hours", "depth", "transit_snr"):
             assert key in data, f"Missing '{key}' in JSON"
+        assert data["time_scale"] == "TAI"
+
+    def test_save_records_the_lightcurve_time_scale(self, tmp_path, sample_transit_csv):
+        import json as json_mod
+
+        result = self._make_result(tmp_path, sample_transit_csv)
+        csv_path, *_ = sample_transit_csv
+        df = transit_mod._read_lightcurve(csv_path)
+        df["time_scale"] = "UTC"
+        transit_mod._save_results(result, tmp_path / "out_scale", df)
+        data = json_mod.loads(
+            (tmp_path / "out_scale" / "transit_results.json").read_text()
+        )
+        assert data["time_scale"] == "UTC"
 
     def test_save_creates_bls_periodogram(self, tmp_path, sample_transit_csv):
         result = self._make_result(tmp_path, sample_transit_csv)

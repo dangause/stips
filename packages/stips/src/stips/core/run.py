@@ -110,6 +110,12 @@ class ScienceConfigs:
     calibrate_image: str | None = None
     calibrate_image_fallbacks: list[str] = field(default_factory=list)
     colorterms: str | None = None
+    #: Comma-separated DRP.yaml task labels/subset names, run as
+    #: ``DRP.yaml#<pipeline_labels>`` instead of the full
+    #: "stage1-single-visit" subset. Empty/None keeps current behaviour.
+    #: See ``stips.core.science.TRANSIT_SCIENCE_LABELS`` for the set
+    #: recommended for transit and variable-star campaigns.
+    pipeline_labels: str | None = None
 
 
 @dataclass
@@ -201,6 +207,7 @@ class RunConfig:
     skip_dia: bool = False
     forced_phot: bool = True
     forced_phot_image_type: str = "diffim"  # visit, diffim, or both
+    min_comparison_fraction: float = 0.7  # differentialPhot:minComparisonFraction
     lc_config: "LightcurveConfig" = field(
         default_factory=lambda: __import__(
             "stips.core.lightcurve", fromlist=["LightcurveConfig"]
@@ -235,6 +242,15 @@ class RunConfig:
 
     def __post_init__(self) -> None:
         validate_template_type(self.template_type)
+        if not 0.0 <= self.min_comparison_fraction <= 1.0:
+            raise ValueError(
+                "min_comparison_fraction must be in [0.0, 1.0], got "
+                f"{self.min_comparison_fraction!r}"
+            )
+        if self.science_configs.pipeline_labels:
+            from stips.core.science import validate_pipeline_labels
+
+            validate_pipeline_labels(self.science_configs.pipeline_labels)
 
     @classmethod
     def from_yaml(cls, path: Path) -> RunConfig:
@@ -295,6 +311,7 @@ class RunConfig:
                 "calibrate_image_fallbacks", []
             ),
             colorterms=science_cfg_data.get("colorterms"),
+            pipeline_labels=science_cfg_data.get("pipeline_labels"),
         )
 
         dia_configs = DIAConfigs(
@@ -359,6 +376,7 @@ class RunConfig:
             forced_phot_image_type=options.get(
                 "forced_phot_image_type", default_fphot_type
             ),
+            min_comparison_fraction=float(options.get("min_comparison_fraction", 0.7)),
             lc_config=LightcurveConfig.from_yaml(data.get("lightcurve"), options),
             rebuild_templates=options.get("rebuild_templates", False),
             continue_on_error=options.get("continue_on_error", True),
@@ -1418,7 +1436,7 @@ def _run_differential_phot_step(
     differential flux ratios.
     """
     from stips.core import butler_query
-    from stips.core.pipeline import CollectionNames
+    from stips.core.pipeline import CollectionNames, generate_run_timestamp
     from stips.core.stack import run_pipetask
 
     prof = config.require_profile()
@@ -1453,8 +1471,9 @@ def _run_differential_phot_step(
         f"{science_coll},{prof.collection_prefix}/calib/current,"
         f"refcats,{prof.skymap_collection}"
     )
+    run_ts = generate_run_timestamp()
     output_coll = CollectionNames(
-        all_nights[0], prefix=prof.collection_prefix
+        all_nights[0], run_ts, prefix=prof.collection_prefix
     ).differential_phot
 
     bands = run_cfg.bands
@@ -1477,6 +1496,8 @@ def _run_differential_phot_step(
         f"differentialPhot:targetDec={run_cfg.dec}",
         "-c",
         f"differentialPhot:targetName={run_cfg.object_name}",
+        "-c",
+        f"differentialPhot:minComparisonFraction={run_cfg.min_comparison_fraction}",
         "--register-dataset-types",
         "--clobber-outputs",
     ]
@@ -1538,6 +1559,8 @@ def _export_differential_lightcurve(
     """Write the newest ``differential_phot_lightcurve_table`` in
     ``output_coll`` to ``out_csv`` with the transit search's columns
     (mjd, band, flux, flux_err, plus the normalised and diagnostic columns).
+    ``mjd`` is the visit table's ``expMidptMJD``: the mid-exposure MJD on
+    the TAI scale, which a ``time_scale`` column records.
 
     Returns the number of rows written; 0 when the table is missing or empty.
     """
@@ -1559,6 +1582,7 @@ if refs:
     df = table.to_pandas() if hasattr(table, "to_pandas") else table
     if len(df):
         df = df.rename(columns={{"diff_flux": "flux", "diff_flux_err": "flux_err"}})
+        df["time_scale"] = "TAI"
         df.to_csv({str(out_csv)!r}, index=False)
         rows = len(df)
 print(json.dumps({{"rows": rows}}))
@@ -1847,6 +1871,8 @@ def run(
             config.resolve_config(fb)
             for fb in run_cfg.science_configs.calibrate_image_fallbacks
         ]
+    if run_cfg.science_configs.pipeline_labels:
+        science_cfg.pipeline_labels = run_cfg.science_configs.pipeline_labels
 
     result = RunResult(success=True, log_dir=str(run_log_dir))
     all_nights = list(run_cfg.nights)

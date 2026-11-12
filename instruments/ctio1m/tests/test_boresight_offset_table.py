@@ -81,6 +81,67 @@ def test_tracking_radec_shifts_2006_header_via_table():
     assert shifted.ra.deg > raw.ra.deg and shifted.dec.deg > raw.dec.deg
 
 
+def test_2009_wasp18_in_window_offset():
+    # 2009-10-30T02:29:26 UT -- a WASP-18 TraMoS frame inside the measured window.
+    d = "2009-10-30T02:29:26"
+    assert prof_mod.boresight_offset_covered(d) is True
+    east, north = prof_mod.boresight_offset_arcsec(d)
+    assert east == pytest.approx(192.0)
+    assert north == pytest.approx(308.0)
+
+
+def test_2009_wasp18_window_boundaries_are_inclusive():
+    for d in ("2009-10-28", "2009-10-31"):
+        assert prof_mod.boresight_offset_covered(d) is True
+        assert prof_mod.boresight_offset_arcsec(d) == (192.0, 308.0)
+
+
+def test_2009_wasp18_adjacent_dates_are_uncovered():
+    # One UT day on either side of the measured window (2009-10-27: the night
+    # before the WASP-18 run's first measured night; 2009-11-01: one day past
+    # the window end) must NOT inherit the WASP-18 offset.
+    for d in ("2009-10-27", "2009-11-01"):
+        assert prof_mod.boresight_offset_covered(d) is False
+        assert prof_mod.boresight_offset_arcsec(d) == (0.0, 0.0)
+
+
+def test_2011_wasp19_april_night_in_window_offset():
+    # 2011-04-23T02:22:31 UT -- a WASP-19 "test" frame of local night 20110422,
+    # one of the two frames the offset was measured on.
+    d = "2011-04-23T02:22:31"
+    assert prof_mod.boresight_offset_covered(d) is True
+    east, north = prof_mod.boresight_offset_arcsec(d)
+    assert east == pytest.approx(157.0)
+    assert north == pytest.approx(-148.0)
+
+
+def test_2011_wasp19_april_window_boundaries_are_inclusive():
+    for d in ("2011-04-22", "2011-04-23"):
+        assert prof_mod.boresight_offset_covered(d) is True
+        assert prof_mod.boresight_offset_arcsec(d) == (157.0, -148.0)
+
+
+def test_2011_landolt_and_december_nights_stay_uncovered():
+    # The surrounding April/May 2011 Landolt nights and the December WASP-19
+    # night were measured at <=99" and must NOT inherit the 20110422 offset.
+    for d in ("2011-04-13", "2011-04-21", "2011-04-24", "2011-05-03", "2011-12-25"):
+        assert prof_mod.boresight_offset_covered(d) is False
+        assert prof_mod.boresight_offset_arcsec(d) == (0.0, 0.0)
+
+
+def test_table_windows_do_not_overlap():
+    import datetime as _d
+
+    rows = sorted(
+        prof_mod._BORESIGHT_OFFSET_TABLE,
+        key=lambda row: _d.date.fromisoformat(row[0]),
+    )
+    for prev, cur in zip(rows, rows[1:]):
+        prev_end = _d.date.fromisoformat(prev[1])
+        cur_start = _d.date.fromisoformat(cur[0])
+        assert prev_end < cur_start, f"overlapping windows: {prev[:2]} vs {cur[:2]}"
+
+
 def test_boresight_offset_covered_registered_as_hook():
     hook = PROFILE.hooks["boresight_offset_covered"]
     assert hook(dt.date(2006, 10, 2)) is True  # in 2006 window
