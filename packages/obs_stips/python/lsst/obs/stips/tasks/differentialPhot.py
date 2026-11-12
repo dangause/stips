@@ -97,7 +97,9 @@ def _select_comparisons(
     Returns list of indices into sources.
     """
     target_flux = sources[target_idx][aperture_col]
-    if target_flux <= 0:
+    # A NaN reference flux would make the flux window NaN, which every
+    # comparison below passes, so reject it (and None) explicitly.
+    if target_flux is None or not np.isfinite(target_flux) or target_flux <= 0:
         return []
 
     # Convert magnitude bounds to flux bounds
@@ -372,7 +374,9 @@ def _process_catalogs(
     # Step 3: Compute differential flux per visit
     min_present = max(
         min_comparisons,
-        math.ceil(min_comparison_fraction * len(final_comp_positions)),
+        # The epsilon keeps float products such as 0.28 * 25 = 7.000000000000001
+        # from rounding up to the next integer.
+        math.ceil(min_comparison_fraction * len(final_comp_positions) - 1e-9),
     )
     rows = []
     for vid, cat in catalogs:

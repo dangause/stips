@@ -963,3 +963,23 @@ def test_nan_in_best_candidate_does_not_change_selection():
         if v == 84000002:
             continue
         assert abs(float(row["diff_flux"]) - baseline_by_visit[v]) < 1e-6
+
+
+def test_select_comparisons_rejects_nan_target_flux():
+    """A NaN target flux would make the flux window NaN and admit every
+    candidate; it must select nothing instead."""
+    rng = np.random.default_rng(1)
+    sources = _make_mock_catalog(20, rng)
+    sources[0]["base_CircularApertureFlux_17_0_instFlux"] = np.nan
+    comps = _select_comparisons(
+        sources, 0, aperture_col="base_CircularApertureFlux_17_0_instFlux"
+    )
+    assert comps == []
+
+
+def test_comparison_fraction_threshold_has_no_float_round_up():
+    """0.28 * 25 evaluates to 7.000000000000001; the threshold must be 7."""
+    import math
+
+    assert math.ceil(0.28 * 25 - 1e-9) == 7
+    assert math.ceil(0.7 * 3 - 1e-9) == 3

@@ -117,8 +117,8 @@ def resolve_pipeline_task_labels(pipeline_yaml_path, labels: str) -> set[str]:
             resolved.add(label)
         else:
             raise ValueError(
-                f"{label!r} is not a task label or subset name in "
-                f"{pipeline_yaml_path}"
+                f"pipeline_labels entry {label!r} is not a task label or "
+                f"subset name in {pipeline_yaml_path}"
             )
     return resolved
 
@@ -657,6 +657,9 @@ _FATAL_ERROR_PATTERNS: tuple[str, ...] = (
     # in principle be stopped early here; no shipped config mixes such configs
     # in one fallback chain.
     "MissingDatasetTypeError",
+    # a configs.science.pipeline_labels entry the pipeline does not define
+    # (resolve_pipeline_task_labels); every fallback would fail the same way.
+    "is not a task label or subset name",
 )
 
 

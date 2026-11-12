@@ -497,6 +497,9 @@ class TestIsFatalError:
             "OSError: [Errno 28] No space left on device",
             "lsst.daf.butler.MissingDatasetTypeError: Dataset type "
             "'the_monster_20250219_local' is not registered",
+            # a bad configs.science.pipeline_labels entry fails every fallback
+            "ValueError: pipeline_labels entry 'step9' is not a task label "
+            "or subset name in DRP.yaml",
         ],
     )
     def test_fatal(self, text):
