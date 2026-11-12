@@ -209,6 +209,8 @@ def _process_catalogs(
         Each catalog is a list of dicts with coord_ra, coord_dec, aperture flux, etc.
     visit_table : astropy.table.Table
         Visit metadata table with visit, expMidptMJD, band columns.
+        The output ``mjd`` is ``expMidptMJD``, the mid-exposure MJD on
+        the TAI scale.
     min_comparison_fraction : float
         Drop a visit when fewer than this fraction of the *usable*
         selected comparison stars (those with a valid reference flux) are

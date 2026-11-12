@@ -57,8 +57,23 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
   Y4KCam nights under `scripts/config/wasp18/` and `scripts/config/wasp19/`.
 - `stips clean --step diffphot` and differentialPhot collections in the
   run patterns of `stips clean`.
+- Light-curve CSVs (`lightcurve_<object>.csv`, `differential_<object>.csv`) carry a
+  `time_scale` column, and `transit_results.json` a `time_scale` key, giving the
+  scale of `mjd` and `t0`: `TAI`, the scale on which the Butler records exposure
+  times. The docs say so and show the conversion to BJD_TDB.
 
 ### Changed
+- STIPS is relicensed from GPL-3.0-or-later to BSD-3-Clause (`LICENSE`,
+  `CITATION.cff`, `.zenodo.json`, the package metadata and the container image
+  labels). Releases up to and including v2.4.0 remain GPL-3.0-or-later. The
+  vendored Lick archive client keeps its own BSD 3-Clause license.
+  `packages/obs_stips/python/lsst/obs/stips/calibCombine.py` contains code
+  derived from cp_pipe and stays GPL-3.0-or-later; its header now says so.
+- `stips lightcurve` time-stamps each measurement at the middle of its exposure,
+  as the differential-photometry and DIA-plot tasks already did (`expMidptMJD`).
+  It used the exposure start, so its times move later by half the exposure time
+  (5-165 s for the 10-330 s SN 2020wnt exposures). Phases and periods are
+  unaffected beyond that shift.
 - `ctio1m` runs in `refcat.mode: gaia` now apply the Gaia colour terms and
   report B, V, R and I on the Vega system; they were uncorrected before.
 - Differential photometry writes to a timestamped collection,
@@ -109,6 +124,18 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
   product such as 0.28 * 25 up to the next integer.
 - A `pipeline_labels` entry that the pipeline does not define is a
   known-fatal error, so the `calibrateImage` fallbacks no longer repeat it.
+- `scripts/config/hd189733/pipeline_transit.yaml`: the comment claiming the
+  mid-transit matches the Agol et al. 2010 ephemeris to 0.0 min treated TAI
+  times as UTC and that BJD_UTC ephemeris as BJD_TDB, two offsets that nearly
+  cancel. It now gives the corrected comparison.
+- SN 2020wnt run configs (`scripts/config/2020wnt/`) set `explosion_mjd: 59180.0`,
+  commented as the discovery date; the supernova was discovered on 2020 Oct 14
+  (MJD 59136.4). They now use MJD 59135.42, the explosion epoch of Gutierrez et
+  al. 2022 (MNRAS 517, 2056), the midpoint of the last ZTF non-detection and the
+  first detection. Only the `days_since_explosion` column of 2020wnt light curves
+  changes, by +44.6 d. The 2023ixf configs keep MJD 60082.75, whose comment now
+  gives its source (Hosseinzadeh et al. 2023, ApJL 953, L16) instead of calling
+  it the discovery date.
 
 ## [2.4.0] — 2026-10-12
 

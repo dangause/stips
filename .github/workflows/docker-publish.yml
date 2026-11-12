@@ -98,12 +98,12 @@ jobs:
             type=ref,event=pr
           # These labels override the Dockerfile's LABELs. licenses is set
           # explicitly because the action otherwise fills it from GitHub's
-          # license detection ("GPL-3.0"), not the declared GPL-3.0-or-later.
+          # license detection, not the declared BSD-3-Clause.
           labels: |
             org.opencontainers.image.title=Small Telescope Image Processing Suite
             org.opencontainers.image.description=LSST Science Pipelines for 1-meter class telescope data
             org.opencontainers.image.vendor=Lick Observatory
-            org.opencontainers.image.licenses=GPL-3.0-or-later
+            org.opencontainers.image.licenses=BSD-3-Clause
 
       - name: Determine LSST tag
         id: lsst

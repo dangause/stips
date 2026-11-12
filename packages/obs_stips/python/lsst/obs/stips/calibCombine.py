@@ -1,3 +1,17 @@
+# This file contains code derived from cp_pipe
+# (https://github.com/lsst/cp_pipe, python/lsst/cp/pipe/cpCombine.py):
+# StipsCalibCombineTask.combineHeaders() is a modified copy of
+# CalibCombineTask.combineHeaders(). cp_pipe is distributed under the GNU
+# General Public License, version 3 or later; see its COPYRIGHT file for code
+# ownership. This file is therefore distributed under GPL-3.0-or-later, not
+# under the BSD 3-Clause License that covers the rest of STIPS. You can
+# redistribute it and/or modify it under the terms of the GNU General Public
+# License as published by the Free Software Foundation, either version 3 of
+# the License, or (at your option) any later version. It is distributed
+# WITHOUT ANY WARRANTY; see <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Small-telescope CalibCombineTask that handles missing VisitInfo dates.
 
 Small-telescope ISR pipelines do not always preserve VisitInfo dates in

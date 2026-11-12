@@ -27,7 +27,7 @@ FROM ghcr.io/lsst/scipipe:al9-${LSST_TAG}
 # Set labels
 LABEL org.opencontainers.image.source="https://github.com/dangause/stips"
 LABEL org.opencontainers.image.description="Small Telescope Image Processing Suite for LSST Science Pipelines"
-LABEL org.opencontainers.image.licenses="GPL-3.0-or-later"
+LABEL org.opencontainers.image.licenses="BSD-3-Clause"
 
 USER root
 

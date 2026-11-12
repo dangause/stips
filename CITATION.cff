@@ -36,7 +36,7 @@ identifiers:
   - type: doi
     value: "10.5281/zenodo.23243457"
     description: "v2.2.4"
-license: GPL-3.0-or-later
+license: BSD-3-Clause
 version: 2.4.0
 date-released: "2026-10-12"
 keywords:
