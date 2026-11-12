@@ -1,6 +1,6 @@
 # STIPS documentation
 
-These pages are published at <https://stips-lsst.readthedocs.io>. They are
+These pages are published at <https://stips-docs.readthedocs.io>. They are
 MyST Markdown, built with Sphinx (`docs/conf.py`); preview them locally with
 `make docs-serve`.
 
