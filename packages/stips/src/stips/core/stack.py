@@ -219,7 +219,7 @@ def run_with_stack(
 
 #: Seconds to wait before each retry of a Butler command that found the
 #: registry locked by another writer (SQLite allows one at a time).
-LOCK_RETRY_DELAYS: tuple[float, ...] = (10.0, 30.0, 60.0, 120.0, 240.0)
+LOCK_RETRY_DELAYS: tuple[float, ...] = (10.0, 30.0, 60.0, 120.0, 240.0, 300.0, 300.0)
 _LOCKED = "database is locked"
 
 

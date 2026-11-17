@@ -127,8 +127,8 @@ in flight holds one block, and the controller builds one graph or runs one
 core per night.
 
 The nights share one SQLite registry, which takes one writer at a time. A
-`butler` command that finds it locked waits and tries again (up to about
-eight minutes), and so does a submission's final job, which registers its
+`butler` command that finds it locked waits and tries again (for up to about
+eighteen minutes), and so does a submission's final job, which registers its
 outputs. Lock waits grow with the number of nights in flight; for many more
 nights than this, a PostgreSQL registry is the robust choice.
 

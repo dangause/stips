@@ -857,3 +857,63 @@ class TestRecoverLockedFinalJob:
         (args,) = calls
         assert args[:3] == ["aggregate-graph", str(sd / "g.qg"), "/repo"]
         assert "--update-output-chain" in args
+
+
+class TestFailedSubmitWithLockedFinalJob:
+    """`bps submit` fails when its final job found the registry locked."""
+
+    def _run(self, tmp_path, final_log, recovered=True):
+        from types import SimpleNamespace
+
+        from stips.core import executor as ex
+        from stips.core.butler_query import GraphOutcome
+
+        repo = tmp_path / "repo"
+        sub = repo / "bps" / "submit" / "g_20260101T000000"
+        (sub / "logs" / "finalJob").mkdir(parents=True)
+        (sub / "logs" / "finalJob" / "finalJob.stderr").write_text(final_log)
+        config = MagicMock()
+        config.repo = repo
+        # A failed submit names the config dir, not the submit dir.
+        bps_result = SimpleNamespace(
+            success=False,
+            run_id=None,
+            stderr="CalledProcessError: final_job.bash",
+            error="CalledProcessError: final_job.bash",
+            submit_dir=str(repo / "bps" / "configs" / "g_20260101T000000"),
+        )
+        outcome = GraphOutcome(expected={"isr": 3}, succeeded_by_task={"isr": 3})
+        reruns = []
+
+        def fake_butler(args, cfg, **k):
+            reruns.append(args)
+            return SimpleNamespace(returncode=0 if recovered else 1)
+
+        with (
+            patch.object(ex.bps, "submit", return_value=bps_result),
+            patch.object(ex, "run_butler", fake_butler),
+            patch.object(ex.butler_query, "quantum_graph_outcome", return_value=outcome),
+        ):
+            result = ex.BPSExecutor(site="singularity-slurm").run_pipetask(
+                ["run", "-b", str(repo), "-g", "/q/g.qg", "--output-run", "r/run"],
+                config,
+                check=False,
+            )
+        return result, reruns
+
+    def test_locked_final_job_is_recovered(self, tmp_path):
+        result, reruns = self._run(tmp_path, "sqlite3.OperationalError: database is locked")
+        assert result.returncode == 0
+        assert len(reruns) == 1 and reruns[0][0] == "aggregate-graph"
+
+    def test_other_submit_failures_still_fail(self, tmp_path):
+        result, reruns = self._run(tmp_path, "KeyError: something else")
+        assert result.returncode == 1
+        assert reruns == []
+
+    def test_failed_recovery_still_fails(self, tmp_path):
+        result, reruns = self._run(
+            tmp_path, "database is locked", recovered=False
+        )
+        assert result.returncode == 1
+        assert len(reruns) == 1

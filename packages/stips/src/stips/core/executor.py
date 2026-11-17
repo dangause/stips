@@ -345,6 +345,22 @@ def recover_locked_final_job(
     return result.returncode == 0
 
 
+def _submission_dir(submit_dir: str | None, config: Config) -> Path | None:
+    """The BPS submit directory of a submission.
+
+    A failed ``bps submit`` prints no submit directory, and the result then
+    names the submission's config directory; the submit directory has the
+    same name under ``<repo>/bps/submit``.
+    """
+    if not isinstance(submit_dir, (str, Path)) or not submit_dir:
+        return None
+    path = Path(submit_dir)
+    if (path / "logs").exists():
+        return path
+    alt = Path(config.repo) / "bps" / "submit" / path.name
+    return alt if alt.exists() else None
+
+
 class BPSExecutor:
     """Execute pipetask commands via BPS batch submission.
 
@@ -432,6 +448,19 @@ class BPSExecutor:
         # Submit to BPS
         log.info(f"  Submitting to BPS (site={self.site}, qgraph={qgraph_file})")
         bps_result = bps.submit(bps_cfg, config)
+        synchronous = bps.is_synchronous_site(self.site)
+
+        if not bps_result.success and synchronous:
+            # A final job that found the registry locked fails `bps submit`
+            # although every quantum ran; registering the outputs again
+            # recovers the submission.
+            sub_dir = _submission_dir(bps_result.submit_dir, config)
+            if sub_dir is not None and recover_locked_final_job(
+                sub_dir, qgraph_file, config, log_file=kwargs.get("log_file")
+            ):
+                log.info("  Outputs registered on the second try")
+                bps_result.success = True
+                bps_result.submit_dir = str(sub_dir)
 
         if not bps_result.success:
             log.error(f"  BPS submit failed: {bps_result.error}")
@@ -444,7 +473,6 @@ class BPSExecutor:
 
         # A synchronous backend has finished by the time submit returns, so
         # there is nothing to poll even if a run id came back.
-        synchronous = bps.is_synchronous_site(self.site)
         run_id = None if synchronous else bps_result.run_id
 
         # No run id means we cannot poll the WMS. There are two very different
@@ -459,14 +487,6 @@ class BPSExecutor:
         #       mode: we wanted to poll and cannot. Previously this was silently
         #       misclassified as (a); now it is loud, and we fall back to the
         #       output-collection probe only as a last resort.
-        if synchronous and bps_result.submit_dir:
-            recover_locked_final_job(
-                bps_result.submit_dir,
-                qgraph_file,
-                config,
-                log_file=kwargs.get("log_file"),
-            )
-
         if synchronous and output_run:
             outcome = butler_query.quantum_graph_outcome(config, qgraph_file, output_run)
             if outcome is not None:
