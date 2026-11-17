@@ -672,6 +672,7 @@ def _run_coadd_templates(
                     config,
                     jobs=run_cfg.jobs,
                     log_file=calib_log,
+                    executor=executor,
                     flat_bands=run_cfg.flat_bands,
                 )
                 _maybe_split_log(calib_log)
@@ -1929,8 +1930,8 @@ def run(
     if early_exit is not None:
         return early_exit
 
-    # Step 2: Calibrations per night (always local — BPS overhead too high
-    # for small calib pipelines, and calib qgraphs lack --output-run)
+    # Step 2: Calibrations per night. Under BPS the bias and flat pipelines
+    # run on the cluster; the controller only does the Butler bookkeeping.
     if not run_cfg.skip_calibs:
         early_exit = _run_calibs_step(
             all_nights,
@@ -1938,6 +1939,7 @@ def run(
             config,
             result,
             dry_run,
+            executor=executor,
         )
         if early_exit is not None:
             return early_exit

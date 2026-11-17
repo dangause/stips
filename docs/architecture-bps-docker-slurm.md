@@ -36,7 +36,7 @@ The BPS (Batch Processing Service) integration distributes the heavy computation
 │  │  │  │    (login / submit node)       │                │   │
 │  │  │  │                                │                │   │
 │  │  │  │  stips -c config.yaml run      │                │   │
-│  │  │  │    → calibs (LOCAL)            │                │   │
+│  │  │  │    → bps submit (bias, flat)   │                │   │
 │  │  │  │    → bps submit (science)      │                │   │
 │  │  │  │    → bps submit (DIA)          │                │   │
 │  │  │  │    → bps submit (fphot)        │                │   │
@@ -106,16 +106,20 @@ The pipeline orchestrator (`stips ... run`) processes data through stages: calib
                     → c1/c2        → c1/c2
 ```
 
-### Path 1: Local Execution (Calibrations)
+### Path 1: Butler bookkeeping (always on the controller)
 
-Calibrations (bias, flat, defects) are **small** pipelines — typically 5-17 quanta. The overhead of BPS submission (rendering configs, Slurm scheduling, Parsl worker startup, LSST env activation on compute nodes) exceeds the actual computation time. So calibs **always run locally** on the submit node via subprocess.
+Ingesting raws, defining visits, writing curated calibrations, certifying
+calibrations and editing collection chains change the registry directly, so
+they run on the machine running `stips`, through `butler` commands. When
+several nights run at once these wait and retry if another writer holds the
+SQLite registry (`stips.core.stack.run_butler`).
 
-```python
-# In core/calibs.py — defaults to LocalExecutor
-executor = executor or LocalExecutor()
-```
-
-The `LocalExecutor` simply wraps `pipetask run` in a shell that sources the LSST stack:
+The bias and flat pipelines go through the executor like every other step:
+under BPS they run on the cluster. They used to run locally on the grounds
+that BPS overhead exceeded their run time; with several nights at once on
+one controller that made calibrations the longest step, and their quanta
+contended for the registry. With `execution: local` the `LocalExecutor`
+simply wraps `pipetask run` in a shell that sources the LSST stack:
 
 ```bash
 source /opt/lsst/software/stack/loadLSST.bash
@@ -125,7 +129,7 @@ export INSTRUMENT_DIR=/opt/stips/instruments/nickel
 pipetask run -b /data/repo -g /path/to/qgraph.qg -j 4
 ```
 
-### Path 2: BPS Execution (Science, DIA, Forced Photometry)
+### Path 2: BPS Execution (Calibrations, Science, DIA, Forced Photometry)
 
 Science processing (astrometry, photometry per exposure) can have **dozens of quanta** per night, and across 22 nights that's hundreds of independent tasks. These benefit from parallel execution on multiple nodes.
 
@@ -411,8 +415,8 @@ executor = _create_executor(run_cfg)
 # Step 1: Bootstrap (always local)
 _run_bootstrap(...)
 
-# Step 2: Calibrations (ALWAYS local — too small for BPS overhead)
-_run_calibs_step(all_nights, ...)  # No executor passed → LocalExecutor
+# Step 2: Calibrations (bias/flat pipelines through executor — BPS if configured)
+_run_calibs_step(all_nights, ..., executor=executor)
 
 # Step 3: Science (through executor — BPS if configured)
 for night in nights:

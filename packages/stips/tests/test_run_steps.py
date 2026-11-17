@@ -518,3 +518,20 @@ def test_dia_skips_bands_without_science_exposures():
         )
     assert [c.kwargs["band"] for c in mrun.call_args_list] == ["rp"]
     assert res.failed_dia == ["20240101/r"]
+
+
+def test_calibrations_get_the_run_executor():
+    """Under BPS the bias and flat pipelines run through the run's executor."""
+    from stips.core import run as runmod
+
+    executor = MagicMock(name="bps-executor")
+    with (
+        patch.object(runmod, "_get_step_log_file", return_value=None),
+        patch.object(runmod, "_maybe_split_log"),
+        patch("stips.core.calibs.write_curated_calibrations", return_value=None),
+        patch("stips.core.calibs.run", return_value=_calib(True)) as mrun,
+    ):
+        runmod._run_calibs_step(
+            ["20240101"], _run_cfg(), MagicMock(), _result(), False, executor=executor
+        )
+    assert mrun.call_args.kwargs["executor"] is executor
