@@ -11,6 +11,7 @@ from stips.core import butler_query
 from stips.core.pipeline import (
     CollectionNames,
     PipetaskStage,
+    band_in_expr,
     define_visits_args,
     ensure_instrument_registered,
     find_aliasing_exposure_ids,
@@ -173,6 +174,7 @@ def run(
     executor=None,
     skip_curated: bool = False,
     ingested_raw_run: str | None = None,
+    flat_bands: list[str] | None = None,
 ) -> CalibsResult:
     """Run nightly calibration processing.
 
@@ -193,6 +195,8 @@ def run(
             with visits defined (from :func:`write_curated_calibrations`);
             ingest and visit definition are then skipped and the calibration
             pipelines read the raws from it
+        flat_bands: Build flats only for filters of these bands; None builds
+            a flat for every filter that has flat frames that night
 
     Returns:
         CalibsResult with collection names and status
@@ -408,7 +412,8 @@ def run(
                 output_run=cols.cp_flat_run,
                 qgraph_path=str(qg_flat),
                 data_query=(
-                    f"instrument='{prof.name}' " "AND exposure.observation_type='flat'"
+                    f"instrument='{prof.name}' AND exposure.observation_type='flat'"
+                    + (f" AND {band_in_expr(flat_bands)}" if flat_bands else "")
                 ),
                 post_query_args=[
                     "-c",

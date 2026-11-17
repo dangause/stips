@@ -101,6 +101,7 @@ defaults (`packages/obs_stips/instrument_defaults/configs/`).
 | `continue_on_error` | `true` | Keep going when a night or band fails |
 | `use_fallbacks` | `true` | Retry failed exposures with `calibrate_image_fallbacks` |
 | `skip_calibs`, `skip_science`, `skip_dia` | `false` | Skip a stage for every night |
+| `flats_all_filters` | `false` | Build a flat for every filter with flat frames, not only for the filters of `bands` |
 | `rebuild_templates` | `false` | Re-fetch survey templates that already exist; coadd templates are rebuilt every run |
 | `forced_phot` | `true` | Run forced photometry |
 | `forced_phot_image_type` | depends on `pipeline_type` | `diffim`, `visit`, or `both` |

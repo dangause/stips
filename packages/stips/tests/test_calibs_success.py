@@ -65,7 +65,14 @@ def _counts(mapping: dict[str, int]):
 
 
 def _invoke(
-    tmp_path, *, run_rc, counts, ingest_rc=0, ingest_stderr="", ingested_raw_run=None
+    tmp_path,
+    *,
+    run_rc,
+    counts,
+    ingest_rc=0,
+    ingest_stderr="",
+    ingested_raw_run=None,
+    flat_bands=None,
 ):
     """Run calibs.run() with all stack seams mocked; return (result, mocks)."""
     config = _config(tmp_path)
@@ -94,6 +101,7 @@ def _invoke(
             executor=executor,
             skip_curated=True,
             ingested_raw_run=ingested_raw_run,
+            flat_bands=flat_bands,
         )
     return result, SimpleNamespace(run_butler=run_butler, executor=executor, bq=bq)
 
@@ -220,3 +228,30 @@ def test_already_ingested_night_is_not_ingested_again(tmp_path):
     for args in qgraph_args:
         inputs = args[args.index("-i") + 1].split(",")
         assert run in inputs
+
+
+# --------------------------------------------------------------------------- #
+# Flats only for the bands a run uses
+# --------------------------------------------------------------------------- #
+def _flat_query(mocks):
+    (args,) = [
+        c.args[0]
+        for c in mocks.executor.run_pipetask.call_args_list
+        if c.args[0][0] == "qgraph" and "cp_flat_" in c.args[0][c.args[0].index("--save-qgraph") + 1]
+    ]
+    return args[args.index("-d") + 1]
+
+
+def test_flats_for_every_filter_by_default(tmp_path):
+    _, mocks = _invoke(tmp_path, run_rc=0, counts={"bias": 1, "flat": 1})
+    assert _flat_query(mocks) == "instrument='Nickel' AND exposure.observation_type='flat'"
+
+
+def test_flats_limited_to_the_run_bands(tmp_path):
+    _, mocks = _invoke(
+        tmp_path, run_rc=0, counts={"bias": 1, "flat": 1}, flat_bands=["r", "rp", "R"]
+    )
+    assert _flat_query(mocks) == (
+        "instrument='Nickel' AND exposure.observation_type='flat'"
+        " AND band IN ('r', 'rp')"
+    )

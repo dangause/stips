@@ -211,6 +211,16 @@ def night_day_obs_expr(
     return f"{column} IN ({joined})"
 
 
+def band_in_expr(bands: list[str]) -> str:
+    """Butler WHERE fragment ``band IN ('r', 'i')`` for a list of bands."""
+    normalized = list(dict.fromkeys(str(b).strip().lower() for b in bands))
+    for band in normalized:
+        if not re.fullmatch(r"[a-z0-9_]+", band):
+            raise ValueError(f"Invalid band value: {band!r}")
+    joined = ", ".join(f"'{b}'" for b in normalized)
+    return f"band IN ({joined})"
+
+
 def define_visits_args(repo: str, profile, night: str) -> list[str]:
     """``butler define-visits`` arguments for one observing night's exposures.
 

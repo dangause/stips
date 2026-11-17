@@ -51,6 +51,7 @@ Example YAML format:
       lightcurve_dataset_type: dia_source_unfiltered  # or forced_phot_diffim_radec
       lightcurve_min_snr: 3.0
       use_fallbacks: true    # Try fallback configs on failure
+      flats_all_filters: false   # Build flats for every filter, not just `bands`
       pipeline_type: supernova   # supernova | variable | transit
       period_search: false       # Enable Lomb-Scargle period search
       period_min: 0.1            # Minimum search period (days)
@@ -210,6 +211,8 @@ class RunConfig:
     rebuild_templates: bool = False
     continue_on_error: bool = True
     use_fallbacks: bool = True
+    # Calibrations build flats only for the filters of ``bands`` unless set
+    flats_all_filters: bool = False
 
     # Variable star options
     pipeline_type: str = "supernova"  # "supernova" or "variable" or "transit"
@@ -239,6 +242,13 @@ class RunConfig:
 
     def __post_init__(self) -> None:
         validate_template_type(self.template_type)
+
+    @property
+    def flat_bands(self) -> list[str] | None:
+        """Bands to build flats for; None means every filter with flat frames."""
+        if self.flats_all_filters or not self.bands:
+            return None
+        return list(self.bands)
 
     @classmethod
     def from_yaml(cls, path: Path) -> RunConfig:
@@ -367,6 +377,7 @@ class RunConfig:
             rebuild_templates=options.get("rebuild_templates", False),
             continue_on_error=options.get("continue_on_error", True),
             use_fallbacks=options.get("use_fallbacks", True),
+            flats_all_filters=bool(options.get("flats_all_filters", False)),
             pipeline_type=pipeline_type,
             period_search=options.get("period_search", False),
             period_min=float(options.get("period_min", 0.1)),
@@ -655,7 +666,11 @@ def _run_coadd_templates(
             if not dry_run:
                 calib_log = _get_step_log_file("calibs_template", night=night)
                 calib_result = calibs.run(
-                    night, config, jobs=run_cfg.jobs, log_file=calib_log
+                    night,
+                    config,
+                    jobs=run_cfg.jobs,
+                    log_file=calib_log,
+                    flat_bands=run_cfg.flat_bands,
                 )
                 _maybe_split_log(calib_log)
                 if not calib_result.success:
@@ -869,6 +884,7 @@ def _run_calibs_step(
             executor=executor,
             skip_curated=True,
             ingested_raw_run=curated_raw_run if night == first_night else None,
+            flat_bands=run_cfg.flat_bands,
         )
         _maybe_split_log(calib_log)
         return calib_result

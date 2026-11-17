@@ -453,3 +453,18 @@ def test_first_night_reuses_the_curated_ingest():
         )
     passed = {c.args[0]: c.kwargs["ingested_raw_run"] for c in mrun.call_args_list}
     assert passed == {"20240101": run, "20240102": None}
+
+
+def test_flat_bands_follow_the_run_bands():
+    assert _run_cfg(bands=["r", "rp"]).flat_bands == ["r", "rp"]
+    assert _run_cfg(bands=["r"], flats_all_filters=True).flat_bands is None
+
+
+def test_flats_all_filters_option(tmp_path):
+    from stips.core.run import RunConfig
+
+    path = tmp_path / "c.yaml"
+    path.write_text("object: T\nbands: [r]\noptions:\n  flats_all_filters: true\n")
+    assert RunConfig.from_yaml(path).flats_all_filters is True
+    path.write_text("object: T\nbands: [r]\n")
+    assert RunConfig.from_yaml(path).flats_all_filters is False
