@@ -55,6 +55,14 @@ VALID_SITES = ("slurm", "htcondor", "local", "singularity-slurm", "docker-slurm"
 # asynchronous site: it submits and returns a run id for later polling.
 _PARSL_SITES = frozenset({"local", "slurm", "singularity-slurm", "docker-slurm"})
 _HTCONDOR_SITES = frozenset({"htcondor"})
+# Sites whose files turn off BPS's final job (finalJob.whenRun: NEVER): STIPS
+# registers each submission's outputs itself, one registry writer at a time.
+_STIPS_REGISTERS_OUTPUTS = frozenset({"slurm", "singularity-slurm"})
+
+
+def stips_registers_outputs(site: str) -> bool:
+    """Whether STIPS, not a BPS final job, registers a submission's outputs."""
+    return site in _STIPS_REGISTERS_OUTPUTS
 
 #: Keys of a run config's ``options.cluster`` block, each a :class:`BPSConfig`
 #: field with the same name.

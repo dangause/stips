@@ -66,8 +66,13 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
 
 ### Fixed
 - Concurrent nights (`concurrent_nights`) no longer lose work to shared state:
-  `butler` commands that find the SQLite registry locked wait and retry, a
-  submission's final job that hit the lock is run again, and the provenance
+  the nights of one `stips run` write the SQLite registry in turn (ingest,
+  visit definition, certification, collection chains, registering a
+  submission's outputs); a `butler` command that still finds it locked waits
+  and retries; on the `slurm` and `singularity-slurm` sites STIPS registers
+  each BPS submission's outputs itself instead of a BPS final job, which
+  contended with the controller's writes; on other sites a final job that hit
+  the lock is run again; and the provenance
   store (`provenance/runs.json`) is updated under a lock with atomic writes
   (it could be read half-written: "provenance upsert failed"). The live
   provenance hook measures the repository size and stack version once per

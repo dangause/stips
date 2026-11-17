@@ -71,3 +71,58 @@ def test_captured_output_is_returned_not_echoed(monkeypatch, capsys):
 
     assert result.stderr == "fine\n"
     assert capsys.readouterr().err == ""
+
+
+def test_lock_reported_only_in_the_log_file_is_retried(monkeypatch, tmp_path, _no_sleep):
+    """With --log-file, butler writes its traceback to the log, not stderr."""
+    log_file = tmp_path / "night.log"
+    log_file.write_text("earlier: database is locked\n")  # an old failure, ignored
+    calls = []
+
+    def run_with_stack(cmd, config, **kwargs):
+        calls.append(cmd)
+        first = len(calls) == 1
+        with open(log_file, "a") as fh:
+            fh.write(LOCKED if first else "INFO done\n")
+        return SimpleNamespace(returncode=1 if first else 0, stdout="", stderr="", args=cmd)
+
+    monkeypatch.setattr(stack, "run_with_stack", run_with_stack)
+    result = stack.run_butler(["define-visits", "/repo", "Nickel"], object(), log_file=log_file)
+    assert result.returncode == 0
+    assert len(calls) == 2
+
+
+def test_writers_take_turns(monkeypatch):
+    """Two nights' registry writes never run at the same time."""
+    import threading
+
+    active = []
+    overlap = []
+
+    def run_with_stack(cmd, config, **kwargs):
+        active.append(1)
+        if len(active) > 1:
+            overlap.append(cmd)
+        threading.Event().wait(0.05)
+        active.pop()
+        return SimpleNamespace(returncode=0, stdout="", stderr="", args=cmd)
+
+    monkeypatch.setattr(stack, "run_with_stack", run_with_stack)
+    threads = [
+        threading.Thread(target=stack.run_butler, args=(["ingest-raws", "/r"], object()))
+        for _ in range(4)
+    ]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert overlap == []
+
+
+def test_old_lock_lines_in_the_log_do_not_trigger_a_retry(monkeypatch, tmp_path, _no_sleep):
+    log_file = tmp_path / "night.log"
+    log_file.write_text(LOCKED)
+    fake, calls = _fake([(1, "")])
+    monkeypatch.setattr(stack, "run_with_stack", fake)
+    stack.run_butler(["ingest-raws", "/r"], object(), check=False, log_file=log_file)
+    assert len(calls) == 1

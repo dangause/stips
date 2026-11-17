@@ -297,6 +297,39 @@ def _translate_bps_to_completed_process(
 FINAL_JOB_PROCESSES = 4
 
 
+def register_outputs(
+    submit_dir: str | Path,
+    qgraph_file: str,
+    config: Config,
+    *,
+    log_file: Path | None = None,
+) -> bool:
+    """Register everything a finished workflow wrote (``butler aggregate-graph``).
+
+    What BPS's final job does, run here instead: through
+    :func:`stips.core.stack.run_butler`, so concurrent nights take turns on the
+    SQLite registry and a locked registry is waited for.
+    """
+    graph = Path(submit_dir) / Path(qgraph_file).name
+    if not graph.exists():
+        graph = Path(qgraph_file)
+    result = run_butler(
+        [
+            "aggregate-graph",
+            str(graph),
+            str(config.repo),
+            "-j",
+            str(FINAL_JOB_PROCESSES),
+            "--register-dataset-types",
+            "--update-output-chain",
+        ],
+        config,
+        check=False,
+        log_file=log_file,
+    )
+    return result.returncode == 0
+
+
 def recover_locked_final_job(
     submit_dir: str | Path,
     qgraph_file: str,
@@ -328,21 +361,7 @@ def recover_locked_final_job(
     if not graph.exists():
         graph = Path(qgraph_file)
     log.warning(f"  Final job found the registry locked; running it again ({graph.name})")
-    result = run_butler(
-        [
-            "aggregate-graph",
-            str(graph),
-            str(config.repo),
-            "-j",
-            str(FINAL_JOB_PROCESSES),
-            "--register-dataset-types",
-            "--update-output-chain",
-        ],
-        config,
-        check=False,
-        log_file=log_file,
-    )
-    return result.returncode == 0
+    return register_outputs(submit_dir, qgraph_file, config, log_file=log_file)
 
 
 def _submission_dir(submit_dir: str | None, config: Config) -> Path | None:
@@ -450,12 +469,28 @@ class BPSExecutor:
         bps_result = bps.submit(bps_cfg, config)
         synchronous = bps.is_synchronous_site(self.site)
 
-        if not bps_result.success and synchronous:
+        sub_dir = (
+            _submission_dir(bps_result.submit_dir, config) if synchronous else None
+        )
+        if sub_dir is not None and bps.stips_registers_outputs(self.site):
+            # The site runs no final job: register what the workflow wrote,
+            # also when some of its jobs failed (as a final job would).
+            if register_outputs(
+                sub_dir, qgraph_file, config, log_file=kwargs.get("log_file")
+            ):
+                bps_result.success = True
+                bps_result.submit_dir = str(sub_dir)
+            else:
+                bps_result.success = False
+                bps_result.error = (
+                    f"Registering the outputs of {sub_dir.name} failed"
+                    + (f"; {bps_result.error}" if bps_result.error else "")
+                )
+        elif not bps_result.success and sub_dir is not None:
             # A final job that found the registry locked fails `bps submit`
             # although every quantum ran; registering the outputs again
             # recovers the submission.
-            sub_dir = _submission_dir(bps_result.submit_dir, config)
-            if sub_dir is not None and recover_locked_final_job(
+            if recover_locked_final_job(
                 sub_dir, qgraph_file, config, log_file=kwargs.get("log_file")
             ):
                 log.info("  Outputs registered on the second try")

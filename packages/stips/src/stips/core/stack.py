@@ -8,6 +8,7 @@ import os
 import shlex
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -222,6 +223,30 @@ def run_with_stack(
 LOCK_RETRY_DELAYS: tuple[float, ...] = (10.0, 30.0, 60.0, 120.0, 240.0, 300.0, 300.0)
 _LOCKED = "database is locked"
 
+#: Held while a `butler` command that writes the registry runs. Nights run as
+#: threads of one `stips run`; SQLite takes one writer at a time, and several
+#: ingests at once queue on its lock far more slowly than one after another.
+REGISTRY_WRITER = threading.Lock()
+
+
+def _log_tail(log_file: Path | None, start: int) -> str:
+    """Text appended to ``log_file`` since byte ``start`` ("" if none)."""
+    if log_file is None:
+        return ""
+    try:
+        with open(log_file, "rb") as handle:
+            handle.seek(start)
+            return handle.read().decode(errors="replace")
+    except OSError:
+        return ""
+
+
+def _log_size(log_file: Path | None) -> int:
+    try:
+        return log_file.stat().st_size if log_file is not None else 0
+    except OSError:
+        return 0
+
 
 def _run_retrying_on_lock(
     cmd: list[str],
@@ -230,26 +255,35 @@ def _run_retrying_on_lock(
     label: str,
     capture_output: bool,
     check: bool,
+    log_file: Path | None = None,
 ) -> subprocess.CompletedProcess:
-    """Run a Butler command, retrying while the registry is locked.
+    """Run a Butler command that writes the registry, one at a time, retrying if locked.
 
-    Concurrent nights share one SQLite registry, which takes one writer at a
-    time; a command that waits longer than SQLite's busy timeout fails with
-    "database is locked" before its transaction starts, so running it again
-    is safe. stderr is captured to spot that and then passed on unchanged.
+    Commands from concurrent nights take turns (:data:`REGISTRY_WRITER`).
+    Something outside this process (a BPS final job, another run) can still
+    hold the SQLite registry; a command that waits longer than SQLite's busy
+    timeout fails with "database is locked" before its transaction starts, so
+    running it again is safe. The error is looked for on stderr and, when the
+    command logs to ``log_file``, in what it appended there; stderr is passed
+    on unchanged.
     """
     for attempt, delay in enumerate((*LOCK_RETRY_DELAYS, None)):
-        result = run_with_stack(
-            cmd,
-            config,
-            capture_output=capture_output,
-            check=False,
-            capture_stderr=True,
-        )
+        start = _log_size(log_file)
+        with REGISTRY_WRITER:
+            result = run_with_stack(
+                cmd,
+                config,
+                capture_output=capture_output,
+                check=False,
+                capture_stderr=True,
+            )
         stderr = result.stderr or ""
         if not capture_output and stderr:
             sys.stderr.write(stderr)
-        if result.returncode == 0 or _LOCKED not in stderr or delay is None:
+        locked = _LOCKED in stderr or (
+            result.returncode != 0 and _LOCKED in _log_tail(log_file, start)
+        )
+        if result.returncode == 0 or not locked or delay is None:
             break
         _log.warning(
             "Butler registry locked (%s); retrying in %.0f s (%d of %d)",
@@ -380,6 +414,7 @@ def run_butler(
         label=args[0] if args else "butler",
         capture_output=capture_output,
         check=check,
+        log_file=log_file,
     )
 
 

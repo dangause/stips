@@ -32,6 +32,12 @@ computeSite: singularity-slurm
 clusterAlgorithm: {cluster_algorithm}
 stipsMaxJobsPerCluster: {cluster_max_jobs}
 
+# No final job: STIPS registers each submission's outputs itself
+# (stips.core.executor.register_outputs), taking turns with the other nights'
+# registry writes; a final job here would contend with them for SQLite.
+finalJob:
+  whenRun: NEVER
+
 parsl:
   log_level: INFO
 

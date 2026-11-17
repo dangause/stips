@@ -862,7 +862,7 @@ class TestRecoverLockedFinalJob:
 class TestFailedSubmitWithLockedFinalJob:
     """`bps submit` fails when its final job found the registry locked."""
 
-    def _run(self, tmp_path, final_log, recovered=True):
+    def _run(self, tmp_path, final_log, recovered=True, site="docker-slurm", submit_ok=False):
         from types import SimpleNamespace
 
         from stips.core import executor as ex
@@ -876,7 +876,7 @@ class TestFailedSubmitWithLockedFinalJob:
         config.repo = repo
         # A failed submit names the config dir, not the submit dir.
         bps_result = SimpleNamespace(
-            success=False,
+            success=submit_ok,
             run_id=None,
             stderr="CalledProcessError: final_job.bash",
             error="CalledProcessError: final_job.bash",
@@ -894,7 +894,7 @@ class TestFailedSubmitWithLockedFinalJob:
             patch.object(ex, "run_butler", fake_butler),
             patch.object(ex.butler_query, "quantum_graph_outcome", return_value=outcome),
         ):
-            result = ex.BPSExecutor(site="singularity-slurm").run_pipetask(
+            result = ex.BPSExecutor(site=site).run_pipetask(
                 ["run", "-b", str(repo), "-g", "/q/g.qg", "--output-run", "r/run"],
                 config,
                 check=False,
@@ -917,3 +917,30 @@ class TestFailedSubmitWithLockedFinalJob:
         )
         assert result.returncode == 1
         assert len(reruns) == 1
+
+
+class TestStipsRegistersOutputs(TestFailedSubmitWithLockedFinalJob):
+    """On the Slurm sites BPS runs no final job; STIPS registers the outputs."""
+
+    def test_outputs_registered_after_the_workflow(self, tmp_path):
+        result, calls = self._run(tmp_path, "", site="singularity-slurm", submit_ok=True)
+        assert result.returncode == 0
+        assert [c[0] for c in calls] == ["aggregate-graph"]
+
+    def test_outputs_registered_although_some_jobs_failed(self, tmp_path):
+        result, calls = self._run(tmp_path, "", site="slurm", submit_ok=False)
+        assert result.returncode == 0
+        assert len(calls) == 1
+
+    def test_failed_registration_fails_the_step(self, tmp_path):
+        result, calls = self._run(
+            tmp_path, "", site="singularity-slurm", submit_ok=True, recovered=False
+        )
+        assert result.returncode == 1
+        assert "Registering the outputs" in result.stderr
+
+    def test_slurm_sites_run_no_final_job(self):
+        root = Path(__file__).resolve().parents[3]
+        for site in ("slurm", "singularity-slurm"):
+            text = (root / "bps" / "sites" / f"{site}.yaml").read_text()
+            assert "finalJob:\n  whenRun: NEVER" in text

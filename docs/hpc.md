@@ -126,11 +126,18 @@ in flight holds one block, and the controller builds one graph or runs one
 `butler` command per night at a time, so give the controller job about one
 core per night.
 
-The nights share one SQLite registry, which takes one writer at a time. A
-`butler` command that finds it locked waits and tries again (for up to about
-eighteen minutes), and so does a submission's final job, which registers its
-outputs. Lock waits grow with the number of nights in flight; for many more
-nights than this, a PostgreSQL registry is the robust choice.
+The nights share one SQLite registry, which takes one writer at a time, so
+`stips run` lets its nights write in turn: ingesting raws, defining visits,
+certifying calibrations, editing collection chains, and registering what a
+submission wrote. On the `slurm` and `singularity-slurm` sites BPS runs no
+final job; STIPS registers each submission's outputs itself after its
+workflow, in the same queue. Several ingests at once on a shared filesystem
+were much slower than the same ingests one after another, and starved the
+other nights. Raw ingest is then the part of a calibration step that does not
+overlap between nights. A command that still finds the registry locked (by
+another process) waits and tries again for up to about eighteen minutes. Two
+`stips run` processes on one repository do not take turns with each other;
+for many writers, a PostgreSQL registry is the robust choice.
 
 ## Apptainer clusters (`singularity-slurm`)
 
