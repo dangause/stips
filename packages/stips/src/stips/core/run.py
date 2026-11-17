@@ -406,6 +406,8 @@ class RunResult:
     failed_science: list[str] = field(default_factory=list)
     failed_dia: list[str] = field(default_factory=list)
     failed_fphot: list[str] = field(default_factory=list)
+    # night -> bands with no matching science exposures (DIA skips them)
+    bands_without_science: dict[str, list[str]] = field(default_factory=dict)
     template_collections: dict[str, str] = field(default_factory=dict)
     forced_phot_collections: dict[str, list[str]] = field(default_factory=dict)
     differential_phot_success: bool | None = None
@@ -965,6 +967,22 @@ def _run_science_step(
     # night succeeds if ANY group succeeds.
     def _science_one(night: str) -> bool:
         any_success = False
+        # One Butler selection for the whole night, shared by its band groups.
+        try:
+            selection = science.select_night(
+                config,
+                night,
+                object_filter=run_cfg.object_name,
+                target_ra=run_cfg.ra,
+                target_dec=run_cfg.dec,
+            )
+        except Exception as e:
+            log.warning(f"Selecting science exposures for {night} failed: {e}")
+            selection = None
+        if selection is not None:
+            empty = [b for b in run_cfg.bands if selection.count([b]) == 0]
+            if empty:
+                result.bands_without_science[night] = empty
         for group in _split_band_groups(list(run_cfg.bands)):
             group_tag = "_".join(group)
             log.info(f"Running science for {night} bands={group}...")
@@ -982,6 +1000,7 @@ def _run_science_step(
                 target_dec=run_cfg.dec,
                 log_file=sci_log,
                 executor=executor,
+                selection=selection,
             )
             _maybe_split_log(sci_log)
             if sci_result.success:
@@ -1092,6 +1111,9 @@ def _run_dia_step(
         template_coll = result.template_collections.get(band)
         if template_coll is None:
             log.warning(f"Skipping DIA for {night}/{band} (no template available)")
+            return False
+        if band in result.bands_without_science.get(night, ()):
+            log.info(f"Skipping DIA for {night}/{band} (no science exposures)")
             return False
         log.info(f"Running DIA for {night}/{band}...")
         dia_log = _get_step_log_file("dia", night=night, band=band)

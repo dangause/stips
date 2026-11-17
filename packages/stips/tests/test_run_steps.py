@@ -144,12 +144,15 @@ def _sci(success, fallback_used=False, config_used=None, error=None):
 
 
 class TestRunScienceStep:
-    def _call(self, nights, run_cfg, result, dry_run=False):
+    def _call(self, nights, run_cfg, result, dry_run=False, band_counts=None):
         from stips.core import run as runmod
+        from stips.core.science import NightSelection
 
+        selection = NightSelection("raw", "", "", band_counts)
         with (
             patch.object(runmod, "_get_step_log_file", return_value=None),
             patch.object(runmod, "_maybe_split_log"),
+            patch("stips.core.science.select_night", return_value=selection),
         ):
             return runmod._run_science_step(
                 nights,
@@ -468,3 +471,50 @@ def test_flats_all_filters_option(tmp_path):
     assert RunConfig.from_yaml(path).flats_all_filters is True
     path.write_text("object: T\nbands: [r]\n")
     assert RunConfig.from_yaml(path).flats_all_filters is False
+
+
+def test_science_selects_each_night_once_and_records_empty_bands():
+    from stips.core import run as runmod
+    from stips.core.science import NightSelection
+
+    selection = NightSelection("raw", "", "", {"rp": 4})
+    res = _result()
+    with (
+        patch.object(runmod, "_get_step_log_file", return_value=None),
+        patch.object(runmod, "_maybe_split_log"),
+        patch("stips.core.science.select_night", return_value=selection) as msel,
+        patch("stips.core.science.run", return_value=_sci(True)) as mrun,
+    ):
+        runmod._run_science_step(
+            ["20240101"],
+            _run_cfg(bands=["r", "i", "rp", "ip"]),
+            MagicMock(),
+            res,
+            MagicMock(),
+            False,
+            executor=MagicMock(),
+        )
+    assert msel.call_count == 1
+    # Every band group gets the night's selection.
+    assert [c.kwargs["selection"] for c in mrun.call_args_list] == [selection] * 3
+    assert res.bands_without_science == {"20240101": ["r", "i", "ip"]}
+
+
+def test_dia_skips_bands_without_science_exposures():
+    from stips.core import run as runmod
+
+    res = _result()
+    res.bands_without_science["20240101"] = ["r"]
+    for b in ("r", "rp"):
+        res.template_collections[b] = f"templates/{b}"
+    with (
+        patch.object(runmod, "_get_step_log_file", return_value=None),
+        patch.object(runmod, "_maybe_split_log"),
+        patch("stips.core.dia.run", return_value=_dia(True)) as mrun,
+    ):
+        runmod._run_dia_step(
+            ["20240101"], _run_cfg(bands=["r", "rp"]), MagicMock(), res, False,
+            executor=MagicMock(),
+        )
+    assert [c.kwargs["band"] for c in mrun.call_args_list] == ["rp"]
+    assert res.failed_dia == ["20240101/r"]

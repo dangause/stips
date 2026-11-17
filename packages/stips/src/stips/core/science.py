@@ -408,12 +408,109 @@ def _build_data_query(
         target_ra=target_ra,
         target_dec=target_dec,
     )
+    return _assemble_data_query(prof, night, object_expr, exclusion_expr, bands)
+
+
+def _assemble_data_query(
+    prof,
+    night: str,
+    object_expr: str,
+    exclusion_expr: str,
+    bands: list[str] | None,
+) -> str:
+    """Join the WHERE fragments of :func:`_build_data_query` into one query."""
     band_expr = _band_expr(bands)
     return (
         f"instrument='{prof.name}' AND exposure.observation_type='science'"
         f" AND {night_day_obs_expr(night, prof)}"
         f"{object_expr}{band_expr}{exclusion_expr}"
     )
+
+
+def _count_exposures_by_band(config: "Config", where: str) -> dict[str, int] | None:
+    """Count exposures matching a Butler WHERE expression, per band.
+
+    Returns None if the query fails.
+    """
+    from stips.core.stack import run_butler_python_json
+
+    script = f"""
+import json
+from collections import Counter
+from lsst.daf.butler import Butler
+
+butler = Butler({str(config.repo)!r})
+rows = butler.registry.queryDataIds(["exposure", "band"], where={where!r})
+print(json.dumps({{"counts": dict(Counter(str(d["band"]) for d in rows))}}))
+"""
+    result = run_butler_python_json(script, config)
+    if not isinstance(result, dict) or not isinstance(result.get("counts"), dict):
+        return None
+    return {str(k): int(v) for k, v in result["counts"].items()}
+
+
+@dataclass
+class NightSelection:
+    """A night's science-exposure selection, worked out once for every band group.
+
+    Finding the raw collection, resolving the object, validating coordinates
+    and counting the matches each start a Butler process. :func:`run` would
+    otherwise repeat all of them for each band group of the night, including
+    groups with no exposures at all.
+
+    Attributes:
+        raw_run: Newest raw-ingest RUN of the night (None if there is none).
+        object_expr: Object-filter WHERE fragment (``""`` or ``" AND ..."``).
+        exclusion_expr: Bad-exposure WHERE fragment (``""`` or ``" AND ..."``).
+        band_counts: Matching exposures per band; None if counting failed.
+    """
+
+    raw_run: str | None
+    object_expr: str
+    exclusion_expr: str
+    band_counts: dict[str, int] | None
+
+    def count(self, bands: list[str] | None) -> int | None:
+        """Matching exposures in ``bands`` (all bands if empty); None if unknown."""
+        if self.band_counts is None:
+            return None
+        if not bands:
+            return sum(self.band_counts.values())
+        wanted = {str(b).strip().lower() for b in bands}
+        return sum(n for band, n in self.band_counts.items() if band in wanted)
+
+
+def select_night(
+    config: "Config",
+    night: str,
+    *,
+    bad_exposures: str | None = None,
+    bad_file: Path | None = None,
+    object_filter: str | None = None,
+    target_ra: float | None = None,
+    target_dec: float | None = None,
+) -> NightSelection:
+    """Work out a night's science-exposure selection for all of its bands.
+
+    Pass the result to :func:`run` as ``selection`` for each band group; the
+    group then reuses it instead of querying the Butler again.
+    """
+    prof = config.require_profile()
+    night = validate_night(night)
+    raw_run = latest_raw_run(config, night)
+    object_expr, exclusion_expr = _build_exclusions(
+        config,
+        night,
+        prof,
+        bad_exposures=bad_exposures,
+        bad_file=bad_file,
+        object_filter=object_filter,
+        target_ra=target_ra,
+        target_dec=target_dec,
+    )
+    where = _assemble_data_query(prof, night, object_expr, exclusion_expr, None)
+    counts = _count_exposures_by_band(config, where)
+    return NightSelection(raw_run, object_expr, exclusion_expr, counts)
 
 
 def _resolve_configs_to_try(
@@ -1052,6 +1149,7 @@ def run(
     target_dec: float | None = None,
     log_file: Path | None = None,
     executor=None,
+    selection: NightSelection | None = None,
 ) -> ScienceResult:
     """Run science processing for a night.
 
@@ -1074,6 +1172,9 @@ def run(
         target_ra: Expected target RA in degrees (enables coordinate validation)
         target_dec: Expected target Dec in degrees (enables coordinate validation)
         log_file: Optional path to write LSST pipeline logs
+        selection: The night's selection from :func:`select_night`, made
+            with the same object, coordinate and bad-exposure arguments;
+            used instead of querying the Butler again for this band group
 
     Returns:
         ScienceResult with collection names and status
@@ -1098,7 +1199,7 @@ def run(
     # Use the newest raw ingest — a re-ingest (e.g. after a header fix) appends
     # a newer timestamp that supersedes the stale earlier one.
     try:
-        raw_run = latest_raw_run(config, night)
+        raw_run = selection.raw_run if selection else latest_raw_run(config, night)
         if not raw_run:
             return _failure(
                 night,
@@ -1110,17 +1211,22 @@ def run(
 
     # Data selection: two-UT-day window, object filter, band filter, and
     # bad-exposure/coordinate-validation exclusions.
-    data_query = _build_data_query(
-        config,
-        night,
-        prof,
-        bad_exposures=bad_exposures,
-        bad_file=bad_file,
-        object_filter=object_filter,
-        target_ra=target_ra,
-        target_dec=target_dec,
-        bands=bands,
-    )
+    if selection is not None:
+        data_query = _assemble_data_query(
+            prof, night, selection.object_expr, selection.exclusion_expr, bands
+        )
+    else:
+        data_query = _build_data_query(
+            config,
+            night,
+            prof,
+            bad_exposures=bad_exposures,
+            bad_file=bad_file,
+            object_filter=object_filter,
+            target_ra=target_ra,
+            target_dec=target_dec,
+            bands=bands,
+        )
 
     # Pipeline and config paths
     pipeline = config.resolve_pipeline("DRP.yaml")
@@ -1138,7 +1244,9 @@ def run(
         )
 
     # Fail fast if this night has no matching exposures after filtering.
-    match_count = _count_matching_exposures(config, data_query)
+    match_count = selection.count(bands) if selection is not None else None
+    if match_count is None:
+        match_count = _count_matching_exposures(config, data_query)
     if match_count == 0:
         return _failure(
             night,
