@@ -28,6 +28,7 @@ def _profile() -> MagicMock:
     prof.name = "Nickel"
     prof.crosstalk = None
     prof.isr_overrides = {}
+    prof.night_to_dayobs_offset_days = 1
     return prof
 
 
@@ -63,7 +64,9 @@ def _counts(mapping: dict[str, int]):
     return _count
 
 
-def _invoke(tmp_path, *, run_rc, counts, ingest_rc=0, ingest_stderr=""):
+def _invoke(
+    tmp_path, *, run_rc, counts, ingest_rc=0, ingest_stderr="", ingested_raw_run=None
+):
     """Run calibs.run() with all stack seams mocked; return (result, mocks)."""
     config = _config(tmp_path)
     executor = _executor(run_rc)
@@ -84,7 +87,14 @@ def _invoke(tmp_path, *, run_rc, counts, ingest_rc=0, ingest_stderr=""):
         patch.object(pipeline.butler_query, "list_instruments", lambda config: {}),
         patch.object(calibs, "get_raw_dir", return_value=raw_dir),
     ):
-        result = calibs.run(NIGHT, config, jobs=1, executor=executor, skip_curated=True)
+        result = calibs.run(
+            NIGHT,
+            config,
+            jobs=1,
+            executor=executor,
+            skip_curated=True,
+            ingested_raw_run=ingested_raw_run,
+        )
     return result, SimpleNamespace(run_butler=run_butler, executor=executor, bq=bq)
 
 
@@ -172,3 +182,41 @@ def test_ingest_failure_but_raws_present_continues(tmp_path):
 
     assert result.success is True
     mocks.executor.run_pipetask.assert_called()
+
+
+# --------------------------------------------------------------------------- #
+# Ingest and visit definition: once per night, scoped to the night
+# --------------------------------------------------------------------------- #
+def _butler_calls(mocks, subcommand):
+    return [
+        c.args[0]
+        for c in mocks.run_butler.call_args_list
+        if c.args and c.args[0] and c.args[0][0] == subcommand
+    ]
+
+
+def test_define_visits_is_scoped_to_the_night(tmp_path):
+    _, mocks = _invoke(tmp_path, run_rc=0, counts={"bias": 1, "flat": 1})
+
+    (args,) = _butler_calls(mocks, "define-visits")
+    assert args[args.index("--where") + 1] == "exposure.day_obs IN (20230519, 20230520)"
+
+
+def test_already_ingested_night_is_not_ingested_again(tmp_path):
+    run = "Nickel/raw/20230519/20260101T000000Z"
+    result, mocks = _invoke(
+        tmp_path, run_rc=0, counts={"bias": 1, "flat": 1}, ingested_raw_run=run
+    )
+
+    assert result.success is True
+    assert result.raw_run == run
+    assert _butler_calls(mocks, "ingest-raws") == []
+    assert _butler_calls(mocks, "define-visits") == []
+    # Both calibration graphs read the raws from the RUN they are already in.
+    qgraph_args = [
+        c.args[0] for c in mocks.executor.run_pipetask.call_args_list if c.args[0][0] == "qgraph"
+    ]
+    assert len(qgraph_args) == 2
+    for args in qgraph_args:
+        inputs = args[args.index("-i") + 1].split(",")
+        assert run in inputs

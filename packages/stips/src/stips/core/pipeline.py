@@ -211,6 +211,19 @@ def night_day_obs_expr(
     return f"{column} IN ({joined})"
 
 
+def define_visits_args(repo: str, profile, night: str) -> list[str]:
+    """``butler define-visits`` arguments for one observing night's exposures.
+
+    Without ``--where``, define-visits groups every exposure in the repository
+    each time it runs, so a campaign that defines visits night by night does
+    work that grows with every night already ingested. Only exposures whose
+    ``day_obs`` falls in the night (both UT days, see
+    :func:`night_day_obs_values`) are new.
+    """
+    where = night_day_obs_expr(night, profile, column="exposure.day_obs")
+    return ["define-visits", repo, profile.name, "--where", where]
+
+
 def isr_config_args(
     profile, label: str = "isr", *, include_crosstalk: bool = True
 ) -> list[str]:

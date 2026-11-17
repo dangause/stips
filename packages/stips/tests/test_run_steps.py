@@ -435,3 +435,21 @@ class TestRunFphotStep:
         assert r is None
         assert res.failed_fphot == []
         assert set(res.forced_phot_collections) == {"20240101", "20240102"}
+
+
+def test_first_night_reuses_the_curated_ingest():
+    """The curated write ingests the first night; its calibs must not ingest again."""
+    from stips.core import run as runmod
+
+    run = "Nickel/raw/20240101/20260101T000000Z"
+    with (
+        patch.object(runmod, "_get_step_log_file", return_value=None),
+        patch.object(runmod, "_maybe_split_log"),
+        patch("stips.core.calibs.write_curated_calibrations", return_value=run),
+        patch("stips.core.calibs.run", return_value=_calib(True)) as mrun,
+    ):
+        runmod._run_calibs_step(
+            ["20240101", "20240102"], _run_cfg(), MagicMock(), _result(), False
+        )
+    passed = {c.args[0]: c.kwargs["ingested_raw_run"] for c in mrun.call_args_list}
+    assert passed == {"20240101": run, "20240102": None}

@@ -846,8 +846,13 @@ def _run_calibs_step(
     first_night = all_nights[0]
     log.info("Writing curated calibrations (one-time)...")
     curated_log = _get_step_log_file("calibs", night="curated")
+    # The curated write ingests the first night's raws; that night's calibs
+    # then read them from there rather than ingesting the frames again.
+    curated_raw_run = None
     try:
-        calibs.write_curated_calibrations(first_night, config, log_file=curated_log)
+        curated_raw_run = calibs.write_curated_calibrations(
+            first_night, config, log_file=curated_log
+        )
     except Exception as e:
         log.warning(f"Curated calibrations write failed: {e}")
 
@@ -863,6 +868,7 @@ def _run_calibs_step(
             log_file=calib_log,
             executor=executor,
             skip_curated=True,
+            ingested_raw_run=curated_raw_run if night == first_night else None,
         )
         _maybe_split_log(calib_log)
         return calib_result

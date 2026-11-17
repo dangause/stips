@@ -11,6 +11,7 @@ from stips.core import butler_query
 from stips.core.pipeline import (
     CollectionNames,
     PipetaskStage,
+    define_visits_args,
     ensure_instrument_registered,
     find_aliasing_exposure_ids,
     get_raw_dir,
@@ -59,7 +60,7 @@ def write_curated_calibrations(
     config: Config,
     *,
     log_file: Path | None = None,
-) -> None:
+) -> str | None:
     """Write curated calibrations (defects, crosstalk) for a night.
 
     This is safe to call once before concurrent calibs. The curated
@@ -70,6 +71,12 @@ def write_curated_calibrations(
         night: Any observing night (used for raw_run collection reference)
         config: Pipeline configuration
         log_file: Optional log file path
+
+    Returns:
+        The RUN collection this call ingested the night's raws into (visits
+        defined), or None if it did not. The night's own :func:`run` takes it
+        as ``ingested_raw_run`` instead of ingesting the same frames into a
+        second RUN.
     """
     prof = config.require_profile()
     night = validate_night(night)
@@ -77,10 +84,11 @@ def write_curated_calibrations(
     repo = str(config.repo)
 
     # Ingest raws for this night first (needed for write-curated-calibrations)
+    ingested = None
     raw_dir = get_raw_dir(config, night)
     if raw_dir.exists():
         ensure_instrument_registered(config, log_file)
-        run_butler(
+        ingest = run_butler(
             [
                 "ingest-raws",
                 repo,
@@ -94,9 +102,12 @@ def write_curated_calibrations(
             check=False,
             log_file=log_file,
         )
-        run_butler(["define-visits", repo, prof.name], config, log_file=log_file)
+        run_butler(define_visits_args(repo, prof, night), config, log_file=log_file)
+        if ingest.returncode == 0:
+            ingested = cols.raw_run
 
     _write_curated_and_chain(night, config, cols, log_file=log_file)
+    return ingested
 
 
 def _write_curated_and_chain(
@@ -161,6 +172,7 @@ def run(
     log_file: Path | None = None,
     executor=None,
     skip_curated: bool = False,
+    ingested_raw_run: str | None = None,
 ) -> CalibsResult:
     """Run nightly calibration processing.
 
@@ -177,6 +189,10 @@ def run(
         jobs: Number of parallel jobs
         log_file: Optional path to write LSST pipeline logs
         skip_curated: Skip curated calibrations write (already done externally)
+        ingested_raw_run: RUN collection already holding this night's raws
+            with visits defined (from :func:`write_curated_calibrations`);
+            ingest and visit definition are then skipped and the calibration
+            pipelines read the raws from it
 
     Returns:
         CalibsResult with collection names and status
@@ -203,13 +219,14 @@ def run(
         )
 
     repo = str(config.repo)
+    raw_run = ingested_raw_run or cols.raw_run
 
     # Ensure cp_pipe is configured
     if not config.cp_pipe_dir:
         return CalibsResult(
             success=False,
             night=night,
-            raw_run=cols.raw_run,
+            raw_run=raw_run,
             calib_chain=cols.calib_chain,
             cp_bias=cols.cp_bias,
             cp_flat=cols.cp_flat,
@@ -231,7 +248,7 @@ def run(
         return CalibsResult(
             success=False,
             night=night,
-            raw_run=cols.raw_run,
+            raw_run=raw_run,
             calib_chain=cols.calib_chain,
             cp_bias=cols.cp_bias,
             cp_flat=cols.cp_flat,
@@ -252,7 +269,7 @@ def run(
         # But that same non-zero also covers real failures (disk full,
         # permissions, corrupt FITS), so on failure we verify that raws for the
         # night are actually present before continuing.
-        ingest_result = run_butler(
+        ingest_result = None if ingested_raw_run else run_butler(
             [
                 "ingest-raws",
                 repo,
@@ -267,7 +284,7 @@ def run(
             capture_output=True,
             log_file=log_file,
         )
-        if ingest_result.returncode != 0:
+        if ingest_result is not None and ingest_result.returncode != 0:
             stderr = (ingest_result.stderr or "").strip()
             log.warning(
                 "ingest-raws returned %s for %s: %s",
@@ -281,7 +298,7 @@ def run(
                 return CalibsResult(
                     success=False,
                     night=night,
-                    raw_run=cols.raw_run,
+                    raw_run=raw_run,
                     calib_chain=cols.calib_chain,
                     cp_bias=cols.cp_bias,
                     cp_flat=cols.cp_flat,
@@ -291,8 +308,9 @@ def run(
                     ),
                 )
 
-        # Define visits
-        run_butler(["define-visits", repo, prof.name], config, log_file=log_file)
+        # Define visits (this night's exposures only)
+        if not ingested_raw_run:
+            run_butler(define_visits_args(repo, prof, night), config, log_file=log_file)
 
         # Write curated calibrations (skip if already done by orchestrator)
         if not skip_curated:
@@ -309,7 +327,7 @@ def run(
             bias_stage = PipetaskStage(
                 repo=repo,
                 pipeline=str(config.resolve_pipeline("CpBias.yaml")),
-                inputs=f"{cols.curated_chain},{cols.raw_run}",
+                inputs=f"{cols.curated_chain},{raw_run}",
                 output_parent=cols.cp_bias,
                 output_run=cols.cp_bias_run,
                 qgraph_path=str(qg_bias),
@@ -385,7 +403,7 @@ def run(
             flat_stage = PipetaskStage(
                 repo=repo,
                 pipeline=str(config.resolve_pipeline("CpFlat.yaml")),
-                inputs=f"{cols.curated_chain},{cols.raw_run},{cols.calib_out},{cols.cp_bias_run}",
+                inputs=f"{cols.curated_chain},{raw_run},{cols.calib_out},{cols.cp_bias_run}",
                 output_parent=cols.cp_flat,
                 output_run=cols.cp_flat_run,
                 qgraph_path=str(qg_flat),
@@ -477,7 +495,7 @@ def run(
             return CalibsResult(
                 success=False,
                 night=night,
-                raw_run=cols.raw_run,
+                raw_run=raw_run,
                 calib_chain=cols.calib_chain,
                 cp_bias=cols.cp_bias,
                 cp_flat=cols.cp_flat,
@@ -490,7 +508,7 @@ def run(
         return CalibsResult(
             success=True,
             night=night,
-            raw_run=cols.raw_run,
+            raw_run=raw_run,
             calib_chain=cols.calib_chain,
             cp_bias=cols.cp_bias,
             cp_flat=cols.cp_flat,
@@ -500,7 +518,7 @@ def run(
         return CalibsResult(
             success=False,
             night=night,
-            raw_run=cols.raw_run,
+            raw_run=raw_run,
             calib_chain=cols.calib_chain,
             cp_bias=cols.cp_bias,
             cp_flat=cols.cp_flat,
