@@ -126,3 +126,30 @@ def test_old_lock_lines_in_the_log_do_not_trigger_a_retry(monkeypatch, tmp_path,
     monkeypatch.setattr(stack, "run_with_stack", fake)
     stack.run_butler(["ingest-raws", "/r"], object(), check=False, log_file=log_file)
     assert len(calls) == 1
+
+
+def test_short_writes_do_not_wait_for_an_ingest(monkeypatch):
+    """An ingest holds only the ingest turn; other writes go between its transactions."""
+    import threading
+
+    ingest_running = threading.Event()
+    release_ingest = threading.Event()
+    order = []
+
+    def run_with_stack(cmd, config, **kwargs):
+        if "ingest-raws" in cmd:
+            ingest_running.set()
+            release_ingest.wait(5)
+        order.append(cmd[-2] if "ingest-raws" in cmd else cmd[-1])
+        return SimpleNamespace(returncode=0, stdout="", stderr="", args=cmd)
+
+    monkeypatch.setattr(stack, "run_with_stack", run_with_stack)
+    ingest = threading.Thread(
+        target=stack.run_butler, args=(["ingest-raws", "/r"], object())
+    )
+    ingest.start()
+    assert ingest_running.wait(5)
+    stack.run_butler(["certify-calibrations", "/r", "night"], object())
+    release_ingest.set()
+    ingest.join()
+    assert order == ["night", "ingest-raws"]

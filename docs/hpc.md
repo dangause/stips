@@ -127,14 +127,16 @@ in flight holds one block, and the controller builds one graph or runs one
 core per night.
 
 The nights share one SQLite registry, which takes one writer at a time, so
-`stips run` lets its nights write in turn: ingesting raws, defining visits,
-certifying calibrations, editing collection chains, and registering what a
-submission wrote. On the `slurm` and `singularity-slurm` sites BPS runs no
-final job; STIPS registers each submission's outputs itself after its
-workflow, in the same queue. Several ingests at once on a shared filesystem
-were much slower than the same ingests one after another, and starved the
-other nights. Raw ingest is then the part of a calibration step that does not
-overlap between nights. A command that still finds the registry locked (by
+`stips run` lets its nights write in turn: defining visits, certifying
+calibrations, editing collection chains, and registering what a submission
+wrote. On the `slurm` and `singularity-slurm` sites BPS runs no final job;
+STIPS registers each submission's outputs itself after its workflow, in the
+same queue. Raw ingests take turns among themselves: several at once on a
+shared filesystem were much slower than the same ingests one after another.
+An ingest copies files for minutes but writes the registry one exposure at a
+time, so the other writes go between its transactions instead of waiting for
+it. Raw ingest is then the part of a calibration step that does not overlap
+between nights. A command that still finds the registry locked (by
 another process) waits and tries again for up to about eighteen minutes. Two
 `stips run` processes on one repository do not take turns with each other;
 for many writers, a PostgreSQL registry is the robust choice.

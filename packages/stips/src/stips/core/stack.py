@@ -224,9 +224,18 @@ LOCK_RETRY_DELAYS: tuple[float, ...] = (10.0, 30.0, 60.0, 120.0, 240.0, 300.0, 3
 _LOCKED = "database is locked"
 
 #: Held while a `butler` command that writes the registry runs. Nights run as
-#: threads of one `stips run`; SQLite takes one writer at a time, and several
-#: ingests at once queue on its lock far more slowly than one after another.
+#: threads of one `stips run`, and SQLite takes one writer at a time.
 REGISTRY_WRITER = threading.Lock()
+
+#: Held instead while raws are ingested. An ingest runs for minutes (it copies
+#: the files) but writes the registry one exposure at a time, so the other
+#: nights' short writes go between its transactions rather than wait for the
+#: whole ingest; only ingests wait for each other. Several ingests at once
+#: queued on SQLite's lock far more slowly than one after another.
+RAW_INGEST = threading.Lock()
+
+#: Subcommands that take :data:`RAW_INGEST` rather than :data:`REGISTRY_WRITER`.
+_INGEST_COMMANDS = frozenset({"ingest-raws"})
 
 
 def _log_tail(log_file: Path | None, start: int) -> str:
@@ -259,7 +268,8 @@ def _run_retrying_on_lock(
 ) -> subprocess.CompletedProcess:
     """Run a Butler command that writes the registry, one at a time, retrying if locked.
 
-    Commands from concurrent nights take turns (:data:`REGISTRY_WRITER`).
+    Commands from concurrent nights take turns (:data:`REGISTRY_WRITER`;
+    ingests take turns among themselves, :data:`RAW_INGEST`).
     Something outside this process (a BPS final job, another run) can still
     hold the SQLite registry; a command that waits longer than SQLite's busy
     timeout fails with "database is locked" before its transaction starts, so
@@ -267,9 +277,10 @@ def _run_retrying_on_lock(
     command logs to ``log_file``, in what it appended there; stderr is passed
     on unchanged.
     """
+    turn = RAW_INGEST if label in _INGEST_COMMANDS else REGISTRY_WRITER
     for attempt, delay in enumerate((*LOCK_RETRY_DELAYS, None)):
         start = _log_size(log_file)
-        with REGISTRY_WRITER:
+        with turn:
             result = run_with_stack(
                 cmd,
                 config,
