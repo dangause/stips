@@ -7,11 +7,14 @@ Renderers are pluggable; RUNS.md is one view of runs.json.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import os
 import re
 import subprocess
+import threading
+import time
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -238,6 +241,37 @@ def git_sha_before(repo_root: Path, timestamp_end: str | None) -> str | None:
         return None
 
 
+# Concurrent nights of one `stips run` upsert from several threads, and two
+# runs can share a checkout; every read-modify-write of the store holds both a
+# thread lock and an exclusive lock on a file beside it.
+_STORE_LOCK = threading.Lock()
+_LOCK_NAME = ".runs.lock"
+
+
+@contextlib.contextmanager
+def locked_store(out_dir: Path):
+    """Hold the provenance store in ``out_dir`` for one read-modify-write."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    with _STORE_LOCK, open(out_dir / _LOCK_NAME, "a") as handle:
+        try:
+            import fcntl
+
+            fcntl.flock(handle, fcntl.LOCK_EX)
+        except (ImportError, OSError):
+            # No flock here (some network filesystems): the thread lock still
+            # serialises the nights of this process.
+            pass
+        yield
+
+
+def _write_atomic(path: Path, text: str) -> None:
+    """Replace ``path`` with ``text`` in one step: readers never see half a file."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.{threading.get_ident()}.tmp")
+    tmp.write_text(text)
+    os.replace(tmp, path)
+
+
 def load_store(path: Path) -> list[RunRecord]:
     if not path.exists():
         return []
@@ -258,8 +292,7 @@ def upsert_records(
 
 
 def save_store(path: Path, records: list[RunRecord]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps([r.to_dict() for r in records], indent=2))
+    _write_atomic(path, json.dumps([r.to_dict() for r in records], indent=2))
 
 
 def _human_gb(n: int | None) -> str:
@@ -371,6 +404,19 @@ def sync(
             incoming.append(rec)
 
     store = out_dir / "runs.json"
+    with locked_store(out_dir):
+        merged = _merge_scanned(store, incoming, out_dir, dry_run)
+    return {
+        "records": len(incoming),
+        "repos": sorted(set(repos_seen)),
+        "empty_or_unparseable": sorted(set(empty_repos)),
+        "total_records_after": len(merged),
+    }
+
+
+def _merge_scanned(
+    store: Path, incoming: list[RunRecord], out_dir: Path, dry_run: bool
+) -> list[RunRecord]:
     existing = load_store(store)
     # A historical repo scan cannot know the pipelines version a past run used
     # (the live stack may have moved on), so `sync` never sets it. Preserve any
@@ -384,27 +430,23 @@ def sync(
     merged = upsert_records(existing, incoming)
     if not dry_run:
         save_store(store, merged)
-        (out_dir / "RUNS.md").write_text(render_markdown(merged))
-    return {
-        "records": len(incoming),
-        "repos": sorted(set(repos_seen)),
-        "empty_or_unparseable": sorted(set(empty_repos)),
-        "total_records_after": len(merged),
-    }
+        _write_atomic(out_dir / "RUNS.md", render_markdown(merged))
+    return merged
 
 
 def mark_deleted(repos: list[str], out_dir: Path, reclaimed_at: str) -> int:
     store = out_dir / "runs.json"
-    records = load_store(store)
-    targets = set(repos)
-    n = 0
-    for r in records:
-        if r.repo in targets and r.repo_status != "deleted":
-            r.repo_status = "deleted"
-            r.reclaimed_at = reclaimed_at
-            n += 1
-    save_store(store, records)
-    (out_dir / "RUNS.md").write_text(render_markdown(records))
+    with locked_store(out_dir):
+        records = load_store(store)
+        targets = set(repos)
+        n = 0
+        for r in records:
+            if r.repo in targets and r.repo_status != "deleted":
+                r.repo_status = "deleted"
+                r.reclaimed_at = reclaimed_at
+                n += 1
+        save_store(store, records)
+        _write_atomic(out_dir / "RUNS.md", render_markdown(records))
     return n
 
 
@@ -430,11 +472,45 @@ def default_roots(config=None) -> list[Path]:
     return []
 
 
+# Measured at most once per repo per interval: `du` of a Butler repository on
+# a network filesystem can take minutes, and the live hook runs after every
+# science band group.
+_SIZE_TTL_S = 3600.0
+_size_cache: dict[str, tuple[float, int | None]] = {}
+_version_cache: dict[str, str | None] = {}
+_CACHE_LOCK = threading.Lock()
+
+
+def _repo_size_cached(repo: Path) -> int | None:
+    key = str(repo)
+    with _CACHE_LOCK:
+        hit = _size_cache.get(key)
+        if hit is not None and time.monotonic() - hit[0] < _SIZE_TTL_S:
+            return hit[1]
+    size = repo_size_bytes(repo)
+    with _CACHE_LOCK:
+        _size_cache[key] = (time.monotonic(), size)
+    return size
+
+
+def _pipelines_version_cached(config) -> str | None:
+    """The stack's pipelines version, read once per stack per process."""
+    from stips.core.stack import stack_pipelines_version
+
+    key = str(getattr(config, "stack_dir", ""))
+    with _CACHE_LOCK:
+        if key in _version_cache:
+            return _version_cache[key]
+    version = stack_pipelines_version(config)
+    if version is not None:
+        with _CACHE_LOCK:
+            _version_cache[key] = version
+    return version
+
+
 def upsert_from_log(plog, config) -> None:
     """Live hook: upsert a single just-finished run. Never raises."""
     try:
-        from stips.core.stack import stack_pipelines_version
-
         repo = Path(config.repo)
         repo_root = Path(__file__).resolve().parents[5]
         out_dir = repo_root / "provenance"
@@ -443,7 +519,7 @@ def upsert_from_log(plog, config) -> None:
         rec = record_from_log_file(
             log_path, repo, instrument=instrument_from_config(config)
         )
-        rec.repo_size_bytes = repo_size_bytes(repo)
+        rec.repo_size_bytes = _repo_size_cached(repo)
         rec.stips_git_sha = git_sha_before(repo_root, rec.timestamp_end)
         rec.stips_git_describe = git_describe(repo_root, rec.stips_git_sha)
         _env_ver = lsst_version_from_env()
@@ -452,7 +528,7 @@ def upsert_from_log(plog, config) -> None:
             "env" if _env_ver else ("repo-scan" if rec.lsst_stack_version else None)
         )
         # True pipelines version (live, in-stack) alongside the conda-env name.
-        rec.lsst_pipelines_version = stack_pipelines_version(config)
+        rec.lsst_pipelines_version = _pipelines_version_cached(config)
         rec.duration_s = duration_from_stamps(rec.started_at, rec.ended_at)
         cfg = rec.configs_tried[0]["config"] if rec.configs_tried else None
         rec.rerun_recipe = build_rerun_recipe(
@@ -464,13 +540,11 @@ def upsert_from_log(plog, config) -> None:
             git_describe=rec.stips_git_describe,
             lsst_version=rec.lsst_pipelines_version or rec.lsst_stack_version,
         )
-        save_store(
-            out_dir / "runs.json",
-            upsert_records(load_store(out_dir / "runs.json"), [rec]),
-        )
-        (out_dir / "RUNS.md").write_text(
-            render_markdown(load_store(out_dir / "runs.json"))
-        )
+        store = out_dir / "runs.json"
+        with locked_store(out_dir):
+            merged = upsert_records(load_store(store), [rec])
+            save_store(store, merged)
+            _write_atomic(out_dir / "RUNS.md", render_markdown(merged))
     except Exception:  # noqa: BLE001 — provenance must never break a pipeline run
         import logging
 

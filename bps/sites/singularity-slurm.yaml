@@ -30,11 +30,16 @@ clusterAlgorithm: stips.core.bps_clustering.visit_clustering
 
 parsl:
   log_level: INFO
-  retries: 3
 
 site:
   singularity-slurm:
     class: stips.core.bps_sites.ApptainerSlurm
+
+    # Parsl runs a failed job again up to this many times, but only when its
+    # worker was lost: a job whose pipetask exited non-zero fails the same way
+    # again (stips.core.bps_retry). ctrl_bps_parsl reads retries here, not
+    # from the parsl: section.
+    retries: 1
 
     # One block = one Slurm job on one node. Parsl starts
     # min(cores_per_node, mem_per_node / mem_per_worker) workers in it, and

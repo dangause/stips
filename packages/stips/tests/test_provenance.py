@@ -489,3 +489,54 @@ def test_sync_preserves_prior_pipelines_version(tmp_path):
     recs = load_store(out_dir / "runs.json")
     assert len(recs) == 1
     assert recs[0].lsst_pipelines_version == "gf03f954c0e+3d14ea8aaf"
+
+
+def test_concurrent_upserts_keep_every_record(tmp_path):
+    """Nights finishing at once must not lose or corrupt each other's records."""
+    import json
+    import threading
+
+    from stips.core.provenance import (
+        RunRecord,
+        load_store,
+        locked_store,
+        save_store,
+        upsert_records,
+    )
+
+    store = tmp_path / "runs.json"
+
+    def upsert(i):
+        rec = RunRecord(
+            repo="r",
+            repo_path="/r",
+            target="t",
+            instrument="nickel",
+            night=f"2023{i:04d}",
+            step="science",
+            final_status="success",
+        )
+        with locked_store(tmp_path):
+            save_store(store, upsert_records(load_store(store), [rec]))
+
+    threads = [threading.Thread(target=upsert, args=(i,)) for i in range(24)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert len(json.loads(store.read_text())) == 24
+    assert not list(tmp_path.glob(".*.tmp"))
+
+
+def test_live_upsert_measures_repo_size_once(tmp_path, monkeypatch):
+    from stips.core import provenance
+
+    calls = []
+    monkeypatch.setattr(provenance, "_size_cache", {})
+    monkeypatch.setattr(
+        provenance, "repo_size_bytes", lambda repo: calls.append(repo) or 1024
+    )
+    assert provenance._repo_size_cached(tmp_path) == 1024
+    assert provenance._repo_size_cached(tmp_path) == 1024
+    assert len(calls) == 1

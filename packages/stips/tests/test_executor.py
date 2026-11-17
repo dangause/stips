@@ -8,6 +8,8 @@ import time
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 
@@ -819,3 +821,39 @@ class TestIntegration:
         bps_exec = _create_executor(bps_cfg)
         assert isinstance(bps_exec, BPSExecutor)
         assert bps_exec.site == "slurm"
+
+
+class TestRecoverLockedFinalJob:
+    def _submit(self, tmp_path, text):
+        final = tmp_path / "logs" / "finalJob"
+        final.mkdir(parents=True)
+        (final / "finalJob.stderr").write_text(text)
+        (tmp_path / "g.qg").write_text("")
+        return tmp_path
+
+    def test_clean_final_job_is_left_alone(self, tmp_path, monkeypatch):
+        from stips.core import executor
+
+        monkeypatch.setattr(executor, "run_butler", lambda *a, **k: pytest.fail("re-ran"))
+        sd = self._submit(tmp_path, "INFO aggregate-graph done\n")
+        assert executor.recover_locked_final_job(sd, "/elsewhere/g.qg", MagicMock()) is None
+
+    def test_locked_final_job_is_run_again(self, tmp_path, monkeypatch):
+        from types import SimpleNamespace
+
+        from stips.core import executor
+
+        calls = []
+        monkeypatch.setattr(
+            executor,
+            "run_butler",
+            lambda args, config, **k: calls.append(args) or SimpleNamespace(returncode=0),
+        )
+        config = MagicMock()
+        config.repo = "/repo"
+        sd = self._submit(tmp_path, "sqlite3.OperationalError: database is locked\n")
+
+        assert executor.recover_locked_final_job(sd, "/elsewhere/g.qg", config) is True
+        (args,) = calls
+        assert args[:3] == ["aggregate-graph", str(sd / "g.qg"), "/repo"]
+        assert "--update-output-chain" in args

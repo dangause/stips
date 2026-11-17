@@ -7,6 +7,8 @@ import logging
 import os
 import shlex
 import subprocess
+import sys
+import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -174,6 +176,7 @@ def run_with_stack(
     capture_output: bool = False,
     check: bool = True,
     cwd: Path | None = None,
+    capture_stderr: bool = False,
 ) -> subprocess.CompletedProcess:
     """Run a command within the LSST stack environment.
 
@@ -187,6 +190,8 @@ def run_with_stack(
         capture_output: If True, capture stdout/stderr
         check: If True, raise on non-zero exit
         cwd: Working directory (default: stack_dir)
+        capture_stderr: Capture stderr only (stdout still goes to the
+            terminal); ignored when ``capture_output`` is set
 
     Returns:
         CompletedProcess with return code and output
@@ -200,6 +205,7 @@ def run_with_stack(
 
     # Config-derived values are injected here (never interpolated into the
     # script text); the script references them as "$VAR". See F-018.
+    extra = {"stderr": subprocess.PIPE} if capture_stderr and not capture_output else {}
     return subprocess.run(
         ["bash", "-c", script],
         capture_output=capture_output,
@@ -207,7 +213,57 @@ def run_with_stack(
         cwd=cwd or config.stack_dir,
         text=True,
         env={**os.environ, **script_env},
+        **extra,
     )
+
+
+#: Seconds to wait before each retry of a Butler command that found the
+#: registry locked by another writer (SQLite allows one at a time).
+LOCK_RETRY_DELAYS: tuple[float, ...] = (10.0, 30.0, 60.0, 120.0, 240.0)
+_LOCKED = "database is locked"
+
+
+def _run_retrying_on_lock(
+    cmd: list[str],
+    config: Config,
+    *,
+    label: str,
+    capture_output: bool,
+    check: bool,
+) -> subprocess.CompletedProcess:
+    """Run a Butler command, retrying while the registry is locked.
+
+    Concurrent nights share one SQLite registry, which takes one writer at a
+    time; a command that waits longer than SQLite's busy timeout fails with
+    "database is locked" before its transaction starts, so running it again
+    is safe. stderr is captured to spot that and then passed on unchanged.
+    """
+    for attempt, delay in enumerate((*LOCK_RETRY_DELAYS, None)):
+        result = run_with_stack(
+            cmd,
+            config,
+            capture_output=capture_output,
+            check=False,
+            capture_stderr=True,
+        )
+        stderr = result.stderr or ""
+        if not capture_output and stderr:
+            sys.stderr.write(stderr)
+        if result.returncode == 0 or _LOCKED not in stderr or delay is None:
+            break
+        _log.warning(
+            "Butler registry locked (%s); retrying in %.0f s (%d of %d)",
+            label,
+            delay,
+            attempt + 1,
+            len(LOCK_RETRY_DELAYS),
+        )
+        time.sleep(delay)
+    if check and result.returncode != 0:
+        raise subprocess.CalledProcessError(
+            result.returncode, result.args, result.stdout, result.stderr
+        )
+    return result
 
 
 def run_pipetask(
@@ -318,9 +374,10 @@ def run_butler(
     # Add the actual command arguments
     butler_args.extend(args)
 
-    return run_with_stack(
+    return _run_retrying_on_lock(
         butler_args,
         config,
+        label=args[0] if args else "butler",
         capture_output=capture_output,
         check=check,
     )

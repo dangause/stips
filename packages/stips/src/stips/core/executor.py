@@ -13,10 +13,11 @@ from __future__ import annotations
 import logging
 import subprocess
 import time
+from pathlib import Path
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from stips.core import bps, bps_report, butler_query, quanta_report
-from stips.core.stack import run_pipetask
+from stips.core.stack import run_butler, run_pipetask
 
 if TYPE_CHECKING:
 
@@ -292,6 +293,58 @@ def _translate_bps_to_completed_process(
     )
 
 
+#: Processes the re-run final job uses (the site files' finalJob.requestCpus).
+FINAL_JOB_PROCESSES = 4
+
+
+def recover_locked_final_job(
+    submit_dir: str | Path,
+    qgraph_file: str,
+    config: Config,
+    *,
+    log_file: Path | None = None,
+) -> bool | None:
+    """Re-run a submission's final job if it found the registry locked.
+
+    The final job (``butler aggregate-graph``) registers everything the
+    workflow wrote. Several nights finishing at once can find the SQLite
+    registry held by another writer; the final job then fails and the
+    submission's outputs stay unregistered, so its quanta would count as
+    failed. Running it again (retrying while the registry is locked) is safe:
+    the failed attempt changed nothing.
+
+    Returns None when the final job did not hit a lock, otherwise whether
+    the re-run succeeded.
+    """
+    final_logs = Path(submit_dir) / "logs" / "finalJob"
+    text = "".join(
+        p.read_text(errors="replace")
+        for p in (final_logs / "finalJob.stderr", final_logs / "finalJob.stdout")
+        if p.exists()
+    )
+    if "database is locked" not in text:
+        return None
+    graph = Path(submit_dir) / Path(qgraph_file).name
+    if not graph.exists():
+        graph = Path(qgraph_file)
+    log.warning(f"  Final job found the registry locked; running it again ({graph.name})")
+    result = run_butler(
+        [
+            "aggregate-graph",
+            str(graph),
+            str(config.repo),
+            "-j",
+            str(FINAL_JOB_PROCESSES),
+            "--register-dataset-types",
+            "--update-output-chain",
+        ],
+        config,
+        check=False,
+        log_file=log_file,
+    )
+    return result.returncode == 0
+
+
 class BPSExecutor:
     """Execute pipetask commands via BPS batch submission.
 
@@ -406,6 +459,14 @@ class BPSExecutor:
         #       mode: we wanted to poll and cannot. Previously this was silently
         #       misclassified as (a); now it is loud, and we fall back to the
         #       output-collection probe only as a last resort.
+        if synchronous and bps_result.submit_dir:
+            recover_locked_final_job(
+                bps_result.submit_dir,
+                qgraph_file,
+                config,
+                log_file=kwargs.get("log_file"),
+            )
+
         if synchronous and output_run:
             outcome = butler_query.quantum_graph_outcome(config, qgraph_file, output_run)
             if outcome is not None:

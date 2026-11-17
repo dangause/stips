@@ -110,6 +110,12 @@ output:
 # Where to create submit directories
 submitPath: "{repo}/bps/submit/{submit_name}"
 
+# The final job registers a submission's outputs; it runs on the machine that
+# submitted. The ctrl_bps default of 16 processes is far more than one
+# night's graph needs when several nights finish at once.
+finalJob:
+  requestCpus: 4
+
 # Keep logs for debugging
 saveClusteredQgraph: true
 saveDot: false

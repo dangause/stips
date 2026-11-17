@@ -114,3 +114,7 @@ docs/methods-handout.*
 
 # Sphinx build output (make docs)
 docs/_build/
+
+# Provenance store lock and in-flight writes (stips.core.provenance)
+provenance/.runs.lock
+provenance/.*.tmp

@@ -27,6 +27,7 @@ from parsl.executors.base import ParslExecutor
 from parsl.jobs.error_handlers import windowed_error_handler
 
 from stips.core.bps_apptainer import container_launch_cmd, worker_setup_script
+from stips.core.bps_retry import retry_cost
 
 __all__ = ("ApptainerSlurm", "StipsSlurm")
 
@@ -80,7 +81,15 @@ class StipsSlurm(Slurm):
       every job it holds has failed, which never happens while a replacement
       is pending, so a worker that cannot start would be resubmitted for as
       long as the controller lives.
+
+    A job whose ``pipetask`` exited non-zero is not retried (see
+    :mod:`stips.core.bps_retry`); ``retries`` applies to lost workers.
     """
+
+    def get_parsl_config(self):
+        config = super().get_parsl_config()
+        config.retry_handler = functools.partial(retry_cost, retries=config.retries)
+        return config
 
     def make_executor(
         self,
