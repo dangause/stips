@@ -21,9 +21,13 @@ includeConfigs:
 wmsServiceClass: lsst.ctrl.bps.parsl.ParslService
 computeSite: slurm
 
-# One job per visit: a job pays ~10 s of pipetask start-up, more than most
-# per-visit tasks take to run (see stips.core.bps_clustering).
-clusterAlgorithm: stips.core.bps_clustering.visit_clustering
+# How the graph is split into jobs (options.cluster.clustering). Each job
+# pays pipetask start-up, more than most STIPS quanta take to run, so by
+# default a graph's visits share at most as many jobs as a block runs at once
+# (stipsMaxJobsPerCluster), and the tasks combining visits run as one job (see
+# stips.core.bps_clustering).
+clusterAlgorithm: {cluster_algorithm}
+stipsMaxJobsPerCluster: {cluster_max_jobs}
 
 # =============================================================================
 # Parsl Configuration

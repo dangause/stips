@@ -1,4 +1,4 @@
-"""Tests for stips.core.bps_clustering (one BPS job per visit)."""
+"""Tests for stips.core.bps_clustering (how a graph is split into BPS jobs)."""
 
 from __future__ import annotations
 
@@ -106,11 +106,12 @@ def test_tasks_nothing_outside_needs_get_their_own_job():
     assert section["visit_leaves"]["dimensions"] == "visit"
 
 
-def test_slurm_sites_use_visit_clustering():
+def test_slurm_sites_take_clustering_from_the_run_config():
     root = Path(__file__).resolve().parents[3]
     for site in ("slurm", "singularity-slurm"):
         text = (root / "bps" / "sites" / f"{site}.yaml").read_text()
-        assert "clusterAlgorithm: stips.core.bps_clustering.visit_clustering" in text
+        assert "clusterAlgorithm: {cluster_algorithm}" in text
+        assert "stipsMaxJobsPerCluster: {cluster_max_jobs}" in text
 
 
 class _Config:
@@ -130,3 +131,82 @@ def test_empty_cluster_section_is_not_a_user_definition():
     assert not _defines_clusters(_Config())
     assert not _defines_clusters(_Config(cluster={}))
     assert _defines_clusters(_Config(cluster={"visit": {"pipetasks": "isr"}}))
+
+
+
+class TestGrouped:
+    """grouped_cluster_config: few jobs per graph."""
+
+    # The science graph's shape: per-visit chain, an analysis leaf, and tasks
+    # combining visits, one of them per-visit but after a global one.
+    ORDER = ["isr", "calibrateImage", "analyzeVisit", "visitTable", "associate", "analyzeAssoc"]
+    DIMS = {
+        "isr": EXPOSURE,
+        "calibrateImage": VISIT,
+        "analyzeVisit": VISIT,
+        "visitTable": GLOBAL,
+        "associate": GLOBAL,
+        "analyzeAssoc": VISIT,
+    }
+    PREDS = {
+        "isr": set(),
+        "calibrateImage": {"isr"},
+        "analyzeVisit": {"calibrateImage"},
+        "visitTable": {"calibrateImage"},
+        "associate": {"calibrateImage"},
+        "analyzeAssoc": {"associate"},
+    }
+
+    def test_sections(self):
+        from stips.core.bps_clustering import grouped_cluster_config
+
+        section = grouped_cluster_config(self.ORDER, self.DIMS, self.PREDS, 4)
+        split = {"partitionDimensions": "visit", "equalDimensions": "visit:exposure", "partitionMaxClusters": 4}
+        assert section == {
+            "visit": {"pipetasks": "isr, calibrateImage", **split},
+            "visit_leaves": {"pipetasks": "analyzeVisit", **split},
+            # One job for everything after the visits, including the per-visit
+            # task that has to wait for a global one.
+            "combine": {"pipetasks": "visitTable, associate, analyzeAssoc"},
+        }
+
+    def test_combining_tasks_never_feed_the_visit_jobs(self):
+        from stips.core.bps_clustering import grouped_cluster_config
+
+        section = grouped_cluster_config(self.ORDER, self.DIMS, self.PREDS, 4)
+        combine = {t.strip() for t in section["combine"]["pipetasks"].split(",")}
+        visit_tasks = {
+            t.strip()
+            for key in ("visit", "visit_leaves")
+            for t in section[key]["pipetasks"].split(",")
+        }
+        for task in visit_tasks:
+            assert not (self.PREDS[task] & combine)
+
+    def test_calibration_graph(self):
+        # cpBias: per-exposure ISR, then a combine over all exposures.
+        from stips.core.bps_clustering import grouped_cluster_config
+
+        order = ["cpBiasIsr", "cpBiasCombine", "cpBiasBin8"]
+        dims = {"cpBiasIsr": EXPOSURE, "cpBiasCombine": {"instrument", "detector"}, "cpBiasBin8": {"instrument", "detector"}}
+        preds = {"cpBiasIsr": set(), "cpBiasCombine": {"cpBiasIsr"}, "cpBiasBin8": {"cpBiasCombine"}}
+        section = grouped_cluster_config(order, dims, preds, 3)
+        assert section["visit"]["pipetasks"] == "cpBiasIsr"
+        assert section["visit"]["partitionMaxClusters"] == 3
+        assert section["combine"] == {"pipetasks": "cpBiasCombine, cpBiasBin8"}
+        assert "visit_leaves" not in section
+
+    def test_only_per_visit_tasks(self):
+        from stips.core.bps_clustering import grouped_cluster_config
+
+        order = ["rewarp", "subtract", "detect"]
+        dims = dict.fromkeys(order, VISIT)
+        preds = {"rewarp": set(), "subtract": {"rewarp"}, "detect": {"subtract"}}
+        section = grouped_cluster_config(order, dims, preds, 4)
+        assert list(section) == ["visit"]
+        assert section["visit"]["pipetasks"] == "rewarp, subtract, detect"
+
+    def test_no_per_visit_task(self):
+        from stips.core.bps_clustering import grouped_cluster_config
+
+        assert grouped_cluster_config(["a"], {"a": GLOBAL}, {"a": set()}, 4) is None

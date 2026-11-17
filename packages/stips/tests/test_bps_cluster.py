@@ -224,3 +224,40 @@ class TestSitesNeedTheStack:
         assert executor.block_error_handler.keywords == {"threshold": 3}
         script = (submit / "stips-worker.sh").read_text()
         assert 'export A="${B:-}"' in script
+
+
+class TestClusteringOption:
+    def test_default_groups_visits_into_a_blocks_worth_of_jobs(self, tmp_path):
+        from stips.core.bps import BPSConfig, render_bps_config
+
+        bps_cfg = BPSConfig(
+            pipeline="custom",
+            night="20110906",
+            site="singularity-slurm",
+            qgraph_file="/g.qg",
+            cores_per_node=4,
+            mem_per_node=12,
+            mem_per_worker=3.0,
+        )
+        render_bps_config(bps_cfg, _mock_config(tmp_path), tmp_path / "submit")
+        site = yaml.safe_load((tmp_path / "submit" / "sites" / "singularity-slurm.yaml").read_text())
+        assert site["clusterAlgorithm"] == "stips.core.bps_clustering.grouped_clustering"
+        assert site["stipsMaxJobsPerCluster"] == 4
+
+    def test_memory_limits_parallelism(self):
+        from stips.core.bps import BPSConfig
+
+        cfg = BPSConfig(pipeline="custom", night="20110906", cores_per_node=8, mem_per_node=12, mem_per_worker=4.0)
+        assert cfg.quanta_in_parallel == 3
+
+    def test_visit_clustering(self, tmp_path):
+        text, _ = _render_site(tmp_path, "slurm", clustering="visit")
+        site = yaml.safe_load(text)
+        assert site["clusterAlgorithm"] == "stips.core.bps_clustering.visit_clustering"
+
+    def test_unknown_clustering_is_an_error(self):
+        from stips.core.bps import cluster_options
+
+        with pytest.raises(ValueError, match="clustering"):
+            cluster_options({"clustering": "per_night"})
+        assert cluster_options({"clustering": "visit"}) == {"clustering": "visit"}

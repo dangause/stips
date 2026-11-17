@@ -53,12 +53,27 @@ options:
     mem_per_worker: 4            # GB per quantum slot
     walltime: "04:00:00"         # per block; quote it
     max_blocks: 4                # blocks held at once
+    clustering: grouped          # or "visit": one job per visit
 ```
 
-A block runs `min(cores_per_node, mem_per_node / mem_per_worker)` quanta at once,
-so the example above runs up to 32 quanta on four nodes. `walltime` bounds a
-block, not the step: when Slurm ends a block, the quanta it was running are
-retried and Parsl starts another block while work remains.
+A block runs `min(cores_per_node, mem_per_node / mem_per_worker)` jobs at once.
+Every job pays the start-up of `pipetask` (10 s, more on a busy shared
+filesystem), longer than most STIPS quanta take to run, so by default
+(`grouped`) a graph's per-visit tasks run as at most that many jobs, each
+taking a share of the visits, and the tasks that combine visits run as one
+job after them. A submission (one step of one night's band group) then fits
+one block. With `clustering: visit` each visit is a job (two, see
+`stips.core.bps_clustering`) and each task that combines visits another; the
+example above would then run up to 32 jobs on four nodes. Use it for graphs
+with many more visits than a block has cores.
+
+A failed quantum does not stop the other quanta of its job, only those that
+need its outputs.
+
+`walltime` bounds a block, not the step: when Slurm ends a block, the jobs it
+was running are retried and Parsl starts another block while work remains.
+A job whose `pipetask` exited non-zero is not retried; it would fail the
+same way, and the science step's fallback configurations take those quanta.
 
 A night parallelises over its visits, so workers beyond the number of visits
 sit idle. Science processing of 2×2-binned Y4KCam frames peaks at about
@@ -82,6 +97,11 @@ count.
 
 An unknown key in `options.cluster` is an error, and so is an unquoted
 walltime: YAML reads `4:00:00` as the integer 14400.
+
+Calibrations (bias and flat), science, difference imaging and forced
+photometry all run on blocks; the controller builds the graphs and does the
+Butler bookkeeping (ingest, visit definition, certification, collection
+chains).
 
 ## Apptainer clusters (`singularity-slurm`)
 

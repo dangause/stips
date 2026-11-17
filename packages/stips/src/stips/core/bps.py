@@ -67,7 +67,14 @@ CLUSTER_KEYS = (
     "partition",
     "account",
     "max_blocks",
+    "clustering",
 )
+
+#: options.cluster.clustering -> clusterAlgorithm (stips.core.bps_clustering)
+CLUSTERING_ALGORITHMS = {
+    "grouped": "stips.core.bps_clustering.grouped_clustering",
+    "visit": "stips.core.bps_clustering.visit_clustering",
+}
 
 
 def cluster_options(raw: dict | None) -> dict:
@@ -92,6 +99,11 @@ def cluster_options(raw: dict | None) -> dict:
         raise ValueError(
             f"options.cluster.walltime must be a quoted string such as "
             f'"01:00:00", got {raw["walltime"]!r}'
+        )
+    if "clustering" in raw and raw["clustering"] not in CLUSTERING_ALGORITHMS:
+        raise ValueError(
+            f"options.cluster.clustering must be one of "
+            f"{', '.join(CLUSTERING_ALGORITHMS)}, got {raw['clustering']!r}"
         )
     kinds = {"cores_per_node": int, "mem_per_node": int, "max_blocks": int, "mem_per_worker": float}
     return {key: kinds.get(key, str)(value) for key, value in raw.items()}
@@ -170,6 +182,13 @@ class BPSConfig:
     partition: str = ""  # "" → the cluster's default partition
     account: str = ""  # "" → --project if given, else the user's default account
     max_blocks: int = 4  # Slurm jobs Parsl may hold at once
+    clustering: str = "grouped"  # few jobs per graph; "visit": one per visit
+
+    @property
+    def quanta_in_parallel(self) -> int:
+        """Quanta one block runs at once: its cores, unless memory allows fewer."""
+        by_memory = int(self.mem_per_node // self.mem_per_worker) if self.mem_per_worker else 0
+        return max(1, min(self.cores_per_node, by_memory or self.cores_per_node))
 
     def __post_init__(self) -> None:
         """Validate configuration after initialization."""
@@ -186,6 +205,11 @@ class BPSConfig:
         # Validate night format
         if self.night != "00000000" and not re.match(r"^\d{8}$", self.night):
             raise ValueError(f"Invalid night format '{self.night}'. Expected YYYYMMDD.")
+        if self.clustering not in CLUSTERING_ALGORITHMS:
+            raise ValueError(
+                f"Invalid clustering '{self.clustering}'. "
+                f"Must be one of: {', '.join(CLUSTERING_ALGORITHMS)}"
+            )
 
 
 @dataclass
@@ -381,6 +405,8 @@ def render_bps_config(
         # name) is rejected by any cluster that checks accounts.
         "account": bps_cfg.account or bps_cfg.project or "",
         "max_blocks": str(bps_cfg.max_blocks),
+        "cluster_algorithm": CLUSTERING_ALGORITHMS[bps_cfg.clustering],
+        "cluster_max_jobs": str(bps_cfg.quanta_in_parallel),
         # Parsl numbers run directories by listing the existing ones, which
         # races between concurrent submissions: give each its own.
         "run_dir": str(config.repo / "bps" / "submit" / submit_name / "parsl_runinfo"),
