@@ -1,7 +1,7 @@
 """BPS quantum clustering: how a submitted graph is split into jobs.
 
 Every job BPS runs starts a fresh ``pipetask run-qbb`` process, about 10 s of
-imports (25 s on a busy shared filesystem) before any work, while most STIPS
+imports (more on a busy shared filesystem) before any work, while most STIPS
 quanta then run for under 5 s; within a job, quanta run one after another in
 that one process. Two algorithms, chosen with ``options.cluster.clustering``:
 

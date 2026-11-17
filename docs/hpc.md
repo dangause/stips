@@ -103,6 +103,35 @@ photometry all run on blocks; the controller builds the graphs and does the
 Butler bookkeeping (ingest, visit definition, certification, collection
 chains).
 
+## Many nights
+
+Under BPS a night's step spends most of its time waiting rather than
+computing: building the graph, submitting it, starting a block and
+`pipetask`, and registering the outputs. A night of a small telescope is a
+few minutes of CPU per step. Running more nights at once shortens a campaign
+more than larger blocks do, at the same total core count:
+
+```yaml
+options:
+  concurrent_nights: 6
+  cluster:
+    cores_per_node: 4
+    mem_per_node: 12
+    mem_per_worker: 3
+    max_blocks: 1                # one block per night in flight
+```
+
+uses the same cores as `concurrent_nights: 3` with 8-core blocks. Each night
+in flight holds one block, and the controller builds one graph or runs one
+`butler` command per night at a time, so give the controller job about one
+core per night.
+
+The nights share one SQLite registry, which takes one writer at a time. A
+`butler` command that finds it locked waits and tries again (up to about
+eight minutes), and so does a submission's final job, which registers its
+outputs. Lock waits grow with the number of nights in flight; for many more
+nights than this, a PostgreSQL registry is the robust choice.
+
 ## Apptainer clusters (`singularity-slurm`)
 
 The controller runs inside the image and needs the host's Slurm client, because

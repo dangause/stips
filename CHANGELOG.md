@@ -23,12 +23,34 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
   scale of `mjd` and `t0`: `TAI`, the scale on which the Butler records exposure
   times. The docs say so and show the conversion to BJD_TDB.
 
+- `options.flats_all_filters` (default `false`): `stips run` now builds flats
+  only for the filters of the run's `bands`; set it to build a flat for every
+  filter with flat frames, as before.
+- `options.cluster.clustering`: `grouped` (default) or `visit`, how a graph is
+  split into BPS jobs (see Changed).
+
 ### Changed
-- On the `slurm` and `singularity-slurm` BPS sites a visit's quanta run as two
-  jobs (`stips.core.bps_clustering.visit_clustering`) instead of one job per
-  quantum; starting `pipetask` took longer than most per-visit tasks. Tasks
-  that later steps need and the visit's analysis tasks go in separate jobs, so
-  a failing analysis quantum does not stop the tasks that combine visits.
+- On the `slurm` and `singularity-slurm` BPS sites a graph's per-visit tasks
+  run as at most as many jobs as a block runs at once, each taking a share of
+  the visits, and the tasks that combine visits run as one job after them
+  (`stips.core.bps_clustering.grouped_clustering`). Every job pays `pipetask`
+  start-up, longer than most STIPS quanta take; one job per quantum, and then
+  one per visit, mostly paid start-up. Analysis tasks still run in jobs apart
+  from the tasks later steps need, so a failing analysis quantum does not stop
+  the tasks that combine visits. `clustering: visit` gives one job per visit.
+- Under `execution: bps` the bias and flat pipelines run on the cluster like
+  the other steps. They ran on the controller, where several nights at once
+  shared its few cores and contended for the registry.
+- Calibrations define visits for the night's exposures only (`define-visits
+  --where`), instead of re-grouping every exposure in the repository each
+  night, and no longer ingest the first night's raws twice.
+- `stips run` selects a night's science exposures once for all its band
+  groups, and skips difference imaging for bands with no science exposures,
+  instead of finding out from an empty graph.
+- Parsl no longer runs a BPS job again when its `pipetask` exited non-zero; it
+  fails the same way, and fallback configs handle those quanta. Jobs on lost
+  workers are still retried; `retries` now sits in the site block, where
+  ctrl_bps_parsl reads it. The final job runs 4 processes, not 16.
 - Forced photometry builds its quantum graph before running it, as the other
   stages do, so under `execution: bps` it runs on the cluster rather than on
   the machine running `stips`. Its output chain holds the same collections as
@@ -43,6 +65,13 @@ All notable changes to STIPS (the Small Telescope Image Processing Suite) are do
   unaffected beyond that shift.
 
 ### Fixed
+- Concurrent nights (`concurrent_nights`) no longer lose work to shared state:
+  `butler` commands that find the SQLite registry locked wait and retry, a
+  submission's final job that hit the lock is run again, and the provenance
+  store (`provenance/runs.json`) is updated under a lock with atomic writes
+  (it could be read half-written: "provenance upsert failed"). The live
+  provenance hook measures the repository size and stack version once per
+  run instead of after every science band group.
 - The `slurm` and `singularity-slurm` BPS sites ignored `max_blocks`,
   `partition`, `worker_init` and `mem_per_worker`: `ctrl_bps_parsl` reads only
   a few keys, so Parsl ran one exclusive Slurm job at a time in the default
